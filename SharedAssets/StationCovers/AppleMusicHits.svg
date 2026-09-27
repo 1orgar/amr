@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <defs>
+    <linearGradient id="hitsBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#19042b"/>
+      <stop offset="40%" stop-color="#4d0e52"/>
+      <stop offset="70%" stop-color="#fa709a"/>
+      <stop offset="100%" stop-color="#fee140"/>
+    </linearGradient>
+    <linearGradient id="sunGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fee140"/>
+      <stop offset="60%" stop-color="#fa709a"/>
+      <stop offset="100%" stop-color="#7028e4"/>
+    </linearGradient>
+    <filter id="hitsGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1000" height="1000" fill="url(#hitsBg)"/>
+
+  <!-- Retro Horizon Synthwave Grid -->
+  <g stroke="#ffffff" opacity="0.3" stroke-width="2">
+    <line x1="0" y1="580" x2="1000" y2="580"/>
+    <line x1="0" y1="620" x2="1000" y2="620"/>
+    <line x1="0" y1="670" x2="1000" y2="670"/>
+    <line x1="0" y1="730" x2="1000" y2="730"/>
+    <!-- Perspective rays -->
+    <line x1="500" y1="580" x2="100" y2="760"/>
+    <line x1="500" y1="580" x2="300" y2="760"/>
+    <line x1="500" y1="580" x2="500" y2="760"/>
+    <line x1="500" y1="580" x2="700" y2="760"/>
+    <line x1="500" y1="580" x2="900" y2="760"/>
+  </g>
+
+  <!-- Segmented Retro Sunset Disc -->
+  <g filter="url(#hitsGlow)">
+    <mask id="sunMask">
+      <circle cx="500" cy="420" r="180" fill="#ffffff"/>
+      <rect x="300" y="420" width="400" height="8" fill="#000000"/>
+      <rect x="300" y="445" width="400" height="12" fill="#000000"/>
+      <rect x="300" y="475" width="400" height="16" fill="#000000"/>
+      <rect x="300" y="510" width="400" height="20" fill="#000000"/>
+      <rect x="300" y="550" width="400" height="24" fill="#000000"/>
+    </mask>
+    <circle cx="500" cy="420" r="180" fill="url(#sunGrad)" mask="url(#sunMask)"/>
+  </g>
+
+  <!-- Apple Music Header Badge -->
+  <g transform="translate(500, 110)">
+    <rect x="-130" y="-22" width="260" height="44" rx="22" fill="#000000" fill-opacity="0.35"/>
+    <text x="0" y="7" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="20" font-weight="700" letter-spacing="4" text-anchor="middle">APPLE MUSIC</text>
+  </g>
+
+  <!-- Typography -->
+  <text x="500" y="840" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="64" font-weight="900" letter-spacing="3" text-anchor="middle">HITS RADIO</text>
+  <text x="500" y="890" fill="#fee140" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="24" font-weight="700" letter-spacing="6" text-anchor="middle">80s · 90s · 2000s CLASSICS</text>
+</svg>

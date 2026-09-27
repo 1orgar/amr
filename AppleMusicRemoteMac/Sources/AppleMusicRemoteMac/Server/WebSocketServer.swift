@@ -1,0 +1,1501 @@
+//
+//  WebSocketServer.swift
+//  AppleMusicRemoteMac
+//
+//  Pure Swift WebSocket Server using Network.framework (NWListener + NWProtocolWebSocket)
+//
+
+import AppKit
+import CryptoKit
+import Foundation
+import Network
+
+public protocol WebSocketServerDelegate: AnyObject, Sendable {
+    func webSocketServer(_ server: WebSocketServer, didUpdateClientCount count: Int)
+    func webSocketServer(_ server: WebSocketServer, didChangeState state: NWListener.State)
+}
+
+public final class WebSocketServer: @unchecked Sendable {
+    public static let shared = WebSocketServer()
+
+    public weak var delegate: WebSocketServerDelegate?
+
+    private var listener: NWListener?
+    private var clients: [UUID: NWConnection] = [:]
+    private let clientLock = NSRecursiveLock()
+    private let sendLock = NSRecursiveLock()
+    private var isRunning = false
+    public private(set) var port: Int = 8080
+
+    private var pollerTimer: DispatchSourceTimer?
+    private var lastKnownState: String = ""
+    private var lastKnownPosition: Double = 0
+    private var lastKnownTrackId: String = ""
+    private var lastBroadcastTime: Date = Date.distantPast
+    private var observersSetup = false
+
+    private init() {
+        setupDistributedNotifications()
+    }
+
+    private let notifQueue: OperationQueue = {
+        let q = OperationQueue()
+        q.name = "com.amr.notifications"
+        q.maxConcurrentOperationCount = 1
+        return q
+    }()
+
+    private var notifDebounceItem: DispatchWorkItem?
+
+    private func setupDistributedNotifications() {
+        guard !observersSetup else { return }
+        observersSetup = true
+
+        let handler: (Notification) -> Void = { [weak self] _ in
+            guard let self = self else { return }
+            self.notifDebounceItem?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                if MusicBridge.shared.isRadioActive() || MusicBridge.shared.getCurrentOriginalPlaylistName() == "Очередь AMR" {
+                    MusicBridge.shared.syncCurrentTrackToAMRQueue(clearQueue: false)
+                }
+                self.broadcastStatus(includeQueue: true)
+            }
+            self.notifDebounceItem = work
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.2, execute: work)
+        }
+
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.Music.playerInfo"), object: nil, queue: notifQueue, using: handler)
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.iTunes.playerInfo"), object: nil, queue: notifQueue, using: handler)
+    }
+
+    // MARK: - Server Lifecycle
+
+    public func start(port: Int = 8080) -> Bool {
+        setupDistributedNotifications()
+        clientLock.lock()
+        defer { clientLock.unlock() }
+
+        stopUnlocked()
+
+        self.port = port
+
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.enableKeepalive = true
+        tcpOptions.keepaliveIdle = 10
+
+        let params = NWParameters(tls: nil, tcp: tcpOptions)
+        params.allowLocalEndpointReuse = true
+
+        guard let endpointPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
+            NSLog("[Server] Invalid port: %d", port)
+            return false
+        }
+
+        do {
+            let nwListener = try NWListener(using: params, on: endpointPort)
+            self.listener = nwListener
+
+            nwListener.stateUpdateHandler = { [weak self] state in
+                guard let self = self else { return }
+                NSLog("[Server] Listener state: \(state)")
+                self.delegate?.webSocketServer(self, didChangeState: state)
+            }
+
+            nwListener.newConnectionHandler = { [weak self] connection in
+                guard let self = self else { return }
+                self.handleNewConnection(connection)
+            }
+
+            let queue = DispatchQueue(label: "com.amr.server", qos: .userInteractive)
+            nwListener.start(queue: queue)
+            self.isRunning = true
+
+            startPollerTimer()
+
+            // Start Bonjour Advertising
+            BonjourAdvertiser.shared.startAdvertising(port: port)
+
+            NSLog("[Server] Pure Swift HTTP & WebSocket Server listening on port %d", port)
+            return true
+        } catch {
+            NSLog("[Server] Failed to start listener on port %d: %@", port, error.localizedDescription)
+            return false
+        }
+    }
+
+    public func stop() {
+        clientLock.lock()
+        defer { clientLock.unlock() }
+        stopUnlocked()
+    }
+
+    private func stopUnlocked() {
+        stopPollerTimer()
+        BonjourAdvertiser.shared.stopAdvertising()
+
+        if let l = listener {
+            l.cancel()
+            self.listener = nil
+        }
+
+        for (_, conn) in clients {
+            conn.cancel()
+        }
+        clients.removeAll()
+        isRunning = false
+        delegate?.webSocketServer(self, didUpdateClientCount: 0)
+    }
+
+    public var clientCount: Int {
+        clientLock.lock()
+        defer { clientLock.unlock() }
+        return clients.count
+    }
+
+    // MARK: - Connection & Protocol Handling
+
+    private func handleNewConnection(_ connection: NWConnection) {
+        let clientId = UUID()
+
+        connection.stateUpdateHandler = { [weak self, weak connection] state in
+            guard let self = self, let conn = connection else { return }
+            switch state {
+            case .ready:
+                self.readInitialConnection(clientId: clientId, connection: conn, buffer: Data())
+            case .failed(let err):
+                NSLog("[Server] Client connection failed: %@", err.localizedDescription)
+                self.removeClient(clientId: clientId)
+            case .cancelled:
+                self.removeClient(clientId: clientId)
+            default:
+                break
+            }
+        }
+
+        let queue = DispatchQueue(label: "com.amr.server.client.\(clientId.uuidString)", qos: .userInteractive)
+        connection.start(queue: queue)
+    }
+
+    private func removeClient(clientId: UUID) {
+        clientLock.lock()
+        guard let conn = clients.removeValue(forKey: clientId) else {
+            clientLock.unlock()
+            return
+        }
+        let count = clients.count
+        clientLock.unlock()
+
+        conn.cancel()
+        NSLog("[WebSocket] Client disconnected. Total clients: %d", count)
+        delegate?.webSocketServer(self, didUpdateClientCount: count)
+    }
+
+    private func readInitialConnection(clientId: UUID, connection: NWConnection, buffer: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self, weak connection] content, _, isComplete, error in
+            guard let self = self, let conn = connection else { return }
+            if let error = error {
+                NSLog("[Server] Initial receive error: %@", error.localizedDescription)
+                self.removeClient(clientId: clientId)
+                return
+            }
+
+            var current = buffer
+            if let data = content {
+                current.append(data)
+            }
+
+            var delimiterRange: Range<Data.Index>?
+            if let r = current.range(of: Data("\r\n\r\n".utf8)) {
+                delimiterRange = r
+            } else if let r = current.range(of: Data("\n\n".utf8)) {
+                delimiterRange = r
+            }
+
+            guard let delim = delimiterRange else {
+                if isComplete {
+                    conn.cancel()
+                    return
+                }
+                self.readInitialConnection(clientId: clientId, connection: conn, buffer: current)
+                return
+            }
+
+            let headerData = current.subdata(in: current.startIndex..<delim.lowerBound)
+            let restData = current.subdata(in: delim.upperBound..<current.endIndex)
+            guard let headerString = String(data: headerData, encoding: .utf8) else {
+                conn.cancel()
+                return
+            }
+
+            let isWSUpgrade = (self.extractHeader(named: "upgrade", from: headerString)?.lowercased().contains("websocket") == true)
+            if isWSUpgrade, let key = self.extractHeader(named: "sec-websocket-key", from: headerString) {
+                let accept = self.webSocketAccept(for: key)
+                let response = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: \(accept)\r\n\r\n"
+                conn.send(content: Data(response.utf8), completion: .contentProcessed({ [weak self, weak conn] _ in
+                    guard let self = self, let c = conn else { return }
+                    self.clientLock.lock()
+                    self.clients[clientId] = c
+                    let count = self.clients.count
+                    self.clientLock.unlock()
+
+                    NSLog("[WebSocket] Handshake complete. Total WebSocket clients: %d", count)
+                    self.delegate?.webSocketServer(self, didUpdateClientCount: count)
+
+                    let status = MusicBridge.shared.getPlayerStatus()
+                    self.sendEvent("player_state_changed", data: status, to: c)
+                    Task {
+                        let queue = await MusicBridge.shared.getPlaybackQueue()
+                        self.sendEvent("queue", data: queue, to: c)
+                    }
+
+                    self.readWebSocketFrames(clientId: clientId, connection: c, buffer: restData)
+                }))
+                return
+            }
+
+            // Normal HTTP request
+            var expectedBodyLen = 0
+            if let clStr = self.extractHeader(named: "content-length", from: headerString), let cl = Int(clStr) {
+                expectedBodyLen = cl
+            }
+
+            if restData.count < expectedBodyLen {
+                self.readRemainingHTTPBody(clientId: clientId, connection: conn, headerString: headerString, buffer: restData, expectedLen: expectedBodyLen)
+            } else {
+                self.handleHTTPRequest(headerString: headerString, bodyData: restData.prefix(expectedBodyLen), connection: conn)
+            }
+        }
+    }
+
+    private func readRemainingHTTPBody(clientId: UUID, connection: NWConnection, headerString: String, buffer: Data, expectedLen: Int) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self, weak connection] content, _, isComplete, error in
+            guard let self = self, let conn = connection else { return }
+            if let error = error {
+                NSLog("[Server] HTTP body receive error: %@", error.localizedDescription)
+                conn.cancel()
+                return
+            }
+            var current = buffer
+            if let data = content {
+                current.append(data)
+            }
+            if current.count >= expectedLen || isComplete {
+                self.handleHTTPRequest(headerString: headerString, bodyData: current.prefix(expectedLen), connection: conn)
+            } else {
+                self.readRemainingHTTPBody(clientId: clientId, connection: conn, headerString: headerString, buffer: current, expectedLen: expectedLen)
+            }
+        }
+    }
+
+    private func readWebSocketFrames(clientId: UUID, connection: NWConnection, buffer: Data) {
+        var current = buffer
+        let frames = decodeWebSocketFrames(buffer: &current)
+        for (opcode, payload) in frames {
+            switch opcode {
+            case 0x01:
+                if let text = String(data: payload, encoding: .utf8) {
+                    Task {
+                        await self.processClientTextMessage(text, connection: connection)
+                    }
+                }
+            case 0x02:
+                Task {
+                    await self.processClientBinaryMessage(payload, connection: connection)
+                }
+            case 0x08:
+                removeClient(clientId: clientId)
+                return
+            case 0x09:
+                let pong = makeWebSocketFrame(payload: payload, opcode: 0x0A)
+                connection.send(content: pong, completion: .contentProcessed({ _ in }))
+            default:
+                break
+            }
+        }
+
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self, weak connection] content, _, isComplete, error in
+            guard let self = self, let conn = connection else { return }
+            if let error = error {
+                self.removeClient(clientId: clientId)
+                return
+            }
+            if isComplete {
+                self.removeClient(clientId: clientId)
+                return
+            }
+            var next = current
+            if let data = content {
+                next.append(data)
+            }
+            self.readWebSocketFrames(clientId: clientId, connection: conn, buffer: next)
+        }
+    }
+
+    private func decodeWebSocketFrames(buffer: inout Data) -> [(opcode: UInt8, payload: Data)] {
+        var results: [(opcode: UInt8, payload: Data)] = []
+        while buffer.count >= 2 {
+            let b0 = buffer[buffer.startIndex]
+            let opcode = b0 & 0x0F
+            let b1 = buffer[buffer.startIndex + 1]
+            let isMasked = (b1 & 0x80) != 0
+            var payloadLen = UInt64(b1 & 0x7F)
+            var offset = 2
+
+            if payloadLen == 126 {
+                guard buffer.count >= offset + 2 else { break }
+                let high = UInt64(buffer[buffer.startIndex + offset])
+                let low = UInt64(buffer[buffer.startIndex + offset + 1])
+                payloadLen = (high << 8) | low
+                offset += 2
+            } else if payloadLen == 127 {
+                guard buffer.count >= offset + 8 else { break }
+                payloadLen = 0
+                for i in 0..<8 {
+                    payloadLen = (payloadLen << 8) | UInt64(buffer[buffer.startIndex + offset + i])
+                }
+                offset += 8
+            }
+
+            var maskKey: [UInt8] = [0, 0, 0, 0]
+            if isMasked {
+                guard buffer.count >= offset + 4 else { break }
+                maskKey = [
+                    buffer[buffer.startIndex + offset],
+                    buffer[buffer.startIndex + offset + 1],
+                    buffer[buffer.startIndex + offset + 2],
+                    buffer[buffer.startIndex + offset + 3]
+                ]
+                offset += 4
+            }
+
+            let totalFrameLen = offset + Int(payloadLen)
+            guard buffer.count >= totalFrameLen else { break }
+
+            let rawPayload = buffer.subdata(in: (buffer.startIndex + offset)..<(buffer.startIndex + totalFrameLen))
+            buffer.removeSubrange(buffer.startIndex..<(buffer.startIndex + totalFrameLen))
+
+            var unmasked = Data(count: rawPayload.count)
+            if isMasked {
+                let count = rawPayload.count
+                rawPayload.withUnsafeBytes { rawPtr in
+                    unmasked.withUnsafeMutableBytes { outPtr in
+                        let inBytes = rawPtr.bindMemory(to: UInt8.self).baseAddress!
+                        let outBytes = outPtr.bindMemory(to: UInt8.self).baseAddress!
+                        for i in 0..<count {
+                            outBytes[i] = inBytes[i] ^ maskKey[i % 4]
+                        }
+                    }
+                }
+            } else {
+                unmasked = rawPayload
+            }
+
+            results.append((opcode: opcode, payload: unmasked))
+        }
+        return results
+    }
+
+    private func makeWebSocketFrame(payload: Data, opcode: UInt8) -> Data {
+        var frame = Data()
+        frame.append(0x80 | (opcode & 0x0F))
+        let count = payload.count
+        if count <= 125 {
+            frame.append(UInt8(count))
+        } else if count <= 65535 {
+            frame.append(126)
+            var len16 = UInt16(count).bigEndian
+            withUnsafeBytes(of: &len16) { frame.append(contentsOf: $0) }
+        } else {
+            frame.append(127)
+            var len64 = UInt64(count).bigEndian
+            withUnsafeBytes(of: &len64) { frame.append(contentsOf: $0) }
+        }
+        frame.append(payload)
+        return frame
+    }
+
+    private func webSocketAccept(for key: String) -> String {
+        let magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        let combined = key.trimmingCharacters(in: .whitespacesAndNewlines) + magic
+        let digest = Insecure.SHA1.hash(data: Data(combined.utf8))
+        return Data(digest).base64EncodedString()
+    }
+
+    private func extractHeader(named name: String, from headerString: String) -> String? {
+        let lines = headerString.components(separatedBy: "\r\n")
+        let target = name.lowercased() + ":"
+        for line in lines {
+            if line.lowercased().hasPrefix(target) {
+                let value = line.dropFirst(target.count)
+                return value.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return nil
+    }
+
+    // MARK: - HTTP Request Handling & Media API
+
+    private func handleHTTPRequest(headerString: String, bodyData: Data, connection: NWConnection) {
+        let firstLine = headerString.components(separatedBy: "\r\n").first ?? headerString.components(separatedBy: "\n").first ?? ""
+        let parts = firstLine.split(separator: " ")
+        guard parts.count >= 2 else {
+            sendHTTPResponse(status: "400 Bad Request", contentType: "text/plain", body: Data("Bad Request".utf8), connection: connection)
+            return
+        }
+        let method = String(parts[0]).uppercased()
+        let fullPath = String(parts[1])
+        let path = fullPath.components(separatedBy: "?").first ?? fullPath
+
+        if method == "OPTIONS" {
+            sendCORSPreflight(connection: connection)
+            return
+        }
+
+        if method == "GET" || method == "HEAD" {
+            switch path {
+            case "/", "/index.html":
+                let content = loadWebAsset(filename: "index.html") ?? WebUIContent.indexHTML
+                sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: Data(content.utf8), connection: connection)
+            case "/style.css":
+                let content = loadWebAsset(filename: "style.css") ?? WebUIContent.styleCSS
+                sendHTTPResponse(status: "200 OK", contentType: "text/css; charset=utf-8", body: Data(content.utf8), connection: connection)
+            case "/app.js":
+                let content = loadWebAsset(filename: "app.js") ?? WebUIContent.appJS
+                sendHTTPResponse(status: "200 OK", contentType: "application/javascript; charset=utf-8", body: Data(content.utf8), connection: connection)
+            case "/manifest.json":
+                let content = loadWebAsset(filename: "manifest.json") ?? WebUIContent.manifestJSON
+                sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: Data(content.utf8), connection: connection)
+            case "/apple-touch-icon.svg":
+                let content = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
+                sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(content.utf8), connection: connection)
+            case let p where p.hasPrefix("/assets/"):
+                let sub = String(p.dropFirst("/assets/".count))
+                if let data = loadWebBinaryAsset(subpath: "assets/\(sub)") {
+                    let cType = sub.hasSuffix(".png") ? "image/png" : (sub.hasSuffix(".jpg") || sub.hasSuffix(".jpeg") ? "image/jpeg" : (sub.hasSuffix(".svg") ? "image/svg+xml" : "application/octet-stream"))
+                    sendHTTPResponse(status: "200 OK", contentType: cType, body: data, connection: connection, cacheSeconds: 86400 * 30)
+                    return
+                }
+                sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
+            case "/api/artwork":
+                let artData = MusicBridge.shared.getCurrentTrackArtwork()
+                if let art = artData, !art.isEmpty {
+                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
+                } else {
+                    let curStatus = MusicBridge.shared.getPlayerStatus()
+                    if let trackArt = curStatus.track?.artworkUrl, !trackArt.isEmpty, trackArt.hasPrefix("http") {
+                        let redirectResp = "HTTP/1.1 302 Found\r\nLocation: \(trackArt)\r\nCache-Control: public, max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                        connection.send(content: Data(redirectResp.utf8), completion: .contentProcessed({ _ in
+                            connection.cancel()
+                        }))
+                    } else {
+                        let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
+                        sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                    }
+                }
+            case let p where p.hasPrefix("/api/artwork/track"):
+                var trackId = 0
+                if let qIdx = fullPath.firstIndex(of: "?") {
+                    let qs = String(fullPath[fullPath.index(after: qIdx)...])
+                    for pair in qs.components(separatedBy: "&") {
+                        let parts = pair.components(separatedBy: "=")
+                        if parts.count == 2 && parts[0] == "id" {
+                            trackId = Int(parts[1]) ?? 0
+                        }
+                    }
+                }
+                if trackId > 0, let art = MusicBridge.shared.getTrackArtwork(id: trackId), !art.isEmpty {
+                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
+                } else if trackId > 0, let meta = MusicBridge.shared.getTrackMetadata(id: trackId) {
+                    if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: meta.name, artist: meta.artist, album: meta.album), !cached.isEmpty {
+                        let redirectResp = "HTTP/1.1 302 Found\r\nLocation: \(cached)\r\nCache-Control: public, max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                        connection.send(content: Data(redirectResp.utf8), completion: .contentProcessed({ _ in connection.cancel() }))
+                    } else {
+                        Task {
+                            if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: meta.name, artist: meta.artist, album: meta.album) {
+                                let redirectResp = "HTTP/1.1 302 Found\r\nLocation: \(cloudArt)\r\nCache-Control: public, max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                                connection.send(content: Data(redirectResp.utf8), completion: .contentProcessed({ _ in connection.cancel() }))
+                            } else {
+                                let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
+                                sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                            }
+                        }
+                    }
+                } else {
+                    let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
+                    sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                }
+            case let p where p.hasPrefix("/api/artwork/playlist"):
+                var plName = ""
+                if let components = URLComponents(string: fullPath),
+                   let nameItem = components.queryItems?.first(where: { $0.name == "name" })?.value {
+                    plName = nameItem
+                } else if let qIdx = fullPath.firstIndex(of: "?") {
+                    let qs = String(fullPath[fullPath.index(after: qIdx)...])
+                    for pair in qs.components(separatedBy: "&") {
+                        let parts = pair.components(separatedBy: "=")
+                        if parts.count == 2 && parts[0] == "name" {
+                            plName = parts[1].removingPercentEncoding ?? parts[1]
+                        }
+                    }
+                }
+                if !plName.isEmpty, let art = MusicBridge.shared.getPlaylistArtwork(name: plName), !art.isEmpty {
+                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
+                } else if !plName.isEmpty {
+                    Task { [weak self] in
+                        guard let self = self else { return }
+                        var cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: plName, storefront: "ru")
+                        if cloudArtUrl == nil || cloudArtUrl?.isEmpty == true {
+                            cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: plName, storefront: "us")
+                        }
+                        if let artUrl = cloudArtUrl, !artUrl.isEmpty {
+                            let redirectResp = "HTTP/1.1 302 Found\r\nLocation: \(artUrl)\r\nCache-Control: public, max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                            connection.send(content: Data(redirectResp.utf8), completion: .contentProcessed({ _ in
+                                connection.cancel()
+                            }))
+                            return
+                        }
+                        let fallback = self.loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
+                        self.sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                    }
+                } else {
+                    let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
+                    sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                }
+            case "/api/status":
+                let status = MusicBridge.shared.getPlayerStatus()
+                if let data = try? JSONEncoder().encode(status) {
+                    sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
+                } else {
+                    sendHTTPResponse(status: "500 Internal Server Error", contentType: "text/plain", body: Data("{}".utf8), connection: connection)
+                }
+            default:
+                sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
+            }
+        } else if method == "POST" && path == "/api/media" {
+            Task {
+                await handleMediaAPI(bodyData: bodyData, connection: connection)
+            }
+        } else {
+            sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
+        }
+    }
+
+    private func handleMediaAPI(bodyData: Data, connection: NWConnection) async {
+        guard let json = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any],
+              let endpoint = (json["endpoint"] as? String)?.lowercased() else {
+            let errResp: [String: Any] = ["status": "error", "message": "Missing endpoint in JSON payload"]
+            let data = (try? JSONSerialization.data(withJSONObject: errResp)) ?? Data()
+            sendHTTPResponse(status: "400 Bad Request", contentType: "application/json; charset=utf-8", body: data, connection: connection)
+            return
+        }
+
+        let params = (json["params"] as? [String: Any]) ?? [:]
+        let bridge = MusicBridge.shared
+        var resultData: [String: Any] = ["status": "ok", "endpoint": endpoint]
+
+        switch endpoint {
+        case "play":
+            let ok = bridge.play()
+            resultData["success"] = ok
+            broadcastStatus(includeQueue: false)
+
+        case "pause":
+            let ok = bridge.pause()
+            resultData["success"] = ok
+            broadcastStatus(includeQueue: false)
+
+        case "play_pause":
+            let ok = bridge.playPause()
+            resultData["success"] = ok
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.broadcastStatus(includeQueue: false)
+            }
+
+        case "next":
+            let ok = bridge.nextTrack()
+            resultData["success"] = ok
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
+        case "previous":
+            let ok = bridge.previousTrack()
+            resultData["success"] = ok
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
+        case "stop":
+            let ok = bridge.stop()
+            resultData["success"] = ok
+            broadcastStatus(includeQueue: false)
+
+        case "set_volume":
+            var vol = 100
+            if let num = params["volume"] as? NSNumber {
+                vol = num.intValue
+            } else if let num = params["volume"] as? Int {
+                vol = num
+            }
+            vol = max(0, min(100, vol))
+            let ok = bridge.setVolume(vol)
+            resultData["success"] = ok
+            resultData["volume"] = vol
+            broadcastStatus(includeQueue: false)
+
+        case "search_and_play":
+            let query = (params["query"] as? String) ?? ""
+            let ok = await bridge.searchAndPlay(query: query)
+            resultData["success"] = ok
+            resultData["query"] = query
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
+        case "status":
+            let status = bridge.getPlayerStatus()
+            if let enc = try? JSONEncoder().encode(status),
+               let dict = try? JSONSerialization.jsonObject(with: enc) as? [String: Any] {
+                resultData["data"] = dict
+            }
+
+        case "play_playlist":
+            let plName = (params["playlist"] as? String) ?? (params["name"] as? String) ?? "Музыка"
+            let trackId = (params["track_id"] as? Int) ?? Int((params["track_id"] as? String) ?? "")
+            let trackIndex = (params["track_index"] as? Int) ?? (params["trackIndex"] as? Int) ?? Int((params["track_index"] as? String) ?? "")
+            let shuffle = (params["shuffle"] as? Bool) ?? false
+            let ok = bridge.playPlaylist(name: plName, trackId: trackId, trackIndex: trackIndex, shuffle: shuffle)
+            resultData["success"] = ok
+            resultData["playlist"] = plName
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
+        case "play_queue_index", "queue_play_index":
+            let idx = (params["index"] as? Int) ?? 0
+            let ok = await bridge.playQueueIndex(idx)
+            resultData["success"] = ok
+            resultData["index"] = idx
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
+        case "queue":
+            let queue = await bridge.getPlaybackQueue()
+            if let enc = try? JSONEncoder().encode(queue),
+               let dict = try? JSONSerialization.jsonObject(with: enc) as? [String: Any] {
+                resultData["data"] = dict
+            }
+
+        default:
+            resultData = ["status": "error", "message": "Unknown endpoint: \(endpoint)"]
+        }
+
+        let respData = (try? JSONSerialization.data(withJSONObject: resultData)) ?? Data("{\"status\":\"ok\"}".utf8)
+        sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: respData, connection: connection)
+    }
+
+    private func sendHTTPResponse(status: String, contentType: String, body: Data, connection: NWConnection, cacheSeconds: Int = 0) {
+        var header = "HTTP/1.1 \(status)\r\nContent-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n"
+        if cacheSeconds > 0 {
+            header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
+        } else {
+            header += "Cache-Control: no-cache\r\n"
+        }
+        header += "\r\n"
+        var respData = Data(header.utf8)
+        respData.append(body)
+        connection.send(content: respData, completion: .contentProcessed({ [weak connection] _ in
+            connection?.cancel()
+        }))
+    }
+
+    private func sendCORSPreflight(connection: NWConnection) {
+        let header = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak connection] _ in
+            connection?.cancel()
+        }))
+    }
+
+    private func loadWebAsset(filename: String) -> String? {
+        if let resourcePath = Bundle.main.resourcePath {
+            let filePath = (resourcePath as NSString).appendingPathComponent("Web/\(filename)")
+            if FileManager.default.fileExists(atPath: filePath),
+               let content = try? String(contentsOfFile: filePath, encoding: .utf8) {
+                return content
+            }
+        }
+        let devPath = "/Users/kirill/Documents/projects/amr/AppleMusicRemoteMac/Web/\(filename)"
+        if FileManager.default.fileExists(atPath: devPath),
+           let content = try? String(contentsOfFile: devPath, encoding: .utf8) {
+            return content
+        }
+        return nil
+    }
+
+    private func loadWebBinaryAsset(subpath: String) -> Data? {
+        if let resourcePath = Bundle.main.resourcePath {
+            let filePath = (resourcePath as NSString).appendingPathComponent("Web/\(subpath)")
+            if FileManager.default.fileExists(atPath: filePath),
+               let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) {
+                return data
+            }
+        }
+        let devPath = "/Users/kirill/Documents/projects/amr/AppleMusicRemoteMac/Web/\(subpath)"
+        if FileManager.default.fileExists(atPath: devPath),
+           let data = try? Data(contentsOf: URL(fileURLWithPath: devPath)) {
+            return data
+        }
+        return nil
+    }
+
+    // MARK: - Message Routing & Dispatcher
+
+    private func processClientTextMessage(_ text: String, connection: NWConnection) async {
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            sendError(action: "unknown", error: "Invalid JSON format", id: nil, to: connection)
+            return
+        }
+
+        let id = json["id"] as? String
+        let action = (json["action"] as? String) ?? (json["command"] as? String) ?? (json["type"] as? String) ?? ""
+        let params = (json["params"] as? [String: Any]) ?? (json["payload"] as? [String: Any]) ?? (json["data"] as? [String: Any]) ?? json
+
+        let bridge = MusicBridge.shared
+        let cloud = CloudCatalogService.shared
+
+        NSLog("[WebSocket] Processing action: %@, id: %@", action, id ?? "nil")
+        switch action.lowercased() {
+        case "play", "start":
+            let ok = bridge.play()
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+            broadcastStatus(includeQueue: false)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.broadcastStatus(includeQueue: false)
+            }
+
+        case "pause":
+            let ok = bridge.pause()
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+            broadcastStatus(includeQueue: false)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.broadcastStatus(includeQueue: false)
+            }
+
+        case "stop":
+            let ok = bridge.stop()
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+            broadcastStatus(includeQueue: false)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.broadcastStatus(includeQueue: false)
+            }
+
+        case "play_pause", "toggle_play_pause":
+            let ok = bridge.playPause()
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+            // ScriptingBridge needs ~150-250ms to reflect state changes in Music.app.
+            // Avoid immediate broadcast of stale state; broadcast after 250ms and 600ms.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.broadcastStatus(includeQueue: false)
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                self?.broadcastStatus(includeQueue: false)
+            }
+
+        case "next", "next_track":
+            let ok = bridge.nextTrack()
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            broadcastStatus(includeQueue: true)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
+        case "previous", "prev", "previous_track":
+            let ok = bridge.previousTrack()
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            broadcastStatus(includeQueue: true)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
+        case "seek":
+            let pos = (params["position"] as? Double) ?? (params["pos"] as? Double) ?? 0
+            let ok = bridge.seek(to: pos)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "position": pos], id: id, to: connection)
+            broadcastStatus(includeQueue: false)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.broadcastStatus(includeQueue: false)
+            }
+
+        case "set_volume", "volume":
+            var volInt = 50
+            if let num = params["volume"] as? NSNumber {
+                volInt = num.intValue
+            } else if let num = params["vol"] as? NSNumber {
+                volInt = num.intValue
+            } else if let d = params["volume"] as? Double {
+                volInt = Int(d)
+            } else if let d = params["vol"] as? Double {
+                volInt = Int(d)
+            } else if let s = params["volume"] as? String, let parsed = Int(s) {
+                volInt = parsed
+            }
+            volInt = max(0, min(100, volInt))
+            let ok = bridge.setVolume(volInt)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "volume": volInt], id: id, to: connection)
+            broadcastStatus(includeQueue: false)
+
+        case "set_shuffle", "shuffle":
+            let enabled = (params["enabled"] as? Bool) ?? (params["shuffle"] as? Bool) ?? false
+            let ok = bridge.setShuffle(enabled)
+            broadcastStatus(includeQueue: false)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "shuffle": enabled], id: id, to: connection)
+
+        case "set_repeat", "repeat":
+            let mode = (params["mode"] as? String) ?? (params["repeat"] as? String) ?? "off"
+            let ok = bridge.setRepeat(mode: mode)
+            broadcastStatus(includeQueue: false)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "repeat": mode], id: id, to: connection)
+
+        case "favorite", "toggle_favorite":
+            let ok = bridge.toggleFavorite()
+            broadcastStatus(includeQueue: false)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "search_and_play":
+            let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
+            Task {
+                let ok = await bridge.searchAndPlay(query: query)
+                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "query": query], id: id, to: connection)
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                self.broadcastStatus(includeQueue: true)
+            }
+
+        case "get_status", "status", "player_status":
+            let status = bridge.getPlayerStatus()
+            sendSuccess(action: action, data: status, id: id, to: connection)
+
+        case "get_playlists", "playlists":
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let fastList = bridge.getPlaylists()
+                self.sendSuccess(action: action, data: PlaylistsResponse(playlists: fastList), id: id, to: connection)
+
+                let hasMissing = fastList.contains { ($0.artworkUrl?.isEmpty ?? true) }
+                if hasMissing {
+                    let enriched = await bridge.getPlaylistsWithArtworks()
+                    self.sendEvent("playlists_result", data: PlaylistsResponse(playlists: enriched), to: connection)
+                }
+            }
+
+        case "get_playlist_tracks", "playlist_tracks":
+            let name = (params["name"] as? String) ?? (params["playlist"] as? String) ?? ""
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                var tracks = bridge.getPlaylistTracks(name: name)
+                self.sendSuccess(action: action, data: PlaylistTracksResponse(playlist: name, tracks: tracks), id: id, to: connection)
+
+                let hasMissing = tracks.contains { !$0.hasArtwork || $0.artworkUrl.isEmpty }
+                if hasMissing {
+                    let enriched = await bridge.enrichTracksArtwork(tracks)
+                    bridge.updatePlaylistTracksCache(name: name, tracks: enriched)
+                    self.sendEvent("playlist_tracks", data: PlaylistTracksResponse(playlist: name, tracks: enriched), to: connection)
+                }
+            }
+
+        case "get_artists", "get_library_artists":
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let artists = bridge.getLibraryArtists()
+                self.sendSuccess(action: action, data: ArtistsResponse(artists: artists), id: id, to: connection)
+            }
+
+        case "get_albums", "get_library_albums":
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let albums = bridge.getLibraryAlbums()
+                self.sendSuccess(action: action, data: AlbumsResponse(albums: albums), id: id, to: connection)
+            }
+
+        case "get_songs", "get_library_songs":
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let songs = bridge.getLibrarySongs()
+                self.sendSuccess(action: action, data: SongsResponse(songs: songs), id: id, to: connection)
+            }
+
+        case "get_stations", "stations":
+            let country = (params["country"] as? String) ?? "ru"
+            let stations = cloud.getCuratedStations(country: country)
+            sendSuccess(action: action, data: StationsResponse(stations: stations), id: id, to: connection)
+
+        case "play_station":
+            let url = (params["url"] as? String) ?? ""
+            let name = (params["name"] as? String) ?? "Apple Music Radio"
+            let ok = bridge.playStation(url: url, name: name)
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "station": name], id: id, to: connection)
+
+        case "play_hero_card":
+            let index = (params["index"] as? Int) ?? 0
+            let name = (params["name"] as? String) ?? ""
+            let artist = (params["artist"] as? String) ?? (params["subtitle"] as? String) ?? (params["sub"] as? String) ?? ""
+            let cardId = params["id"] as? String
+            let url = params["url"] as? String
+            let type = params["type"] as? String
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let ok = await bridge.playHeroCard(index: index, name: name, artist: artist, cardId: cardId, url: url, type: type)
+                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "name": name], id: id, to: connection)
+                self.broadcastStatus(includeQueue: true)
+            }
+
+        case "play_playlist":
+            let plName = (params["playlist"] as? String) ?? (params["name"] as? String) ?? "Музыка"
+            let trackId = (params["track_id"] as? Int) ?? Int((params["track_id"] as? String) ?? "")
+            let trackIndex = (params["track_index"] as? Int) ?? Int((params["track_index"] as? String) ?? "")
+            let shuffle = (params["shuffle"] as? Bool) ?? false
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let ok = bridge.playPlaylist(name: plName, trackId: trackId, trackIndex: trackIndex, shuffle: shuffle)
+                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "playlist": plName], id: id, to: connection)
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                self.broadcastStatus(includeQueue: true)
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                self.broadcastStatus(includeQueue: true)
+            }
+
+        case "play_history_index", "history_play_index":
+            let idx = (params["index"] as? Int) ?? 0
+            let ok = await bridge.playHistoryIndex(idx)
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "play_history_track", "history_play_track":
+            let name = (params["name"] as? String) ?? ""
+            let artist = (params["artist"] as? String) ?? ""
+            let ok = await bridge.playHistoryTrack(name: name, artist: artist)
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "play_album", "play_album_tracks":
+            let albumId = (params["id"] as? String) ?? (params["album_id"] as? String) ?? ""
+            let name = (params["name"] as? String) ?? (params["title"] as? String) ?? ""
+            let artist = (params["artist"] as? String) ?? ""
+            let shuffle = (params["shuffle"] as? Bool) ?? false
+            let trackIndex = (params["track_index"] as? Int) ?? (params["index"] as? Int) ?? 1
+            let startIndex = max(0, trackIndex - 1)
+            let ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, startIndex: startIndex, shuffle: shuffle)
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "album": name], id: id, to: connection)
+
+        case "play_recent", "play_recently_played":
+            let shuffle = (params["shuffle"] as? Bool) ?? false
+            let ok = await bridge.playRecentTracks(shuffle: shuffle)
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "play_cloud":
+            let url = params["url"] as? String
+            let storeId = params["id"] as? String
+            let name = (params["name"] as? String) ?? (params["title"] as? String) ?? ""
+            let artist = (params["artist"] as? String) ?? ""
+            let numericId = (params["numeric_id"] as? Int) ?? (params["numericId"] as? Int)
+            let type = (params["type"] as? String)?.lowercased()
+            let shuffle = (params["shuffle"] as? Bool) ?? false
+
+            var isAlbum = (type == "album")
+            var albumId = storeId ?? ""
+            if !isAlbum, let u = url, u.contains("/album/"), !u.contains("?i="), !u.contains("/song/") {
+                isAlbum = true
+                if albumId.isEmpty {
+                    let clean = u.components(separatedBy: "?").first ?? u
+                    if let lastSegment = clean.split(separator: "/").last, !lastSegment.isEmpty {
+                        albumId = String(lastSegment)
+                    }
+                }
+            }
+
+            let ok: Bool
+            if isAlbum && !albumId.isEmpty {
+                ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, shuffle: shuffle)
+            } else {
+                ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId)
+            }
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "play_search_results":
+            let shuffle = (params["shuffle"] as? Bool) ?? false
+            var trackInfos = [TrackInfo]()
+            if let rawTracks = params["tracks"] as? [[String: Any]] {
+                for (idx, item) in rawTracks.enumerated() {
+                    let tid = (item["id"] as? String) ?? "\(idx + 1)"
+                    let numId = (item["numeric_id"] as? Int) ?? (item["numericId"] as? Int)
+                    let tName = (item["name"] as? String) ?? ""
+                    let tArtist = (item["artist"] as? String) ?? ""
+                    let tAlbum = (item["album"] as? String) ?? ""
+                    let tUrl = item["url"] as? String
+                    let tArt = (item["artwork_url"] as? String) ?? (item["artwork"] as? String) ?? ""
+                    let isLoc = (item["is_local"] as? Bool) ?? (item["isLocal"] as? Bool) ?? false
+                    trackInfos.append(TrackInfo(
+                        id: tid,
+                        numericId: numId,
+                        name: tName,
+                        artist: tArtist,
+                        album: tAlbum,
+                        duration: 0,
+                        hasArtwork: !tArt.isEmpty,
+                        artworkUrl: tArt,
+                        favorited: false,
+                        isLocal: isLoc,
+                        url: tUrl,
+                        index: idx + 1
+                    ))
+                }
+            }
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let ok = await bridge.playSearchResults(tracks: trackInfos, shuffle: shuffle)
+                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "count": trackInfos.count], id: id, to: connection)
+                self.broadcastStatus(includeQueue: true)
+            }
+
+        case "search":
+            let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
+            let country = (params["country"] as? String) ?? "ru"
+            let source = (params["scope"] as? String) ?? (params["source"] as? String) ?? "all"
+            let results = await cloud.search(query: query, country: country, source: source)
+            sendSuccess(action: action, data: results, id: id, to: connection)
+
+        case "get_developer_token":
+            if let token = MusicKitManager.shared.getDeveloperToken() {
+                sendSuccess(action: action, data: ["token": token], id: id, to: connection)
+            } else {
+                sendError(action: action, error: "Developer token unavailable", id: id, to: connection)
+            }
+
+        case "get_catalog_charts", "catalog_charts", "charts":
+            let country = (params["country"] as? String) ?? "us"
+            let songs = await MusicKitManager.shared.getTopCharts(storefront: country)
+            sendSuccess(action: action, data: ["songs": songs], id: id, to: connection)
+
+        case "get_explore", "explore":
+            let country = (params["country"] as? String) ?? "ru"
+            let feed = await cloud.getExploreFeed(country: country)
+            sendSuccess(action: action, data: feed, id: id, to: connection)
+
+        case "get_album", "album":
+            let albumId = (params["id"] as? String) ?? (params["album_id"] as? String) ?? ""
+            let name = (params["name"] as? String) ?? (params["title"] as? String) ?? ""
+            let artist = (params["artist"] as? String) ?? ""
+            let country = (params["country"] as? String) ?? "ru"
+            var albumInfo = await cloud.getAlbumDetails(albumId: albumId, country: country)
+            if albumInfo == nil && country != "us" {
+                albumInfo = await cloud.getAlbumDetails(albumId: albumId, country: "us")
+            }
+            if albumInfo == nil && (!name.isEmpty || !artist.isEmpty) {
+                var trks = await MusicKitManager.shared.getAlbumTracks(album: name, artist: artist, storefront: country)
+                if trks.isEmpty && country != "us" {
+                    trks = await MusicKitManager.shared.getAlbumTracks(album: name, artist: artist, storefront: "us")
+                }
+                if !trks.isEmpty {
+                    albumInfo = AlbumInfo(
+                        id: albumId,
+                        name: name,
+                        artist: artist,
+                        artwork: trks.first?.artworkUrl ?? "",
+                        releaseDate: nil,
+                        trackCount: trks.count,
+                        genre: nil,
+                        url: nil,
+                        tracks: trks
+                    )
+                }
+            }
+            if let album = albumInfo {
+                sendSuccess(action: action, data: ["album": album], id: id, to: connection)
+            } else {
+                sendError(action: action, error: "Album not found", id: id, to: connection)
+            }
+
+        case "add_to_library":
+            let trackId = params["track_id"] as? Int
+            let name = params["name"] as? String
+            let artist = params["artist"] as? String
+            let url = params["url"] as? String
+            let ok = bridge.addToLibrary(trackId: trackId, name: name, artist: artist, url: url)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "queue_add", "add_to_queue":
+            var ok = false
+            if let rawTracks = params["tracks"] as? [[String: Any]] {
+                let trackInfos = rawTracks.map { parseTrackInfo($0) }
+                ok = await bridge.enqueueTracks(trackInfos, playNext: false)
+            } else if let rawTrack = params["track"] as? [String: Any] {
+                let trackInfo = parseTrackInfo(rawTrack)
+                ok = await bridge.enqueueTrack(trackInfo, playNext: false)
+            }
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "queue_play_next":
+            var ok = false
+            if let rawTracks = params["tracks"] as? [[String: Any]] {
+                let trackInfos = rawTracks.map { parseTrackInfo($0) }
+                ok = await bridge.enqueueTracks(trackInfos, playNext: true)
+            } else if let rawTrack = params["track"] as? [String: Any] {
+                let trackInfo = parseTrackInfo(rawTrack)
+                ok = await bridge.enqueueTrack(trackInfo, playNext: true)
+            }
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "queue_remove":
+            let idx = (params["index"] as? Int) ?? 0
+            let ok = await bridge.removeQueueTrack(at: idx)
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "queue_clear":
+            let ok = await bridge.clearUpcomingQueue()
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "queue_play_index", "play_queue_index":
+            let idx = (params["index"] as? Int) ?? 0
+            let ok = await bridge.playQueueIndex(idx)
+            broadcastStatus(includeQueue: true)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+
+        case "get_queue", "queue":
+            let q = await bridge.getPlaybackQueue()
+            sendSuccess(action: action, data: q, id: id, to: connection)
+
+        case "get_artwork", "artwork":
+            if let isCur = params["current"] as? Bool, isCur {
+                if let data = bridge.getCurrentTrackArtwork() {
+                    let b64 = data.base64EncodedString()
+                    sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
+                } else {
+                    sendError(action: action, error: "No artwork found", id: id, to: connection)
+                }
+            } else if let tid = params["track_id"] as? Int {
+                if let data = bridge.getTrackArtwork(id: tid) {
+                    let b64 = data.base64EncodedString()
+                    sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
+                } else {
+                    sendError(action: action, error: "No artwork found", id: id, to: connection)
+                }
+            } else if let plName = params["playlist"] as? String {
+                if let data = bridge.getPlaylistArtwork(name: plName) {
+                    let b64 = data.base64EncodedString()
+                    sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
+                } else {
+                    sendError(action: action, error: "No artwork found", id: id, to: connection)
+                }
+            } else {
+                sendError(action: action, error: "Missing parameters for artwork", id: id, to: connection)
+            }
+
+        case "get_info", "info":
+            let ips = getLANIPAddresses()
+            let primaryUrl = ips.first.map { "http://\($0):\(self.port)" } ?? "http://localhost:\(self.port)"
+            sendSuccess(action: action, data: [
+                "port": self.port,
+                "primary_url": primaryUrl,
+                "ips": ips,
+                "version": "2.0.0",
+                "platform": "macOS"
+            ], id: id, to: connection)
+
+        default:
+            sendError(action: action, error: "Unsupported action: \(action)", id: id, to: connection)
+        }
+    }
+
+    private func processClientBinaryMessage(_ data: Data, connection: NWConnection) async {
+        sendSuccess(action: "binary", data: ["received_bytes": data.count], id: nil, to: connection)
+    }
+
+    private func parseTrackInfo(_ dict: [String: Any]) -> TrackInfo {
+        let tid = (dict["id"] as? String) ?? "\(dict["numeric_id"] ?? UUID().uuidString)"
+        let numericId = (dict["numeric_id"] as? Int) ?? Int(tid)
+        let name = (dict["name"] as? String) ?? ""
+        let artist = (dict["artist"] as? String) ?? ""
+        let album = (dict["album"] as? String) ?? ""
+        let dur = (dict["duration"] as? Double) ?? 0
+        let art = (dict["artwork"] as? String) ?? (dict["artwork_url"] as? String) ?? ""
+        let url = dict["url"] as? String
+        let preview = dict["preview_url"] as? String
+        let isLocal = (dict["is_local"] as? Bool) ?? false
+
+        return TrackInfo(
+            id: tid,
+            numericId: numericId,
+            name: name,
+            artist: artist,
+            album: album,
+            duration: dur,
+            hasArtwork: !art.isEmpty,
+            artworkUrl: art,
+            favorited: false,
+            isLocal: isLocal,
+            url: url,
+            previewUrl: preview
+        )
+    }
+
+    // MARK: - Outgoing WebSocket Messages
+
+    public func sendSuccess<T: Encodable>(action: String, data: T, id: String?, to connection: NWConnection) {
+        var baseObj: [String: Any] = [
+            "action": action,
+            "event": action,
+            "type": action,
+            "status": "ok"
+        ]
+        if let reqId = id {
+            baseObj["id"] = reqId
+        }
+
+        if let encodedData = try? JSONEncoder().encode(data),
+           let dataObj = try? JSONSerialization.jsonObject(with: encodedData) {
+            baseObj["data"] = dataObj
+        } else {
+            baseObj["data"] = "\(data)"
+        }
+
+        if let jsonBytes = try? JSONSerialization.data(withJSONObject: baseObj),
+           let text = String(data: jsonBytes, encoding: .utf8) {
+            sendText(text, to: connection)
+        }
+    }
+
+    public func sendSuccess(action: String, data: [String: Any], id: String?, to connection: NWConnection) {
+        var payload: [String: Any] = [
+            "action": action,
+            "event": action,
+            "type": action,
+            "status": "ok"
+        ]
+        if let reqId = id {
+            payload["id"] = reqId
+        }
+
+        // Sanitize data dictionary so AnyCodable or custom Swift structs/enums become native JSON types
+        let sanitizedData = sanitizeForJSON(data)
+        payload["data"] = sanitizedData
+
+        if let jsonBytes = try? JSONSerialization.data(withJSONObject: payload),
+           let text = String(data: jsonBytes, encoding: .utf8) {
+            sendText(text, to: connection)
+        }
+    }
+
+    private func sanitizeForJSON(_ value: Any) -> Any {
+        if let ac = value as? AnyCodable {
+            return sanitizeForJSON(ac.value ?? NSNull())
+        } else if let dict = value as? [String: Any] {
+            var res = [String: Any]()
+            for (k, v) in dict {
+                res[k] = sanitizeForJSON(v)
+            }
+            return res
+        } else if let arr = value as? [Any] {
+            return arr.map { sanitizeForJSON($0) }
+        } else if let str = value as? String {
+            return str
+        } else if let num = value as? NSNumber {
+            return num
+        } else if let b = value as? Bool {
+            return b
+        } else if let i = value as? Int {
+            return i
+        } else if let d = value as? Double {
+            return d
+        } else if let s = value as? StationInfo {
+            if let data = try? JSONEncoder().encode(s),
+               let obj = try? JSONSerialization.jsonObject(with: data) {
+                return obj
+            }
+            return s.name
+        } else if let t = value as? TrackInfo {
+            if let data = try? JSONEncoder().encode(t),
+               let obj = try? JSONSerialization.jsonObject(with: data) {
+                return obj
+            }
+            return t.name
+        } else if value is NSNull {
+            return NSNull()
+        } else {
+            return String(describing: value)
+        }
+    }
+
+    public func sendError(action: String, error: String, id: String?, to connection: NWConnection) {
+        var payload: [String: Any] = [
+            "action": action,
+            "status": "error",
+            "error": error
+        ]
+        if let reqId = id {
+            payload["id"] = reqId
+        }
+
+        if let jsonBytes = try? JSONSerialization.data(withJSONObject: payload),
+           let text = String(data: jsonBytes, encoding: .utf8) {
+            sendText(text, to: connection)
+        }
+    }
+
+    public struct EventEnvelope<T: Encodable>: Encodable {
+        public let event: String
+        public let type: String
+        public let data: T
+    }
+
+    public func sendEvent<T: Encodable>(_ eventName: String, data: T, to connection: NWConnection) {
+        let env = EventEnvelope(event: eventName, type: eventName, data: data)
+        if let encoded = try? JSONEncoder().encode(env),
+           let text = String(data: encoded, encoding: .utf8) {
+            sendText(text, to: connection)
+        }
+    }
+
+    public func sendText(_ text: String, to connection: NWConnection) {
+        guard let data = text.data(using: .utf8) else { return }
+        let frame = makeWebSocketFrame(payload: data, opcode: 0x01)
+        sendLock.lock()
+        defer { sendLock.unlock() }
+        connection.send(content: frame, completion: .contentProcessed({ error in
+            if let err = error {
+                NSLog("[WebSocket] sendText error: %@", err.localizedDescription)
+            }
+        }))
+    }
+
+    public func sendBinary(_ data: Data, to connection: NWConnection) {
+        let frame = makeWebSocketFrame(payload: data, opcode: 0x02)
+        sendLock.lock()
+        defer { sendLock.unlock() }
+        connection.send(content: frame, completion: .contentProcessed({ _ in }))
+    }
+
+    public func broadcastText(_ text: String) {
+        clientLock.lock()
+        let active = Array(clients.values)
+        clientLock.unlock()
+
+        for conn in active {
+            sendText(text, to: conn)
+        }
+    }
+
+    public func broadcastStatus(includeQueue: Bool = false) {
+        let status = MusicBridge.shared.getPlayerStatus()
+        clientLock.lock()
+        let active = Array(clients.values)
+        clientLock.unlock()
+
+        for conn in active {
+            sendEvent("player_state_changed", data: status, to: conn)
+        }
+
+        if includeQueue {
+            Task {
+                let queue = await MusicBridge.shared.getPlaybackQueue()
+                for conn in active {
+                    sendEvent("queue_changed", data: queue, to: conn)
+                }
+                await MainActor.run {
+                    MenuManager.shared.updateMenuState(with: status)
+                }
+            }
+        }
+
+        Task { @MainActor in
+            MenuManager.shared.updateMenuState(with: status)
+        }
+
+        UPnPMediaRendererServer.shared.notifySubscribers(status: status)
+    }
+
+    // MARK: - Periodic Monitoring Timer
+
+    private func startPollerTimer() {
+        stopPollerTimer()
+
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+        timer.schedule(deadline: .now() + 1.0, repeating: 1.0)
+        timer.setEventHandler { [weak self] in
+            guard let self = self else { return }
+
+            let hasClients = self.clientCount > 0
+
+            // Auto-advance check for cloud queue
+            MusicBridge.shared.checkAndAutoAdvanceCloudQueue()
+
+            let status = MusicBridge.shared.getPlayerStatus()
+            let state = status.playerState
+            let pos = status.position
+            let trackId = status.track?.id ?? ""
+
+            let stateChanged = (state != self.lastKnownState)
+            let trackChanged = (!trackId.isEmpty && trackId != self.lastKnownTrackId)
+            let posJumped = abs(pos - self.lastKnownPosition) > 2.5
+            let isPlaying = (state == "playing")
+
+            if stateChanged || trackChanged || posJumped || (hasClients && isPlaying && Date().timeIntervalSince(self.lastBroadcastTime) >= 1.0) {
+                self.lastKnownState = state
+                self.lastKnownPosition = pos
+                if !trackId.isEmpty {
+                    self.lastKnownTrackId = trackId
+                }
+                self.lastBroadcastTime = Date()
+                if hasClients || stateChanged || trackChanged {
+                    self.broadcastStatus(includeQueue: trackChanged)
+                }
+            }
+        }
+        timer.resume()
+        self.pollerTimer = timer
+    }
+
+    private func stopPollerTimer() {
+        pollerTimer?.cancel()
+        pollerTimer = nil
+    }
+
+    // MARK: - IP Address Detection
+
+    public func getLANIPAddresses() -> [String] {
+        var addresses = [String]()
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        if getifaddrs(&ifaddr) == 0 {
+            var ptr = ifaddr
+            while ptr != nil {
+                let flags = Int32(ptr!.pointee.ifa_flags)
+                var addr = ptr!.pointee.ifa_addr.pointee
+                if (flags & (IFF_UP | IFF_RUNNING | IFF_LOOPBACK)) == (IFF_UP | IFF_RUNNING) {
+                    if addr.sa_family == UInt8(AF_INET) {
+                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                        if getnameinfo(&addr, socklen_t(addr.sa_len), &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST) == 0 {
+                            let ip = String(cString: hostname)
+                            if ip != "127.0.0.1" && !ip.hasPrefix("169.254") {
+                                addresses.append(ip)
+                            }
+                        }
+                    }
+                }
+                ptr = ptr!.pointee.ifa_next
+            }
+            freeifaddrs(ifaddr)
+        }
+        return addresses.isEmpty ? ["127.0.0.1"] : addresses
+    }
+}

@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Icon?
+Thumbs.db
+
+# Swift & Xcode
+.build/
+Packages/
+xcuserdata/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+*.app/
+*.dSYM/
+build/
+
+# Python virtual environment & temporary
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Agent Scratch & Temporary
+scratch/
+.system_generated/
+*.tmp
+*.log
+
+# Sensitive Keys (Security)
+AuthKey_*.p8

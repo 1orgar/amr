@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <defs>
+    <linearGradient id="popBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#33001f"/>
+      <stop offset="35%" stop-color="#fa2d48"/>
+      <stop offset="70%" stop-color="#ff6b8b"/>
+      <stop offset="100%" stop-color="#ffd166"/>
+    </linearGradient>
+    <filter id="popGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1000" height="1000" fill="url(#popBg)"/>
+
+  <!-- Explosive Pop Star-Burst Graphic -->
+  <g filter="url(#popGlow)" fill="#ffffff">
+    <path d="M 500 240 L 535 390 L 680 430 L 545 480 L 500 640 L 455 480 L 320 430 L 465 390 Z" opacity="0.95"/>
+    <circle cx="500" cy="435" r="30" fill="#fa2d48"/>
+  </g>
+
+  <!-- Sparkling Pop Diamonds -->
+  <polygon points="300,300 315,330 345,345 315,360 300,390 285,360 255,345 285,330" fill="#ffffff" opacity="0.8"/>
+  <polygon points="720,290 730,310 750,320 730,330 720,350 710,330 690,320 710,310" fill="#ffd166" opacity="0.9"/>
+  <polygon points="260,560 270,580 290,590 270,600 260,620 250,600 230,590 250,580" fill="#ffffff" opacity="0.7"/>
+  <polygon points="740,540 750,560 770,570 750,580 740,600 730,580 710,570 730,560" fill="#ffffff" opacity="0.8"/>
+
+  <!-- Apple Music Header Badge -->
+  <g transform="translate(500, 110)">
+    <rect x="-130" y="-22" width="260" height="44" rx="22" fill="#000000" fill-opacity="0.35"/>
+    <text x="0" y="7" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="20" font-weight="700" letter-spacing="4" text-anchor="middle">APPLE MUSIC</text>
+  </g>
+
+  <!-- Typography -->
+  <text x="500" y="830" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="64" font-weight="900" letter-spacing="3" text-anchor="middle">POP HITS</text>
+  <text x="500" y="880" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="24" font-weight="700" letter-spacing="6" text-anchor="middle">THE BIGGEST ANTHEMS</text>
+</svg>

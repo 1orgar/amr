@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#141416"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  
+  <!-- Background with subtle border -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#262628" stroke-width="4"/>
+
+  <!-- High-fidelity minimalist soundwave / audio core -->
+  <g fill="#ffffff">
+    <!-- Bar 1 -->
+    <rect x="96" y="216" width="20" height="80" rx="10"/>
+    <!-- Bar 2 -->
+    <rect x="136" y="176" width="20" height="160" rx="10"/>
+    <!-- Bar 3 -->
+    <rect x="176" y="128" width="20" height="256" rx="10"/>
+    <!-- Bar 4 -->
+    <rect x="216" y="200" width="20" height="112" rx="10"/>
+    <!-- Bar 5 -->
+    <rect x="256" y="96" width="20" height="320" rx="10"/>
+    <!-- Bar 6 -->
+    <rect x="296" y="160" width="20" height="192" rx="10"/>
+    <!-- Bar 7 -->
+    <rect x="336" y="120" width="20" height="272" rx="10"/>
+    <!-- Bar 8 -->
+    <rect x="376" y="192" width="20" height="128" rx="10"/>
+    <!-- Bar 9 -->
+    <rect x="416" y="232" width="20" height="48" rx="10"/>
+  </g>
+
+  <!-- Bit-perfect badge text indicator at bottom center -->
+  <text x="256" y="455" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="22" font-weight="700" letter-spacing="5" fill="#8e8e93">BIT-PERFECT</text>
+</svg>

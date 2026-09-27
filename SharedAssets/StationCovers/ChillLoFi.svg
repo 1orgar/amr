@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <defs>
+    <linearGradient id="chillBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#061928"/>
+      <stop offset="35%" stop-color="#00667f"/>
+      <stop offset="70%" stop-color="#00b4db"/>
+      <stop offset="100%" stop-color="#9b51e0"/>
+    </linearGradient>
+    <linearGradient id="sineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#b388ff"/>
+    </linearGradient>
+    <filter id="chillGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="15" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1000" height="1000" fill="url(#chillBg)"/>
+
+  <!-- Ambient Mist Orbs -->
+  <circle cx="300" cy="350" r="180" fill="#00f2fe" opacity="0.25" filter="url(#chillGlow)"/>
+  <circle cx="700" cy="500" r="220" fill="#9b51e0" opacity="0.3" filter="url(#chillGlow)"/>
+
+  <!-- Serene Undulating Wave Ribbons -->
+  <g fill="none" stroke="url(#sineGrad)" stroke-linecap="round" filter="url(#chillGlow)">
+    <path d="M 100 420 C 300 300, 400 540, 600 420 C 750 320, 850 480, 900 420" stroke-width="12" opacity="0.95"/>
+    <path d="M 100 480 C 300 360, 400 600, 600 480 C 750 380, 850 540, 900 480" stroke-width="8" opacity="0.6"/>
+    <path d="M 100 360 C 300 240, 400 480, 600 360 C 750 260, 850 420, 900 360" stroke-width="6" opacity="0.4"/>
+  </g>
+
+  <!-- Floating Minimal Lo-Fi Cassette Glyphs -->
+  <g transform="translate(500, 450)" opacity="0.85">
+    <circle cx="-50" cy="0" r="24" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <circle cx="50" cy="0" r="24" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <line x1="-50" y1="24" x2="50" y2="24" stroke="#ffffff" stroke-width="3"/>
+  </g>
+
+  <!-- Apple Music Header Badge -->
+  <g transform="translate(500, 110)">
+    <rect x="-130" y="-22" width="260" height="44" rx="22" fill="#000000" fill-opacity="0.35"/>
+    <text x="0" y="7" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="20" font-weight="700" letter-spacing="4" text-anchor="middle">APPLE MUSIC</text>
+  </g>
+
+  <!-- Typography -->
+  <text x="500" y="830" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="64" font-weight="900" letter-spacing="3" text-anchor="middle">CHILL &amp; LO-FI</text>
+  <text x="500" y="880" fill="#bdefff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="24" font-weight="600" letter-spacing="6" text-anchor="middle">LAID-BACK SOUNDS &amp; BEATS</text>
+</svg>

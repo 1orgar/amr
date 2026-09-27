@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <defs>
+    <linearGradient id="elecBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#02120c"/>
+      <stop offset="35%" stop-color="#004d40"/>
+      <stop offset="70%" stop-color="#00c853"/>
+      <stop offset="100%" stop-color="#00f5d4"/>
+    </linearGradient>
+    <linearGradient id="laserGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f5d4"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#00e676"/>
+    </linearGradient>
+    <filter id="elecGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1000" height="1000" fill="url(#elecBg)"/>
+
+  <!-- Cybernetic Synthesizer Grid -->
+  <g stroke="#00f5d4" opacity="0.25" stroke-width="2">
+    <line x1="200" y1="200" x2="800" y2="200"/>
+    <line x1="200" y1="300" x2="800" y2="300"/>
+    <line x1="200" y1="400" x2="800" y2="400"/>
+    <line x1="200" y1="500" x2="800" y2="500"/>
+    <line x1="200" y1="600" x2="800" y2="600"/>
+    <line x1="200" y1="700" x2="800" y2="700"/>
+    
+    <line x1="200" y1="200" x2="200" y2="700"/>
+    <line x1="320" y1="200" x2="320" y2="700"/>
+    <line x1="440" y1="200" x2="440" y2="700"/>
+    <line x1="560" y1="200" x2="560" y2="700"/>
+    <line x1="680" y1="200" x2="680" y2="700"/>
+    <line x1="800" y1="200" x2="800" y2="700"/>
+  </g>
+
+  <!-- Pulsating BPM Waveform -->
+  <g filter="url(#elecGlow)" fill="none" stroke="url(#laserGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 160 450 L 320 450 L 360 300 L 410 580 L 460 380 L 510 520 L 560 340 L 610 560 L 650 450 L 840 450"/>
+  </g>
+
+  <!-- Apple Music Header Badge -->
+  <g transform="translate(500, 110)">
+    <rect x="-130" y="-22" width="260" height="44" rx="22" fill="#000000" fill-opacity="0.35"/>
+    <text x="0" y="7" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="20" font-weight="700" letter-spacing="4" text-anchor="middle">APPLE MUSIC</text>
+  </g>
+
+  <!-- Typography -->
+  <text x="500" y="830" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="62" font-weight="900" letter-spacing="2" text-anchor="middle">DANCE &amp; ELECTRONIC</text>
+  <text x="500" y="880" fill="#00f5d4" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="24" font-weight="700" letter-spacing="6" text-anchor="middle">CLUB &amp; FESTIVAL BANGERS</text>
+</svg>

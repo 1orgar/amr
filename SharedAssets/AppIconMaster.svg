@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c0a18"/>
+      <stop offset="35%" stop-color="#150f28"/>
+      <stop offset="70%" stop-color="#1f1138"/>
+      <stop offset="100%" stop-color="#2a0f40"/>
+    </linearGradient>
+
+    <linearGradient id="glassFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.02"/>
+    </linearGradient>
+
+    <linearGradient id="glassBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="25%" stop-color="#ff2d55" stop-opacity="0.45"/>
+      <stop offset="70%" stop-color="#af52de" stop-opacity="0.40"/>
+      <stop offset="100%" stop-color="#00f2fe" stop-opacity="0.30"/>
+    </linearGradient>
+
+    <linearGradient id="musicGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fa233b"/>
+      <stop offset="22%" stop-color="#ff2d55"/>
+      <stop offset="50%" stop-color="#c837ab"/>
+      <stop offset="75%" stop-color="#7928ca"/>
+      <stop offset="100%" stop-color="#00d2ff"/>
+    </linearGradient>
+
+    <linearGradient id="signalGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fa233b"/>
+      <stop offset="45%" stop-color="#ff2d55"/>
+      <stop offset="100%" stop-color="#00f2fe"/>
+    </linearGradient>
+
+    <filter id="noteShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#fa233b" flood-opacity="0.55"/>
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <radialGradient id="redSpot" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fa233b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#fa233b" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="purpleSpot" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7928ca" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#7928ca" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bgGrad)"/>
+  <circle cx="300" cy="320" r="340" fill="url(#redSpot)"/>
+  <circle cx="740" cy="460" r="360" fill="url(#purpleSpot)"/>
+
+  <!-- Background Acoustic Waveform Bars -->
+  <g opacity="0.16">
+    <rect x="200" y="450" width="8" height="124" rx="4" fill="#ffffff"/>
+    <rect x="230" y="400" width="8" height="224" rx="4" fill="#ffffff"/>
+    <rect x="260" y="360" width="8" height="304" rx="4" fill="#ffffff"/>
+    <rect x="290" y="420" width="8" height="184" rx="4" fill="#ffffff"/>
+    <rect x="730" y="430" width="8" height="164" rx="4" fill="#ffffff"/>
+    <rect x="760" y="370" width="8" height="284" rx="4" fill="#ffffff"/>
+    <rect x="790" y="330" width="8" height="364" rx="4" fill="#ffffff"/>
+    <rect x="820" y="410" width="8" height="204" rx="4" fill="#ffffff"/>
+  </g>
+
+  <!-- Central Frosted Glass Shield -->
+  <rect x="144" y="144" width="736" height="736" rx="175" fill="url(#glassFill)" stroke="url(#glassBorder)" stroke-width="2.5"/>
+
+  <!-- Specular Reflection -->
+  <path d="M 170 190 C 340 160, 684 160, 854 190 C 864 230, 868 310, 848 390 C 660 310, 364 310, 174 390 Z" fill="#ffffff" opacity="0.05"/>
+
+  <!-- Wireless Remote Broadcast Waves -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M 650 330 A 230 230 0 0 1 750 430" stroke="url(#signalGrad)" stroke-width="13" opacity="0.95" filter="url(#softGlow)"/>
+    <path d="M 685 295 A 280 280 0 0 1 805 415" stroke="url(#signalGrad)" stroke-width="10" opacity="0.75" filter="url(#softGlow)"/>
+    <path d="M 720 260 A 330 330 0 0 1 860 400" stroke="url(#signalGrad)" stroke-width="7" opacity="0.5"/>
+  </g>
+
+  <!-- Sound Equalizer Matrix in Glass Body -->
+  <g opacity="0.85" filter="url(#softGlow)">
+    <rect x="295" y="485" width="11" height="115" rx="5.5" fill="url(#musicGrad)"/>
+    <rect x="325" y="445" width="11" height="175" rx="5.5" fill="url(#musicGrad)"/>
+    <rect x="355" y="525" width="11" height="85" rx="5.5" fill="url(#musicGrad)"/>
+    
+    <rect x="645" y="465" width="11" height="145" rx="5.5" fill="url(#musicGrad)"/>
+    <rect x="675" y="425" width="11" height="205" rx="5.5" fill="url(#musicGrad)"/>
+    <rect x="705" y="505" width="11" height="105" rx="5.5" fill="url(#musicGrad)"/>
+  </g>
+
+  <!-- Double Eighth Note Glyph -->
+  <g filter="url(#noteShadow)">
+    <ellipse cx="388" cy="670" rx="76" ry="56" transform="rotate(-22 388 670)" fill="url(#musicGrad)"/>
+    <ellipse cx="638" cy="580" rx="76" ry="56" transform="rotate(-22 638 580)" fill="url(#musicGrad)"/>
+
+    <rect x="442" y="325" width="28" height="345" rx="4" fill="url(#musicGrad)"/>
+    <rect x="692" y="235" width="28" height="345" rx="4" fill="url(#musicGrad)"/>
+
+    <polygon points="442,325 720,235 720,298 442,388" fill="url(#musicGrad)"/>
+    <polygon points="442,410 720,320 720,358 442,448" fill="url(#musicGrad)" opacity="0.9"/>
+  </g>
+
+  <!-- Specular Highlights -->
+  <g fill="#ffffff" opacity="0.3">
+    <polygon points="444,327 718,237 718,247 444,337"/>
+    <ellipse cx="374" cy="658" rx="38" ry="22" transform="rotate(-22 374 658)" fill="#ffffff" opacity="0.25"/>
+    <ellipse cx="624" cy="568" rx="38" ry="22" transform="rotate(-22 624 568)" fill="#ffffff" opacity="0.25"/>
+  </g>
+</svg>

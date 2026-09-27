@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <defs>
+    <linearGradient id="dBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0017"/>
+      <stop offset="35%" stop-color="#3b0078"/>
+      <stop offset="70%" stop-color="#7928ca"/>
+      <stop offset="100%" stop-color="#ff007f"/>
+    </linearGradient>
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ff007f"/>
+    </linearGradient>
+    <filter id="dGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1000" height="1000" fill="url(#dBg)"/>
+
+  <!-- Orbiting Cosmic Acoustic Rings -->
+  <g fill="none" stroke="#00f2fe" opacity="0.5" stroke-linecap="round" filter="url(#dGlow)">
+    <ellipse cx="500" cy="450" rx="300" ry="120" stroke-width="4" transform="rotate(-25 500 450)"/>
+    <ellipse cx="500" cy="450" rx="340" ry="140" stroke-width="3" stroke-dasharray="15 30" transform="rotate(35 500 450)"/>
+  </g>
+
+  <!-- Radiant 8-Pointed Discovery Starburst -->
+  <g filter="url(#dGlow)">
+    <!-- Primary Flare Points -->
+    <path d="M 500 200 L 530 420 L 750 450 L 530 480 L 500 700 L 470 480 L 250 450 L 470 420 Z" fill="url(#starGrad)"/>
+    <!-- Diagonal Subtle Points -->
+    <path d="M 500 310 L 518 432 L 640 450 L 518 468 L 500 590 L 482 468 L 360 450 L 482 432 Z" fill="#ffffff" opacity="0.8" transform="rotate(45 500 450)"/>
+    <circle cx="500" cy="450" r="28" fill="#ffffff"/>
+  </g>
+
+  <!-- Star particles -->
+  <circle cx="320" cy="280" r="6" fill="#00f2fe" opacity="0.8"/>
+  <circle cx="680" cy="260" r="8" fill="#ffffff" opacity="0.9"/>
+  <circle cx="280" cy="620" r="7" fill="#ff007f" opacity="0.7"/>
+  <circle cx="720" cy="600" r="5" fill="#00f2fe" opacity="0.8"/>
+
+  <!-- Apple Music Header Badge -->
+  <g transform="translate(500, 110)">
+    <rect x="-130" y="-22" width="260" height="44" rx="22" fill="#000000" fill-opacity="0.35"/>
+    <text x="0" y="7" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="20" font-weight="700" letter-spacing="4" text-anchor="middle">APPLE MUSIC</text>
+  </g>
+
+  <!-- Typography -->
+  <text x="500" y="840" fill="#ffffff" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="60" font-weight="900" letter-spacing="2" text-anchor="middle">СТАНЦИЯ ОТКРЫТИЙ</text>
+  <text x="500" y="890" fill="#00f2fe" font-family="-apple-system, SF Pro Display, Helvetica Neue, sans-serif" font-size="26" font-weight="600" letter-spacing="6" text-anchor="middle">DISCOVERY STATION</text>
+</svg>
