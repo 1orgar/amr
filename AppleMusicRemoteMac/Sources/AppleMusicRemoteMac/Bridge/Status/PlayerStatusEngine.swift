@@ -325,8 +325,9 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                     let encAlbum = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
                     artUrl = "/api/artwork/search?name=\(encName)&artist=\(encArtist)&album=\(encAlbum)"
                     hasArt = true
+                    let searchAlbum = tAlbum
                     Task.detached(priority: .userInitiated) {
-                        if let fetched = await MusicKitManager.shared.searchTrackArtwork(name: radName, artist: radArtist, album: tAlbum), !fetched.isEmpty {
+                        if let fetched = await MusicKitManager.shared.searchTrackArtwork(name: radName, artist: radArtist, album: searchAlbum), !fetched.isEmpty {
                             if !PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.isTransitioningTrack }) {
                                 WebSocketServer.shared.broadcastStatus(includeQueue: false)
                             }
@@ -471,8 +472,11 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                     artUrl = local
                 } else {
                     artUrl = "/api/artwork/search?name=\(encName)&artist=\(encArtist)&album=\(encAlbum)"
+                    let searchName = tName
+                    let searchArtist = tArtist
+                    let searchAlbum = tAlbum
                     Task.detached(priority: .userInitiated) {
-                        if let fetched = await MusicKitManager.shared.searchTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !fetched.isEmpty {
+                        if let fetched = await MusicKitManager.shared.searchTrackArtwork(name: searchName, artist: searchArtist, album: searchAlbum), !fetched.isEmpty {
                             WebSocketServer.shared.broadcastStatus(includeQueue: false)
                         }
                     }
