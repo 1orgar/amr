@@ -2784,44 +2784,6 @@ body.ui-blocked #busy-overlay {
   text-overflow: ellipsis;
 }
 
-/* Header Actions & Settings Button */
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-settings-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 9999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  transition: all var(--transition-fast);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.btn-settings-icon:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-  border-color: var(--border-bright);
-}
-
-.btn-settings-icon:active {
-  transform: scale(0.92);
-}
-
-.btn-settings-icon svg {
-  width: 17px;
-  height: 17px;
-}
-
 /* Volume Slider Section */
 .volume-section {
   display: flex;
@@ -2929,83 +2891,5 @@ body.ui-blocked #busy-overlay {
   min-width: 34px;
   text-align: right;
   flex-shrink: 0;
-}
-
-/* Settings Modal & Switch Styles */
-.setting-item-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.setting-item-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.setting-item-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.setting-item-desc {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-}
-
-/* Apple-style Toggle Switch */
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 28px;
-  flex-shrink: 0;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(255, 255, 255, 0.2);
-  transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 28px;
-}
-
-.toggle-slider:before {
-  position: absolute;
-  content: "";
-  height: 22px;
-  width: 22px;
-  left: 3px;
-  bottom: 3px;
-  background-color: #ffffff;
-  transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 50%;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-}
-
-.toggle-switch input:checked + .toggle-slider {
-  background-color: #ffffff;
-}
-
-.toggle-switch input:checked + .toggle-slider:before {
-  transform: translateX(20px);
-  background-color: #000000;
 }
 

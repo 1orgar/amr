@@ -53,21 +53,13 @@ public enum WebUIContent {
           <span class="brand-dot"></span>
           <span class="brand-title">APPLE MUSIC REMOTE</span>
         </div>
-        <div class="header-actions">
-          <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
-            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <polygon points="10 8 16 12 10 16 10 8"/>
-            </svg>
-            <span id="audio-quality-text">LOSSLESS</span>
-          </button>
-          <button id="btn-settings" class="btn-icon btn-settings-icon" type="button" aria-label="Настройки" title="Настройки">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
-        </div>
+        <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
+          <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
+          <span id="audio-quality-text">LOSSLESS</span>
+        </button>
       </header>
 
       <!-- Artwork Area -->
@@ -207,21 +199,13 @@ public enum WebUIContent {
           <button class="nav-tab-btn" data-target="queue">Очередь</button>
           <button class="nav-tab-btn" data-target="search">Поиск</button>
         </div>
-        <div class="header-actions">
-          <button id="desktop-dac-badge" class="quality-badge desktop-dac-badge" type="button" title="Параметры потока и ЦАП">
-            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <polygon points="10 8 16 12 10 16 10 8"/>
-            </svg>
-            <span id="desktop-dac-text">Bit-Perfect DAC</span>
-          </button>
-          <button id="desktop-btn-settings" class="btn-icon btn-settings-icon" type="button" aria-label="Настройки" title="Настройки">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
-        </div>
+        <button id="desktop-dac-badge" class="quality-badge desktop-dac-badge" type="button" title="Параметры потока и ЦАП">
+          <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
+          <span id="desktop-dac-text">Bit-Perfect DAC</span>
+        </button>
       </nav>
 
       <!-- Mobile Top Bar with Permanent DAC Badge (visible on mobile outside Now Playing) -->
@@ -230,21 +214,13 @@ public enum WebUIContent {
           <span class="brand-dot"></span>
           <span class="brand-title">AMR</span>
         </div>
-        <div class="header-actions">
-          <button id="mobile-dac-badge" class="quality-badge mobile-dac-badge" type="button" title="Параметры потока и ЦАП">
-            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <polygon points="10 8 16 12 10 16 10 8"/>
-            </svg>
-            <span id="mobile-dac-text">LOSSLESS</span>
-          </button>
-          <button id="mobile-btn-settings" class="btn-icon btn-settings-icon" type="button" aria-label="Настройки" title="Настройки">
-            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
-        </div>
+        <button id="mobile-dac-badge" class="quality-badge mobile-dac-badge" type="button" title="Параметры потока и ЦАП">
+          <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
+          <span id="mobile-dac-text">LOSSLESS</span>
+        </button>
       </header>
 
       <!-- Queue View -->
@@ -656,40 +632,6 @@ public enum WebUIContent {
     </div>
   </div>
 
-  <!-- Settings Modal -->
-  <div id="settings-modal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-card">
-      <div class="modal-header">
-        <div class="modal-title-wrap">
-          <h3 class="modal-title">Настройки</h3>
-          <span class="modal-tag">AMR</span>
-        </div>
-        <button id="btn-close-settings-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="setting-item-row">
-          <div class="setting-item-info">
-            <span class="setting-item-title">Устанавливать громкость 100%</span>
-            <span class="setting-item-desc">Фиксирует цифровую громкость Music.app на максимуме для Bit-Perfect вывода. Если опция выключена — в плеере появляется регулятор громкости.</span>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="setting-lock-volume-100" checked>
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-
-        <div class="spec-row" style="margin-top: 14px;">
-          <span class="spec-label">Текущая громкость Music.app</span>
-          <span id="settings-current-volume" class="spec-val">100%</span>
-        </div>
-
-        <div class="modal-explanation">
-          <p>В режиме Bit-Perfect цифровая регулировка macOS отключается для исключения искажений разрядности аудиопотока. Если вы используете наушники или колонки без аппаратного регулятора, выключите эту опцию для ручной регулировки прямо из интерфейса.</p>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- Busy / Action Loading Overlay -->
   <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
@@ -3492,44 +3434,6 @@ body.ui-blocked #busy-overlay {
   text-overflow: ellipsis;
 }
 
-/* Header Actions & Settings Button */
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-settings-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 9999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  transition: all var(--transition-fast);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.btn-settings-icon:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-  border-color: var(--border-bright);
-}
-
-.btn-settings-icon:active {
-  transform: scale(0.92);
-}
-
-.btn-settings-icon svg {
-  width: 17px;
-  height: 17px;
-}
-
 /* Volume Slider Section */
 .volume-section {
   display: flex;
@@ -3637,84 +3541,6 @@ body.ui-blocked #busy-overlay {
   min-width: 34px;
   text-align: right;
   flex-shrink: 0;
-}
-
-/* Settings Modal & Switch Styles */
-.setting-item-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.setting-item-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.setting-item-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.setting-item-desc {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-}
-
-/* Apple-style Toggle Switch */
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 28px;
-  flex-shrink: 0;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(255, 255, 255, 0.2);
-  transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 28px;
-}
-
-.toggle-slider:before {
-  position: absolute;
-  content: "";
-  height: 22px;
-  width: 22px;
-  left: 3px;
-  bottom: 3px;
-  background-color: #ffffff;
-  transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 50%;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-}
-
-.toggle-switch input:checked + .toggle-slider {
-  background-color: #ffffff;
-}
-
-.toggle-switch input:checked + .toggle-slider:before {
-  transform: translateX(20px);
-  background-color: #000000;
 }
 
 
@@ -3928,16 +3754,6 @@ body.ui-blocked #busy-overlay {
     volumeThumb: document.getElementById('volume-thumb'),
     volumeLevelText: document.getElementById('volume-level-text'),
     playerBottomNotice: document.querySelector('.player-bottom-notice .dac-notice-text'),
-
-    // Settings
-    btnSettings: document.getElementById('btn-settings'),
-    desktopBtnSettings: document.getElementById('desktop-btn-settings'),
-    mobileBtnSettings: document.getElementById('mobile-btn-settings'),
-    settingsModal: document.getElementById('settings-modal'),
-    btnCloseSettingsModal: document.getElementById('btn-close-settings-modal'),
-    settingLockVolume100: document.getElementById('setting-lock-volume-100'),
-    settingsCurrentVolume: document.getElementById('settings-current-volume'),
-
     // Modal
     qualityModal: document.getElementById('quality-modal'),
     btnCloseModal: document.getElementById('btn-close-modal'),
@@ -4427,13 +4243,6 @@ body.ui-blocked #busy-overlay {
   }
 
   function renderVolumeUI() {
-    if (dom.settingLockVolume100) {
-      dom.settingLockVolume100.checked = state.lockVolume100;
-    }
-    if (dom.settingsCurrentVolume) {
-      dom.settingsCurrentVolume.textContent = `${state.volume}%`;
-    }
-
     if (state.lockVolume100) {
       if (dom.volumeSection) dom.volumeSection.classList.add('hidden');
       if (dom.playerBottomNotice) {
@@ -5033,7 +4842,6 @@ body.ui-blocked #busy-overlay {
     if (dom.volumeTrackFill) dom.volumeTrackFill.style.width = `${vol}%`;
     if (dom.volumeThumb) dom.volumeThumb.style.left = `${vol}%`;
     if (dom.volumeLevelText) dom.volumeLevelText.textContent = `${vol}%`;
-    if (dom.settingsCurrentVolume) dom.settingsCurrentVolume.textContent = `${vol}%`;
     updateVolumeIcon(vol);
 
     const now = Date.now();
@@ -5072,56 +4880,6 @@ body.ui-blocked #busy-overlay {
         const restore = state.previousVolume > 0 ? state.previousVolume : 50;
         sendThrottledVolume(restore);
       }
-    });
-  }
-
-  // --- Settings Modal & Toggle Listeners ---
-  const openSettingsModal = () => {
-    triggerHaptic('light');
-    if (dom.settingLockVolume100) {
-      dom.settingLockVolume100.checked = state.lockVolume100;
-    }
-    if (dom.settingsCurrentVolume) {
-      dom.settingsCurrentVolume.textContent = `${state.volume}%`;
-    }
-    if (dom.settingsModal) {
-      dom.settingsModal.classList.remove('hidden');
-    }
-  };
-
-  const closeSettingsModal = () => {
-    if (dom.settingsModal) {
-      dom.settingsModal.classList.add('hidden');
-    }
-  };
-
-  if (dom.btnSettings) dom.btnSettings.addEventListener('click', openSettingsModal);
-  if (dom.desktopBtnSettings) dom.desktopBtnSettings.addEventListener('click', openSettingsModal);
-  if (dom.mobileBtnSettings) dom.mobileBtnSettings.addEventListener('click', openSettingsModal);
-
-  if (dom.btnCloseSettingsModal) {
-    dom.btnCloseSettingsModal.addEventListener('click', closeSettingsModal);
-  }
-
-  if (dom.settingsModal) {
-    dom.settingsModal.addEventListener('click', (e) => {
-      if (e.target === dom.settingsModal) {
-        closeSettingsModal();
-      }
-    });
-  }
-
-  if (dom.settingLockVolume100) {
-    dom.settingLockVolume100.addEventListener('change', (e) => {
-      const enabled = Boolean(e.target.checked);
-      state.lockVolume100 = enabled;
-      try { localStorage.setItem('amr_lock_volume_100', String(enabled)); } catch (err) {}
-      triggerHaptic('toggle');
-      renderVolumeUI();
-      send({
-        action: 'set_lock_volume_100',
-        params: { enabled }
-      });
     });
   }
 

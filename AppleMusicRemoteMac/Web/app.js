@@ -205,16 +205,6 @@
     volumeThumb: document.getElementById('volume-thumb'),
     volumeLevelText: document.getElementById('volume-level-text'),
     playerBottomNotice: document.querySelector('.player-bottom-notice .dac-notice-text'),
-
-    // Settings
-    btnSettings: document.getElementById('btn-settings'),
-    desktopBtnSettings: document.getElementById('desktop-btn-settings'),
-    mobileBtnSettings: document.getElementById('mobile-btn-settings'),
-    settingsModal: document.getElementById('settings-modal'),
-    btnCloseSettingsModal: document.getElementById('btn-close-settings-modal'),
-    settingLockVolume100: document.getElementById('setting-lock-volume-100'),
-    settingsCurrentVolume: document.getElementById('settings-current-volume'),
-
     // Modal
     qualityModal: document.getElementById('quality-modal'),
     btnCloseModal: document.getElementById('btn-close-modal'),
@@ -704,13 +694,6 @@
   }
 
   function renderVolumeUI() {
-    if (dom.settingLockVolume100) {
-      dom.settingLockVolume100.checked = state.lockVolume100;
-    }
-    if (dom.settingsCurrentVolume) {
-      dom.settingsCurrentVolume.textContent = `${state.volume}%`;
-    }
-
     if (state.lockVolume100) {
       if (dom.volumeSection) dom.volumeSection.classList.add('hidden');
       if (dom.playerBottomNotice) {
@@ -1310,7 +1293,6 @@
     if (dom.volumeTrackFill) dom.volumeTrackFill.style.width = `${vol}%`;
     if (dom.volumeThumb) dom.volumeThumb.style.left = `${vol}%`;
     if (dom.volumeLevelText) dom.volumeLevelText.textContent = `${vol}%`;
-    if (dom.settingsCurrentVolume) dom.settingsCurrentVolume.textContent = `${vol}%`;
     updateVolumeIcon(vol);
 
     const now = Date.now();
@@ -1349,56 +1331,6 @@
         const restore = state.previousVolume > 0 ? state.previousVolume : 50;
         sendThrottledVolume(restore);
       }
-    });
-  }
-
-  // --- Settings Modal & Toggle Listeners ---
-  const openSettingsModal = () => {
-    triggerHaptic('light');
-    if (dom.settingLockVolume100) {
-      dom.settingLockVolume100.checked = state.lockVolume100;
-    }
-    if (dom.settingsCurrentVolume) {
-      dom.settingsCurrentVolume.textContent = `${state.volume}%`;
-    }
-    if (dom.settingsModal) {
-      dom.settingsModal.classList.remove('hidden');
-    }
-  };
-
-  const closeSettingsModal = () => {
-    if (dom.settingsModal) {
-      dom.settingsModal.classList.add('hidden');
-    }
-  };
-
-  if (dom.btnSettings) dom.btnSettings.addEventListener('click', openSettingsModal);
-  if (dom.desktopBtnSettings) dom.desktopBtnSettings.addEventListener('click', openSettingsModal);
-  if (dom.mobileBtnSettings) dom.mobileBtnSettings.addEventListener('click', openSettingsModal);
-
-  if (dom.btnCloseSettingsModal) {
-    dom.btnCloseSettingsModal.addEventListener('click', closeSettingsModal);
-  }
-
-  if (dom.settingsModal) {
-    dom.settingsModal.addEventListener('click', (e) => {
-      if (e.target === dom.settingsModal) {
-        closeSettingsModal();
-      }
-    });
-  }
-
-  if (dom.settingLockVolume100) {
-    dom.settingLockVolume100.addEventListener('change', (e) => {
-      const enabled = Boolean(e.target.checked);
-      state.lockVolume100 = enabled;
-      try { localStorage.setItem('amr_lock_volume_100', String(enabled)); } catch (err) {}
-      triggerHaptic('toggle');
-      renderVolumeUI();
-      send({
-        action: 'set_lock_volume_100',
-        params: { enabled }
-      });
     });
   }
 
