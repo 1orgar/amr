@@ -94,6 +94,15 @@ public final class MusicKitManager: @unchecked Sendable {
         return true
     }
 
+    /// Injects an in-memory private key for unit testing (e.g. CI environments without AuthKey.p8)
+    public func setPrivateKeyForTesting(_ key: P256.Signing.PrivateKey) {
+        lock.lock()
+        self.privateKey = key
+        self.cachedToken = nil
+        self.tokenExpiry = nil
+        lock.unlock()
+    }
+
     // MARK: - Developer Token (JWT)
 
     public func getDeveloperToken() -> String? {

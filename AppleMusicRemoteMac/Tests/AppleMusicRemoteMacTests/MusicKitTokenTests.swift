@@ -1,9 +1,13 @@
 import XCTest
+import CryptoKit
 @testable import AppleMusicRemoteMac
 
 final class MusicKitTokenTests: XCTestCase {
 
     func testDeveloperTokenGeneration() {
+        if MusicKitManager.shared.getDeveloperToken() == nil {
+            MusicKitManager.shared.setPrivateKeyForTesting(P256.Signing.PrivateKey())
+        }
         let token = MusicKitManager.shared.getDeveloperToken()
         XCTAssertNotNil(token, "Developer token should be generated successfully")
 

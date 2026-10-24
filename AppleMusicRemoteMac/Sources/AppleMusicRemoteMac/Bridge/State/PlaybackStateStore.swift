@@ -54,6 +54,9 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public var playbackQueueCache: (timestamp: Date, info: PlaybackQueueInfo)?
     public var trackMetadataCache: [Int: (name: String, artist: String, album: String)] = [:]
 
+    // Volume State (simulated when Music.app is not active or in test runners)
+    public var simulatedVolume: Int = 50
+
     // Volume Lock State (Bit-Perfect 100% volume mode)
     public var isVolumeLockedTo100: Bool {
         get {

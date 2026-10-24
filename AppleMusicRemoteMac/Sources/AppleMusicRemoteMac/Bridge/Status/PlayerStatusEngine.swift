@@ -90,11 +90,12 @@ public final class PlayerStatusEngine: @unchecked Sendable {
 
         // Fast path: if Music.app is closed, avoid running AppleScript or triggering app launch
         if !MusicAppProvider.shared.isMusicAppRunning {
+            let currentVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
             let stoppedStatus = PlayerStatus(
                 playerState: "stopped",
                 position: 0,
                 duration: 0,
-                volume: 50,
+                volume: currentVol,
                 shuffle: false,
                 repeatMode: "off",
                 playlist: "Музыка",
@@ -231,6 +232,9 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         let rawPosStr = parts[1].replacingOccurrences(of: ",", with: ".")
         let rawPos = Double(rawPosStr) ?? 0.0
         let vol = Int(parts[2]) ?? 100
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.simulatedVolume = vol
+        }
         let rawDurStr = parts[3].replacingOccurrences(of: ",", with: ".")
         var dur = Double(rawDurStr) ?? 0.0
         var tName = parts[4]

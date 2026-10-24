@@ -174,13 +174,18 @@ public final class PlaybackTransportController: @unchecked Sendable {
     }
 
     public func setVolume(_ volume: Int) -> Bool {
-        PlaybackStateStore.shared.invalidateStatusCache()
         let clamped = max(0, min(100, volume))
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.simulatedVolume = clamped
+        }
+        PlaybackStateStore.shared.invalidateStatusCache()
         if let app = MusicAppProvider.shared.getMusicApp() {
             app.soundVolume = clamped
         }
-        let script = "tell application \"Music\" to set sound volume to \(clamped)"
-        _ = AppleScriptExecutor.shared.execute(script)
+        if MusicAppProvider.shared.isMusicAppRunning {
+            let script = "tell application \"Music\" to set sound volume to \(clamped)"
+            _ = AppleScriptExecutor.shared.execute(script)
+        }
         PlaybackStateStore.shared.invalidateStatusCache()
         return true
     }

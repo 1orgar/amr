@@ -1085,33 +1085,61 @@ public final class WebSocketServer: @unchecked Sendable {
     }
 
     internal func loadWebAsset(filename: String) -> String? {
+        let currentDir = FileManager.default.currentDirectoryPath
+        let thisFile = URL(fileURLWithPath: #filePath)
+        let rootMac = thisFile.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+
+        var candidates: [String] = []
         if let resourcePath = Bundle.main.resourcePath {
-            let filePath = (resourcePath as NSString).appendingPathComponent("Web/\(filename)")
-            if FileManager.default.fileExists(atPath: filePath),
-               let content = try? String(contentsOfFile: filePath, encoding: .utf8) {
+            candidates.append((resourcePath as NSString).appendingPathComponent("Web/\(filename)"))
+        }
+        candidates.append((currentDir as NSString).appendingPathComponent("AppleMusicRemoteMac/Web/\(filename)"))
+        candidates.append((currentDir as NSString).appendingPathComponent("Web/\(filename)"))
+        candidates.append(((currentDir as NSString).appendingPathComponent("..") as NSString).appendingPathComponent("AppleMusicRemoteMac/Web/\(filename)"))
+        candidates.append(rootMac.appendingPathComponent("Web/\(filename)").path)
+        candidates.append(rootMac.appendingPathComponent("AppleMusicRemoteMac/Web/\(filename)").path)
+        candidates.append("/Users/kirill/Documents/projects/amr/AppleMusicRemoteMac/Web/\(filename)")
+
+        for path in candidates {
+            if FileManager.default.fileExists(atPath: path),
+               let content = try? String(contentsOfFile: path, encoding: .utf8) {
                 return content
             }
         }
-        let devPath = "/Users/kirill/Documents/projects/amr/AppleMusicRemoteMac/Web/\(filename)"
-        if FileManager.default.fileExists(atPath: devPath),
-           let content = try? String(contentsOfFile: devPath, encoding: .utf8) {
-            return content
+
+        // Fallback to embedded WebUIContent for known core assets
+        switch filename {
+        case "index.html": return WebUIContent.indexHTML
+        case "style.css": return WebUIContent.styleCSS
+        case "app.js": return WebUIContent.appJS
+        case "manifest.json": return WebUIContent.manifestJSON
+        case "sw.js": return WebUIContent.swJS
+        case "apple-touch-icon.svg": return WebUIContent.appleTouchIconSVG
+        default: return nil
         }
-        return nil
     }
 
     internal func loadWebBinaryAsset(subpath: String) -> Data? {
+        let currentDir = FileManager.default.currentDirectoryPath
+        let thisFile = URL(fileURLWithPath: #filePath)
+        let rootMac = thisFile.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+
+        var candidates: [String] = []
         if let resourcePath = Bundle.main.resourcePath {
-            let filePath = (resourcePath as NSString).appendingPathComponent("Web/\(subpath)")
-            if FileManager.default.fileExists(atPath: filePath),
-               let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)) {
+            candidates.append((resourcePath as NSString).appendingPathComponent("Web/\(subpath)"))
+        }
+        candidates.append((currentDir as NSString).appendingPathComponent("AppleMusicRemoteMac/Web/\(subpath)"))
+        candidates.append((currentDir as NSString).appendingPathComponent("Web/\(subpath)"))
+        candidates.append(((currentDir as NSString).appendingPathComponent("..") as NSString).appendingPathComponent("AppleMusicRemoteMac/Web/\(subpath)"))
+        candidates.append(rootMac.appendingPathComponent("Web/\(subpath)").path)
+        candidates.append(rootMac.appendingPathComponent("AppleMusicRemoteMac/Web/\(subpath)").path)
+        candidates.append("/Users/kirill/Documents/projects/amr/AppleMusicRemoteMac/Web/\(subpath)")
+
+        for path in candidates {
+            if FileManager.default.fileExists(atPath: path),
+               let data = try? Data(contentsOf: URL(fileURLWithPath: path)) {
                 return data
             }
-        }
-        let devPath = "/Users/kirill/Documents/projects/amr/AppleMusicRemoteMac/Web/\(subpath)"
-        if FileManager.default.fileExists(atPath: devPath),
-           let data = try? Data(contentsOf: URL(fileURLWithPath: devPath)) {
-            return data
         }
         return nil
     }

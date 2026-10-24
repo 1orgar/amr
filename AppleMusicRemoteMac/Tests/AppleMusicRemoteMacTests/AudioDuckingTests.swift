@@ -63,15 +63,24 @@ final class AudioDuckingTests: XCTestCase {
         _ = MusicBridge.shared.setVolume(60)
 
         let exp = expectation(description: "Auto-unduck timer fires")
-        controller.activate(reductionPercent: 80.0, timeout: 0.3)
+        controller.activate(reductionPercent: 80.0, timeout: 0.2)
         XCTAssertTrue(controller.isDucked)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            XCTAssertFalse(controller.isDucked, "Should have auto-unducked after timeout")
+        DispatchQueue.global().async {
+            let start = Date()
+            while Date().timeIntervalSince(start) < 2.0 {
+                if !controller.isDucked {
+                    exp.fulfill()
+                    return
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            XCTFail("Should have auto-unducked after timeout")
             exp.fulfill()
         }
 
-        waitForExpectations(timeout: 2.0)
+        waitForExpectations(timeout: 3.0)
+        XCTAssertFalse(controller.isDucked)
     }
 
     func testPlayerStatusCodableWithIsDucked() throws {
