@@ -266,23 +266,21 @@ public final class QueueManager: @unchecked Sendable {
         // 3. Album track resolution (from cache, never dump full library)
         if tracksList.isEmpty && !curAlbum.isEmpty && (curPlName.localizedCaseInsensitiveCompare(curAlbum) == .orderedSame) {
             let cacheKey = "\(curAlbum.lowercased())|\(curArtist.lowercased())"
-            lock.lock()
-            let cached = albumTracksCache[cacheKey]
-            lock.unlock()
+            let cached = lock.withLock { albumTracksCache[cacheKey] }
 
             if let c = cached, Date().timeIntervalSince(c.timestamp) < 1800 {
                 tracksList = c.tracks
-                    effectivePlName = curAlbum
-                } else {
-                    let catalogTracks = await MusicKitManager.shared.getAlbumTracks(album: curAlbum, artist: curArtist)
-                    if !catalogTracks.isEmpty {
-                        lock.lock()
+                effectivePlName = curAlbum
+            } else {
+                let catalogTracks = await MusicKitManager.shared.getAlbumTracks(album: curAlbum, artist: curArtist)
+                if !catalogTracks.isEmpty {
+                    lock.withLock {
                         albumTracksCache[cacheKey] = (Date(), catalogTracks)
-                        lock.unlock()
-                        tracksList = catalogTracks
-                        effectivePlName = curAlbum
                     }
+                    tracksList = catalogTracks
+                    effectivePlName = curAlbum
                 }
+            }
             }
 
         if tracksList.isEmpty {

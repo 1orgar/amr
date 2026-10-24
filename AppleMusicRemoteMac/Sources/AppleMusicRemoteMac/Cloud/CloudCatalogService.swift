@@ -415,12 +415,15 @@ public final class CloudCatalogService: @unchecked Sendable {
     public func getExploreFeed(country: String = "ru") async -> [String: Any] {
         let c = country.isEmpty ? "ru" : country.lowercased()
 
-        feedLock.lock()
-        if let cached = cachedFeed[c], Date().timeIntervalSince(cached.timestamp) < 600.0 {
-            feedLock.unlock()
-            return cached.feed
+        let cached = feedLock.withLock { () -> [String: Any]? in
+            if let entry = cachedFeed[c], Date().timeIntervalSince(entry.timestamp) < 600.0 {
+                return entry.feed
+            }
+            return nil
         }
-        feedLock.unlock()
+        if let cached = cached {
+            return cached
+        }
 
         let stations = getCuratedStations(country: c)
 
@@ -656,9 +659,9 @@ public final class CloudCatalogService: @unchecked Sendable {
             }
         }
 
-        feedLock.lock()
-        cachedFeed[c] = (timestamp: Date(), feed: feed)
-        feedLock.unlock()
+        feedLock.withLock {
+            cachedFeed[c] = (timestamp: Date(), feed: feed)
+        }
 
         return feed
     }

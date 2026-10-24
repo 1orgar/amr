@@ -221,7 +221,7 @@ public final class PlaybackRouter: @unchecked Sendable {
 
         if ok {
             DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                guard let self = self else { return }
+                guard self != nil else { return }
                 _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
@@ -445,8 +445,6 @@ public final class PlaybackRouter: @unchecked Sendable {
             PlaybackStateStore.shared.activeStationName = nil
         }
 
-        let escN = (name ?? "").replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let escA = (artist ?? "").replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let numId = numericId ?? (Int(id ?? "") ?? 0)
 
         // 1. If numeric database ID exists (> 0), try local library playlist first
@@ -636,7 +634,7 @@ public final class PlaybackRouter: @unchecked Sendable {
         }
 
         // 2. Direct station, album, or playlist URL fallback
-        var targetUrl = url ?? ""
+        let targetUrl = url ?? ""
         if !targetUrl.isEmpty {
             let ok = openMusicUrl(targetUrl)
             if ok {

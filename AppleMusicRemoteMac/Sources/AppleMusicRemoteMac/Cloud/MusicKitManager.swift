@@ -451,12 +451,15 @@ public final class MusicKitManager: @unchecked Sendable {
         guard !cleanName.isEmpty else { return nil }
 
         let cacheKey = "\(cleanName.lowercased())|\(cleanArtist.lowercased())|\(cleanAlbum.lowercased())"
-        lock.lock()
-        if let cached = trackArtworkCache[cacheKey] {
-            lock.unlock()
-            return cached.isEmpty ? nil : cached
+        let cached = lock.withLock { () -> String? in
+            if let entry = trackArtworkCache[cacheKey] {
+                return entry.isEmpty ? nil : entry
+            }
+            return nil
         }
-        lock.unlock()
+        if let cached = cached {
+            return cached
+        }
 
         let simplifiedName = cleanName
             .replacingOccurrences(of: #"\s*\(.*?\)"#, with: "", options: .regularExpression)
@@ -546,16 +549,16 @@ public final class MusicKitManager: @unchecked Sendable {
         }
 
         if let artUrl = foundArtUrl, !artUrl.isEmpty {
-            lock.lock()
-            trackArtworkCache[cacheKey] = artUrl
-            trackArtworkCache["\(cleanName.lowercased())|\(cleanArtist.lowercased())"] = artUrl
-            lock.unlock()
+            lock.withLock {
+                trackArtworkCache[cacheKey] = artUrl
+                trackArtworkCache["\(cleanName.lowercased())|\(cleanArtist.lowercased())"] = artUrl
+            }
             return artUrl
         }
 
-        lock.lock()
-        trackArtworkCache[cacheKey] = ""
-        lock.unlock()
+        lock.withLock {
+            trackArtworkCache[cacheKey] = ""
+        }
         return nil
     }
 

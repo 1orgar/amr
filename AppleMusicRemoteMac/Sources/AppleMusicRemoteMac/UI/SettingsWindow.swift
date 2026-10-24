@@ -354,19 +354,19 @@ public final class SettingsWindow: NSWindowController {
         }
 
         CoreAudioDeviceManager.shared.onDevicesChanged = { [weak self] _ in
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 self?.refreshState()
             }
         }
 
         MusicAppProvider.shared.onMusicAppLaunched = { [weak self] in
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 self?.refreshState()
             }
         }
 
         MusicAppProvider.shared.onMusicAppTerminated = { [weak self] in
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 self?.refreshState()
             }
         }

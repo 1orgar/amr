@@ -318,7 +318,7 @@ public final class WebSocketServer: @unchecked Sendable {
 
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self, weak connection] content, _, isComplete, error in
             guard let self = self, let conn = connection else { return }
-            if let error = error {
+            if error != nil {
                 self.removeClient(clientId: clientId)
                 return
             }
@@ -670,14 +670,15 @@ public final class WebSocketServer: @unchecked Sendable {
                         }
                     }
                 }
-                if !plName.isEmpty, let art = MusicBridge.shared.getPlaylistArtwork(name: plName), !art.isEmpty {
+                let targetPlName = plName
+                if !targetPlName.isEmpty, let art = MusicBridge.shared.getPlaylistArtwork(name: targetPlName), !art.isEmpty {
                     sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
-                } else if !plName.isEmpty {
+                } else if !targetPlName.isEmpty {
                     Task { [weak self] in
                         guard let self = self else { return }
-                        var cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: plName, storefront: "ru")
+                        var cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: targetPlName, storefront: "ru")
                         if cloudArtUrl == nil || cloudArtUrl?.isEmpty == true {
-                            cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: plName, storefront: "us")
+                            cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: targetPlName, storefront: "us")
                         }
                         if let artUrl = cloudArtUrl, !artUrl.isEmpty {
                             self.sendRedirect(location: artUrl, connection: connection, cacheSeconds: 86400)
@@ -1319,7 +1320,7 @@ public final class WebSocketServer: @unchecked Sendable {
             let name = (params["name"] as? String) ?? (params["playlist"] as? String) ?? ""
             Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
-                var tracks = name == "Сейчас на повторе" ? bridge.getRecentlyPlayed(limit: 50) : bridge.getPlaylistTracks(name: name)
+                let tracks = name == "Сейчас на повторе" ? bridge.getRecentlyPlayed(limit: 50) : bridge.getPlaylistTracks(name: name)
                 self.sendSuccess(action: action, data: PlaylistTracksResponse(playlist: name, tracks: tracks), id: id, to: connection)
 
                 let hasMissing = tracks.contains { !$0.hasArtwork || $0.artworkUrl.isEmpty }
@@ -1483,12 +1484,14 @@ public final class WebSocketServer: @unchecked Sendable {
                     }
                 }
             }
+            let targetIsAlbum = isAlbum
+            let targetAlbumId = albumId
 
             Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
                 let ok: Bool
-                if isAlbum && !albumId.isEmpty {
-                    ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, shuffle: shuffle)
+                if targetIsAlbum && !targetAlbumId.isEmpty {
+                    ok = await bridge.playAlbum(id: targetAlbumId, name: name, artist: artist, shuffle: shuffle)
                 } else {
                     ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId)
                 }
@@ -1525,10 +1528,11 @@ public final class WebSocketServer: @unchecked Sendable {
                     ))
                 }
             }
+            let targetTracks = trackInfos
             Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
-                let ok = await bridge.playSearchResults(tracks: trackInfos, shuffle: shuffle)
-                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "count": trackInfos.count], id: id, to: connection)
+                let ok = await bridge.playSearchResults(tracks: targetTracks, shuffle: shuffle)
+                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "count": targetTracks.count], id: id, to: connection)
                 self.broadcastStatus(includeQueue: true)
             }
 

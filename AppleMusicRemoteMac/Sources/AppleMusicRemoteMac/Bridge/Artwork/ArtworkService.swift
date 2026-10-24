@@ -342,23 +342,23 @@ public final class ArtworkService: @unchecked Sendable {
 
     public func queueNativeArtworkFetch(ids: [Int]) {
         var toFetch = [Int]()
-        lock.lock()
-        for nid in ids where nid > 0 {
-            let cacheKey = "track_\(nid)" as NSString
-            if self.artworkCache.object(forKey: cacheKey) == nil && !self.fetchingArtworkIds.contains(nid) {
-                self.fetchingArtworkIds.insert(nid)
-                toFetch.append(nid)
+        lock.withLock {
+            for nid in ids where nid > 0 {
+                let cacheKey = "track_\(nid)" as NSString
+                if self.artworkCache.object(forKey: cacheKey) == nil && !self.fetchingArtworkIds.contains(nid) {
+                    self.fetchingArtworkIds.insert(nid)
+                    toFetch.append(nid)
+                }
             }
         }
-        lock.unlock()
 
         if !toFetch.isEmpty {
             Task.detached(priority: .utility) {
                 for nid in toFetch {
                     _ = self.getTrackArtwork(id: nid)
-                    self.lock.lock()
-                    self.fetchingArtworkIds.remove(nid)
-                    self.lock.unlock()
+                    _ = self.lock.withLock {
+                        self.fetchingArtworkIds.remove(nid)
+                    }
                 }
             }
         }

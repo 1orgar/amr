@@ -686,14 +686,14 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
             // Fetch completely asynchronously without blocking the server queue
             if let url = URL(string: artUrl) {
-                var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
+                let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
                 let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
                     guard let self = self else { return }
                     if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
                         let mime = http.mimeType ?? "image/jpeg"
-                        self.artworkLock.lock()
-                        self.cachedArtworkData = (key: artUrl, data: d, contentType: mime)
-                        self.artworkLock.unlock()
+                        self.artworkLock.withLock {
+                            self.cachedArtworkData = (key: artUrl, data: d, contentType: mime)
+                        }
                         self.sendBinary(connection, data: d, contentType: mime)
                     } else {
                         // Fallback to 302 redirect
@@ -726,14 +726,14 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             }
 
             // Fetch asynchronously with URLSession (never synchronous Data(contentsOf:))
-            var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
+            let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
             let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
                 guard let self = self else { return }
                 if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
                     let mime = http.mimeType ?? "image/jpeg"
-                    self.artworkLock.lock()
-                    self.cachedArtworkData = (key: cachedUrlStr, data: d, contentType: mime)
-                    self.artworkLock.unlock()
+                    self.artworkLock.withLock {
+                        self.cachedArtworkData = (key: cachedUrlStr, data: d, contentType: mime)
+                    }
                     self.sendBinary(connection, data: d, contentType: mime)
                 } else {
                     self.sendDefaultIcon(connection)
