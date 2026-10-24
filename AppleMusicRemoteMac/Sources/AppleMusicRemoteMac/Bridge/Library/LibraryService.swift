@@ -123,11 +123,12 @@ public final class LibraryService: @unchecked Sendable {
                     continue
                 }
 
+                let playlistName = pl.name
                 group.addTask {
-                    if let catArt = await MusicKitManager.shared.searchPlaylistArtwork(name: pl.name) {
-                        return (pl.name, catArt)
+                    if let catArt = await MusicKitManager.shared.searchPlaylistArtwork(name: playlistName) {
+                        return (playlistName, catArt)
                     }
-                    return (pl.name, "")
+                    return (playlistName, "")
                 }
             }
 

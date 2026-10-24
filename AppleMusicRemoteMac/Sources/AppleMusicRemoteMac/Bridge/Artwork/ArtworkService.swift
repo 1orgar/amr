@@ -352,9 +352,10 @@ public final class ArtworkService: @unchecked Sendable {
             }
         }
 
-        if !toFetch.isEmpty {
+        let fetchIds = toFetch
+        if !fetchIds.isEmpty {
             Task.detached(priority: .utility) {
-                for nid in toFetch {
+                for nid in fetchIds {
                     _ = self.getTrackArtwork(id: nid)
                     _ = self.lock.withLock {
                         self.fetchingArtworkIds.remove(nid)

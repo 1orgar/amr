@@ -128,10 +128,10 @@ public final class QueueManager: @unchecked Sendable {
                 upcoming = Array(formattedTracks[(matchedIdx + 1)...])
             }
 
-            let missingUpcoming = upcoming.prefix(5).filter { !$0.hasArtwork }
-            if !missingUpcoming.isEmpty {
+            let missingTracks = Array(upcoming.prefix(5).filter { !$0.hasArtwork })
+            if !missingTracks.isEmpty {
                 Task.detached(priority: .utility) {
-                    for t in missingUpcoming {
+                    for t in missingTracks {
                         _ = await MusicKitManager.shared.searchTrackArtwork(name: t.name, artist: t.artist)
                     }
                 }
