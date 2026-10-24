@@ -555,13 +555,17 @@ public final class WebSocketServer: @unchecked Sendable {
                                 }
                             }
                         }
-                        if !trackName.isEmpty {
-                            if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: trackName, artist: trackArtist, album: trackAlbum), !cached.isEmpty {
+                        let tName = trackName
+                        let tArtist = trackArtist
+                        let tAlbum = trackAlbum
+                        if !tName.isEmpty {
+                            if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
                                 sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
                                 return
                             }
-                            Task {
-                                if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: trackName, artist: trackArtist, album: trackAlbum) {
+                            Task { [weak self] in
+                                guard let self = self else { return }
+                                if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: tName, artist: tArtist, album: tAlbum) {
                                     self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
                                 } else {
                                     self.sendDefaultArtwork(connection: connection)
@@ -588,7 +592,10 @@ public final class WebSocketServer: @unchecked Sendable {
                         }
                     }
                 }
-                let lowName = trackName.lowercased()
+                let tName = trackName
+                let tArtist = trackArtist
+                let tAlbum = trackAlbum
+                let lowName = tName.lowercased()
                 if lowName.contains("моя станция") {
                     sendRedirect(location: "/assets/stations/CoverPersonal.png", connection: connection, cacheSeconds: 86400)
                     return
@@ -603,11 +610,12 @@ public final class WebSocketServer: @unchecked Sendable {
                     return
                 }
 
-                if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: trackName, artist: trackArtist, album: trackAlbum), !cached.isEmpty {
+                if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
                     sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
                 } else {
-                    Task {
-                        if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: trackName, artist: trackArtist, album: trackAlbum) {
+                    Task { [weak self] in
+                        guard let self = self else { return }
+                        if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: tName, artist: tArtist, album: tAlbum) {
                             self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
                         } else {
                             self.sendDefaultArtwork(connection: connection)
@@ -644,7 +652,8 @@ public final class WebSocketServer: @unchecked Sendable {
                         if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: effName, artist: effArtist, album: effAlbum), !cached.isEmpty {
                             sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
                         } else {
-                            Task {
+                            Task { [weak self] in
+                                guard let self = self else { return }
                                 if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: effName, artist: effArtist, album: effAlbum) {
                                     self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
                                 } else {
@@ -1277,7 +1286,8 @@ public final class WebSocketServer: @unchecked Sendable {
 
         case "search_and_play":
             let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
-            Task {
+            Task { [weak self] in
+                guard let self = self else { return }
                 let res = await bridge.searchAndPlayDetailed(query: query)
                 var respData: [String: Any] = [
                     "status": res.success ? "ok" : "error",
