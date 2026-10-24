@@ -36,7 +36,24 @@ public final class MusicKitManager: @unchecked Sendable {
         }
     }
 
+    public struct TrackStationInfo: Sendable {
+        public let trackId: String
+        public let title: String
+        public let artist: String
+        public let stationUrl: String
+        public let artworkUrl: String?
+
+        public init(trackId: String, title: String, artist: String, stationUrl: String, artworkUrl: String? = nil) {
+            self.trackId = trackId
+            self.title = title
+            self.artist = artist
+            self.stationUrl = stationUrl
+            self.artworkUrl = artworkUrl
+        }
+    }
+
     private var artistStationCache: [String: ArtistStationInfo] = [:]
+    private var trackStationCache: [String: TrackStationInfo] = [:]
 
     private let session: URLSession
 
@@ -310,6 +327,75 @@ public final class MusicKitManager: @unchecked Sendable {
         artistStationCache[key.lowercased()] = info
     }
 
+    private func getCachedTrackStation(for key: String) -> TrackStationInfo? {
+        lock.lock()
+        defer { lock.unlock() }
+        return trackStationCache[key.lowercased()]
+    }
+
+    private func setCachedTrackStation(_ info: TrackStationInfo, for key: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        trackStationCache[key.lowercased()] = info
+    }
+
+    // MARK: - Station Fuzzy Matching Helpers
+
+    public static func normalizeQueryText(_ str: String) -> String {
+        let lower = str.lowercased()
+        let withoutParens = lower
+            .replacingOccurrences(of: #"\s*\(.*?\)"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s*\[.*?\]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: ##"[!"#$%&'()*+,-./:;<=>?@\[\\\]^_`{|}~]"##, with: " ", options: .regularExpression)
+        return withoutParens.split(separator: " ").joined(separator: " ")
+    }
+
+    public static func computeSongSimilarity(
+        queryTitle: String,
+        queryArtist: String,
+        candidateTitle: String,
+        candidateArtist: String
+    ) -> (score: Double, isMatch: Bool) {
+        let normQT = normalizeQueryText(queryTitle)
+        let normQA = normalizeQueryText(queryArtist)
+        let normCT = normalizeQueryText(candidateTitle)
+        let normCA = normalizeQueryText(candidateArtist)
+
+        var titleScore = 0.0
+        if normQT == normCT {
+            titleScore = 1.0
+        } else if normCT.contains(normQT) || normQT.contains(normCT) {
+            titleScore = 0.85
+        } else {
+            let qWords = Set(normQT.split(separator: " "))
+            let cWords = Set(normCT.split(separator: " "))
+            let common = qWords.intersection(cWords)
+            if !qWords.isEmpty {
+                titleScore = Double(common.count) / Double(qWords.count)
+            }
+        }
+
+        var artistScore = 0.0
+        if normQA.isEmpty {
+            artistScore = 1.0
+        } else if normQA == normCA {
+            artistScore = 1.0
+        } else if normCA.contains(normQA) || normQA.contains(normCA) {
+            artistScore = 0.85
+        } else {
+            let qWords = Set(normQA.split(separator: " "))
+            let cWords = Set(normCA.split(separator: " "))
+            let common = qWords.intersection(cWords)
+            if !qWords.isEmpty {
+                artistScore = Double(common.count) / Double(qWords.count)
+            }
+        }
+
+        let total = (titleScore * 0.65) + (artistScore * 0.35)
+        let isMatch = titleScore >= 0.5 && (normQA.isEmpty || artistScore >= 0.3)
+        return (total, isMatch)
+    }
+
     public func extractArtistCandidates(from raw: String) -> [String] {
         var result: [String] = []
         func add(_ s: String) {
@@ -357,7 +443,7 @@ public final class MusicKitManager: @unchecked Sendable {
         return result
     }
 
-    public func resolveArtistStation(artist: String) async -> ArtistStationInfo? {
+    public func resolveArtistStation(artist: String, storefront: String = "ru") async -> ArtistStationInfo? {
         let clean = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return nil }
 
@@ -366,54 +452,131 @@ public final class MusicKitManager: @unchecked Sendable {
         }
 
         let candidates = extractArtistCandidates(from: clean)
+        let sfOrder = [storefront.lowercased(), "us", "jp"].filter { !$0.isEmpty }
+        var uniqueSfs: [String] = []
+        for s in sfOrder {
+            if !uniqueSfs.contains(s) { uniqueSfs.append(s) }
+        }
 
+        // 1. Try Apple Music Catalog API with developer token
+        if let token = getDeveloperToken() {
+            for sf in uniqueSfs {
+                for candidate in candidates {
+                    guard let enc = candidate.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                    let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(enc)&types=artists&limit=5"
+                    guard let url = URL(string: urlStr) else { continue }
+                    var req = URLRequest(url: url)
+                    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    req.setValue("application/json", forHTTPHeaderField: "Accept")
+                    req.timeoutInterval = 3.0
+
+                    guard let (data, resp) = try? await session.data(for: req),
+                          let http = resp as? HTTPURLResponse, http.statusCode == 200,
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let results = json["results"] as? [String: Any],
+                          let artists = results["artists"] as? [String: Any],
+                          let dataArr = artists["data"] as? [[String: Any]] else {
+                        continue
+                    }
+
+                    for item in dataArr {
+                        guard let idStr = item["id"] as? String,
+                              let artistId = Int(idStr),
+                              let attrs = item["attributes"] as? [String: Any],
+                              let aName = attrs["name"] as? String else { continue }
+
+                        let normCand = Self.normalizeQueryText(candidate)
+                        let normName = Self.normalizeQueryText(aName)
+                        let isMatch = normCand == normName || normName.contains(normCand) || normCand.contains(normName)
+                        if isMatch {
+                            let canonicalName = aName
+                            let stationUrl = "https://music.apple.com/\(sf)/station/item/ra.\(artistId)"
+                            var artworkUrl: String? = nil
+                            if let artObj = attrs["artwork"] as? [String: Any],
+                               let artTmpl = artObj["url"] as? String {
+                                artworkUrl = artTmpl
+                                    .replacingOccurrences(of: "{w}x{h}", with: "600x600")
+                                    .replacingOccurrences(of: "{w}", with: "600")
+                                    .replacingOccurrences(of: "{h}", with: "600")
+                                    .replacingOccurrences(of: "{f}", with: "jpg")
+                            }
+
+                            let info = ArtistStationInfo(
+                                artistId: artistId,
+                                canonicalName: canonicalName,
+                                stationUrl: stationUrl,
+                                artworkUrl: artworkUrl
+                            )
+                            setCachedArtistStation(info, for: clean)
+                            if clean.lowercased() != candidate.lowercased() {
+                                setCachedArtistStation(info, for: candidate)
+                            }
+                            return info
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback to iTunes Store Search API
         for candidate in candidates {
             guard let enc = candidate.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
-            for country in ["ru", "us", ""] {
+            for country in uniqueSfs {
                 let countryParam = country.isEmpty ? "" : "&country=\(country)"
-                let searchUrlStr = "https://itunes.apple.com/search?term=\(enc)&entity=musicArtist&limit=1\(countryParam)"
+                let searchUrlStr = "https://itunes.apple.com/search?term=\(enc)&entity=musicArtist&limit=5\(countryParam)"
                 guard let url = URL(string: searchUrlStr) else { continue }
                 var req = URLRequest(url: url)
                 req.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+                req.timeoutInterval = 3.0
 
-                guard let (data, _) = try? await URLSession.shared.data(for: req),
+                guard let (data, resp) = try? await session.data(for: req),
+                      let http = resp as? HTTPURLResponse, http.statusCode == 200,
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let results = json["results"] as? [[String: Any]],
-                      let first = results.first,
-                      let artistId = first["artistId"] as? Int else {
+                      let results = json["results"] as? [[String: Any]] else {
                     continue
                 }
 
-                let canonicalName = first["artistName"] as? String ?? candidate
-                let stationUrl = "music://music.apple.com/station/ra.\(artistId)"
+                for item in results {
+                    guard let artistId = item["artistId"] as? Int,
+                          let aName = item["artistName"] as? String else { continue }
 
-                var artworkUrl: String? = nil
-                let lookupCountryParam = country.isEmpty ? "" : "&country=\(country)"
-                let lookupStr = "https://itunes.apple.com/lookup?id=\(artistId)&entity=album&limit=1\(lookupCountryParam)"
-                if let lookupUrl = URL(string: lookupStr) {
-                    var lreq = URLRequest(url: lookupUrl)
-                    lreq.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-                    if let (ldata, _) = try? await URLSession.shared.data(for: lreq),
-                       let ljson = try? JSONSerialization.jsonObject(with: ldata) as? [String: Any],
-                       let lresults = ljson["results"] as? [[String: Any]],
-                       lresults.count > 1,
-                       let rawArt = lresults[1]["artworkUrl100"] as? String {
-                        artworkUrl = rawArt.replacingOccurrences(of: "100x100bb", with: "600x600bb")
+                    let normCand = Self.normalizeQueryText(candidate)
+                    let normName = Self.normalizeQueryText(aName)
+                    let isMatch = normCand == normName || normName.contains(normCand) || normCand.contains(normName)
+                    guard isMatch else { continue }
+
+                    let canonicalName = aName
+                    let cCode = country.isEmpty ? "ru" : country
+                    let stationUrl = "https://music.apple.com/\(cCode)/station/item/ra.\(artistId)"
+
+                    var artworkUrl: String? = nil
+                    let lookupCountryParam = country.isEmpty ? "" : "&country=\(country)"
+                    let lookupStr = "https://itunes.apple.com/lookup?id=\(artistId)&entity=album&limit=1\(lookupCountryParam)"
+                    if let lookupUrl = URL(string: lookupStr) {
+                        var lreq = URLRequest(url: lookupUrl)
+                        lreq.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+                        if let (ldata, _) = try? await session.data(for: lreq),
+                           let ljson = try? JSONSerialization.jsonObject(with: ldata) as? [String: Any],
+                           let lresults = ljson["results"] as? [[String: Any]],
+                           lresults.count > 1,
+                           let rawArt = lresults[1]["artworkUrl100"] as? String {
+                            artworkUrl = rawArt.replacingOccurrences(of: "100x100bb", with: "600x600bb")
+                        }
                     }
-                }
 
-                let info = ArtistStationInfo(
-                    artistId: artistId,
-                    canonicalName: canonicalName,
-                    stationUrl: stationUrl,
-                    artworkUrl: artworkUrl
-                )
+                    let info = ArtistStationInfo(
+                        artistId: artistId,
+                        canonicalName: canonicalName,
+                        stationUrl: stationUrl,
+                        artworkUrl: artworkUrl
+                    )
 
-                setCachedArtistStation(info, for: clean)
-                if clean.lowercased() != candidate.lowercased() {
-                    setCachedArtistStation(info, for: candidate)
+                    setCachedArtistStation(info, for: clean)
+                    if clean.lowercased() != candidate.lowercased() {
+                        setCachedArtistStation(info, for: candidate)
+                    }
+                    return info
                 }
-                return info
             }
         }
 
@@ -421,35 +584,172 @@ public final class MusicKitManager: @unchecked Sendable {
     }
 
     public func searchArtistStationUrl(artist: String, storefront: String = "ru") async -> String? {
-        if let info = await resolveArtistStation(artist: artist) {
+        if let info = await resolveArtistStation(artist: artist, storefront: storefront) {
             return info.stationUrl
         }
         return nil
     }
 
-    public func resolveTrackStation(title: String, artist: String = "") async -> String? {
+    public func resolveTrackStation(title: String, artist: String = "", storefront: String = "ru") async -> String? {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { return nil }
         let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        let query = cleanArtist.isEmpty ? cleanTitle : "\(cleanTitle) \(cleanArtist)"
-        guard let enc = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
-
-        for country in ["ru", "us", ""] {
-            let countryParam = country.isEmpty ? "" : "&country=\(country)"
-            let searchUrlStr = "https://itunes.apple.com/search?term=\(enc)&entity=song&limit=1\(countryParam)"
-            guard let url = URL(string: searchUrlStr) else { continue }
-            var req = URLRequest(url: url)
-            req.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-
-            guard let (data, _) = try? await URLSession.shared.data(for: req),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let results = json["results"] as? [[String: Any]],
-                  let first = results.first,
-                  let trackId = first["trackId"] as? Int else {
-                continue
-            }
-            return "music://music.apple.com/station/ra.\(trackId)"
+        let cacheKey = "\(cleanTitle.lowercased())|\(cleanArtist.lowercased())"
+        if let cached = getCachedTrackStation(for: cacheKey) {
+            return cached.stationUrl
         }
+
+        let normT = Self.normalizeQueryText(cleanTitle)
+        let normA = Self.normalizeQueryText(cleanArtist)
+        var queries: [String] = []
+        if !cleanArtist.isEmpty {
+            queries.append("\(cleanTitle) \(cleanArtist)")
+            if !normT.isEmpty && !normA.isEmpty && (normT != cleanTitle.lowercased() || normA != cleanArtist.lowercased()) {
+                queries.append("\(normT) \(normA)")
+            }
+        }
+        if !normT.isEmpty && normT != cleanTitle.lowercased() {
+            queries.append(normT)
+        }
+        queries.append(cleanTitle)
+
+        let sfOrder = [storefront.lowercased(), "us", "jp"].filter { !$0.isEmpty }
+        var uniqueSfs: [String] = []
+        for s in sfOrder {
+            if !uniqueSfs.contains(s) { uniqueSfs.append(s) }
+        }
+
+        // 1. Search via Apple Music Catalog API with developer token
+        if let token = getDeveloperToken() {
+            var bestCandidate: (songId: String, title: String, artist: String, sf: String, score: Double)? = nil
+            for sf in uniqueSfs {
+                if let b = bestCandidate, b.score >= 0.85 { break }
+                for q in queries {
+                    if let b = bestCandidate, b.score >= 0.85 { break }
+                    guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                    let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=songs&limit=10"
+                    guard let url = URL(string: urlStr) else { continue }
+                    var req = URLRequest(url: url)
+                    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    req.setValue("application/json", forHTTPHeaderField: "Accept")
+                    req.timeoutInterval = 3.0
+
+                    guard let (data, resp) = try? await session.data(for: req),
+                          let http = resp as? HTTPURLResponse, http.statusCode == 200,
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let results = json["results"] as? [String: Any],
+                          let songs = results["songs"] as? [String: Any],
+                          let dataArr = songs["data"] as? [[String: Any]] else {
+                        continue
+                    }
+
+                    for item in dataArr {
+                        guard let id = item["id"] as? String,
+                              let attrs = item["attributes"] as? [String: Any],
+                              let cName = attrs["name"] as? String,
+                              let cArtist = attrs["artistName"] as? String else { continue }
+
+                        let (score, isMatch) = Self.computeSongSimilarity(
+                            queryTitle: cleanTitle,
+                            queryArtist: cleanArtist,
+                            candidateTitle: cName,
+                            candidateArtist: cArtist
+                        )
+                        if isMatch {
+                            if bestCandidate == nil || score > bestCandidate!.score {
+                                bestCandidate = (id, cName, cArtist, sf, score)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let best = bestCandidate {
+                var stationUrl: String? = nil
+                let stationReqStr = "https://api.music.apple.com/v1/catalog/\(best.sf)/songs/\(best.songId)/station"
+                if let stUrl = URL(string: stationReqStr) {
+                    var sreq = URLRequest(url: stUrl)
+                    sreq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    sreq.setValue("application/json", forHTTPHeaderField: "Accept")
+                    sreq.timeoutInterval = 3.0
+                    if let (sdata, sresp) = try? await session.data(for: sreq),
+                       let shttp = sresp as? HTTPURLResponse, shttp.statusCode == 200,
+                       let sjson = try? JSONSerialization.jsonObject(with: sdata) as? [String: Any],
+                       let sArr = sjson["data"] as? [[String: Any]],
+                       let sFirst = sArr.first,
+                       let sAttrs = sFirst["attributes"] as? [String: Any],
+                       let officialUrl = sAttrs["url"] as? String, !officialUrl.isEmpty {
+                        stationUrl = officialUrl
+                    }
+                }
+
+                if stationUrl == nil {
+                    stationUrl = "https://music.apple.com/\(best.sf)/station/item/ra.\(best.songId)"
+                }
+
+                if let finalUrl = stationUrl {
+                    let info = TrackStationInfo(
+                        trackId: best.songId,
+                        title: best.title,
+                        artist: best.artist,
+                        stationUrl: finalUrl
+                    )
+                    setCachedTrackStation(info, for: cacheKey)
+                    return finalUrl
+                }
+            }
+        }
+
+        // 2. Fallback to iTunes Store Search API
+        for country in uniqueSfs {
+            for q in queries {
+                guard let enc = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                let searchUrlStr = "https://itunes.apple.com/search?term=\(enc)&entity=song&limit=10&country=\(country)"
+                guard let url = URL(string: searchUrlStr) else { continue }
+                var req = URLRequest(url: url)
+                req.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+                req.timeoutInterval = 3.0
+
+                guard let (data, resp) = try? await session.data(for: req),
+                      let http = resp as? HTTPURLResponse, http.statusCode == 200,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let results = json["results"] as? [[String: Any]] else {
+                    continue
+                }
+
+                var bestItunes: (trackId: Int, name: String, artist: String, score: Double)? = nil
+                for r in results {
+                    guard let tid = r["trackId"] as? Int,
+                          let tName = r["trackName"] as? String,
+                          let tArtist = r["artistName"] as? String else { continue }
+                    let (score, isMatch) = Self.computeSongSimilarity(
+                        queryTitle: cleanTitle,
+                        queryArtist: cleanArtist,
+                        candidateTitle: tName,
+                        candidateArtist: tArtist
+                    )
+                    if isMatch {
+                        if bestItunes == nil || score > bestItunes!.score {
+                            bestItunes = (tid, tName, tArtist, score)
+                        }
+                    }
+                }
+
+                if let b = bestItunes {
+                    let cCode = country.isEmpty ? "ru" : country
+                    let finalUrl = "https://music.apple.com/\(cCode)/station/item/ra.\(b.trackId)"
+                    let info = TrackStationInfo(
+                        trackId: "\(b.trackId)",
+                        title: b.name,
+                        artist: b.artist,
+                        stationUrl: finalUrl
+                    )
+                    setCachedTrackStation(info, for: cacheKey)
+                    return finalUrl
+                }
+            }
+        }
+
         return nil
     }
 

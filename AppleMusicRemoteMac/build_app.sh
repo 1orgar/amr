@@ -79,7 +79,10 @@ if [ -f "$ROOT_DIR/SharedAssets/Icons/macOS/icon_256x256.png" ]; then
     cp "$ROOT_DIR/SharedAssets/Icons/macOS/icon_256x256.png" "$RESOURCES_DIR/icon.png"
 fi
 if [ -f "$ROOT_DIR/AuthKey_MJHWRCSZHH.p8" ]; then
+    echo "🔑 Bundling MusicKit AuthKey_MJHWRCSZHH.p8 into Resources..."
     cp "$ROOT_DIR/AuthKey_MJHWRCSZHH.p8" "$RESOURCES_DIR/AuthKey_MJHWRCSZHH.p8"
+else
+    echo "ℹ️ AuthKey_MJHWRCSZHH.p8 not found; building without embedded key"
 fi
 
 # Create Info.plist

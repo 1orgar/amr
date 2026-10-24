@@ -26,8 +26,14 @@ public final class PlaybackRouter: @unchecked Sendable {
             target = "music://" + target
         }
 
-        guard let url = URL(string: target) else { return false }
-        return NSWorkspace.shared.open(url)
+        if let url = URL(string: target) {
+            return NSWorkspace.shared.open(url)
+        }
+        if let encoded = target.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: encoded) {
+            return NSWorkspace.shared.open(url)
+        }
+        return false
     }
 
     // MARK: - Playlist Playback
@@ -172,10 +178,17 @@ public final class PlaybackRouter: @unchecked Sendable {
             targetUrl = "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
         } else if !targetUrl.contains("ra.") {
             if type == "track" || (!trackTitle.isEmpty && targetUrl.isEmpty) {
-                if let resolved = await MusicKitManager.shared.resolveTrackStation(title: trackTitle.isEmpty ? name : trackTitle, artist: artistName) {
+                let titleToResolve = trackTitle.isEmpty ? name : trackTitle
+                if let resolved = await MusicKitManager.shared.resolveTrackStation(title: titleToResolve, artist: artistName) {
                     targetUrl = resolved
                     if stationDisplayName.isEmpty || stationDisplayName == "Apple Music Radio" {
-                        stationDisplayName = "Станция «\(trackTitle.isEmpty ? name : trackTitle)»"
+                        stationDisplayName = "Станция «\(titleToResolve)»"
+                    }
+                } else if !artistName.isEmpty, let artistInfo = await MusicKitManager.shared.resolveArtistStation(artist: artistName) {
+                    // Fallback Tier 2: Artist station when track-specific station is unavailable
+                    targetUrl = artistInfo.stationUrl
+                    if stationDisplayName.isEmpty || stationDisplayName == "Apple Music Radio" {
+                        stationDisplayName = "Станция «\(artistInfo.canonicalName)»"
                     }
                 }
             } else {
@@ -193,6 +206,28 @@ public final class PlaybackRouter: @unchecked Sendable {
             playUrl = "music://" + playUrl.dropFirst(8)
         }
 
+        // Fallback Tier 3: If track-based station still has no URL, try playing catalog track directly
+        // This natively triggers Apple Music Autoplay (∞) for the track's genre/style.
+        if playUrl.isEmpty && (type == "track" || !trackTitle.isEmpty) {
+            let t = trackTitle.isEmpty ? name : trackTitle
+            let query = artistName.isEmpty ? t : "\(t) \(artistName)"
+            if await searchAndPlay(query: query) {
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.isRadioPlayback = true
+                    PlaybackStateStore.shared.activeStationName = "Станция «\(t)»"
+                }
+                PlaybackStateStore.shared.invalidateQueueCache()
+                PlaybackStateStore.shared.invalidateStatusCache()
+                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                return true
+            }
+            return false
+        }
+
+        guard !playUrl.isEmpty || (!name.isEmpty && !name.hasPrefix("Станция «") && !name.hasPrefix("Радио ")) else {
+            return false
+        }
+
         _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isRadioPlayback = true
@@ -200,7 +235,7 @@ public final class PlaybackRouter: @unchecked Sendable {
             PlaybackStateStore.shared.isCustomQueuePlayback = false
             PlaybackStateStore.shared.activeCustomQueue.removeAll()
             PlaybackStateStore.shared.activeCustomQueueName = nil
-            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+            PlaybackStateStore.shared.currentOriginalPlaylistName = nil
             PlaybackStateStore.shared.latestUpcomingTracks.removeAll()
             PlaybackStateStore.shared.latestHistoryTracks.removeAll()
             PlaybackStateStore.shared.isShuffleQueueActive = false
@@ -212,17 +247,16 @@ public final class PlaybackRouter: @unchecked Sendable {
         var ok = false
         if !playUrl.isEmpty {
             ok = openMusicUrl(playUrl)
-        } else if !name.isEmpty {
-            // Search local station via applescript fallback
+        } else if !name.isEmpty && !name.hasPrefix("Станция «") && !name.hasPrefix("Радио ") {
+            // Search local station via applescript fallback ONLY if name is a real local playlist
             let escName = name.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
             let (resOk, _) = AppleScriptExecutor.shared.execute("tell application \"Music\" to play playlist \"\(escName)\"")
             ok = resOk
         }
 
         if ok {
-            DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard self != nil else { return }
-                _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
                 WebSocketServer.shared.broadcastStatus(includeQueue: false)

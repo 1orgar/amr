@@ -22,6 +22,22 @@ jobs:
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcrun swift --version
 
+      - name: Setup MusicKit Auth Key
+        env:
+          MUSICKIT_KEY_P8: ${{ secrets.MUSICKIT_KEY_P8 }}
+        run: |
+          if [ -n "$MUSICKIT_KEY_P8" ]; then
+            if echo "$MUSICKIT_KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
+              echo "$MUSICKIT_KEY_P8" > AuthKey_MJHWRCSZHH.p8
+            else
+              echo "$MUSICKIT_KEY_P8" | base64 --decode > AuthKey_MJHWRCSZHH.p8
+            fi
+            chmod 600 AuthKey_MJHWRCSZHH.p8
+            echo "✅ AuthKey_MJHWRCSZHH.p8 successfully restored for build"
+          else
+            echo "⚠️ MUSICKIT_KEY_P8 secret not found; build will proceed with fallback behavior"
+          fi
+
       - name: Run Swift Unit Tests (Blocking)
         run: |
           xcrun swift test --package-path AppleMusicRemoteMac

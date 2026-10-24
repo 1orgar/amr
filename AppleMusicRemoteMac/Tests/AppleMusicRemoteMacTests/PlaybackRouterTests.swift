@@ -132,4 +132,59 @@ final class PlaybackRouterTests: XCTestCase {
         let result = await MusicKitManager.shared.resolveTrackStation(title: "", artist: "")
         XCTAssertNil(result)
     }
+
+    func testNormalizeQueryTextRemovesPunctuationAndTags() {
+        let raw1 = "The Hero!! \"One Punch Man\" (Full Version)"
+        let norm1 = MusicKitManager.normalizeQueryText(raw1)
+        XCTAssertEqual(norm1, "the hero one punch man")
+
+        let raw2 = "KICK BACK [Chainsaw Man OP]"
+        let norm2 = MusicKitManager.normalizeQueryText(raw2)
+        XCTAssertEqual(norm2, "kick back")
+
+        let raw3 = "Uncrowned Greatest Hero (GET OVER 2021 Live Edition)"
+        let norm3 = MusicKitManager.normalizeQueryText(raw3)
+        XCTAssertEqual(norm3, "uncrowned greatest hero")
+    }
+
+    func testComputeSongSimilarityRejectsMismatchedGenresAndArtists() {
+        // Perfect match
+        let (score1, isMatch1) = MusicKitManager.computeSongSimilarity(
+            queryTitle: "Unravel",
+            queryArtist: "TK from Ling tosite sigure",
+            candidateTitle: "unravel",
+            candidateArtist: "TK from Ling tosite sigure"
+        )
+        XCTAssertTrue(isMatch1)
+        XCTAssertGreaterThanOrEqual(score1, 0.95)
+
+        // Title containment
+        let (score2, isMatch2) = MusicKitManager.computeSongSimilarity(
+            queryTitle: "The Hero!! \"One Punch Man\"",
+            queryArtist: "HelloROMIX",
+            candidateTitle: "The Hero!! \"One Punch Man\"",
+            candidateArtist: "HelloROMIX"
+        )
+        XCTAssertTrue(isMatch2)
+        XCTAssertGreaterThanOrEqual(score2, 0.95)
+
+        // Strict rejection: Void_Chords (Anime) vs Serenity (Metal)
+        let (_, isMatch3) = MusicKitManager.computeSongSimilarity(
+            queryTitle: "twilight little star",
+            queryArtist: "Void_Chords",
+            candidateTitle: "Symphony for the Quiet",
+            candidateArtist: "Serenity"
+        )
+        XCTAssertFalse(isMatch3, "Anime track must NEVER match unrelated metal band Serenity")
+
+        // Strict rejection: Re:vale (Anime) vs John Travolta (Musical)
+        let (_, isMatch4) = MusicKitManager.computeSongSimilarity(
+            queryTitle: "Journey",
+            queryArtist: "Re:vale",
+            candidateTitle: "You're the One That I Want",
+            candidateArtist: "John Travolta & Olivia Newton-John"
+        )
+        XCTAssertFalse(isMatch4, "Anime track must NEVER match John Travolta")
+    }
 }
+
