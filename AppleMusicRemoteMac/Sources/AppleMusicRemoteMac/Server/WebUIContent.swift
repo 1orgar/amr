@@ -1,28 +1,38 @@
-//  WebUIContent.swift
-//  Embedded Web UI static assets for Apple Music Remote
-
 import Foundation
 
+// MARK: - Embedded Web UI Assets (Fallback when files not on disk)
+
 public enum WebUIContent {
-    public static let indexHTML: String = ##"""
+    public static let indexHTML = ##"""
 <!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AMR">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#000000">
   <meta name="description" content="Apple Music Remote Mac - Bit-Perfect High-Fidelity Controller">
   <title>Apple Music Remote</title>
 
-  <link rel="icon" type="image/svg+xml" href="apple-touch-icon.svg">
-  <link rel="apple-touch-icon" href="apple-touch-icon.svg">
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/svg+xml" href="/apple-touch-icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="/apple-touch-icon-192.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/style.css?v=5">
 </head>
 <body>
+  <!-- iOS Lock Screen & Background Media Keep-Alive -->
+  <audio id="bg-silent-audio" preload="auto" playsinline webkit-playsinline loop src="/assets/silence.m4a?v=2" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;"></audio>
+
   <!-- Connection Lost Overlay -->
   <div id="connection-overlay" class="overlay-modal hidden" aria-hidden="true">
     <div class="overlay-card">
@@ -43,13 +53,21 @@ public enum WebUIContent {
           <span class="brand-dot"></span>
           <span class="brand-title">APPLE MUSIC REMOTE</span>
         </div>
-        <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
-          <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polygon points="10 8 16 12 10 16 10 8"/>
-          </svg>
-          <span id="audio-quality-text">LOSSLESS</span>
-        </button>
+        <div class="header-actions">
+          <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
+            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polygon points="10 8 16 12 10 16 10 8"/>
+            </svg>
+            <span id="audio-quality-text">LOSSLESS</span>
+          </button>
+          <button id="btn-settings" class="btn-icon btn-settings-icon" type="button" aria-label="Настройки" title="Настройки">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
       </header>
 
       <!-- Artwork Area -->
@@ -68,11 +86,22 @@ public enum WebUIContent {
       <div class="track-meta">
         <div class="track-title-row">
           <h1 id="player-title" class="track-title" title="Не играет">Не играет</h1>
-          <button id="btn-favorite" class="btn-icon btn-fav" type="button" aria-label="Избранное" title="В избранное">
-            <svg id="icon-fav" class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-          </button>
+          <div class="track-actions-group">
+            <button id="btn-create-station" class="btn-icon btn-station" type="button" aria-label="Создать радио" title="Создать радиостанцию">
+              <svg class="svg-icon icon-station" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4.93 19.07a10 10 0 0 1 0-14.14"/>
+                <path d="M7.76 16.24a6 6 0 0 1 0-8.48"/>
+                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                <path d="M16.24 7.76a6 6 0 0 1 0 8.48"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </button>
+            <button id="btn-favorite" class="btn-icon btn-fav" type="button" aria-label="Избранное" title="В избранное">
+              <svg id="icon-fav" class="svg-icon icon-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <p id="player-artist" class="track-artist">Apple Music</p>
         <p id="player-album" class="track-album"></p>
@@ -142,6 +171,25 @@ public enum WebUIContent {
         </button>
       </div>
 
+      <!-- Volume Section (Visible when Lock Volume 100% is OFF) -->
+      <div id="volume-section" class="volume-section hidden">
+        <button id="btn-volume-mute" class="btn-icon btn-volume-mute" type="button" aria-label="Отключить звук" title="Без звука">
+          <svg id="volume-icon" class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path id="vol-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            <path id="vol-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          </svg>
+        </button>
+        <div class="volume-slider-container">
+          <div class="volume-track">
+            <div id="volume-track-fill" class="volume-track-fill" style="width: 100%;"></div>
+            <div id="volume-thumb" class="volume-thumb" style="left: 100%;"></div>
+          </div>
+          <input type="range" id="volume-input" class="volume-input" min="0" max="100" value="100" step="1" aria-label="Громкость">
+        </div>
+        <span id="volume-level-text" class="volume-level-label">100%</span>
+      </div>
+
       <!-- Bit-Perfect Audio Mode Notice -->
       <footer class="player-bottom-notice">
         <span class="dac-status-dot"></span>
@@ -151,13 +199,53 @@ public enum WebUIContent {
 
     <!-- Right Column on Desktop / Switched Views on Mobile -->
     <main class="content-panel-wrapper">
-      <!-- Desktop Navigation Tabs -->
+      <!-- Desktop Navigation Tabs & Permanent DAC Badge -->
       <nav class="desktop-nav-header">
-        <button class="nav-tab-btn" data-target="home">Главная</button>
-        <button class="nav-tab-btn active" data-target="library">Медиатека</button>
-        <button class="nav-tab-btn" data-target="queue">Очередь</button>
-        <button class="nav-tab-btn" data-target="search">Поиск</button>
+        <div class="desktop-nav-tabs">
+          <button class="nav-tab-btn" data-target="home">Главная</button>
+          <button class="nav-tab-btn active" data-target="library">Медиатека</button>
+          <button class="nav-tab-btn" data-target="queue">Очередь</button>
+          <button class="nav-tab-btn" data-target="search">Поиск</button>
+        </div>
+        <div class="header-actions">
+          <button id="desktop-dac-badge" class="quality-badge desktop-dac-badge" type="button" title="Параметры потока и ЦАП">
+            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polygon points="10 8 16 12 10 16 10 8"/>
+            </svg>
+            <span id="desktop-dac-text">Bit-Perfect DAC</span>
+          </button>
+          <button id="desktop-btn-settings" class="btn-icon btn-settings-icon" type="button" aria-label="Настройки" title="Настройки">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
       </nav>
+
+      <!-- Mobile Top Bar with Permanent DAC Badge (visible on mobile outside Now Playing) -->
+      <header class="mobile-top-bar">
+        <div class="brand-pill">
+          <span class="brand-dot"></span>
+          <span class="brand-title">AMR</span>
+        </div>
+        <div class="header-actions">
+          <button id="mobile-dac-badge" class="quality-badge mobile-dac-badge" type="button" title="Параметры потока и ЦАП">
+            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polygon points="10 8 16 12 10 16 10 8"/>
+            </svg>
+            <span id="mobile-dac-text">LOSSLESS</span>
+          </button>
+          <button id="mobile-btn-settings" class="btn-icon btn-settings-icon" type="button" aria-label="Настройки" title="Настройки">
+            <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+      </header>
 
       <!-- Queue View -->
       <section id="view-queue" class="view-panel content-view">
@@ -409,6 +497,11 @@ public enum WebUIContent {
         </div>
       </div>
       <div class="mini-actions">
+        <button id="mini-btn-favorite" class="btn-icon mini-btn mini-btn-fav" type="button" aria-label="Избранное" title="В избранное">
+          <svg class="svg-icon icon-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </button>
         <button id="mini-btn-play-pause" class="btn-icon mini-btn" type="button" aria-label="Воспроизведение">
           <svg id="mini-icon-play" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
             <polygon points="6 3 20 12 6 21 6 3"/>
@@ -481,6 +574,48 @@ public enum WebUIContent {
 
   </div>
 
+  <!-- Radio Station Picker Modal -->
+  <div id="station-picker-modal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card station-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Создать радиостанцию</h3>
+          <span class="modal-tag">APPLE MUSIC</span>
+        </div>
+        <button id="btn-close-station-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="modal-subtitle">Бесконечный радиопоток на основе ваших предпочтений</p>
+        <div class="station-options-list">
+          <button id="btn-station-by-track" class="station-option-btn" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">По текущему треку</span>
+              <span id="station-opt-track-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+
+          <button id="btn-station-by-artist" class="station-option-btn" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">По исполнителю</span>
+              <span id="station-opt-artist-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Audio Quality Popover Modal -->
   <div id="quality-modal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card">
@@ -521,6 +656,41 @@ public enum WebUIContent {
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Настройки</h3>
+          <span class="modal-tag">AMR</span>
+        </div>
+        <button id="btn-close-settings-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="setting-item-row">
+          <div class="setting-item-info">
+            <span class="setting-item-title">Устанавливать громкость 100%</span>
+            <span class="setting-item-desc">Фиксирует цифровую громкость Music.app на максимуме для Bit-Perfect вывода. Если опция выключена — в плеере появляется регулятор громкости.</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="setting-lock-volume-100" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="spec-row" style="margin-top: 14px;">
+          <span class="spec-label">Текущая громкость Music.app</span>
+          <span id="settings-current-volume" class="spec-val">100%</span>
+        </div>
+
+        <div class="modal-explanation">
+          <p>В режиме Bit-Perfect цифровая регулировка macOS отключается для исключения искажений разрядности аудиопотока. Если вы используете наушники или колонки без аппаратного регулятора, выключите эту опцию для ручной регулировки прямо из интерфейса.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Busy / Action Loading Overlay -->
   <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
     <div class="busy-card">
@@ -529,13 +699,13 @@ public enum WebUIContent {
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="/app.js?v=5"></script>
 </body>
 </html>
 
 """##
 
-    public static let styleCSS: String = ##"""
+    public static let styleCSS = ##"""
 /* ==========================================================================
    Apple Music Remote (AMR) - Ultra-Clean Monochrome Production Design
    Color Palette:
@@ -563,11 +733,11 @@ public enum WebUIContent {
   --transition-fast: 0.15s cubic-bezier(0.2, 0.9, 0.4, 1);
   --transition-smooth: 0.25s cubic-bezier(0.2, 0.9, 0.4, 1);
 
-  /* iOS Safe Area Insets with Robust Dynamic Island Fallbacks */
-  --safe-top: max(env(safe-area-inset-top, 0px), 0px);
-  --safe-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
-  --safe-left: max(env(safe-area-inset-left, 0px), 0px);
-  --safe-right: max(env(safe-area-inset-right, 0px), 0px);
+  /* iOS Safe Area Insets with Robust Dynamic Island & Home Indicator Fallbacks */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 *, *::before, *::after {
@@ -580,16 +750,31 @@ public enum WebUIContent {
   user-select: none;
 }
 
-html, body {
+html {
   width: 100%;
   height: 100%;
-  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-pure);
+  overflow: hidden;
+}
+
+body {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
   background-color: var(--bg-pure);
   color: var(--text-primary);
   font-family: var(--font-stack);
   overflow: hidden;
-  position: fixed;
   overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 button {
@@ -636,12 +821,15 @@ input {
    ========================================================================== */
 
 .app-layout {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
-  height: 100dvh;
   display: flex;
   background: var(--bg-pure);
-  position: relative;
   overflow: hidden;
 }
 
@@ -680,11 +868,46 @@ input {
   .desktop-nav-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 12px;
     padding: calc(var(--safe-top) + 20px) 32px 16px 32px;
     background: var(--surface-base);
     border-bottom: 1px solid var(--border-subtle);
     z-index: 5;
+  }
+
+  .desktop-nav-tabs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .desktop-dac-badge {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    height: 38px;
+    border-radius: 19px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .desktop-dac-badge:hover {
+    color: var(--text-primary);
+    border-color: var(--border-bright);
+    background: var(--surface-hover);
+  }
+
+  .mobile-top-bar {
+    display: none !important;
   }
 
   .nav-tab-btn {
@@ -743,21 +966,55 @@ input {
     display: none !important;
   }
 
+  .mobile-top-bar {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(max(var(--safe-top), env(safe-area-inset-top, 0px), 44px) + 8px) calc(var(--safe-left) + 20px) 12px calc(var(--safe-right) + 20px);
+    background: var(--bg-pure);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .mobile-dac-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    height: 32px;
+    border-radius: 16px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .mobile-dac-badge:hover,
+  .mobile-dac-badge:active {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+    border-color: var(--border-bright);
+  }
+
   .player-panel {
     display: none;
     width: 100%;
     height: 100%;
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background: var(--bg-pure);
     flex-direction: column;
-    padding-top: calc(var(--safe-top) + 16px);
+    padding-top: calc(max(var(--safe-top), env(safe-area-inset-top, 0px), 54px) + 16px);
     padding-left: calc(var(--safe-left) + 20px);
     padding-right: calc(var(--safe-right) + 20px);
-    padding-bottom: calc(var(--safe-bottom) + 72px);
+    padding-bottom: 70px;
     overflow-y: auto;
     z-index: 20;
     overscroll-behavior-y: contain;
@@ -786,7 +1043,7 @@ input {
     height: 100%;
     flex-direction: column;
     overflow: hidden;
-    padding-top: calc(var(--safe-top) + 16px);
+    padding-top: calc(max(var(--safe-top), env(safe-area-inset-top, 0px), 54px) + 16px);
     padding-left: calc(var(--safe-left) + 16px);
     padding-right: calc(var(--safe-right) + 16px);
     padding-bottom: 0;
@@ -881,18 +1138,28 @@ input {
   margin-bottom: 16px;
   flex: 1 1 auto;
   min-height: 0;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+
+.artwork-container:active {
+  cursor: grabbing;
 }
 
 .artwork-wrapper {
   position: relative;
   width: 100%;
-  max-width: min(320px, 75vw, 36vh);
+  max-width: min(380px, 86vw, 42vh);
   aspect-ratio: 1 / 1;
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--border-subtle);
   background: var(--surface-card);
   flex-shrink: 1;
+  will-change: transform, opacity;
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.4, 1), opacity 0.25s ease;
 }
 
 .player-art {
@@ -900,7 +1167,8 @@ input {
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform var(--transition-smooth);
+  pointer-events: none;
+  transition: opacity 0.25s ease;
 }
 
 .art-placeholder {
@@ -957,7 +1225,46 @@ input {
   text-overflow: ellipsis;
 }
 
+/* Track Actions Group */
+.track-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Station Creation Button - 44x44px touch target */
+.btn-station {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+  touch-action: manipulation;
+}
+
+.btn-station:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.btn-station:active {
+  transform: scale(0.92);
+}
+
 /* Favorite Button - 44x44px touch target */
+@keyframes favPop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.35); }
+  75% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+
 .btn-fav {
   width: 44px;
   height: 44px;
@@ -974,6 +1281,7 @@ input {
 
 .btn-fav:hover {
   color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
 .btn-fav.active {
@@ -982,6 +1290,37 @@ input {
 
 .btn-fav.active svg {
   fill: #ffffff;
+  stroke: #ffffff;
+  animation: favPop 0.35s cubic-bezier(0.2, 0.9, 0.4, 1);
+}
+
+.mini-btn-fav {
+  color: var(--text-muted);
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+  touch-action: manipulation;
+}
+
+.mini-btn-fav:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.mini-btn-fav.active {
+  color: #ffffff;
+}
+
+.mini-btn-fav.active svg {
+  fill: #ffffff;
+  stroke: #ffffff;
+  animation: favPop 0.35s cubic-bezier(0.2, 0.9, 0.4, 1);
 }
 
 /* Custom Monochrome Scrubber */
@@ -1184,9 +1523,18 @@ input {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid var(--border-subtle);
-  margin-top: auto;
+  margin-top: 14px;
+}
+
+@media (max-width: 767px) and (min-height: 800px) {
+  .player-panel {
+    justify-content: space-evenly;
+  }
+  .artwork-wrapper {
+    max-width: min(400px, 88vw, 45vh);
+  }
 }
 
 .dac-status-dot {
@@ -1815,6 +2163,32 @@ input {
 
 .btn-search-shuffle:hover {
   background: var(--surface-hover);
+}
+
+.btn-search-load-more {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  margin: 10px 0 20px 0;
+  border-radius: 12px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-search-load-more:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.btn-search-load-more:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .track-row-title-wrap {
@@ -2544,10 +2918,10 @@ input {
    ========================================================================== */
 
 .mini-player {
-  position: absolute;
+  position: fixed;
   left: calc(var(--safe-left) + 12px);
   right: calc(var(--safe-right) + 12px);
-  bottom: calc(var(--safe-bottom) + 62px);
+  bottom: 64px;
   height: 60px;
   background: rgba(22, 22, 24, 0.94);
   backdrop-filter: blur(25px);
@@ -2558,7 +2932,7 @@ input {
   align-items: center;
   justify-content: space-between;
   padding: 0 8px 0 12px;
-  z-index: 30;
+  z-index: 95;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.75);
   cursor: pointer;
   touch-action: manipulation;
@@ -2581,6 +2955,7 @@ input {
   background: var(--surface-card);
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.25s ease;
 }
 
 .mini-info {
@@ -2654,22 +3029,22 @@ input {
    ========================================================================== */
 
 .bottom-tab-bar {
-  position: absolute;
+  position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(var(--safe-bottom) + 54px);
-  padding-bottom: var(--safe-bottom);
+  height: 56px;
+  padding-bottom: 4px;
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
-  background: rgba(14, 14, 16, 0.95);
+  background: #000000;
   backdrop-filter: blur(25px);
   -webkit-backdrop-filter: blur(25px);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-around;
-  z-index: 25;
+  z-index: 100;
 }
 
 .tab-item {
@@ -3005,9 +3380,347 @@ body.ui-blocked #busy-overlay {
 }
 
 
+/* Search Landing Categories (Genres) */
+#search-landing {
+  padding: 16px;
+}
+.search-category-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #fff;
+}
+.genres-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.genre-card {
+  position: relative;
+  border-radius: 12px;
+  height: 100px;
+  padding: 12px;
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  transition: transform 0.2s, filter 0.2s;
+}
+.genre-card:active {
+  transform: scale(0.96);
+  filter: brightness(0.8);
+}
+
+/* Station Picker Modal Card */
+.station-modal-card {
+  max-width: 420px;
+}
+
+.modal-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+  line-height: 1.4;
+}
+
+.station-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.station-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  min-height: 54px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  touch-action: manipulation;
+  width: 100%;
+}
+
+.station-option-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-bright);
+  transform: translateY(-1px);
+}
+
+.station-option-btn:active {
+  transform: scale(0.98);
+}
+
+.station-opt-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.station-opt-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.station-opt-primary {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.station-opt-secondary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Header Actions & Settings Button */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-settings-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.btn-settings-icon:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  border-color: var(--border-bright);
+}
+
+.btn-settings-icon:active {
+  transform: scale(0.92);
+}
+
+.btn-settings-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* Volume Slider Section */
+.volume-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 360px;
+  margin: 12px auto 0;
+  padding: 0 8px;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.volume-section.hidden {
+  display: none !important;
+}
+
+.btn-volume-mute {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.btn-volume-mute:hover {
+  color: var(--text-primary);
+}
+
+.btn-volume-mute:active {
+  transform: scale(0.9);
+}
+
+.btn-volume-mute svg {
+  width: 20px;
+  height: 20px;
+}
+
+.volume-slider-container {
+  position: relative;
+  flex: 1;
+  height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.volume-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.volume-track-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: #ffffff;
+  border-radius: 2px;
+  transition: width 0.05s linear;
+}
+
+.volume-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transition: left 0.05s linear;
+}
+
+.volume-input {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.volume-level-label {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Settings Modal & Switch Styles */
+.setting-item-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.setting-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.setting-item-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.setting-item-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* Apple-style Toggle Switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.2);
+  transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 28px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #ffffff;
+  transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: #ffffff;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+  background-color: #000000;
+}
+
+
 """##
 
-    public static let appJS: String = ##"""
+    public static let appJS = ##"""
 /**
  * Apple Music Remote (AMR) - Client Application
  * Pure Vanilla JS (ES6+), Zero Dependencies.
@@ -3015,6 +3728,15 @@ body.ui-blocked #busy-overlay {
 
 (function () {
   'use strict';
+
+  // --- PWA Service Worker Registration ---
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('AMR ServiceWorker registration:', err);
+      });
+    });
+  }
 
   // --- Application State ---
   const state = {
@@ -3025,6 +3747,9 @@ body.ui-blocked #busy-overlay {
     position: 0,
     duration: 0,
     volume: 100,
+    previousVolume: 100,
+    lockVolume100: localStorage.getItem('amr_lock_volume_100') !== null ? (localStorage.getItem('amr_lock_volume_100') === 'true') : true,
+    isDraggingVolume: false,
     shuffle: false,
     repeatMode: 'off', // 'off', 'one', 'all'
     audioQuality: 'Lossless (ALAC 24-bit/48kHz)',
@@ -3049,6 +3774,7 @@ body.ui-blocked #busy-overlay {
     searchQuery: '',
     searchScope: 'all',
     activeView: 'view-now-playing',
+    lastNonPlayerView: 'view-home',
     desktopActiveTab: 'library',
 
     // Scrubber local tracking
@@ -3077,6 +3803,10 @@ body.ui-blocked #busy-overlay {
     homeRecentSection: document.getElementById('home-recent-section'),
     homeRecentLink: document.getElementById('home-recent-link'),
     homeRecentCarousel: document.getElementById('home-recent-carousel'),
+    homeHeavySection: document.getElementById('home-heavy-section'),
+    homeHeavyCarousel: document.getElementById('home-heavy-carousel'),
+    homeRecContainer: document.getElementById('home-recommendations-container'),
+    searchLanding: document.getElementById('search-landing'),
     homeStationsSection: document.getElementById('home-stations-section'),
     homeStationsCarousel: document.getElementById('home-stations-carousel'),
     homeAlbumsSection: document.getElementById('home-albums-section'),
@@ -3109,6 +3839,7 @@ body.ui-blocked #busy-overlay {
     miniArt: document.getElementById('mini-artwork'),
     miniTitle: document.getElementById('mini-title'),
     miniArtist: document.getElementById('mini-artist'),
+    miniBtnFavorite: document.getElementById('mini-btn-favorite'),
     miniBtnPlayPause: document.getElementById('mini-btn-play-pause'),
     miniIconPlay: document.getElementById('mini-icon-play'),
     miniIconPause: document.getElementById('mini-icon-pause'),
@@ -3116,13 +3847,28 @@ body.ui-blocked #busy-overlay {
     miniProgressFill: document.getElementById('mini-progress-fill'),
 
     // Now Playing Main Player
+    artworkContainer: document.querySelector('.artwork-container'),
+    artworkWrapper: document.querySelector('.artwork-wrapper'),
     playerArtwork: document.getElementById('player-artwork'),
     playerTitle: document.getElementById('player-title'),
     playerArtist: document.getElementById('player-artist'),
     playerAlbum: document.getElementById('player-album'),
+    btnCreateStation: document.getElementById('btn-create-station'),
     btnFavorite: document.getElementById('btn-favorite'),
     audioQualityBadge: document.getElementById('audio-quality-badge'),
     audioQualityText: document.getElementById('audio-quality-text'),
+    desktopDacBadge: document.getElementById('desktop-dac-badge'),
+    desktopDacText: document.getElementById('desktop-dac-text'),
+    mobileDacBadge: document.getElementById('mobile-dac-badge'),
+    mobileDacText: document.getElementById('mobile-dac-text'),
+
+    // Station Picker Modal
+    stationPickerModal: document.getElementById('station-picker-modal'),
+    btnCloseStationModal: document.getElementById('btn-close-station-modal'),
+    btnStationByTrack: document.getElementById('btn-station-by-track'),
+    btnStationByArtist: document.getElementById('btn-station-by-artist'),
+    stationOptTrackName: document.getElementById('station-opt-track-name'),
+    stationOptArtistName: document.getElementById('station-opt-artist-name'),
 
     // Scrubber
     scrubberContainer: document.getElementById('scrubber-container'),
@@ -3172,6 +3918,25 @@ body.ui-blocked #busy-overlay {
     // Busy / Action Loading Overlay
     busyOverlay: document.getElementById('busy-overlay'),
     busyMessage: document.getElementById('busy-message'),
+
+    // Volume Section
+    volumeSection: document.getElementById('volume-section'),
+    btnVolumeMute: document.getElementById('btn-volume-mute'),
+    volumeIcon: document.getElementById('volume-icon'),
+    volumeInput: document.getElementById('volume-input'),
+    volumeTrackFill: document.getElementById('volume-track-fill'),
+    volumeThumb: document.getElementById('volume-thumb'),
+    volumeLevelText: document.getElementById('volume-level-text'),
+    playerBottomNotice: document.querySelector('.player-bottom-notice .dac-notice-text'),
+
+    // Settings
+    btnSettings: document.getElementById('btn-settings'),
+    desktopBtnSettings: document.getElementById('desktop-btn-settings'),
+    mobileBtnSettings: document.getElementById('mobile-btn-settings'),
+    settingsModal: document.getElementById('settings-modal'),
+    btnCloseSettingsModal: document.getElementById('btn-close-settings-modal'),
+    settingLockVolume100: document.getElementById('setting-lock-volume-100'),
+    settingsCurrentVolume: document.getElementById('settings-current-volume'),
 
     // Modal
     qualityModal: document.getElementById('quality-modal'),
@@ -3266,11 +4031,10 @@ body.ui-blocked #busy-overlay {
       reconnectAttempt = 0;
       dom.overlay.classList.add('hidden');
 
-      // Request initial status, queue, library, and trends
+      // Request initial status, queue, library, and explore feed
       send({ action: 'get_status' });
       send({ action: 'get_queue' });
       send({ action: 'get_playlists' });
-      send({ action: 'get_catalog_charts', params: { country: state.trends.country } });
       send({ action: 'get_explore', params: { country: state.trends.country } });
     };
 
@@ -3308,6 +4072,12 @@ body.ui-blocked #busy-overlay {
   function send(msgObj) {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
+    }
+    const act = (msgObj && msgObj.action) ? msgObj.action.toLowerCase() : '';
+    if (act === 'play' || act.startsWith('play_') || act.includes('play') || act === 'next' || act === 'previous') {
+      syncSilentAudio(true);
+    } else if (act === 'pause' || act === 'stop') {
+      syncSilentAudio(false);
     }
     socket.send(JSON.stringify(msgObj));
     return true;
@@ -3381,7 +4151,16 @@ body.ui-blocked #busy-overlay {
       'play_album', 'play_album_tracks', 'play_playlist',
       'play_station', 'play_recent', 'play_queue_index', 'play_cloud'
     ];
-    if (busyDismissActions.includes(type) || msg.status === 'ok' || msg.status === 'error') {
+    if (state.isLaunchingStation) {
+      if (data && (data.player_state === 'playing' || data.playerState === 'playing')) {
+        state.isLaunchingStation = false;
+        if (state.stationLaunchTimeout) {
+          clearTimeout(state.stationLaunchTimeout);
+          state.stationLaunchTimeout = null;
+        }
+        setUIBusy(false);
+      }
+    } else if (busyDismissActions.includes(type) || msg.status === 'ok' || msg.status === 'error') {
       if (state.isBusyAction) {
         setUIBusy(false);
       }
@@ -3422,16 +4201,30 @@ body.ui-blocked #busy-overlay {
         updateScrubberUI(reportedPos, state.duration);
       }
     } else if (!state.isScrubbing) {
-      // Smooth sync: only reconcile if reported position drifts from local prediction by > 1.2s
       const now = performance.now();
-      const predictedPos = state.playerState === 'playing'
-        ? Math.min(state.duration, state.lastSyncPos + (now - state.lastSyncTime) / 1000)
-        : state.lastSyncPos;
-
-      if (Math.abs(reportedPos - predictedPos) > 1.2 || reportedPos < 1.0) {
+      if (state.playerState !== 'playing') {
         state.lastSyncPos = reportedPos;
         state.lastSyncTime = now;
         updateScrubberUI(reportedPos, state.duration);
+      } else {
+        const predictedPos = Math.min(
+          state.duration,
+          state.lastSyncPos + (now - state.lastSyncTime) / 1000
+        );
+        const diff = reportedPos - predictedPos;
+        if (Math.abs(diff) > 4.0 || (reportedPos < 1.0 && predictedPos > 3.0)) {
+          // Explicit seek or track skip/restart: sync immediately
+          state.lastSyncPos = reportedPos;
+          state.lastSyncTime = now;
+          updateScrubberUI(reportedPos, state.duration);
+        } else {
+          // Continuous smooth drift synchronization (Phase-Locked Loop):
+          // Smoothly absorb clock drift without ever causing a visible jump/jitter.
+          // By applying a 15% damping correction per broadcast, client clock matches
+          // server clock within a fraction of a second without jitter.
+          state.lastSyncPos = predictedPos + diff * 0.15;
+          state.lastSyncTime = now;
+        }
       }
     }
 
@@ -3439,6 +4232,21 @@ body.ui-blocked #busy-overlay {
     state.repeatMode = data.repeat || data.repeatMode || 'off';
     state.audioQuality = data.audio_quality || data.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
     state.track = newTrack;
+
+    if (data.lock_volume_100 !== undefined) {
+      state.lockVolume100 = Boolean(data.lock_volume_100);
+      try { localStorage.setItem('amr_lock_volume_100', String(state.lockVolume100)); } catch (e) {}
+    } else if (data.isVolumeLockedTo100 !== undefined) {
+      state.lockVolume100 = Boolean(data.isVolumeLockedTo100);
+      try { localStorage.setItem('amr_lock_volume_100', String(state.lockVolume100)); } catch (e) {}
+    }
+
+    if (data.volume !== undefined) {
+      state.volume = Math.max(0, Math.min(100, Number(data.volume)));
+      if (state.volume > 0) {
+        state.previousVolume = state.volume;
+      }
+    }
 
     renderNowPlaying();
   }
@@ -3452,8 +4260,8 @@ body.ui-blocked #busy-overlay {
 
   function getArtworkSrc(track) {
     if (!track) return 'apple-touch-icon.svg';
-    if (track.artwork_data_base64) {
-      return `data:image/jpeg;base64,${track.artwork_data_base64}`;
+    if (track.artworkUrl && track.artworkUrl.length > 5) {
+      return track.artworkUrl;
     }
     if (track.artwork_url && track.artwork_url.length > 5) {
       return track.artwork_url;
@@ -3461,10 +4269,75 @@ body.ui-blocked #busy-overlay {
     if (track.artwork && track.artwork.length > 5) {
       return track.artwork;
     }
-    if (track.numeric_id && track.numeric_id > 0) {
-      return `/api/artwork/track?id=${track.numeric_id}`;
+    if (track.artwork_data_base64) {
+      return `data:image/jpeg;base64,${track.artwork_data_base64}`;
+    }
+    if (track.is_local && track.id && Number(track.id) > 0) {
+      return `/api/artwork/track?id=${track.id}`;
+    }
+    if (track.name) {
+      const q = new URLSearchParams();
+      q.set('name', track.name);
+      if (track.artist) q.set('artist', track.artist);
+      if (track.album) q.set('album', track.album);
+      return `/api/artwork/search?${q.toString()}`;
+    }
+    if (track.id && Number(track.id) > 0) {
+      return `/api/artwork/track?id=${track.id}`;
     }
     return '/api/artwork';
+  }
+
+  let currentLoadedArtworkUrl = '';
+  function setPlayerArtwork(artUrl) {
+    if (!artUrl) artUrl = 'apple-touch-icon.svg';
+    if (dom.playerArtwork.dataset.targetSrc === artUrl) {
+      return;
+    }
+    dom.playerArtwork.dataset.targetSrc = artUrl;
+
+    if (artUrl === 'apple-touch-icon.svg') {
+      dom.playerArtwork.src = artUrl;
+      dom.playerArtwork.style.opacity = '1';
+      currentLoadedArtworkUrl = artUrl;
+      if (dom.miniArt) {
+        dom.miniArt.src = artUrl;
+        dom.miniArt.style.opacity = '1';
+      }
+      return;
+    }
+
+    // Immediately dim/fade the artwork elements so the old track's image NEVER lingers
+    if (currentLoadedArtworkUrl && currentLoadedArtworkUrl !== artUrl) {
+      dom.playerArtwork.style.opacity = '0';
+      if (dom.miniArt) dom.miniArt.style.opacity = '0.3';
+    }
+
+    // Preload image to prevent showing old track's image if new image fails or loads slowly
+    const img = new Image();
+    img.onload = () => {
+      if (dom.playerArtwork.dataset.targetSrc === artUrl) {
+        dom.playerArtwork.src = artUrl;
+        dom.playerArtwork.style.opacity = '1';
+        currentLoadedArtworkUrl = artUrl;
+        if (dom.miniArt) {
+          dom.miniArt.src = artUrl;
+          dom.miniArt.style.opacity = '1';
+        }
+      }
+    };
+    img.onerror = () => {
+      if (dom.playerArtwork.dataset.targetSrc === artUrl) {
+        dom.playerArtwork.src = 'apple-touch-icon.svg';
+        dom.playerArtwork.style.opacity = '1';
+        currentLoadedArtworkUrl = 'apple-touch-icon.svg';
+        if (dom.miniArt) {
+          dom.miniArt.src = 'apple-touch-icon.svg';
+          dom.miniArt.style.opacity = '1';
+        }
+      }
+    };
+    img.src = artUrl;
   }
 
   function renderNowPlaying() {
@@ -3477,31 +4350,23 @@ body.ui-blocked #busy-overlay {
       dom.playerArtist.textContent = t.artist || 'Неизвестный исполнитель';
       dom.playerAlbum.textContent = t.album || '';
       const art = getArtworkSrc(t);
-      if (dom.playerArtwork.getAttribute('src') !== art) {
-        dom.playerArtwork.src = art;
-      }
+      setPlayerArtwork(art);
       dom.btnFavorite.classList.toggle('active', Boolean(t.favorited));
+      if (dom.miniBtnFavorite) dom.miniBtnFavorite.classList.toggle('active', Boolean(t.favorited));
 
       // Mini Player sync
       dom.miniTitle.textContent = t.name || 'Без названия';
       dom.miniArtist.textContent = t.artist || 'Apple Music';
-      if (dom.miniArt.getAttribute('src') !== art) {
-        dom.miniArt.src = art;
-      }
     } else {
       dom.playerTitle.textContent = 'Не играет';
       dom.playerArtist.textContent = 'Apple Music';
       dom.playerAlbum.textContent = '';
-      if (dom.playerArtwork.getAttribute('src') !== 'apple-touch-icon.svg') {
-        dom.playerArtwork.src = 'apple-touch-icon.svg';
-      }
+      setPlayerArtwork('apple-touch-icon.svg');
       dom.btnFavorite.classList.remove('active');
+      if (dom.miniBtnFavorite) dom.miniBtnFavorite.classList.remove('active');
 
       dom.miniTitle.textContent = 'Не играет';
       dom.miniArtist.textContent = 'Apple Music';
-      if (dom.miniArt.getAttribute('src') !== 'apple-touch-icon.svg') {
-        dom.miniArt.src = 'apple-touch-icon.svg';
-      }
     }
 
     // Play/Pause button icons
@@ -3530,10 +4395,12 @@ body.ui-blocked #busy-overlay {
       dom.repeatBadge.classList.add('hidden');
     }
 
-    // Audio Quality Badge
-    const aqText = cleanAudioQualityLabel(state.audioQuality);
-    dom.audioQualityText.textContent = aqText;
-    dom.modalSpecQuality.textContent = state.audioQuality;
+    // Audio Quality & Permanent DAC Badge Sync
+    const dacText = formatDacPill(state.audioQuality);
+    if (dom.audioQualityText) dom.audioQualityText.textContent = dacText;
+    if (dom.desktopDacText) dom.desktopDacText.textContent = dacText;
+    if (dom.mobileDacText) dom.mobileDacText.textContent = dacText;
+    if (dom.modalSpecQuality) dom.modalSpecQuality.textContent = state.audioQuality;
 
     // Extract sample rate if present
     if (state.audioQuality.includes('192')) {
@@ -3548,12 +4415,348 @@ body.ui-blocked #busy-overlay {
       dom.modalSpecRate.textContent = 'Автосинхронизация CoreAudio';
     }
 
-    // If not scrubbing, update timestamps
-    if (!state.isScrubbing) {
+    // Only update scrubber UI here if stopped or paused.
+    // When playing, the 60fps scrubberAnimationLoop handles smooth rendering without jitter!
+    if (!state.isScrubbing && state.playerState !== 'playing') {
       updateScrubberUI(state.lastSyncPos, state.duration);
     }
 
+    renderVolumeUI();
     renderCurrentQueueTrack(dom.queueCurrentTrack);
+    updateMediaSession();
+  }
+
+  function renderVolumeUI() {
+    if (dom.settingLockVolume100) {
+      dom.settingLockVolume100.checked = state.lockVolume100;
+    }
+    if (dom.settingsCurrentVolume) {
+      dom.settingsCurrentVolume.textContent = `${state.volume}%`;
+    }
+
+    if (state.lockVolume100) {
+      if (dom.volumeSection) dom.volumeSection.classList.add('hidden');
+      if (dom.playerBottomNotice) {
+        dom.playerBottomNotice.textContent = 'Прямой вывод CoreAudio (Bit-Perfect DAC • 100%)';
+      }
+    } else {
+      if (dom.volumeSection) dom.volumeSection.classList.remove('hidden');
+      if (dom.playerBottomNotice) {
+        dom.playerBottomNotice.textContent = 'Прямой вывод CoreAudio (Регулируемая громкость)';
+      }
+      if (dom.volumeInput && !state.isDraggingVolume) {
+        dom.volumeInput.value = state.volume;
+      }
+      if (dom.volumeTrackFill) {
+        dom.volumeTrackFill.style.width = `${state.volume}%`;
+      }
+      if (dom.volumeThumb) {
+        dom.volumeThumb.style.left = `${state.volume}%`;
+      }
+      if (dom.volumeLevelText) {
+        dom.volumeLevelText.textContent = `${state.volume}%`;
+      }
+      updateVolumeIcon(state.volume);
+    }
+  }
+
+  function updateVolumeIcon(vol) {
+    if (!dom.volumeIcon) return;
+    const wave1 = dom.volumeSection ? dom.volumeSection.querySelector('#vol-wave-1') : null;
+    const wave2 = dom.volumeSection ? dom.volumeSection.querySelector('#vol-wave-2') : null;
+    if (vol === 0) {
+      if (wave1) wave1.style.display = 'none';
+      if (wave2) wave2.style.display = 'none';
+    } else if (vol < 50) {
+      if (wave1) wave1.style.display = 'block';
+      if (wave2) wave2.style.display = 'none';
+    } else {
+      if (wave1) wave1.style.display = 'block';
+      if (wave2) wave2.style.display = 'block';
+    }
+  }
+
+  // --- Tactile & Haptic Engine ---
+  let hapticAudioCtx = null;
+  function getHapticAudioContext() {
+    if (!hapticAudioCtx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        hapticAudioCtx = new AudioCtx();
+      }
+    }
+    if (hapticAudioCtx && hapticAudioCtx.state === 'suspended') {
+      hapticAudioCtx.resume().catch(() => {});
+    }
+    return hapticAudioCtx;
+  }
+
+  function triggerHaptic(type = 'light') {
+    // 1. Native Vibration API (Android, Chrome, supported browsers)
+    if ('vibrate' in navigator) {
+      try {
+        if (type === 'light') navigator.vibrate(15);
+        else if (type === 'medium') navigator.vibrate(28);
+        else if (type === 'heavy') navigator.vibrate(45);
+        else if (type === 'toggle') navigator.vibrate([15, 30, 25]);
+      } catch (e) {}
+    }
+
+    // 2. iOS Speaker Transducer Micro-Thump (Physical recoil pulse in iPhone chassis)
+    try {
+      const ctx = getHapticAudioContext();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      if (type === 'light') {
+        // Fast subtle tap (75Hz down to 25Hz, 18ms, gain 0.85)
+        osc.frequency.setValueAtTime(75, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.018);
+        gain.gain.setValueAtTime(0.85, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.018);
+      } else if (type === 'medium') {
+        // Firm mechanical thump (85Hz down to 25Hz, 30ms, gain 1.0)
+        osc.frequency.setValueAtTime(85, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.03);
+        gain.gain.setValueAtTime(1.0, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.03);
+      } else if (type === 'toggle') {
+        // Double-click toggle (like switch / like button)
+        osc.frequency.setValueAtTime(95, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.018);
+        gain.gain.setValueAtTime(0.85, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.018);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(110, now + 0.026);
+        osc2.frequency.exponentialRampToValueAtTime(35, now + 0.046);
+        gain2.gain.setValueAtTime(0.9, now + 0.026);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.046);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.026);
+        osc2.stop(now + 0.046);
+      }
+    } catch (e) {}
+  }
+
+  // --- Silent Audio Loop for iOS Background & Lock Screen Keep-Alive ---
+  let silentAudioEl = null;
+  let silentAudioUnlocked = false;
+
+  function initSilentAudio() {
+    if (!silentAudioEl) {
+      silentAudioEl = document.getElementById('bg-silent-audio');
+    }
+    if (!silentAudioEl) {
+      silentAudioEl = document.createElement('audio');
+      silentAudioEl.id = 'bg-silent-audio';
+      silentAudioEl.loop = true;
+      silentAudioEl.setAttribute('playsinline', '');
+      silentAudioEl.setAttribute('webkit-playsinline', '');
+      silentAudioEl.preload = 'auto';
+      silentAudioEl.src = '/assets/silence.m4a?v=2';
+      silentAudioEl.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;';
+      document.body.appendChild(silentAudioEl);
+    }
+    return silentAudioEl;
+  }
+
+  function syncSilentAudio(isPlaying) {
+    const el = initSilentAudio();
+    if (!el) return;
+
+    if (isPlaying) {
+      if (el.paused) {
+        const p = el.play();
+        if (p !== undefined) {
+          p.then(() => {
+            silentAudioUnlocked = true;
+          }).catch((err) => {
+            console.warn('[AudioKeepAlive] play error:', err);
+          });
+        }
+      }
+    } else {
+      if (!el.paused) {
+        el.pause();
+      }
+    }
+  }
+
+  // Synchronously unlock audio & Web Audio on EVERY user gesture until unlocked
+  function unlockAudioOnUserGesture() {
+    const el = initSilentAudio();
+    const ctx = getHapticAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    if (!silentAudioUnlocked && el) {
+      const p = el.play();
+      if (p !== undefined) {
+        p.then(() => {
+          silentAudioUnlocked = true;
+          if (state.playerState !== 'playing') {
+            el.pause();
+          }
+          updateMediaSession();
+        }).catch(() => {});
+      }
+    }
+  }
+
+  ['pointerdown', 'touchstart', 'touchend', 'click'].forEach(evt => {
+    window.addEventListener(evt, unlockAudioOnUserGesture, { passive: true });
+  });
+
+  // Global tactile feedback on all interactive elements
+  let lastGlobalHapticTime = 0;
+  document.addEventListener('pointerup', (e) => {
+    const now = Date.now();
+    if (now - lastGlobalHapticTime < 80) return;
+    const target = e.target.closest('button, .track-row, .playlist-card, .hero-card, .station-card, .media-card, .genre-card, .tab-item, .nav-btn, .search-chip, .quality-badge, .pill, .mini-btn, .mini-player-content');
+    if (target) {
+      lastGlobalHapticTime = now;
+      triggerHaptic('light');
+    }
+  }, { passive: true });
+
+  // --- MediaSession (Lock Screen, Dynamic Island, AirPods, Control Center) ---
+  let lastMediaSessionKey = '';
+  function setupMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+
+    try {
+      navigator.mediaSession.setActionHandler('play', () => {
+        triggerHaptic('medium');
+        syncSilentAudio(true);
+        state.playerState = 'playing';
+        renderNowPlaying();
+        send({ action: 'play' });
+      });
+
+      navigator.mediaSession.setActionHandler('pause', () => {
+        triggerHaptic('medium');
+        syncSilentAudio(false);
+        state.playerState = 'paused';
+        renderNowPlaying();
+        send({ action: 'pause' });
+      });
+
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        triggerHaptic('medium');
+        sendThrottledTransport('previous');
+      });
+
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        triggerHaptic('medium');
+        sendThrottledTransport('next');
+      });
+
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime != null && !isNaN(details.seekTime)) {
+          triggerHaptic('light');
+          if (silentAudioEl && !isNaN(details.seekTime)) {
+            try { silentAudioEl.currentTime = details.seekTime; } catch(e){}
+          }
+          sendSeek(details.seekTime);
+        }
+      });
+
+      // Disable seekbackward & seekforward so iOS Lock Screen, Dynamic Island,
+      // and Control Center display Previous / Next Track buttons (⏮ / ⏭) instead of ±10s buttons.
+      try { navigator.mediaSession.setActionHandler('seekbackward', null); } catch (e) {}
+      try { navigator.mediaSession.setActionHandler('seekforward', null); } catch (e) {}
+
+      navigator.mediaSession.setActionHandler('stop', () => {
+        triggerHaptic('medium');
+        syncSilentAudio(false);
+        send({ action: 'stop' });
+      });
+    } catch (err) {
+      console.warn('[MediaSession] Handler setup:', err);
+    }
+  }
+
+  function updateMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+
+    const isPlaying = state.playerState === 'playing';
+    syncSilentAudio(isPlaying);
+
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+    const t = state.track;
+    if (!t || !t.name) return;
+
+    const rawArt = getArtworkSrc(t);
+    let fullArt = rawArt;
+    if (!fullArt || fullArt.includes('.svg') || fullArt.includes('apple-touch-icon.svg')) {
+      fullArt = `${window.location.origin}/apple-touch-icon-512.png`;
+    } else if (fullArt.startsWith('/')) {
+      fullArt = `${window.location.origin}${fullArt}`;
+    }
+
+    const artType = (fullArt.endsWith('.png') || fullArt.includes('icon')) ? 'image/png' : 'image/jpeg';
+
+    const key = `${t.name}_${t.artist}_${t.album}_${fullArt}`;
+    if (key !== lastMediaSessionKey) {
+      lastMediaSessionKey = key;
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: t.name || 'Без названия',
+          artist: t.artist || 'Apple Music',
+          album: t.album || '',
+          artwork: [
+            { src: fullArt, sizes: '96x96', type: artType },
+            { src: fullArt, sizes: '128x128', type: artType },
+            { src: fullArt, sizes: '192x192', type: artType },
+            { src: fullArt, sizes: '256x256', type: artType },
+            { src: fullArt, sizes: '512x512', type: artType }
+          ]
+        });
+      } catch (e) {
+        console.warn('[MediaSession] Metadata update error:', e);
+      }
+    }
+
+    if ('setPositionState' in navigator.mediaSession && state.duration > 0) {
+      try {
+        const curPos = Math.min(Math.max(0, state.position || state.lastSyncPos || 0), state.duration);
+        navigator.mediaSession.setPositionState({
+          duration: Math.max(state.duration, 0.1),
+          playbackRate: isPlaying ? 1.0 : 0.0,
+          position: curPos
+        });
+        if (silentAudioEl && !silentAudioEl.paused && curPos >= 0) {
+          const drift = Math.abs(silentAudioEl.currentTime - curPos);
+          if (drift > 3.0) {
+            try { silentAudioEl.currentTime = curPos; } catch(e){}
+          }
+        }
+      } catch (e) {}
+    }
   }
 
   function cleanAudioQualityLabel(raw) {
@@ -3563,6 +4766,19 @@ body.ui-blocked #busy-overlay {
     if (up.includes('LOSSLESS')) return 'LOSSLESS';
     if (up.includes('AAC')) return 'AAC 256';
     if (up.includes('ALAC')) return 'ALAC LOSSLESS';
+    return raw;
+  }
+
+  function formatDacPill(raw) {
+    if (!raw) return 'Bit-Perfect DAC';
+    const up = raw.toUpperCase();
+    if (up.includes('192')) return 'Bit-Perfect • 192 kHz / 24-bit';
+    if (up.includes('96')) return 'Bit-Perfect • 96 kHz / 24-bit';
+    if (up.includes('48')) return 'Lossless • 48 kHz / 24-bit';
+    if (up.includes('44.1')) return 'Lossless • 44.1 kHz / 16-bit';
+    if (up.includes('HI-RES')) return 'Hi-Res Lossless Bit-Perfect';
+    if (up.includes('LOSSLESS') || up.includes('ALAC')) return 'Lossless Bit-Perfect';
+    if (up.includes('AAC')) return 'AAC • 256 kbps';
     return raw;
   }
 
@@ -3619,13 +4835,20 @@ body.ui-blocked #busy-overlay {
     if (!state.isScrubbing) return;
     const targetPos = state.scrubValue;
     state.isScrubbing = false;
+    sendSeek(targetPos);
+  }
+
+  function sendSeek(position) {
+    const targetPos = Math.max(0, Math.min(state.duration || 0, position));
     state.lastSyncPos = targetPos;
     state.lastSyncTime = performance.now();
-
+    state.position = targetPos;
+    updateScrubberUI(targetPos, state.duration);
     send({
       action: 'seek',
       params: { position: targetPos }
     });
+    updateMediaSession();
   }
 
   dom.scrubberInput.addEventListener('change', commitScrub);
@@ -3638,24 +4861,44 @@ body.ui-blocked #busy-overlay {
       e.preventDefault();
       e.stopPropagation();
     }
+    triggerHaptic('medium');
     const isPlaying = state.playerState === 'playing';
-    state.playerState = isPlaying ? 'paused' : 'playing';
+    syncSilentAudio(!isPlaying);
+    if (isPlaying) {
+      const now = performance.now();
+      state.lastSyncPos = Math.min(state.duration, state.lastSyncPos + (now - state.lastSyncTime) / 1000);
+      state.lastSyncTime = now;
+      state.playerState = 'paused';
+    } else {
+      state.lastSyncTime = performance.now();
+      state.playerState = 'playing';
+    }
     renderNowPlaying();
     send({ action: isPlaying ? 'pause' : 'play' });
+  }
+
+  let lastTransportActionTime = 0;
+  function sendThrottledTransport(action) {
+    const now = Date.now();
+    if (now - lastTransportActionTime < 500) return;
+    lastTransportActionTime = now;
+    triggerHaptic('medium');
+    send({ action });
   }
 
   dom.btnPlayPause.addEventListener('click', togglePlayPause);
   dom.miniBtnPlayPause.addEventListener('click', togglePlayPause);
 
-  dom.btnNext.addEventListener('click', () => send({ action: 'next' }));
+  dom.btnNext.addEventListener('click', () => sendThrottledTransport('next'));
   dom.miniBtnNext.addEventListener('click', (e) => {
     e.stopPropagation();
-    send({ action: 'next' });
+    sendThrottledTransport('next');
   });
 
-  dom.btnPrev.addEventListener('click', () => send({ action: 'previous' }));
+  dom.btnPrev.addEventListener('click', () => sendThrottledTransport('previous'));
 
   dom.btnShuffle.addEventListener('click', () => {
+    triggerHaptic('toggle');
     send({
       action: 'set_shuffle',
       params: { enabled: !state.shuffle }
@@ -3663,6 +4906,7 @@ body.ui-blocked #busy-overlay {
   });
 
   dom.btnRepeat.addEventListener('click', () => {
+    triggerHaptic('toggle');
     const modes = ['off', 'all', 'one'];
     const nextIdx = (modes.indexOf(state.repeatMode) + 1) % modes.length;
     const nextMode = modes[nextIdx];
@@ -3673,27 +4917,213 @@ body.ui-blocked #busy-overlay {
   });
 
   dom.btnFavorite.addEventListener('click', () => {
+    triggerHaptic('toggle');
     send({ action: 'favorite' });
   });
 
+  if (dom.miniBtnFavorite) {
+    dom.miniBtnFavorite.addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerHaptic('toggle');
+      send({ action: 'favorite' });
+    });
+  }
+
   dom.btnReconnect.addEventListener('click', () => {
+    triggerHaptic('light');
     connectWebSocket();
   });
 
   // --- Audio Quality Modal Listeners ---
-  dom.audioQualityBadge.addEventListener('click', () => {
+  const openQualityModal = () => {
+    triggerHaptic('light');
     dom.qualityModal.classList.remove('hidden');
-  });
+  };
+  dom.audioQualityBadge.addEventListener('click', openQualityModal);
+  if (dom.desktopDacBadge) dom.desktopDacBadge.addEventListener('click', openQualityModal);
+  if (dom.mobileDacBadge) dom.mobileDacBadge.addEventListener('click', openQualityModal);
 
   dom.btnCloseModal.addEventListener('click', () => {
     dom.qualityModal.classList.add('hidden');
   });
+
+  // --- Station Creation Modal Listeners ---
+  if (dom.btnCreateStation) {
+    dom.btnCreateStation.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.stationOptTrackName) {
+        dom.stationOptTrackName.textContent = (state.track && state.track.name) ? state.track.name : 'Не играет';
+      }
+      if (dom.stationOptArtistName) {
+        dom.stationOptArtistName.textContent = (state.track && state.track.artist) ? state.track.artist : 'Apple Music';
+      }
+      if (dom.stationPickerModal) {
+        dom.stationPickerModal.classList.remove('hidden');
+      }
+    });
+  }
+
+  if (dom.btnCloseStationModal) {
+    dom.btnCloseStationModal.addEventListener('click', () => {
+      if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+    });
+  }
+
+  if (dom.stationPickerModal) {
+    dom.stationPickerModal.addEventListener('click', (e) => {
+      if (e.target === dom.stationPickerModal) {
+        dom.stationPickerModal.classList.add('hidden');
+      }
+    });
+  }
+
+  if (dom.btnStationByTrack) {
+    dom.btnStationByTrack.addEventListener('click', () => {
+      triggerHaptic('medium');
+      if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+      const trackName = state.track ? state.track.name : '';
+      const artistName = state.track ? state.track.artist : '';
+      if (!trackName) return;
+      setUIBusy(true, `Запуск радио по треку «${trackName}»...`);
+      send({
+        action: 'play_station',
+        params: {
+          type: 'track',
+          title: trackName,
+          artist: artistName,
+          name: `Станция «${trackName}»`
+        }
+      });
+    });
+  }
+
+  if (dom.btnStationByArtist) {
+    dom.btnStationByArtist.addEventListener('click', () => {
+      triggerHaptic('medium');
+      if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+      const artistName = state.track ? state.track.artist : '';
+      if (!artistName) return;
+      setUIBusy(true, `Запуск радио по артисту «${artistName}»...`);
+      send({
+        action: 'play_station',
+        params: {
+          type: 'artist',
+          artist: artistName,
+          name: `Станция «${artistName}»`
+        }
+      });
+    });
+  }
 
   dom.qualityModal.addEventListener('click', (e) => {
     if (e.target === dom.qualityModal) {
       dom.qualityModal.classList.add('hidden');
     }
   });
+
+  // --- Volume Control & Settings Listeners ---
+  let lastVolumeSendTime = 0;
+  let volumeSendTimeout = null;
+
+  function sendThrottledVolume(val) {
+    const vol = Math.max(0, Math.min(100, Math.round(Number(val) || 0)));
+    state.volume = vol;
+    if (vol > 0) state.previousVolume = vol;
+
+    if (dom.volumeTrackFill) dom.volumeTrackFill.style.width = `${vol}%`;
+    if (dom.volumeThumb) dom.volumeThumb.style.left = `${vol}%`;
+    if (dom.volumeLevelText) dom.volumeLevelText.textContent = `${vol}%`;
+    if (dom.settingsCurrentVolume) dom.settingsCurrentVolume.textContent = `${vol}%`;
+    updateVolumeIcon(vol);
+
+    const now = Date.now();
+    if (now - lastVolumeSendTime >= 75) {
+      lastVolumeSendTime = now;
+      send({ action: 'set_volume', params: { volume: vol } });
+    } else {
+      if (volumeSendTimeout) clearTimeout(volumeSendTimeout);
+      volumeSendTimeout = setTimeout(() => {
+        lastVolumeSendTime = Date.now();
+        send({ action: 'set_volume', params: { volume: vol } });
+      }, 75);
+    }
+  }
+
+  if (dom.volumeInput) {
+    dom.volumeInput.addEventListener('input', (e) => {
+      state.isDraggingVolume = true;
+      sendThrottledVolume(e.target.value);
+    });
+
+    dom.volumeInput.addEventListener('change', (e) => {
+      state.isDraggingVolume = false;
+      sendThrottledVolume(e.target.value);
+      triggerHaptic('light');
+    });
+  }
+
+  if (dom.btnVolumeMute) {
+    dom.btnVolumeMute.addEventListener('click', () => {
+      triggerHaptic('toggle');
+      if (state.volume > 0) {
+        state.previousVolume = state.volume;
+        sendThrottledVolume(0);
+      } else {
+        const restore = state.previousVolume > 0 ? state.previousVolume : 50;
+        sendThrottledVolume(restore);
+      }
+    });
+  }
+
+  // --- Settings Modal & Toggle Listeners ---
+  const openSettingsModal = () => {
+    triggerHaptic('light');
+    if (dom.settingLockVolume100) {
+      dom.settingLockVolume100.checked = state.lockVolume100;
+    }
+    if (dom.settingsCurrentVolume) {
+      dom.settingsCurrentVolume.textContent = `${state.volume}%`;
+    }
+    if (dom.settingsModal) {
+      dom.settingsModal.classList.remove('hidden');
+    }
+  };
+
+  const closeSettingsModal = () => {
+    if (dom.settingsModal) {
+      dom.settingsModal.classList.add('hidden');
+    }
+  };
+
+  if (dom.btnSettings) dom.btnSettings.addEventListener('click', openSettingsModal);
+  if (dom.desktopBtnSettings) dom.desktopBtnSettings.addEventListener('click', openSettingsModal);
+  if (dom.mobileBtnSettings) dom.mobileBtnSettings.addEventListener('click', openSettingsModal);
+
+  if (dom.btnCloseSettingsModal) {
+    dom.btnCloseSettingsModal.addEventListener('click', closeSettingsModal);
+  }
+
+  if (dom.settingsModal) {
+    dom.settingsModal.addEventListener('click', (e) => {
+      if (e.target === dom.settingsModal) {
+        closeSettingsModal();
+      }
+    });
+  }
+
+  if (dom.settingLockVolume100) {
+    dom.settingLockVolume100.addEventListener('change', (e) => {
+      const enabled = Boolean(e.target.checked);
+      state.lockVolume100 = enabled;
+      try { localStorage.setItem('amr_lock_volume_100', String(enabled)); } catch (err) {}
+      triggerHaptic('toggle');
+      renderVolumeUI();
+      send({
+        action: 'set_lock_volume_100',
+        params: { enabled }
+      });
+    });
+  }
 
   // --- Queue View Handling ---
   function updateQueue(data) {
@@ -3862,8 +5292,9 @@ body.ui-blocked #busy-overlay {
     dom.detailArtwork.src = pl.artwork_url || pl.artworkUrl || 'apple-touch-icon.svg';
     dom.playlistTracksList.innerHTML = '<div class="loading-state">Загрузка треков...</div>';
 
-    dom.playlistsBrowsePane.classList.add('hidden');
-    dom.playlistDetailPane.classList.remove('hidden');
+    navigateToView('view-library', 'library');
+    if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.add('hidden');
+    if (dom.playlistDetailPane) dom.playlistDetailPane.classList.remove('hidden');
 
     send({
       action: 'get_playlist_tracks',
@@ -4101,16 +5532,70 @@ body.ui-blocked #busy-overlay {
     });
   });
 
-  function executeSearch(query, scope) {
-    dom.searchResults.innerHTML = '<div class="loading-state">Поиск в каталоге Apple Music...</div>';
+  let currentSearchSongs = [];
+  let currentSearchOffset = 0;
+  let currentSearchHasMore = false;
+  let isSearchLoadingMore = false;
+
+  function executeSearch(query, scope, offset = 0) {
+    if (offset === 0) {
+      currentSearchSongs = [];
+      currentSearchOffset = 0;
+      currentSearchHasMore = false;
+      dom.searchResults.innerHTML = '<div class="loading-state">Поиск в каталоге Apple Music...</div>';
+    } else {
+      isSearchLoadingMore = true;
+      const btn = document.getElementById('btn-search-load-more');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Загрузка...';
+      }
+    }
     send({
       action: 'search',
       params: {
         query: query,
         country: 'ru',
-        scope: scope
+        scope: scope,
+        limit: 50,
+        offset: offset
       }
     });
+  }
+
+  function createTrackRow(s) {
+    const row = document.createElement('div');
+    row.className = 'track-row';
+    const artSrc = s.artwork_url || s.artwork || 'apple-touch-icon.svg';
+    const isLocal = Boolean(s.is_local || s.isLocal);
+    const localBadge = isLocal ? '<span class="badge-library">МЕДИАТЕКА</span>' : '';
+
+    row.innerHTML = `
+      <img class="track-thumb" src="${artSrc}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
+      <div class="track-details">
+        <div class="track-row-title-wrap">
+          <span class="track-row-title">${escapeHtml(s.name || s.trackName || '')}</span>
+          ${localBadge}
+        </div>
+        <span class="track-row-artist">${escapeHtml(s.artist || s.artistName || '')}</span>
+      </div>
+    `;
+
+    row.addEventListener('click', () => {
+      setUIBusy(true, 'Запуск трека...');
+      send({
+        action: 'play_cloud',
+        params: {
+          numeric_id: s.numeric_id || s.numericId || undefined,
+          id: `${s.id || s.trackId || ''}`,
+          name: s.name || s.trackName || '',
+          artist: s.artist || s.artistName || '',
+          url: s.url || s.trackViewUrl || '',
+          artwork: s.artwork_url || s.artwork || ''
+        }
+      });
+    });
+    return row;
   }
 
   function updateSearchResults(data) {
@@ -4122,6 +5607,35 @@ body.ui-blocked #busy-overlay {
     const songs = data.songs || [];
     const albums = data.albums || [];
     const artists = data.artists || [];
+    const offset = data.offset || 0;
+    const hasMore = Boolean(data.has_more);
+
+    // If this is a page append (offset > 0)
+    if (offset > 0) {
+      isSearchLoadingMore = false;
+      const songList = document.getElementById('search-songs-list');
+      if (songList && songs.length > 0) {
+        currentSearchSongs.push(...songs);
+        songs.forEach(s => {
+          songList.appendChild(createTrackRow(s));
+        });
+      }
+      const existingBtn = document.getElementById('btn-search-load-more');
+      if (existingBtn) {
+        if (hasMore) {
+          existingBtn.disabled = false;
+          existingBtn.textContent = 'Загрузить ещё';
+        } else {
+          existingBtn.remove();
+        }
+      }
+      return;
+    }
+
+    // Initial search result (offset === 0)
+    currentSearchSongs = [...songs];
+    currentSearchOffset = songs.length;
+    currentSearchHasMore = hasMore;
 
     if (songs.length === 0 && albums.length === 0 && artists.length === 0) {
       dom.searchResults.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
@@ -4153,7 +5667,7 @@ body.ui-blocked #busy-overlay {
         <span>Слушать всё</span>
       `;
       btnPlayAll.addEventListener('click', () => {
-        playSearchResultsList(songs, false);
+        playSearchResultsList(currentSearchSongs, false);
       });
 
       const btnShuffle = document.createElement('button');
@@ -4170,7 +5684,7 @@ body.ui-blocked #busy-overlay {
         <span>Перемешать</span>
       `;
       btnShuffle.addEventListener('click', () => {
-        playSearchResultsList(songs, true);
+        playSearchResultsList(currentSearchSongs, true);
       });
 
       actionsBar.appendChild(btnPlayAll);
@@ -4179,43 +5693,24 @@ body.ui-blocked #busy-overlay {
       dom.searchResults.appendChild(headerRow);
 
       const list = document.createElement('div');
+      list.id = 'search-songs-list';
       list.className = 'track-list';
       songs.forEach(s => {
-        const row = document.createElement('div');
-        row.className = 'track-row';
-        const artSrc = s.artwork_url || s.artwork || 'apple-touch-icon.svg';
-        const isLocal = Boolean(s.is_local || s.isLocal);
-        const localBadge = isLocal ? '<span class="badge-library">МЕДИАТЕКА</span>' : '';
-
-        row.innerHTML = `
-          <img class="track-thumb" src="${artSrc}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
-          <div class="track-details">
-            <div class="track-row-title-wrap">
-              <span class="track-row-title">${escapeHtml(s.name || s.trackName || '')}</span>
-              ${localBadge}
-            </div>
-            <span class="track-row-artist">${escapeHtml(s.artist || s.artistName || '')}</span>
-          </div>
-        `;
-
-        row.addEventListener('click', () => {
-          setUIBusy(true, 'Запуск трека...');
-          send({
-            action: 'play_cloud',
-            params: {
-              numeric_id: s.numeric_id || s.numericId || undefined,
-              id: `${s.id || s.trackId || ''}`,
-              name: s.name || s.trackName || '',
-              artist: s.artist || s.artistName || '',
-              url: s.url || s.trackViewUrl || '',
-              artwork: s.artwork_url || s.artwork || ''
-            }
-          });
-        });
-
-        list.appendChild(row);
+        list.appendChild(createTrackRow(s));
       });
       dom.searchResults.appendChild(list);
+
+      if (hasMore) {
+        const btnLoadMore = document.createElement('button');
+        btnLoadMore.id = 'btn-search-load-more';
+        btnLoadMore.className = 'btn-search-load-more';
+        btnLoadMore.type = 'button';
+        btnLoadMore.textContent = 'Загрузить ещё';
+        btnLoadMore.addEventListener('click', () => {
+          executeSearch(state.searchQuery, state.searchScope, currentSearchSongs.length);
+        });
+        dom.searchResults.appendChild(btnLoadMore);
+      }
     }
 
     // Render Albums
@@ -4436,7 +5931,10 @@ body.ui-blocked #busy-overlay {
     { name: '🎬 Саундтреки', query: 'Soundtrack' }
   ];
 
-  function loadTrends(country) {
+  let lastTrendsLoadedTime = 0;
+  let lastTrendsCountry = '';
+
+  function loadTrends(country, force = false) {
     if (country) {
       state.trends.country = country;
     }
@@ -4448,10 +5946,12 @@ body.ui-blocked #busy-overlay {
       });
     }
 
-    send({
-      action: 'get_catalog_charts',
-      params: { country: c }
-    });
+    const now = Date.now();
+    if (!force && lastTrendsCountry === c && now - lastTrendsLoadedTime < 30000 && state.trends.stations && state.trends.stations.length > 0) {
+      return;
+    }
+    lastTrendsLoadedTime = now;
+    lastTrendsCountry = c;
 
     send({
       action: 'get_explore',
@@ -4485,6 +5985,8 @@ body.ui-blocked #busy-overlay {
       : (data.top_picks || []);
     state.recentlyPlayed = recents;
     renderRecentlyPlayed(recents);
+    renderHeavyRotation(data.heavy_rotation);
+    renderSimilarRecommendations(data.recommended_similar);
 
     // 3. Render Stations (Станции для вас ›)
     renderHomeStations(state.trends.stations || DEFAULT_STATIONS);
@@ -4519,6 +6021,7 @@ body.ui-blocked #busy-overlay {
         heroCards.push({
           index: c.index || 0,
           title: c.title || 'Apple Music',
+          name: c.name || '',
           sub: c.subtitle || c.sub || '',
           tag: c.tag || 'Специально для вас',
           id: c.id || '',
@@ -4647,17 +6150,25 @@ body.ui-blocked #busy-overlay {
           return;
         }
         if (c.type === 'playlist' && !isPlayBtn) {
-          openPlaylistDetail({ name: c.id || c.title });
+          openPlaylistDetail({ name: c.name || c.title });
           return;
         }
 
-        setUIBusy(true, 'Запуск...');
+        setUIBusy(true, 'Запуск станции...');
+        if (c.type === 'station') {
+          state.isLaunchingStation = true;
+          if (state.stationLaunchTimeout) clearTimeout(state.stationLaunchTimeout);
+          state.stationLaunchTimeout = setTimeout(() => {
+            state.isLaunchingStation = false;
+            setUIBusy(false);
+          }, 10000);
+        }
         send({
           action: 'play_hero_card',
           params: {
             index: c.index,
-            name: c.title,
-            artist: c.sub || c.subtitle || c.artist || '',
+            name: c.name || c.title,
+            artist: c.name || c.sub || c.subtitle || c.artist || '',
             id: c.id,
             url: c.url,
             type: c.type
@@ -4670,6 +6181,99 @@ body.ui-blocked #busy-overlay {
       });
 
       dom.homeHeroCarousel.appendChild(el);
+    });
+  }
+
+  // Render Heavy Rotation
+  function renderHeavyRotation(heavyRotation) {
+    if (!dom.homeHeavyCarousel) return;
+    const list = heavyRotation || [];
+    if (list.length === 0) {
+      if (dom.homeHeavySection) dom.homeHeavySection.classList.add('hidden');
+      return;
+    }
+    if (dom.homeHeavySection) dom.homeHeavySection.classList.remove('hidden');
+    dom.homeHeavyCarousel.innerHTML = '';
+    list.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'media-card';
+      const art = t.artwork || 'apple-touch-icon.svg';
+      card.innerHTML = `
+          <div class="media-card-art-wrap">
+            <img class="media-card-art" src="${art}" loading="lazy" alt="Cover">
+            <div class="media-play-overlay">
+              <div class="media-play-pill">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="#000000"><polygon points="8 5 19 12 8 19 8 5"/></svg>
+              </div>
+            </div>
+          </div>
+          <div class="media-card-title">${escapeHtml(t.name || t.album || 'Unknown')}</div>
+          <div class="media-card-sub">${escapeHtml(t.artist || '')}</div>
+        `;
+      card.addEventListener('click', () => {
+        executeAction('play_album', { 
+          id: t.id || '', 
+          name: t.name || '', 
+          artist: t.artist || '' 
+        });
+      });
+      dom.homeHeavyCarousel.appendChild(card);
+    });
+  }
+
+  // Render Recommendations
+  function renderSimilarRecommendations(recommendedArray) {
+    if (!dom.homeRecContainer) return;
+    dom.homeRecContainer.innerHTML = '';
+    
+    if (!recommendedArray || !Array.isArray(recommendedArray) || recommendedArray.length === 0) {
+      return;
+    }
+    
+    recommendedArray.forEach((rec, idx) => {
+      const list = rec.items || [];
+      if (list.length === 0) return;
+      
+      const section = document.createElement('div');
+      section.className = 'home-section';
+      
+      const title = document.createElement('h2');
+      title.className = 'home-section-title';
+      title.textContent = rec.title || 'Рекомендации';
+      
+      const carousel = document.createElement('div');
+      carousel.className = 'home-carousel-row';
+      
+      list.forEach(a => {
+        const card = document.createElement('div');
+        card.className = 'media-card';
+        const aName = a.name || (a.title ? a.title : '');
+        const art = a.artwork || 'apple-touch-icon.svg';
+        card.innerHTML = `
+          <div class="media-card-art-wrap">
+            <img class="media-card-art" src="${art}" loading="lazy" alt="Cover">
+            <div class="media-play-overlay">
+              <div class="media-play-pill">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="#000000"><polygon points="8 5 19 12 8 19 8 5"/></svg>
+              </div>
+            </div>
+          </div>
+          <div class="media-card-title">${escapeHtml(aName)}</div>
+          <div class="media-card-sub">${escapeHtml(a.artist || '')}</div>
+        `;
+        card.addEventListener('click', () => {
+          executeAction('play_album', { 
+            id: a.id || '', 
+            name: aName, 
+            artist: a.artist || '' 
+          });
+        });
+        carousel.appendChild(card);
+      });
+      
+      section.appendChild(title);
+      section.appendChild(carousel);
+      dom.homeRecContainer.appendChild(section);
     });
   }
 
@@ -4687,7 +6291,7 @@ body.ui-blocked #busy-overlay {
     list.forEach(t => {
       const card = document.createElement('div');
       card.className = 'media-card';
-      const art = t.artwork || (t.id ? `/api/artwork/track?id=${t.id}` : 'apple-touch-icon.svg');
+      const art = getArtworkSrc(t);
 
       card.innerHTML = `
         <div class="media-card-art-wrap">
@@ -4846,7 +6450,7 @@ body.ui-blocked #busy-overlay {
     list.forEach((t, idx) => {
       const row = document.createElement('div');
       row.className = 'track-row';
-      const art = t.artwork || (t.id ? `/api/artwork/track?id=${t.id}` : 'apple-touch-icon.svg');
+      const art = getArtworkSrc(t);
       const dur = t.duration ? formatTime(t.duration) : '';
 
       row.innerHTML = `
@@ -5012,12 +6616,16 @@ body.ui-blocked #busy-overlay {
   // Mobile Bottom Tab Bar
   dom.tabItems.forEach(tab => {
     tab.addEventListener('click', () => {
+      triggerHaptic('light');
       const targetViewId = tab.dataset.view;
       switchMobileView(targetViewId);
     });
   });
 
   function switchMobileView(viewId) {
+    if (viewId !== 'view-now-playing') {
+      state.lastNonPlayerView = viewId;
+    }
     state.activeView = viewId;
 
     dom.tabItems.forEach(item => {
@@ -5060,14 +6668,195 @@ body.ui-blocked #busy-overlay {
     }
   }
 
-  // Tapping Mini-Player body expands Now Playing
-  dom.miniTrigger.addEventListener('click', () => {
+  function minimizeNowPlaying() {
+    triggerHaptic('light');
+    switchMobileView(state.lastNonPlayerView || 'view-home');
+  }
+
+  function expandNowPlaying() {
+    triggerHaptic('light');
     switchMobileView('view-now-playing');
+  }
+
+  // Tapping Mini-Player body expands Now Playing
+  dom.miniTrigger.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    expandNowPlaying();
   });
+
+  // --- Artwork & Mini-Player Swipe Gestures ---
+  function setupArtworkSwipeGestures() {
+    const container = dom.artworkContainer;
+    const wrapper = dom.artworkWrapper;
+    if (!container || !wrapper) return;
+
+    let startX = 0;
+    let startY = 0;
+    let deltaX = 0;
+    let deltaY = 0;
+    let startTime = 0;
+    let isSwiping = false;
+
+    container.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      deltaX = 0;
+      deltaY = 0;
+      startTime = Date.now();
+      isSwiping = true;
+      wrapper.style.transition = 'none';
+    }, { passive: true });
+
+    container.addEventListener('touchmove', (e) => {
+      if (!isSwiping || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      deltaX = t.clientX - startX;
+      deltaY = t.clientY - startY;
+
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        // Horizontal swipe preview with resistance
+        const dampened = deltaX * 0.42;
+        const scale = Math.max(0.92, 1 - Math.abs(deltaX) / 1000);
+        wrapper.style.transform = `translateX(${dampened}px) scale(${scale})`;
+      } else if (deltaY > 0) {
+        // Pull down preview to minimize
+        const dampenedY = deltaY * 0.35;
+        const scale = Math.max(0.92, 1 - deltaY / 1200);
+        wrapper.style.transform = `translateY(${dampenedY}px) scale(${scale})`;
+      }
+    }, { passive: true });
+
+    const handleTouchEnd = () => {
+      if (!isSwiping) return;
+      isSwiping = false;
+      const elapsed = Date.now() - startTime;
+      wrapper.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.9, 0.4, 1)';
+
+      const isFastSwipe = elapsed < 320;
+      const horizontalThreshold = isFastSwipe ? 35 : 60;
+      const verticalThreshold = isFastSwipe ? 45 : 75;
+
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > horizontalThreshold) {
+        if (deltaX < 0) {
+          // Swipe Left -> Next Track
+          triggerHaptic('medium');
+          wrapper.style.transform = 'translateX(-120%) scale(0.9)';
+          setTimeout(() => {
+            sendThrottledTransport('next');
+            wrapper.style.transition = 'none';
+            wrapper.style.transform = 'translateX(60%) scale(0.92)';
+            requestAnimationFrame(() => {
+              wrapper.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.9, 0.4, 1)';
+              wrapper.style.transform = 'none';
+            });
+          }, 160);
+          return;
+        } else {
+          // Swipe Right -> Previous Track
+          triggerHaptic('medium');
+          wrapper.style.transform = 'translateX(120%) scale(0.9)';
+          setTimeout(() => {
+            sendThrottledTransport('previous');
+            wrapper.style.transition = 'none';
+            wrapper.style.transform = 'translateX(-60%) scale(0.92)';
+            requestAnimationFrame(() => {
+              wrapper.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.9, 0.4, 1)';
+              wrapper.style.transform = 'none';
+            });
+          }, 160);
+          return;
+        }
+      } else if (deltaY > verticalThreshold && Math.abs(deltaX) < deltaY * 0.8) {
+        // Swipe Down -> Minimize Now Playing
+        triggerHaptic('light');
+        wrapper.style.transform = 'translateY(120px) scale(0.85)';
+        setTimeout(() => {
+          wrapper.style.transform = 'none';
+          minimizeNowPlaying();
+        }, 140);
+        return;
+      }
+
+      // Reset if not meeting threshold
+      wrapper.style.transform = 'none';
+    };
+
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+  }
+
+  function setupMiniPlayerGestures() {
+    const mini = dom.miniPlayer;
+    if (!mini) return;
+
+    let startX = 0;
+    let startY = 0;
+    let deltaX = 0;
+    let deltaY = 0;
+    let startTime = 0;
+    let isTouch = false;
+
+    mini.addEventListener('touchstart', (e) => {
+      if (e.target.closest('button')) return;
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      deltaX = 0;
+      deltaY = 0;
+      startTime = Date.now();
+      isTouch = true;
+    }, { passive: true });
+
+    mini.addEventListener('touchmove', (e) => {
+      if (!isTouch || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      deltaX = t.clientX - startX;
+      deltaY = t.clientY - startY;
+    }, { passive: true });
+
+    const handleMiniEnd = (e) => {
+      if (!isTouch) return;
+      isTouch = false;
+      const elapsed = Date.now() - startTime;
+      const dist = Math.hypot(deltaX, deltaY);
+
+      if (dist > 35) {
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+          if (deltaX < -35) {
+            // Swipe Left -> Next
+            triggerHaptic('medium');
+            sendThrottledTransport('next');
+            return;
+          } else if (deltaX > 35) {
+            // Swipe Right -> Previous
+            triggerHaptic('medium');
+            sendThrottledTransport('previous');
+            return;
+          }
+        } else if (deltaY < -35) {
+          // Swipe Up -> Expand Now Playing
+          expandNowPlaying();
+          return;
+        }
+      }
+
+      // Single tap without drag expands Now Playing
+      if (dist < 10 && elapsed < 350 && !e.target.closest('button')) {
+        expandNowPlaying();
+      }
+    };
+
+    mini.addEventListener('touchend', handleMiniEnd);
+    mini.addEventListener('touchcancel', () => { isTouch = false; });
+  }
 
   // Desktop Navigation
   dom.desktopNavButtons.forEach(btn => {
     btn.addEventListener('click', () => {
+      triggerHaptic('light');
       const target = btn.dataset.target;
       switchDesktopTab(target);
     });
@@ -5133,6 +6922,9 @@ body.ui-blocked #busy-overlay {
   window.addEventListener('resize', handleResize);
 
   // Initialize
+  setupMediaSession();
+  setupArtworkSwipeGestures();
+  setupMiniPlayerGestures();
   renderHeroCarousel({});
   renderHomeStations(DEFAULT_STATIONS);
   renderHomeGenres(DEFAULT_GENRES);
@@ -5141,37 +6933,191 @@ body.ui-blocked #busy-overlay {
 
 })();
 
+function bindGenreCards() {
+  document.querySelectorAll('.genre-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const genre = card.getAttribute('data-genre');
+      if (genre) {
+        dom.searchInput.value = genre;
+        state.searchQuery = genre;
+        dom.btnClearSearch.classList.remove('hidden');
+        executeSearch(genre, state.searchScope);
+      }
+    });
+  });
+}
+bindGenreCards();
+
 """##
 
-    public static let manifestJSON: String = ##"""
+    public static let manifestJSON = ##"""
 {
   "name": "Apple Music Remote",
   "short_name": "AMR",
   "description": "Bit-Perfect High-Fidelity Remote for Apple Music on macOS",
-  "start_url": "./index.html",
-  "scope": "./",
+  "id": "/",
+  "start_url": "/?pwa=1",
+  "scope": "/",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "fullscreen",
+    "window-controls-overlay"
+  ],
   "orientation": "portrait-primary",
   "background_color": "#000000",
   "theme_color": "#000000",
+  "categories": [
+    "music",
+    "entertainment",
+    "utilities"
+  ],
   "icons": [
     {
-      "src": "apple-touch-icon.svg",
-      "sizes": "512x512",
+      "src": "/apple-touch-icon.svg",
+      "sizes": "any",
       "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "apple-touch-icon.svg",
+      "src": "/apple-touch-icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
 
 """##
 
-    public static let appleTouchIconSVG: String = ##"""
+    public static let swJS = ##"""
+// Apple Music Remote (AMR) - Service Worker for PWA
+const CACHE_NAME = 'amr-shell-v5';
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/style.css',
+  '/app.js',
+  '/manifest.json',
+  '/apple-touch-icon.svg',
+  '/apple-touch-icon.png',
+  '/apple-touch-icon-180.png',
+  '/apple-touch-icon-192.png',
+  '/apple-touch-icon-512.png',
+  '/assets/silence.m4a',
+  '/assets/silence.wav',
+  '/assets/stations/CoverPersonal.png',
+  '/assets/stations/CoverDiscovery.png',
+  '/assets/stations/CoverAppleMusic1.png',
+  '/assets/stations/CoverHeavyRotation.svg',
+  '/assets/stations/CoverElectronic.png',
+  '/assets/stations/CoverRock.png'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(STATIC_ASSETS).catch((err) => {
+        console.warn('AMR ServiceWorker pre-cache notice:', err);
+      });
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // Always bypass cache for API endpoints, WebSocket, and dynamic search
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/ws') ||
+    event.request.method !== 'GET'
+  ) {
+    return;
+  }
+
+  // Network-first for code assets (HTML, app.js, style.css) so updates are immediate
+  if (
+    event.request.headers.get('accept')?.includes('text/html') ||
+    url.pathname === '/app.js' ||
+    url.pathname === '/style.css' ||
+    url.pathname === '/manifest.json'
+  ) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-first with background revalidation for static assets
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      if (cached) {
+        fetch(event.request)
+          .then((networkRes) => {
+            if (networkRes && networkRes.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkRes));
+            }
+          })
+          .catch(() => {});
+        return cached;
+      }
+      return fetch(event.request).then((networkRes) => {
+        if (networkRes && networkRes.status === 200) {
+          const copy = networkRes.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return networkRes;
+      });
+    })
+  );
+});
+
+"""##
+
+    public static let appleTouchIconSVG = ##"""
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">

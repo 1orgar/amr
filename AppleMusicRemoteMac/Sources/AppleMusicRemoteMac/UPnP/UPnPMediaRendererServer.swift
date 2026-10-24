@@ -17,6 +17,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "org.ksholokhov.amr.upnp.http", qos: .utility)
     private var activeConnections: [NWConnection] = []
+    private let connectionsLock = NSLock()
 
     // Optimistic tracking for instantaneous Home Assistant response & seek stabilization
     private var optimisticState: String?
@@ -25,10 +26,18 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     private var optimisticPosition: Double?
     private var optimisticPositionDate: Date = .distantPast
     private var optimisticPositionIsPlaying: Bool = false
+    private let stateLock = NSLock()
 
     private var lastNotifiedState: String?
     private var lastNotifiedTrackId: String?
+    private var lastNotifiedArtworkUrl: String?
+    private var lastNotifiedTrackTitle: String?
     private var lastNotifiedTime: Date = .distantPast
+
+    // Cache for downloaded remote CDN artwork data so UPnP doesn't repeatedly download from Apple CDN
+    private var cachedArtworkData: (key: String, data: Data, contentType: String)?
+    private let artworkLock = NSLock()
+    private var isRestarting = false
 
     private init() {}
 
@@ -40,12 +49,13 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
             self.listener = listener
 
-            listener.stateUpdateHandler = { state in
+            listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
                     NSLog("[UPnPMediaRendererServer] ✅ HTTP UPnP Server listening on port %u", port)
                 case .failed(let err):
                     NSLog("[UPnPMediaRendererServer] ❌ Listener failed: %@", err.localizedDescription)
+                    self?.scheduleRestart()
                 default:
                     break
                 }
@@ -63,15 +73,31 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         }
     }
 
+    private func scheduleRestart() {
+        queue.async { [weak self] in
+            guard let self = self, !self.isRestarting else { return }
+            self.isRestarting = true
+            self.listener?.cancel()
+            self.listener = nil
+            self.queue.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self else { return }
+                self.isRestarting = false
+                _ = self.start(port: self.port)
+            }
+        }
+    }
+
     public func stop() {
         queue.async { [weak self] in
             guard let self = self else { return }
             self.listener?.cancel()
             self.listener = nil
+            self.connectionsLock.lock()
             for conn in self.activeConnections {
                 conn.cancel()
             }
             self.activeConnections.removeAll()
+            self.connectionsLock.unlock()
             NSLog("[UPnPMediaRendererServer] UPnP HTTP server stopped.")
         }
     }
@@ -79,20 +105,27 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     // MARK: - Connection Handling
 
     private func handleNewConnection(_ connection: NWConnection) {
-        queue.async { [weak self] in
-            self?.activeConnections.append(connection)
-        }
+        connectionsLock.lock()
+        activeConnections.append(connection)
+        connectionsLock.unlock()
 
         connection.stateUpdateHandler = { [weak self, weak connection] state in
             switch state {
             case .failed, .cancelled:
                 if let conn = connection {
-                    self?.queue.async {
-                        self?.activeConnections.removeAll { $0 === conn }
-                    }
+                    self?.connectionsLock.lock()
+                    self?.activeConnections.removeAll { $0 === conn }
+                    self?.connectionsLock.unlock()
                 }
             default:
                 break
+            }
+        }
+
+        // Cancel connection if it stalls/idles for > 15s without finishing
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak connection] in
+            if connection?.state == .ready {
+                connection?.cancel()
             }
         }
 
@@ -130,7 +163,10 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 }
 
                 if bodyData.count >= contentLength {
-                    self.processHTTPRequest(headerString: headerString, bodyData: bodyData, connection: connection)
+                    // Dispatch request processing asynchronously so network socket queue is never blocked
+                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                        self?.processHTTPRequest(headerString: headerString, bodyData: bodyData, connection: connection)
+                    }
                 } else {
                     // Need more body data
                     self.receiveRequest(connection, accumulatedData: current)
@@ -222,6 +258,8 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         let callbackURL: URL
         let path: String
         var seq: UInt32
+        var expiryDate: Date
+        var failureCount: Int
     }
 
     private var subscriptions: [EventSubscription] = []
@@ -232,6 +270,41 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
         if method == "SUBSCRIBE" {
             let requestedSid = headers["SID"]
+
+            // Check if this is a renewal request (UPnP spec: MUST NOT contain CALLBACK)
+            if let renewSid = requestedSid, headers["CALLBACK"] == nil {
+                subQueue.async { [weak self] in
+                    guard let self = self else { return }
+                    if let idx = self.subscriptions.firstIndex(where: { $0.sid == renewSid }) {
+                        self.subscriptions[idx].expiryDate = Date().addingTimeInterval(1800)
+                        self.subscriptions[idx].failureCount = 0
+                        NSLog("[UPnPMediaRendererServer] 🔄 Renewed subscription for %@ (SID: %@)", self.subscriptions[idx].path, renewSid)
+                        let response = """
+                        HTTP/1.1 200 OK\r
+                        SERVER: macOS/14.0 UPnP/1.0 AppleMusicRemote/2.0\r
+                        SID: \(renewSid)\r
+                        TIMEOUT: Second-1800\r
+                        Content-Length: 0\r
+                        Connection: close\r
+                        \r\n
+                        """
+                        self.sendRaw(connection, string: response)
+                    } else {
+                        // 412 Precondition Failed forces Home Assistant to re-subscribe with CALLBACK
+                        NSLog("[UPnPMediaRendererServer] ⚠️ Unknown subscription renewal SID: %@, returning 412", renewSid)
+                        let response = """
+                        HTTP/1.1 412 Precondition Failed\r
+                        SERVER: macOS/14.0 UPnP/1.0 AppleMusicRemote/2.0\r
+                        Content-Length: 0\r
+                        Connection: close\r
+                        \r\n
+                        """
+                        self.sendRaw(connection, string: response)
+                    }
+                }
+                return
+            }
+
             let sid = requestedSid ?? "uuid:\(UUID().uuidString.lowercased())"
 
             let response = """
@@ -250,10 +323,17 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 let clean = rawCallback.trimmingCharacters(in: CharacterSet(charactersIn: "<> \t\r\n"))
                 let firstUrlStr = clean.components(separatedBy: CharacterSet(charactersIn: "<> ")).first { !$0.isEmpty } ?? clean
                 if let url = URL(string: firstUrlStr) {
-                    let sub = EventSubscription(sid: sid, callbackURL: url, path: cleanPath, seq: 0)
+                    let sub = EventSubscription(
+                        sid: sid,
+                        callbackURL: url,
+                        path: cleanPath,
+                        seq: 0,
+                        expiryDate: Date().addingTimeInterval(1800),
+                        failureCount: 0
+                    )
                     subQueue.async { [weak self] in
                         guard let self = self else { return }
-                        // Remove previous subscription only for this specific service path or matching SID
+                        // Remove previous subscription for this specific service path or matching SID
                         self.subscriptions.removeAll { $0.sid == sid || ($0.callbackURL == url && $0.path == cleanPath) }
                         self.subscriptions.append(sub)
                         NSLog("[UPnPMediaRendererServer] 📝 Subscribed to %@ (SID: %@, Total subs: %d)", cleanPath, sid, self.subscriptions.count)
@@ -264,20 +344,13 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                         }
                     }
                 }
-            } else if let renewSid = requestedSid {
-                // Subscription renewal
-                subQueue.async { [weak self] in
-                    guard let self = self else { return }
-                    if let idx = self.subscriptions.firstIndex(where: { $0.sid == renewSid }) {
-                        NSLog("[UPnPMediaRendererServer] 🔄 Renewed subscription for %@ (SID: %@)", self.subscriptions[idx].path, renewSid)
-                    }
-                }
             }
         } else {
             // UNSUBSCRIBE
             if let sid = headers["SID"] {
                 subQueue.async { [weak self] in
                     self?.subscriptions.removeAll { $0.sid == sid }
+                    NSLog("[UPnPMediaRendererServer] 🔌 Unsubscribed SID: %@", sid)
                 }
             }
             let response = """
@@ -293,40 +366,51 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
     public func notifySubscribers(status: PlayerStatus? = nil, force: Bool = false, completion: (() -> Void)? = nil) {
         let currentStatus = status ?? MusicBridge.shared.getPlayerStatus()
-        let stateStr: String
-        if Date().timeIntervalSince(optimisticStateDate) < 5.0, let optState = optimisticState {
-            stateStr = optState
-        } else {
+        let stateStr: String = stateLock.withLock {
+            if Date().timeIntervalSince(optimisticStateDate) < 5.0, let optState = optimisticState {
+                return optState
+            }
             switch currentStatus.playerState.lowercased() {
-            case "playing": stateStr = "PLAYING"
-            case "paused": stateStr = "PAUSED_PLAYBACK"
-            default: stateStr = "STOPPED"
+            case "playing": return "PLAYING"
+            case "paused": return "PAUSED_PLAYBACK"
+            default: return "STOPPED"
             }
         }
         let trackId = currentStatus.track?.id ?? "0"
+        let artUrl = currentStatus.track?.artworkUrl ?? ""
+        let trackTitle = currentStatus.track?.name ?? ""
 
         subQueue.async { [weak self] in
             guard let self = self else {
                 completion?()
                 return
             }
+
+            // Prune expired subscriptions
+            let now = Date()
+            self.subscriptions.removeAll { now > $0.expiryDate }
+
             guard !self.subscriptions.isEmpty else {
                 completion?()
                 return
             }
 
-            // Deduplicate: Don't spam notifications if state & track haven't changed and not forced
+            // Deduplicate: Don't spam notifications if state, track, artwork, and title haven't changed and not forced
             if !force,
                stateStr == self.lastNotifiedState,
                trackId == self.lastNotifiedTrackId,
-               Date().timeIntervalSince(self.lastNotifiedTime) < 30.0 {
+               artUrl == self.lastNotifiedArtworkUrl,
+               trackTitle == self.lastNotifiedTrackTitle,
+               now.timeIntervalSince(self.lastNotifiedTime) < 30.0 {
                 completion?()
                 return
             }
 
             self.lastNotifiedState = stateStr
             self.lastNotifiedTrackId = trackId
-            self.lastNotifiedTime = Date()
+            self.lastNotifiedArtworkUrl = artUrl
+            self.lastNotifiedTrackTitle = trackTitle
+            self.lastNotifiedTime = now
 
             let group = DispatchGroup()
             for i in 0..<self.subscriptions.count {
@@ -340,9 +424,9 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             }
 
             if let comp = completion {
-                // Wait up to 250ms for subscriber delivery so state is ingested before SOAP response
-                _ = group.wait(timeout: .now() + 0.25)
-                comp()
+                group.notify(queue: self.subQueue) {
+                    comp()
+                }
             }
         }
     }
@@ -364,23 +448,46 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         sendRawNotify(to: subscription.callbackURL, sid: subscription.sid, seq: subscription.seq, body: body)
     }
 
+    internal func resolveArtworkURI(for track: TrackInfo?, lanIP: String) -> String {
+        guard let track = track else {
+            return "http://\(lanIP):\(port)/artwork/icon.png"
+        }
+        let rawArtUrl = track.artworkUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 1. If it's a remote CDN URL (e.g. Apple Music CDN https://is1-ssl.mzstatic.com/...)
+        if rawArtUrl.hasPrefix("http://") || rawArtUrl.hasPrefix("https://") {
+            return rawArtUrl
+        }
+
+        // 2. If it's a relative URL to AMR Web/API server (e.g. /api/artwork/track?id=... or /assets/stations/...)
+        if rawArtUrl.hasPrefix("/") {
+            return "http://\(lanIP):8080\(rawArtUrl)"
+        }
+
+        // 3. Fallback to UPnP server current artwork endpoint on port 8090
+        let trackId = track.id
+        let trackHash = abs(track.name.hashValue ^ track.artist.hashValue)
+        let artHash = abs(rawArtUrl.hashValue)
+        return "http://\(lanIP):\(port)/artwork/current.jpg?v=\(trackId)_\(trackHash)_\(artHash)"
+    }
+
     private func sendNotification(for subscription: EventSubscription, status: PlayerStatus? = nil, overrideState: String? = nil, completion: (() -> Void)? = nil) {
         let currentStatus = status ?? MusicBridge.shared.getPlayerStatus()
         let lanIP = getLANIP()
 
-        let curSec: Double
-        if Date().timeIntervalSince(optimisticPositionDate) < 5.0, let optPos = optimisticPosition {
-            let elapsed = optimisticPositionIsPlaying ? Date().timeIntervalSince(optimisticPositionDate) : 0.0
-            curSec = min(optPos + elapsed, currentStatus.track?.duration ?? (optPos + elapsed))
-        } else {
-            curSec = currentStatus.position
+        let curSec: Double = stateLock.withLock {
+            if Date().timeIntervalSince(optimisticPositionDate) < 5.0, let optPos = optimisticPosition {
+                let elapsed = optimisticPositionIsPlaying ? Date().timeIntervalSince(optimisticPositionDate) : 0.0
+                return min(optPos + elapsed, currentStatus.track?.duration ?? (optPos + elapsed))
+            }
+            return currentStatus.position
         }
 
         let durSec = currentStatus.track?.duration ?? 0.0
         let curTimeStr = formatSecondsToTime(curSec)
         let durTimeStr = formatSecondsToTime(durSec)
 
-        let stateStr = overrideState ?? {
+        let stateStr = overrideState ?? stateLock.withLock {
             if Date().timeIntervalSince(optimisticStateDate) < 5.0, let optState = optimisticState {
                 return optState
             }
@@ -389,20 +496,19 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             case "paused": return "PAUSED_PLAYBACK"
             default: return "STOPPED"
             }
-        }()
+        }
 
         let title = currentStatus.track?.name ?? "Без названия"
         let artist = currentStatus.track?.artist ?? "Apple Music"
         let album = currentStatus.track?.album ?? ""
-        let trackId = currentStatus.track?.id ?? "0"
-        let trackHash = abs((currentStatus.track?.name ?? "").hashValue ^ (currentStatus.track?.artist ?? "").hashValue)
-        let artUri = "http://\(lanIP):\(port)/artwork/current.jpg?v=\(trackId)_\(trackHash)"
+        let artUri = resolveArtworkURI(for: currentStatus.track, lanIP: lanIP)
+        let artUriForLastChange = escapeForLastChangeVal(artUri)
 
         let didlRaw = generateDIDLLiteXML(title: title, artist: artist, album: album, artUri: artUri, durTimeStr: durTimeStr)
         let didlForLastChange = escapeForLastChangeVal(didlRaw)
 
         let lastChange = """
-        &lt;Event xmlns="urn:schemas-upnp-org:metadata-1-0/AVT/"&gt;&lt;InstanceID val="0"&gt;&lt;TransportState val="\(stateStr)"/&gt;&lt;TransportStatus val="OK"/&gt;&lt;CurrentTrack val="1"/&gt;&lt;CurrentTrackDuration val="\(durTimeStr)"/&gt;&lt;CurrentTrackMetaData val="\(didlForLastChange)"/&gt;&lt;AVTransportURI val="\(artUri)"/&gt;&lt;AVTransportURIMetaData val="\(didlForLastChange)"/&gt;&lt;CurrentTrackURI val="\(artUri)"/&gt;&lt;RelativeTimePosition val="\(curTimeStr)"/&gt;&lt;AbsoluteTimePosition val="\(curTimeStr)"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;
+        &lt;Event xmlns="urn:schemas-upnp-org:metadata-1-0/AVT/"&gt;&lt;InstanceID val="0"&gt;&lt;TransportState val="\(stateStr)"/&gt;&lt;TransportStatus val="OK"/&gt;&lt;CurrentTrack val="1"/&gt;&lt;CurrentTrackDuration val="\(durTimeStr)"/&gt;&lt;CurrentTrackMetaData val="\(didlForLastChange)"/&gt;&lt;AVTransportURI val="\(artUriForLastChange)"/&gt;&lt;AVTransportURIMetaData val="\(didlForLastChange)"/&gt;&lt;CurrentTrackURI val="\(artUriForLastChange)"/&gt;&lt;RelativeTimePosition val="\(curTimeStr)"/&gt;&lt;AbsoluteTimePosition val="\(curTimeStr)"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;
         """
         let body = """
         <e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">
@@ -431,12 +537,37 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         request.httpBody = bodyData
         request.timeoutInterval = 2.5
 
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else {
+                completion?()
+                return
+            }
+
             if let err = error {
                 NSLog("[UPnPMediaRendererServer] ❌ NOTIFY error to %@: %@", url.absoluteString, err.localizedDescription)
+                self.subQueue.async {
+                    if let idx = self.subscriptions.firstIndex(where: { $0.sid == sid }) {
+                        self.subscriptions[idx].failureCount += 1
+                        if self.subscriptions[idx].failureCount >= 3 {
+                            NSLog("[UPnPMediaRendererServer] 🗑️ Removing dead subscription after 3 failures (SID: %@, URL: %@)", sid, url.absoluteString)
+                            self.subscriptions.remove(at: idx)
+                        }
+                    }
+                }
             } else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                NSLog("[UPnPMediaRendererServer] ✅ NOTIFY delivered to %@ (HTTP %d, seq: %u, SID: %@)", url.absoluteString, code, seq, sid)
+                if code == 412 || code == 404 {
+                    NSLog("[UPnPMediaRendererServer] ⚠️ NOTIFY rejected by client (HTTP %d). Removing subscription SID: %@", code, sid)
+                    self.subQueue.async {
+                        self.subscriptions.removeAll { $0.sid == sid }
+                    }
+                } else {
+                    self.subQueue.async {
+                        if let idx = self.subscriptions.firstIndex(where: { $0.sid == sid }) {
+                            self.subscriptions[idx].failureCount = 0
+                        }
+                    }
+                }
             }
             completion?()
         }
@@ -445,11 +576,11 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
     // MARK: - Device Description
 
-    private func sendDeviceDescription(_ connection: NWConnection) {
+    public func buildDeviceDescriptionXML() -> String {
         let udn = SSDPService.shared.deviceUDN
         let friendlyName = escapeXMLText(SSDPService.shared.friendlyName)
 
-        let xml = """
+        return """
         <?xml version="1.0" encoding="utf-8"?>
         <root xmlns="urn:schemas-upnp-org:device-1-0">
           <specVersion>
@@ -485,6 +616,13 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 <SCPDURL>/upnp/scpd/avtransport.xml</SCPDURL>
               </service>
               <service>
+                <serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+                <serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>
+                <controlURL>/upnp/control/renderingcontrol</controlURL>
+                <eventSubURL>/upnp/event/renderingcontrol</eventSubURL>
+                <SCPDURL>/upnp/scpd/renderingcontrol.xml</SCPDURL>
+              </service>
+              <service>
                 <serviceType>urn:schemas-upnp-org:service:ConnectionManager:1</serviceType>
                 <serviceId>urn:upnp-org:serviceId:ConnectionManager</serviceId>
                 <controlURL>/upnp/control/connectionmanager</controlURL>
@@ -495,34 +633,113 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
           </device>
         </root>
         """
+    }
 
+    private func sendDeviceDescription(_ connection: NWConnection) {
+        let xml = buildDeviceDescriptionXML()
         sendXML(connection, content: xml)
     }
 
     // MARK: - Artwork Endpoint
 
     private func sendCurrentArtwork(_ connection: NWConnection) {
-        // Check if track artwork data is available locally
+        // 1. Check if track artwork data is available locally from Music.app ID3
         if let artData = MusicBridge.shared.getCurrentTrackArtwork() {
             sendBinary(connection, data: artData, contentType: "image/jpeg")
             return
         }
 
-        // If local is not available, check if we have a remote artwork URL
         let status = MusicBridge.shared.getPlayerStatus()
-        if let artUrl = status.track?.artworkUrl, artUrl.hasPrefix("http"), let url = URL(string: artUrl) {
-            // Redirect to remote CDN artwork (supported by HA)
-            let redirect = """
-            HTTP/1.1 302 Found\r
-            Location: \(url.absoluteString)\r
-            Cache-Control: no-cache, no-store, must-revalidate\r
-            Pragma: no-cache\r
-            Expires: 0\r
-            Content-Length: 0\r
-            Connection: close\r
-            \r\n
-            """
-            sendRaw(connection, string: redirect)
+        guard let track = status.track else {
+            sendDefaultIcon(connection)
+            return
+        }
+
+        let artUrl = track.artworkUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 2. Check if it's a station asset (e.g. /assets/stations/CoverPersonal.png)
+        if artUrl.hasPrefix("/assets/") {
+            let assetSubpath = String(artUrl.dropFirst(1)) // "assets/..."
+            if let data = WebSocketServer.shared.loadWebBinaryAsset(subpath: assetSubpath) {
+                let ct = assetSubpath.hasSuffix(".svg") ? "image/svg+xml" : (assetSubpath.hasSuffix(".jpg") ? "image/jpeg" : "image/png")
+                sendBinary(connection, data: data, contentType: ct)
+                return
+            }
+        }
+
+        // 3. Check if it's a local track artwork API (e.g. /api/artwork/track?id=...)
+        if artUrl.hasPrefix("/api/artwork/track"), let numId = track.numericId, numId > 0 {
+            if let data = ArtworkService.shared.getTrackArtwork(id: numId) {
+                sendBinary(connection, data: data, contentType: "image/jpeg")
+                return
+            }
+        }
+
+        // 4. Remote CDN URL (https://is1-ssl.mzstatic.com/...)
+        if artUrl.hasPrefix("http://") || artUrl.hasPrefix("https://") {
+            // Check in-memory cache under lock
+            let cached = artworkLock.withLock { cachedArtworkData }
+            if let cached = cached, cached.key == artUrl {
+                sendBinary(connection, data: cached.data, contentType: cached.contentType)
+                return
+            }
+
+            // Fetch completely asynchronously without blocking the server queue
+            if let url = URL(string: artUrl) {
+                var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
+                let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+                    guard let self = self else { return }
+                    if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
+                        let mime = http.mimeType ?? "image/jpeg"
+                        self.artworkLock.lock()
+                        self.cachedArtworkData = (key: artUrl, data: d, contentType: mime)
+                        self.artworkLock.unlock()
+                        self.sendBinary(connection, data: d, contentType: mime)
+                    } else {
+                        // Fallback to 302 redirect
+                        let redirect = """
+                        HTTP/1.1 302 Found\r
+                        Location: \(url.absoluteString)\r
+                        Cache-Control: no-cache, no-store, must-revalidate\r
+                        Pragma: no-cache\r
+                        Expires: 0\r
+                        Content-Length: 0\r
+                        Connection: close\r
+                        \r\n
+                        """
+                        self.sendRaw(connection, string: redirect)
+                    }
+                }
+                task.resume()
+                return
+            }
+        }
+
+        // 5. If it's a search URL or still resolving, check MusicKit cache
+        if let cachedUrlStr = MusicKitManager.shared.getCachedTrackArtwork(name: track.name, artist: track.artist, album: track.album),
+           !cachedUrlStr.isEmpty,
+           let url = URL(string: cachedUrlStr) {
+            let cached = artworkLock.withLock { cachedArtworkData }
+            if let cached = cached, cached.key == cachedUrlStr {
+                sendBinary(connection, data: cached.data, contentType: cached.contentType)
+                return
+            }
+
+            // Fetch asynchronously with URLSession (never synchronous Data(contentsOf:))
+            var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
+            let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+                guard let self = self else { return }
+                if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
+                    let mime = http.mimeType ?? "image/jpeg"
+                    self.artworkLock.lock()
+                    self.cachedArtworkData = (key: cachedUrlStr, data: d, contentType: mime)
+                    self.artworkLock.unlock()
+                    self.sendBinary(connection, data: d, contentType: mime)
+                } else {
+                    self.sendDefaultIcon(connection)
+                }
+            }
+            task.resume()
             return
         }
 
@@ -560,17 +777,24 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
         let action = extractSOAPAction(from: headers, body: bodyString)
         NSLog("[UPnPMediaRendererServer] 📩 AVTransport SOAP action: %@", action)
-        let status = MusicBridge.shared.getPlayerStatus()
+        var cachedStatus: PlayerStatus?
+        let getStatus: () -> PlayerStatus = {
+            if let s = cachedStatus { return s }
+            let s = MusicBridge.shared.getPlayerStatus()
+            cachedStatus = s
+            return s
+        }
         let lanIP = getLANIP()
 
         switch action {
         case "GetPositionInfo":
-            let curSec: Double
-            if Date().timeIntervalSince(optimisticPositionDate) < 5.0, let optPos = optimisticPosition {
-                let elapsed = optimisticPositionIsPlaying ? Date().timeIntervalSince(optimisticPositionDate) : 0.0
-                curSec = min(optPos + elapsed, status.track?.duration ?? (optPos + elapsed))
-            } else {
-                curSec = status.position
+            let status = getStatus()
+            let curSec: Double = stateLock.withLock {
+                if Date().timeIntervalSince(optimisticPositionDate) < 5.0, let optPos = optimisticPosition {
+                    let elapsed = optimisticPositionIsPlaying ? Date().timeIntervalSince(optimisticPositionDate) : 0.0
+                    return min(optPos + elapsed, status.track?.duration ?? (optPos + elapsed))
+                }
+                return status.position
             }
             let durSec = status.track?.duration ?? 0.0
             let curTimeStr = formatSecondsToTime(curSec)
@@ -579,9 +803,8 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             let title = status.track?.name ?? "Без названия"
             let artist = status.track?.artist ?? "Apple Music"
             let album = status.track?.album ?? ""
-            let trackId = status.track?.id ?? "0"
-            let trackHash = abs((status.track?.name ?? "").hashValue ^ (status.track?.artist ?? "").hashValue)
-            let artUri = "http://\(lanIP):\(port)/artwork/current.jpg?v=\(trackId)_\(trackHash)"
+            let artUri = resolveArtworkURI(for: status.track, lanIP: lanIP)
+            let escapedArtUri = escapeXMLText(artUri)
 
             let didlRaw = generateDIDLLiteXML(title: title, artist: artist, album: album, artUri: artUri, durTimeStr: durTimeStr)
             let didl = escapeForSOAP(didlRaw)
@@ -591,7 +814,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
               <Track>1</Track>
               <TrackDuration>\(durTimeStr)</TrackDuration>
               <TrackMetaData>\(didl)</TrackMetaData>
-              <TrackURI>\(artUri)</TrackURI>
+              <TrackURI>\(escapedArtUri)</TrackURI>
               <RelTime>\(curTimeStr)</RelTime>
               <AbsTime>\(curTimeStr)</AbsTime>
               <RelCount>2147483647</RelCount>
@@ -602,9 +825,16 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
         case "GetTransportInfo":
             let stateStr: String
-            if Date().timeIntervalSince(optimisticStateDate) < 5.0, let optState = optimisticState {
-                stateStr = optState
+            let optimistic: String? = stateLock.withLock {
+                if Date().timeIntervalSince(optimisticStateDate) < 5.0, let optState = optimisticState {
+                    return optState
+                }
+                return nil
+            }
+            if let opt = optimistic {
+                stateStr = opt
             } else {
+                let status = getStatus()
                 switch status.playerState.lowercased() {
                 case "playing": stateStr = "PLAYING"
                 case "paused": stateStr = "PAUSED_PLAYBACK"
@@ -622,14 +852,14 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             sendSOAPResponse(connection, response: response)
 
         case "GetMediaInfo":
+            let status = getStatus()
             let durSec = status.track?.duration ?? 0.0
             let durTimeStr = formatSecondsToTime(durSec)
             let title = status.track?.name ?? "Без названия"
             let artist = status.track?.artist ?? "Apple Music"
             let album = status.track?.album ?? ""
-            let trackId = status.track?.id ?? "0"
-            let trackHash = abs((status.track?.name ?? "").hashValue ^ (status.track?.artist ?? "").hashValue)
-            let artUri = "http://\(lanIP):\(port)/artwork/current.jpg?v=\(trackId)_\(trackHash)"
+            let artUri = resolveArtworkURI(for: status.track, lanIP: lanIP)
+            let escapedArtUri = escapeXMLText(artUri)
 
             let didlRaw = generateDIDLLiteXML(title: title, artist: artist, album: album, artUri: artUri, durTimeStr: durTimeStr)
             let didl = escapeForSOAP(didlRaw)
@@ -638,7 +868,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             <u:GetMediaInfoResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
               <NrTracks>1</NrTracks>
               <MediaDuration>\(durTimeStr)</MediaDuration>
-              <CurrentURI>\(artUri)</CurrentURI>
+              <CurrentURI>\(escapedArtUri)</CurrentURI>
               <CurrentURIMetaData>\(didl)</CurrentURIMetaData>
               <NextURI></NextURI>
               <NextURIMetaData></NextURIMetaData>
@@ -669,50 +899,51 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             sendSOAPResponse(connection, response: response)
 
         case "Play":
-            optimisticState = "PLAYING"
-            optimisticStateDate = Date()
-            optimisticPosition = status.position
-            optimisticPositionDate = Date()
-            optimisticPositionIsPlaying = true
-            _ = MusicBridge.shared.play()
-            notifySubscribers(force: true) { [weak self] in
-                self?.sendSOAPResponse(connection, response: "<u:PlayResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
+            stateLock.withLock {
+                optimisticState = "PLAYING"
+                optimisticStateDate = Date()
+                optimisticPositionIsPlaying = true
             }
-            DispatchQueue.main.async {
+            _ = MusicBridge.shared.play()
+            sendSOAPResponse(connection, response: "<u:PlayResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus()
             }
 
         case "Pause":
-            optimisticState = "PAUSED_PLAYBACK"
-            optimisticStateDate = Date()
-            optimisticPosition = status.position
-            optimisticPositionDate = Date()
-            optimisticPositionIsPlaying = false
-            _ = MusicBridge.shared.pause()
-            notifySubscribers(force: true) { [weak self] in
-                self?.sendSOAPResponse(connection, response: "<u:PauseResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
+            stateLock.withLock {
+                optimisticState = "PAUSED_PLAYBACK"
+                optimisticStateDate = Date()
+                optimisticPositionIsPlaying = false
             }
-            DispatchQueue.main.async {
+            _ = MusicBridge.shared.pause()
+            sendSOAPResponse(connection, response: "<u:PauseResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus()
             }
 
         case "Stop":
-            optimisticState = "STOPPED"
-            optimisticStateDate = Date()
-            optimisticPosition = 0
-            optimisticPositionDate = Date()
-            optimisticPositionIsPlaying = false
-            _ = MusicBridge.shared.stop()
-            notifySubscribers(force: true) { [weak self] in
-                self?.sendSOAPResponse(connection, response: "<u:StopResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
+            stateLock.withLock {
+                optimisticState = "STOPPED"
+                optimisticStateDate = Date()
+                optimisticPosition = 0
+                optimisticPositionDate = Date()
+                optimisticPositionIsPlaying = false
             }
-            DispatchQueue.main.async {
+            _ = MusicBridge.shared.stop()
+            sendSOAPResponse(connection, response: "<u:StopResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus()
             }
 
         case "Next":
-            optimisticPosition = 0
-            optimisticPositionDate = Date()
+            stateLock.withLock {
+                optimisticPosition = 0
+                optimisticPositionDate = Date()
+            }
             _ = MusicBridge.shared.nextTrack()
             sendSOAPResponse(connection, response: "<u:NextResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
@@ -721,8 +952,10 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             }
 
         case "Previous":
-            optimisticPosition = 0
-            optimisticPositionDate = Date()
+            stateLock.withLock {
+                optimisticPosition = 0
+                optimisticPositionDate = Date()
+            }
             _ = MusicBridge.shared.previousTrack()
             sendSOAPResponse(connection, response: "<u:PreviousResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
@@ -734,16 +967,15 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             // Example: <Unit>REL_TIME</Unit><Target>00:01:23</Target>
             if let targetVal = extractTagValue(tag: "Target", from: bodyString) {
                 let seconds = parseTimeToSeconds(targetVal)
-                let isPlaying = (status.playerState.lowercased() == "playing" || optimisticState == "PLAYING")
-                optimisticPosition = seconds
-                optimisticPositionDate = Date()
-                optimisticPositionIsPlaying = isPlaying
+                stateLock.withLock {
+                    optimisticPosition = seconds
+                    optimisticPositionDate = Date()
+                }
                 _ = MusicBridge.shared.seek(to: seconds)
             }
-            notifySubscribers(force: true) { [weak self] in
-                self?.sendSOAPResponse(connection, response: "<u:SeekResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
-            }
-            DispatchQueue.main.async {
+            sendSOAPResponse(connection, response: "<u:SeekResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus()
             }
 
@@ -772,10 +1004,17 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         }
 
         let action = extractSOAPAction(from: headers, body: bodyString)
-        let status = MusicBridge.shared.getPlayerStatus()
+        var cachedStatus: PlayerStatus?
+        let getStatus: () -> PlayerStatus = {
+            if let s = cachedStatus { return s }
+            let s = MusicBridge.shared.getPlayerStatus()
+            cachedStatus = s
+            return s
+        }
 
         switch action {
         case "GetVolume":
+            let status = getStatus()
             let response = """
             <u:GetVolumeResponse xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1">
               <CurrentVolume>\(status.volume)</CurrentVolume>
@@ -797,6 +1036,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             }
 
         case "GetMute":
+            let status = getStatus()
             let isMuted = (status.volume == 0) ? "1" : "0"
             let response = """
             <u:GetMuteResponse xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1">
@@ -872,7 +1112,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
     // MARK: - SOAP Helpers
 
-    private func extractSOAPAction(from headers: [String: String], body: String) -> String {
+    internal func extractSOAPAction(from headers: [String: String], body: String) -> String {
         if let actionHeader = headers["SOAPACTION"] {
             let clean = actionHeader.replacingOccurrences(of: "\"", with: "").trimmingCharacters(in: .whitespaces)
             if let hashIdx = clean.firstIndex(of: "#") {
@@ -892,7 +1132,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         return ""
     }
 
-    private func extractTagValue(tag: String, from xml: String) -> String? {
+    internal func extractTagValue(tag: String, from xml: String) -> String? {
         let pattern = try! NSRegularExpression(pattern: "<\(tag)>([^<]+)</\(tag)>", options: .caseInsensitive)
         let range = NSRange(xml.startIndex..<xml.endIndex, in: xml)
         if let match = pattern.firstMatch(in: xml, options: [], range: range),
@@ -926,7 +1166,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
               <detail>
                 <UPnPError xmlns="urn:schemas-upnp-org:control-1-0">
                   <errorCode>\(code)</errorCode>
-                  <errorDescription>\(message)</errorDescription>
+                  <errorDescription>\(escapeXMLText(message))</errorDescription>
                 </UPnPError>
               </detail>
             </s:Fault>
@@ -1001,7 +1241,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
     // MARK: - Time and XML Utilities
 
-    private func formatSecondsToTime(_ totalSec: Double) -> String {
+    public func formatSecondsToTime(_ totalSec: Double) -> String {
         guard totalSec > 0 && !totalSec.isNaN else { return "00:00:00" }
         let sec = Int(totalSec)
         let hours = sec / 3600
@@ -1010,7 +1250,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
-    private func parseTimeToSeconds(_ timeStr: String) -> Double {
+    public func parseTimeToSeconds(_ timeStr: String) -> Double {
         let parts = timeStr.components(separatedBy: ":")
         if parts.count == 3,
            let h = Double(parts[0]),
@@ -1027,7 +1267,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         return 0.0
     }
 
-    private func escapeXMLText(_ str: String) -> String {
+    public func escapeXMLText(_ str: String) -> String {
         return str
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
@@ -1036,9 +1276,10 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             .replacingOccurrences(of: "'", with: "&apos;")
     }
 
-    private func generateDIDLLiteXML(title: String, artist: String, album: String, artUri: String, durTimeStr: String) -> String {
+    public func generateDIDLLiteXML(title: String, artist: String, album: String, artUri: String, durTimeStr: String) -> String {
         let t = escapeXMLText(title)
         let a = escapeXMLText(artist)
+        let escapedArtUri = escapeXMLText(artUri)
 
         let rate = BitPerfectLogMonitor.shared.currentDetectedSampleRate ?? 44100.0
         let bitDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate > 48000.0 ? 24 : 16)
@@ -1057,10 +1298,10 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         let bytesPerSec = Int(rate * Double(bitDepth) * 2 / 8)
         let sampleFreqInt = Int(rate)
 
-        return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"1\" parentID=\"0\" restricted=\"1\"><dc:title>\(t)</dc:title><dc:creator>\(a)</dc:creator><dc:description>\(qDesc)</dc:description><upnp:artist>\(a)</upnp:artist><upnp:album>\(alb)</upnp:album><upnp:albumArtURI dlna:profileID=\"JPEG_MED\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\">\(artUri)</upnp:albumArtURI><res duration=\"\(durTimeStr)\" sampleFrequency=\"\(sampleFreqInt)\" bitsPerSample=\"\(bitDepth)\" nrAudioChannels=\"2\" bitrate=\"\(bytesPerSec)\" protocolInfo=\"http-get:*:audio/flac:*\">\(artUri)</res><upnp:class>object.item.audioItem.musicTrack</upnp:class></item></DIDL-Lite>"
+        return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"1\" parentID=\"0\" restricted=\"1\"><dc:title>\(t)</dc:title><dc:creator>\(a)</dc:creator><dc:description>\(qDesc)</dc:description><upnp:artist>\(a)</upnp:artist><upnp:album>\(alb)</upnp:album><upnp:albumArtURI dlna:profileID=\"JPEG_MED\" xmlns:dlna=\"urn:schemas-dlna-org:metadata-1-0/\">\(escapedArtUri)</upnp:albumArtURI><upnp:albumArtURI>\(escapedArtUri)</upnp:albumArtURI><upnp:icon>\(escapedArtUri)</upnp:icon><res duration=\"\(durTimeStr)\" sampleFrequency=\"\(sampleFreqInt)\" bitsPerSample=\"\(bitDepth)\" nrAudioChannels=\"2\" bitrate=\"\(bytesPerSec)\" protocolInfo=\"http-get:*:audio/flac:*\">\(escapedArtUri)</res><upnp:class>object.item.audioItem.musicTrack</upnp:class></item></DIDL-Lite>"
     }
 
-    private func escapeForSOAP(_ xmlStr: String) -> String {
+    internal func escapeForSOAP(_ xmlStr: String) -> String {
         return xmlStr
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
@@ -1069,7 +1310,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             .replacingOccurrences(of: "'", with: "&apos;")
     }
 
-    private func escapeForLastChangeVal(_ xmlStr: String) -> String {
+    internal func escapeForLastChangeVal(_ xmlStr: String) -> String {
         return xmlStr
             .replacingOccurrences(of: "&", with: "&amp;amp;")
             .replacingOccurrences(of: "<", with: "&amp;lt;")

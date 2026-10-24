@@ -62,6 +62,15 @@ public final class SSDPService: @unchecked Sendable {
         }
     }
 
+    public func restart() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            NSLog("[SSDPService] 🔄 Restarting SSDP Service...")
+            self.stopInternal()
+            self.startInternal()
+        }
+    }
+
     public func stop() {
         queue.async { [weak self] in
             self?.stopInternal()
@@ -202,6 +211,57 @@ public final class SSDPService: @unchecked Sendable {
         }
     }
 
+    public func matchingTargets(for searchTarget: String) -> [String] {
+        let supportedTargets: [String] = [
+            "ssdp:all",
+            "upnp:rootdevice",
+            "urn:schemas-upnp-org:device:MediaRenderer:1",
+            "urn:schemas-upnp-org:service:AVTransport:1",
+            "urn:schemas-upnp-org:service:RenderingControl:1",
+            "urn:schemas-upnp-org:service:ConnectionManager:1",
+            deviceUDN
+        ]
+
+        if searchTarget == "ssdp:all" {
+            return [
+                "upnp:rootdevice",
+                deviceUDN,
+                "urn:schemas-upnp-org:device:MediaRenderer:1",
+                "urn:schemas-upnp-org:service:AVTransport:1",
+                "urn:schemas-upnp-org:service:RenderingControl:1",
+                "urn:schemas-upnp-org:service:ConnectionManager:1"
+            ]
+        } else if supportedTargets.contains(searchTarget) {
+            return [searchTarget]
+        }
+        return []
+    }
+
+    public func buildMSearchResponse(target: String, lanIP: String) -> String {
+        let usn: String
+        if target == deviceUDN {
+            usn = deviceUDN
+        } else if target == "upnp:rootdevice" {
+            usn = "\(deviceUDN)::upnp:rootdevice"
+        } else {
+            usn = "\(deviceUDN)::\(target)"
+        }
+
+        return """
+        HTTP/1.1 200 OK\r
+        CACHE-CONTROL: max-age=1800\r
+        DATE: \(httpDate())\r
+        EXT:\r
+        LOCATION: http://\(lanIP):\(httpPort)/description.xml\r
+        SERVER: macOS/14.0 UPnP/1.0 AppleMusicRemote/2.0\r
+        ST: \(target)\r
+        USN: \(usn)\r
+        BOOTID.UPNP.ORG: 1\r
+        CONFIGID.UPNP.ORG: 2\r
+        \r\n
+        """
+    }
+
     private func handleMSearch(_ request: String, clientAddr: sockaddr_in) {
         let lines = request.components(separatedBy: "\r\n")
         var headers: [String: String] = [:]
@@ -215,57 +275,14 @@ public final class SSDPService: @unchecked Sendable {
 
         guard let st = headers["ST"] else { return }
 
-        let supportedTargets: [String] = [
-            "ssdp:all",
-            "upnp:rootdevice",
-            "urn:schemas-upnp-org:device:MediaRenderer:1",
-            "urn:schemas-upnp-org:service:AVTransport:1",
-            "urn:schemas-upnp-org:service:ConnectionManager:1",
-            deviceUDN
-        ]
-
-        var targetsToRespond: [String] = []
-
-        if st == "ssdp:all" {
-            targetsToRespond = [
-                "upnp:rootdevice",
-                deviceUDN,
-                "urn:schemas-upnp-org:device:MediaRenderer:1",
-                "urn:schemas-upnp-org:service:AVTransport:1",
-                "urn:schemas-upnp-org:service:ConnectionManager:1"
-            ]
-        } else if supportedTargets.contains(st) {
-            targetsToRespond = [st]
-        }
-
+        let targetsToRespond = matchingTargets(for: st)
         guard !targetsToRespond.isEmpty else { return }
 
         // Find primary LAN IP
         let lanIP = getLANIP()
 
         for target in targetsToRespond {
-            let usn: String
-            if target == deviceUDN {
-                usn = deviceUDN
-            } else if target == "upnp:rootdevice" {
-                usn = "\(deviceUDN)::upnp:rootdevice"
-            } else {
-                usn = "\(deviceUDN)::\(target)"
-            }
-
-            let response = """
-            HTTP/1.1 200 OK\r
-            CACHE-CONTROL: max-age=1800\r
-            DATE: \(httpDate())\r
-            EXT:\r
-            LOCATION: http://\(lanIP):\(httpPort)/description.xml\r
-            SERVER: macOS/14.0 UPnP/1.0 AppleMusicRemote/2.0\r
-            ST: \(target)\r
-            USN: \(usn)\r
-            BOOTID.UPNP.ORG: 1\r
-            CONFIGID.UPNP.ORG: 2\r
-            \r\n
-            """
+            let response = buildMSearchResponse(target: target, lanIP: lanIP)
 
             sendUDPResponse(response, to: clientAddr)
         }
@@ -298,11 +315,18 @@ public final class SSDPService: @unchecked Sendable {
         guard socketFD >= 0 else { return }
 
         let lanIP = getLANIP()
+
+        // Keep outbound multicast interface aligned with active LAN IP
+        var ifAddr = in_addr()
+        ifAddr.s_addr = inet_addr(lanIP)
+        setsockopt(socketFD, IPPROTO_IP, IP_MULTICAST_IF, &ifAddr, socklen_t(MemoryLayout<in_addr>.size))
+
         let targets = [
             "upnp:rootdevice",
             deviceUDN,
             "urn:schemas-upnp-org:device:MediaRenderer:1",
             "urn:schemas-upnp-org:service:AVTransport:1",
+            "urn:schemas-upnp-org:service:RenderingControl:1",
             "urn:schemas-upnp-org:service:ConnectionManager:1"
         ]
 

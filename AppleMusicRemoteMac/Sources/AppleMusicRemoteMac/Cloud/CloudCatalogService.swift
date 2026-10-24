@@ -160,84 +160,146 @@ public final class CloudCatalogService: @unchecked Sendable {
 
     // MARK: - Search Apple Music / iTunes
 
-    public func search(query: String, country: String = "ru", source: String? = "cloud") async -> [String: AnyCodable] {
+    public func search(query: String, country: String = "ru", source: String? = "cloud", limit: Int = 50, offset: Int = 0) async -> [String: AnyCodable] {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return [
                 "artists": AnyCodable([]),
                 "songs": AnyCodable([]),
                 "albums": AnyCodable([]),
-                "all": AnyCodable([])
+                "all": AnyCodable([]),
+                "offset": AnyCodable(offset),
+                "limit": AnyCodable(limit),
+                "has_more": AnyCodable(false)
             ]
         }
 
         let c = country.isEmpty ? "ru" : country.lowercased()
+        let effectiveLimit = max(1, min(limit, 100))
+        let effectiveOffset = max(0, offset)
 
         let encodedQ = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
 
-        // Always query local library / cloud tracks in Music.app first
-        var localSongDicts = [[String: Any]]()
+        // Only query local library on first page (offset == 0)
         let librarySongs = MusicBridge.shared.getLibrarySongs()
-        let lowerQ = query.lowercased()
-        let filtered = librarySongs.filter {
-            $0.name.lowercased().contains(lowerQ) ||
-            $0.artist.lowercased().contains(lowerQ) ||
-            $0.album.lowercased().contains(lowerQ)
-        }
-        for t in filtered {
-            localSongDicts.append([
-                "id": t.id,
-                "numeric_id": t.numericId ?? 0,
-                "name": t.name,
-                "artist": t.artist,
-                "album": t.album,
-                "duration": t.duration,
-                "artwork_url": t.artworkUrl,
-                "favorited": t.favorited,
-                "is_local": true
-            ])
+        var localSongDicts = [[String: Any]]()
+        if effectiveOffset == 0 {
+            let lowerQ = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            let qTokens = lowerQ.split(separator: " ").map { String($0) }.filter { !$0.isEmpty }
+
+            let filtered = librarySongs.filter { t in
+                let n = t.name.lowercased()
+                let a = t.artist.lowercased()
+                let alb = t.album.lowercased()
+                // 1. Direct substring match
+                if n.contains(lowerQ) || a.contains(lowerQ) || alb.contains(lowerQ) {
+                    return true
+                }
+                // 2. Token-based matching (handles word reordering or multi-word queries)
+                if !qTokens.isEmpty {
+                    let combined = "\(n) \(a) \(alb)"
+                    let allMatched = qTokens.allSatisfy { token in
+                        combined.contains(token)
+                    }
+                    if allMatched {
+                        return true
+                    }
+                }
+                return false
+            }
+
+            for t in filtered {
+                localSongDicts.append([
+                    "id": t.id,
+                    "numeric_id": t.numericId ?? 0,
+                    "name": t.name,
+                    "artist": t.artist,
+                    "album": t.album,
+                    "duration": t.duration,
+                    "artwork_url": t.artworkUrl,
+                    "favorited": t.favorited,
+                    "is_local": true
+                ])
+            }
         }
 
         if source == "library" {
             return [
                 "artists": AnyCodable([]),
                 "songs": AnyCodable(localSongDicts),
-                "albums": AnyCodable([])
+                "albums": AnyCodable([]),
+                "offset": AnyCodable(effectiveOffset),
+                "limit": AnyCodable(effectiveLimit),
+                "has_more": AnyCodable(false)
             ]
         }
 
-        // 1. Try official Apple Music API with MusicKit developer token
-        if let appleMusicResults = await MusicKitManager.shared.searchAppleMusic(query: query, storefront: c) {
-            var res = [String: AnyCodable]()
-            var cloudSongs = (appleMusicResults["songs"] as? [[String: Any]]) ?? []
-            let mergedSongs = localSongDicts + cloudSongs
-            res["songs"] = AnyCodable(mergedSongs)
-            if let albums = appleMusicResults["albums"] as? [[String: Any]] {
-                res["albums"] = AnyCodable(albums)
-            }
-            if let artists = appleMusicResults["artists"] as? [[String: Any]] {
-                res["artists"] = AnyCodable(artists)
-            }
-            if !res.isEmpty {
-                return res
+        // Helper to enrich cloud songs with local library IDs if available
+        let enrichWithLocal: ([[String: Any]]) -> [[String: Any]] = { songs in
+            guard !librarySongs.isEmpty else { return songs }
+            return songs.map { orig in
+                var item = orig
+                let sName = (item["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+                let sArtist = (item["artist"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+                guard !sName.isEmpty else { return item }
+
+                if let local = librarySongs.first(where: {
+                    let ln = $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    let la = $0.artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    return ln == sName && (sArtist.isEmpty || la == sArtist || la.contains(sArtist) || sArtist.contains(la))
+                }) {
+                    if let dbId = local.numericId, dbId > 0 {
+                        item["numeric_id"] = dbId
+                        item["is_local"] = true
+                    }
+                }
+                return item
             }
         }
 
-        // 2. Fallback to iTunes Store Search API
-        async let artistsTask = fetchArtists(query: encodedQ, country: c)
-        async let songsTask = fetchSongs(query: encodedQ, country: c)
-        async let albumsTask = fetchAlbums(query: encodedQ, country: c)
+        // 1. Try official Apple Music API with MusicKit developer token
+        if let appleMusicResults = await MusicKitManager.shared.searchAppleMusic(query: query, storefront: c, limit: effectiveLimit, offset: effectiveOffset) {
+            var res = [String: AnyCodable]()
+            let rawCloudSongs = (appleMusicResults["songs"] as? [[String: Any]]) ?? []
+            let enrichedCloudSongs = enrichWithLocal(rawCloudSongs)
+            let mergedSongs = localSongDicts + enrichedCloudSongs
+            res["songs"] = AnyCodable(mergedSongs)
+            if let albums = appleMusicResults["albums"] as? [[String: Any]] {
+                res["albums"] = AnyCodable(albums)
+            } else {
+                res["albums"] = AnyCodable([])
+            }
+            if let artists = appleMusicResults["artists"] as? [[String: Any]] {
+                res["artists"] = AnyCodable(artists)
+            } else {
+                res["artists"] = AnyCodable([])
+            }
+            res["offset"] = AnyCodable(effectiveOffset)
+            res["limit"] = AnyCodable(effectiveLimit)
+            res["has_more"] = AnyCodable(rawCloudSongs.count >= effectiveLimit)
+            return res
+        }
 
-        let (artists, songs, albums) = await (artistsTask, songsTask, albumsTask)
+        // 2. Fallback to iTunes Store Search API
+        async let artistsTask = fetchArtists(query: encodedQ, country: c, limit: min(effectiveLimit, 15), offset: effectiveOffset)
+        async let songsTask = fetchSongs(query: encodedQ, country: c, limit: effectiveLimit, offset: effectiveOffset)
+        async let albumsTask = fetchAlbums(query: encodedQ, country: c, limit: min(effectiveLimit, 20), offset: effectiveOffset)
+
+        let (artists, rawSongs, albums) = await (artistsTask, songsTask, albumsTask)
+        let enrichedSongs = enrichWithLocal(rawSongs)
 
         return [
             "artists": AnyCodable(artists),
-            "songs": AnyCodable(localSongDicts + songs),
-            "albums": AnyCodable(albums)
+            "songs": AnyCodable(localSongDicts + enrichedSongs),
+            "albums": AnyCodable(albums),
+            "offset": AnyCodable(effectiveOffset),
+            "limit": AnyCodable(effectiveLimit),
+            "has_more": AnyCodable(rawSongs.count >= effectiveLimit)
         ]
     }
 
-    private func fetchArtists(query: String, country: String) async -> [[String: Any]] {
-        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=musicArtist&country=\(country)&limit=8"
+    private func fetchArtists(query: String, country: String, limit: Int = 8, offset: Int = 0) async -> [[String: Any]] {
+        let offsetParam = offset > 0 ? "&offset=\(offset)" : ""
+        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=musicArtist&country=\(country)&limit=\(limit)\(offsetParam)"
         guard let url = URL(string: urlStr) else { return [] }
 
         var req = URLRequest(url: url)
@@ -266,8 +328,9 @@ public final class CloudCatalogService: @unchecked Sendable {
         return list
     }
 
-    private func fetchSongs(query: String, country: String) async -> [[String: Any]] {
-        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=song&country=\(country)&limit=25"
+    private func fetchSongs(query: String, country: String, limit: Int = 50, offset: Int = 0) async -> [[String: Any]] {
+        let offsetParam = offset > 0 ? "&offset=\(offset)" : ""
+        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=song&country=\(country)&limit=\(limit)\(offsetParam)"
         guard let url = URL(string: urlStr) else { return [] }
 
         var req = URLRequest(url: url)
@@ -307,8 +370,9 @@ public final class CloudCatalogService: @unchecked Sendable {
         return list
     }
 
-    private func fetchAlbums(query: String, country: String) async -> [[String: Any]] {
-        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=album&country=\(country)&limit=12"
+    private func fetchAlbums(query: String, country: String, limit: Int = 12, offset: Int = 0) async -> [[String: Any]] {
+        let offsetParam = offset > 0 ? "&offset=\(offset)" : ""
+        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=album&country=\(country)&limit=\(limit)\(offsetParam)"
         guard let url = URL(string: urlStr) else { return [] }
 
         var req = URLRequest(url: url)
@@ -521,6 +585,62 @@ public final class CloudCatalogService: @unchecked Sendable {
         ]
 
         let recentTracks = MusicBridge.shared.getRecentlyPlayed(limit: 30)
+        let recentArtists = recentTracks.compactMap({ $0.artist.isEmpty ? nil : $0.artist }).reduce(into: [String: Int](), { $0[$1, default: 0] += 1 }).sorted(by: { $0.value > $1.value }).map { $0.key }
+        
+        var artistsToUse = Array(recentArtists.prefix(3))
+        if artistsToUse.isEmpty {
+            artistsToUse = Array(Set(topAlbums.compactMap { $0["artist"] as? String })).prefix(3).map { $0 }
+        }
+        
+        // Add "Сейчас на повторе" to heroCards
+        heroCards.insert([
+            "index": 0,
+            "title": "Сейчас на повторе",
+            "name": "Сейчас на повторе",
+            "subtitle": "Специально для вас",
+            "sub": "Специально для вас",
+            "tag": "Микс",
+            "type": "playlist",
+            "id": "heavy_rotation_mix",
+            "artwork": "/assets/stations/CoverHeavyRotation.svg"
+        ], at: 0)
+        
+        // Add Artist Stations to heroCards
+        var heroIndex = 10
+        for artist in artistsToUse {
+            let resolved = await MusicKitManager.shared.resolveArtistStation(artist: artist)
+            let stationUrl = resolved?.stationUrl ?? ""
+            let stationId = resolved.map { "ra.\($0.artistId)" } ?? "station_\(artist.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "")"
+            let canonicalArtist = resolved?.canonicalName ?? artist
+
+            var artistArt = resolved?.artworkUrl ?? ""
+            if artistArt.isEmpty {
+                artistArt = recentTracks.first(where: { $0.artist.localizedCaseInsensitiveContains(artist) && !$0.artworkUrl.isEmpty })?.artworkUrl ?? ""
+            }
+            if artistArt.isEmpty {
+                artistArt = topAlbums.first(where: { ($0["artist"] as? String ?? "").localizedCaseInsensitiveContains(artist) })?["artwork"] as? String ?? ""
+            }
+            if artistArt.isEmpty {
+                artistArt = "/assets/stations/CoverDiscovery.png"
+            }
+
+            heroCards.insert([
+                "index": heroIndex,
+                "title": "\(artist) и другие подобные артисты",
+                "name": canonicalArtist,
+                "subtitle": "При участии: \(artist)",
+                "sub": "При участии: \(artist)",
+                "tag": "Радиостанция",
+                "type": "station",
+                "id": stationId,
+                "url": stationUrl,
+                "artwork": artistArt
+            ], at: heroCards.count)
+            heroIndex += 1
+        }
+        
+        feed["hero_cards"] = heroCards
+
         if !recentTracks.isEmpty {
             feed["recently_played"] = recentTracks.map { t in
                 [

@@ -92,23 +92,106 @@ extension SBObject {
 public final class MusicAppProvider: @unchecked Sendable {
     public static let shared = MusicAppProvider()
 
+    public var onMusicAppTerminated: (@Sendable () -> Void)?
+    public var onMusicAppLaunched: (@Sendable () -> Void)?
+
     private let lock = NSLock()
     private var musicApp: MusicApplicationProtocol?
     private var lastMusicPid: pid_t = 0
+    private var launchObserver: NSObjectProtocol?
+    private var terminateObserver: NSObjectProtocol?
 
-    private init() {
-        ensureMusicAppRunning()
+    public var isMusicAppRunning: Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty
     }
 
-    public func ensureMusicAppRunning() {
-        if NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty {
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") {
-                let conf = NSWorkspace.OpenConfiguration()
-                conf.activates = false
-                conf.hides = true
-                NSWorkspace.shared.openApplication(at: url, configuration: conf, completionHandler: nil)
+    private init() {
+        setupLifecycleObservers()
+    }
+
+    deinit {
+        if let obs = launchObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(obs)
+        }
+        if let obs = terminateObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(obs)
+        }
+    }
+
+    private func setupLifecycleObservers() {
+        launchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notif in
+            guard let app = notif.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.bundleIdentifier == "com.apple.Music" else { return }
+            NSLog("[MusicAppProvider] 🟢 Music.app launched (PID: %d)", app.processIdentifier)
+            self?.lock.lock()
+            self?.musicApp = nil
+            self?.lastMusicPid = 0
+            self?.lock.unlock()
+
+            PlaybackStateStore.shared.invalidateStatusCache()
+            PlaybackStateStore.shared.invalidateQueueCache()
+            self?.onMusicAppLaunched?( )
+
+            DispatchQueue.main.async {
+                MenuManager.shared.updateMenuState()
+                WebSocketServer.shared.broadcastStatus(includeQueue: true)
+                UPnPMediaRendererServer.shared.notifySubscribers(force: true)
             }
         }
+
+        terminateObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notif in
+            guard let app = notif.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.bundleIdentifier == "com.apple.Music" else { return }
+            NSLog("[MusicAppProvider] ⚪ Music.app terminated (PID: %d)", app.processIdentifier)
+            self?.lock.lock()
+            self?.musicApp = nil
+            self?.lastMusicPid = 0
+            self?.lock.unlock()
+
+            PlaybackStateStore.shared.resetPlaybackState()
+            self?.onMusicAppTerminated?()
+
+            DispatchQueue.main.async {
+                MenuManager.shared.updateMenuState()
+                WebSocketServer.shared.broadcastStatus(includeQueue: true)
+                UPnPMediaRendererServer.shared.notifySubscribers(force: true)
+            }
+        }
+    }
+
+    @discardableResult
+    public func ensureMusicAppRunning() -> Bool {
+        if isMusicAppRunning { return true }
+        return launchMusicApp()
+    }
+
+    @discardableResult
+    public func launchMusicApp(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") else {
+            completion?(false)
+            return false
+        }
+        let conf = NSWorkspace.OpenConfiguration()
+        conf.activates = false
+        conf.hides = true
+        NSWorkspace.shared.openApplication(at: url, configuration: conf) { _, error in
+            let success = (error == nil)
+            if let error = error {
+                NSLog("[MusicAppProvider] Failed to launch Music.app: %@", error.localizedDescription)
+            } else {
+                NSLog("[MusicAppProvider] Successfully requested Music.app launch in background")
+            }
+            completion?(success)
+        }
+        return true
     }
 
     public func getMusicApp() -> MusicApplicationProtocol? {
@@ -118,7 +201,6 @@ public final class MusicAppProvider: @unchecked Sendable {
             musicApp = nil
             lastMusicPid = 0
             lock.unlock()
-            ensureMusicAppRunning()
             return nil
         }
 

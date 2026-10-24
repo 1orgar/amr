@@ -19,6 +19,9 @@ public struct PlayerStatus: Codable, Sendable {
     public var playlist: String
     public var isRadio: Bool
     public var audioQuality: String
+    public var isMusicAppRunning: Bool
+    public var isDucked: Bool
+    public var isVolumeLockedTo100: Bool
     public var track: TrackInfo?
 
     enum CodingKeys: String, CodingKey {
@@ -31,6 +34,9 @@ public struct PlayerStatus: Codable, Sendable {
         case playlist
         case isRadio = "is_radio"
         case audioQuality = "audio_quality"
+        case isMusicAppRunning = "is_music_app_running"
+        case isDucked = "is_ducked"
+        case isVolumeLockedTo100 = "lock_volume_100"
         case track
     }
 
@@ -44,6 +50,9 @@ public struct PlayerStatus: Codable, Sendable {
         playlist: String = "Музыка",
         isRadio: Bool = false,
         audioQuality: String = "Lossless (ALAC 24-bit/48kHz)",
+        isMusicAppRunning: Bool = true,
+        isDucked: Bool = false,
+        isVolumeLockedTo100: Bool = true,
         track: TrackInfo? = nil
     ) {
         self.playerState = playerState
@@ -55,7 +64,27 @@ public struct PlayerStatus: Codable, Sendable {
         self.playlist = playlist
         self.isRadio = isRadio
         self.audioQuality = audioQuality
+        self.isMusicAppRunning = isMusicAppRunning
+        self.isDucked = isDucked
+        self.isVolumeLockedTo100 = isVolumeLockedTo100
         self.track = track
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.playerState = try container.decodeIfPresent(String.self, forKey: .playerState) ?? "stopped"
+        self.position = try container.decodeIfPresent(Double.self, forKey: .position) ?? 0
+        self.duration = try container.decodeIfPresent(Double.self, forKey: .duration) ?? 0
+        self.volume = try container.decodeIfPresent(Int.self, forKey: .volume) ?? 50
+        self.shuffle = try container.decodeIfPresent(Bool.self, forKey: .shuffle) ?? false
+        self.repeatMode = try container.decodeIfPresent(String.self, forKey: .repeatMode) ?? "off"
+        self.playlist = try container.decodeIfPresent(String.self, forKey: .playlist) ?? "Музыка"
+        self.isRadio = try container.decodeIfPresent(Bool.self, forKey: .isRadio) ?? false
+        self.audioQuality = try container.decodeIfPresent(String.self, forKey: .audioQuality) ?? "Lossless"
+        self.isMusicAppRunning = try container.decodeIfPresent(Bool.self, forKey: .isMusicAppRunning) ?? true
+        self.isDucked = try container.decodeIfPresent(Bool.self, forKey: .isDucked) ?? false
+        self.isVolumeLockedTo100 = try container.decodeIfPresent(Bool.self, forKey: .isVolumeLockedTo100) ?? true
+        self.track = try container.decodeIfPresent(TrackInfo.self, forKey: .track)
     }
 }
 
@@ -80,6 +109,14 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
     public var previewUrl: String?
     public var index: Int?
     public var isCurrent: Bool?
+
+    public var formattedDuration: String {
+        guard duration > 0 else { return "0:00" }
+        let total = Int(duration)
+        let mins = total / 60
+        let secs = total % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
 
     enum CodingKeys: String, CodingKey {
         case id

@@ -200,6 +200,14 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         guard let targetRate = nearestSupportedSampleRate(sampleRate, deviceID: targetID) else { return false }
 
         let currentRate = doubleProperty(objectID: targetID, selector: kAudioDevicePropertyNominalSampleRate) ?? 0
+
+        // If rate is already identical and bit depth does not require modification, skip CoreAudio calls
+        if abs(currentRate - targetRate) < 0.5 {
+            if bitDepth == nil || isCurrentBitDepth(UInt32(bitDepth!), deviceID: targetID, sampleRate: targetRate) {
+                return true
+            }
+        }
+
         var rateChanged = false
         if abs(currentRate - targetRate) >= 0.5 {
             var address = AudioObjectPropertyAddress(
@@ -228,6 +236,36 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             let bitDepthStr = bitDepth != nil ? ", \(bitDepth!) бит" : ""
             NSLog("[CoreAudioDeviceManager] ✅ Switched device %u format: %.1f kHz%@ (was %.1f kHz)",
                   targetID, targetRate / 1000.0, bitDepthStr, currentRate / 1000.0)
+        }
+        return true
+    }
+
+    private func isCurrentBitDepth(_ targetBits: UInt32, deviceID: AudioDeviceID, sampleRate: Double) -> Bool {
+        var streamsAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreams,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var streamsSize: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(deviceID, &streamsAddress, 0, nil, &streamsSize) == noErr, streamsSize > 0 else { return true }
+
+        let streamCount = Int(streamsSize) / MemoryLayout<AudioStreamID>.size
+        var streamIDs = [AudioStreamID](repeating: 0, count: streamCount)
+        guard AudioObjectGetPropertyData(deviceID, &streamsAddress, 0, nil, &streamsSize, &streamIDs) == noErr else { return true }
+
+        for sID in streamIDs {
+            var physAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioStreamPropertyPhysicalFormat,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            var currentASBD = AudioStreamBasicDescription()
+            var currentASBDSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+            if AudioObjectGetPropertyData(sID, &physAddress, 0, nil, &currentASBDSize, &currentASBD) == noErr {
+                if currentASBD.mBitsPerChannel != targetBits {
+                    return false
+                }
+            }
         }
         return true
     }
@@ -383,7 +421,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         return nil
     }
 
-    private func transportIconName(deviceID: AudioDeviceID) -> String {
+    public func transportIconName(deviceID: AudioDeviceID) -> String {
         guard let transport = uint32Property(objectID: deviceID, selector: kAudioDevicePropertyTransportType) else {
             return "speaker.wave.2.fill"
         }
@@ -467,6 +505,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             if let defID = self.getDefaultOutputDeviceID() {
                 self.updateSampleRateMonitoring(for: defID)
             }
+            BitPerfectLogMonitor.shared.reapplyCurrentFormat()
         }
         self.defaultDeviceListenerBlock = defaultBlock
         AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defaultDeviceAddress, nil, defaultBlock)
@@ -481,6 +520,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             guard let self = self else { return }
             let devices = self.getOutputDevices()
             self.onDevicesChanged?(devices)
+            BitPerfectLogMonitor.shared.reapplyCurrentFormat()
         }
         self.devicesListListenerBlock = listBlock
         AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &devicesListAddress, nil, listBlock)

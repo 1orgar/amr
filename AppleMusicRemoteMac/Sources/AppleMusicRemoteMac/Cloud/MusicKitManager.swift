@@ -22,6 +22,22 @@ public final class MusicKitManager: @unchecked Sendable {
     private var privateKey: P256.Signing.PrivateKey?
     private var trackArtworkCache: [String: String] = [:]
 
+    public struct ArtistStationInfo: Sendable {
+        public let artistId: Int
+        public let canonicalName: String
+        public let stationUrl: String
+        public let artworkUrl: String?
+
+        public init(artistId: Int, canonicalName: String, stationUrl: String, artworkUrl: String?) {
+            self.artistId = artistId
+            self.canonicalName = canonicalName
+            self.stationUrl = stationUrl
+            self.artworkUrl = artworkUrl
+        }
+    }
+
+    private var artistStationCache: [String: ArtistStationInfo] = [:]
+
     private let session: URLSession
 
     private init() {
@@ -136,12 +152,13 @@ public final class MusicKitManager: @unchecked Sendable {
 
     // MARK: - Apple Music API Requests
 
-    public func searchAppleMusic(query: String, storefront: String = "us", limit: Int = 20) async -> [String: Any]? {
+    public func searchAppleMusic(query: String, storefront: String = "us", limit: Int = 25, offset: Int = 0) async -> [String: Any]? {
         guard let token = getDeveloperToken() else { return nil }
         guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
 
         let sf = storefront.lowercased()
-        let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encodedQuery)&types=songs,albums,artists,playlists&limit=\(limit)"
+        let offsetParam = offset > 0 ? "&offset=\(offset)" : ""
+        let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encodedQuery)&types=songs,albums,artists,playlists&limit=\(limit)\(offsetParam)"
         guard let url = URL(string: urlStr) else { return nil }
 
         var request = URLRequest(url: url)
@@ -271,6 +288,162 @@ public final class MusicKitManager: @unchecked Sendable {
         return nil
     }
 
+
+    private func getCachedArtistStation(for key: String) -> ArtistStationInfo? {
+        lock.lock()
+        defer { lock.unlock() }
+        return artistStationCache[key.lowercased()]
+    }
+
+    private func setCachedArtistStation(_ info: ArtistStationInfo, for key: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        artistStationCache[key.lowercased()] = info
+    }
+
+    public func extractArtistCandidates(from raw: String) -> [String] {
+        var result: [String] = []
+        func add(_ s: String) {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.count > 1 && !result.contains(t) {
+                result.append(t)
+            }
+        }
+
+        var cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = cleaned.range(of: " и другие", options: .caseInsensitive) {
+            cleaned = String(cleaned[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if cleaned.lowercased().hasPrefix("при участии:") {
+            cleaned = String(cleaned.dropFirst("при участии:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        add(raw)
+        add(cleaned)
+
+        if let lastAmp = cleaned.range(of: " & ", options: .backwards) {
+            let beforeLast = String(cleaned[..<lastAmp.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            add(beforeLast)
+        }
+
+        var subParts = [cleaned]
+        let sepList = [" & ", ", ", " feat. ", " feat ", " ft. ", " ft ", " / ", " with ", " x ", " X "]
+        for sep in sepList {
+            var nextParts: [String] = []
+            for part in subParts {
+                let chunks = part.components(separatedBy: sep)
+                nextParts.append(contentsOf: chunks)
+            }
+            subParts = nextParts
+        }
+
+        for p in subParts {
+            add(p)
+        }
+
+        if let firstAmp = cleaned.components(separatedBy: " & ").first {
+            add(firstAmp)
+        }
+
+        return result
+    }
+
+    public func resolveArtistStation(artist: String) async -> ArtistStationInfo? {
+        let clean = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return nil }
+
+        if let cached = getCachedArtistStation(for: clean) {
+            return cached
+        }
+
+        let candidates = extractArtistCandidates(from: clean)
+
+        for candidate in candidates {
+            guard let enc = candidate.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+            for country in ["ru", "us", ""] {
+                let countryParam = country.isEmpty ? "" : "&country=\(country)"
+                let searchUrlStr = "https://itunes.apple.com/search?term=\(enc)&entity=musicArtist&limit=1\(countryParam)"
+                guard let url = URL(string: searchUrlStr) else { continue }
+                var req = URLRequest(url: url)
+                req.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+
+                guard let (data, _) = try? await URLSession.shared.data(for: req),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let results = json["results"] as? [[String: Any]],
+                      let first = results.first,
+                      let artistId = first["artistId"] as? Int else {
+                    continue
+                }
+
+                let canonicalName = first["artistName"] as? String ?? candidate
+                let stationUrl = "music://music.apple.com/station/ra.\(artistId)"
+
+                var artworkUrl: String? = nil
+                let lookupCountryParam = country.isEmpty ? "" : "&country=\(country)"
+                let lookupStr = "https://itunes.apple.com/lookup?id=\(artistId)&entity=album&limit=1\(lookupCountryParam)"
+                if let lookupUrl = URL(string: lookupStr) {
+                    var lreq = URLRequest(url: lookupUrl)
+                    lreq.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+                    if let (ldata, _) = try? await URLSession.shared.data(for: lreq),
+                       let ljson = try? JSONSerialization.jsonObject(with: ldata) as? [String: Any],
+                       let lresults = ljson["results"] as? [[String: Any]],
+                       lresults.count > 1,
+                       let rawArt = lresults[1]["artworkUrl100"] as? String {
+                        artworkUrl = rawArt.replacingOccurrences(of: "100x100bb", with: "600x600bb")
+                    }
+                }
+
+                let info = ArtistStationInfo(
+                    artistId: artistId,
+                    canonicalName: canonicalName,
+                    stationUrl: stationUrl,
+                    artworkUrl: artworkUrl
+                )
+
+                setCachedArtistStation(info, for: clean)
+                if clean.lowercased() != candidate.lowercased() {
+                    setCachedArtistStation(info, for: candidate)
+                }
+                return info
+            }
+        }
+
+        return nil
+    }
+
+    public func searchArtistStationUrl(artist: String, storefront: String = "ru") async -> String? {
+        if let info = await resolveArtistStation(artist: artist) {
+            return info.stationUrl
+        }
+        return nil
+    }
+
+    public func resolveTrackStation(title: String, artist: String = "") async -> String? {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return nil }
+        let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = cleanArtist.isEmpty ? cleanTitle : "\(cleanTitle) \(cleanArtist)"
+        guard let enc = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+
+        for country in ["ru", "us", ""] {
+            let countryParam = country.isEmpty ? "" : "&country=\(country)"
+            let searchUrlStr = "https://itunes.apple.com/search?term=\(enc)&entity=song&limit=1\(countryParam)"
+            guard let url = URL(string: searchUrlStr) else { continue }
+            var req = URLRequest(url: url)
+            req.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+
+            guard let (data, _) = try? await URLSession.shared.data(for: req),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let results = json["results"] as? [[String: Any]],
+                  let first = results.first,
+                  let trackId = first["trackId"] as? Int else {
+                continue
+            }
+            return "music://music.apple.com/station/ra.\(trackId)"
+        }
+        return nil
+    }
+
     public func searchTrackArtwork(name: String, artist: String, album: String = "", storefront: String = "ru") async -> String? {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -297,57 +470,68 @@ public final class MusicKitManager: @unchecked Sendable {
             mainArtist = String(mainArtist[..<featIdx.lowerBound]).trimmingCharacters(in: .whitespaces)
         }
 
-        var queryParts: [String] = []
-        if !simplifiedName.isEmpty { queryParts.append(simplifiedName) }
-        if !mainArtist.isEmpty { queryParts.append(mainArtist) }
+        var queries: [String] = []
+        let primaryQuery = [simplifiedName, mainArtist].filter { !$0.isEmpty }.joined(separator: " ")
+        if !primaryQuery.isEmpty { queries.append(primaryQuery) }
         if !cleanAlbum.isEmpty {
             let simplifiedAlbum = cleanAlbum
                 .replacingOccurrences(of: #"\s*\(.*?\)"#, with: "", options: .regularExpression)
                 .replacingOccurrences(of: #"\s*\[.*?\]"#, with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespaces)
-            if !simplifiedAlbum.isEmpty { queryParts.append(simplifiedAlbum) }
+            let fullQuery = [simplifiedName, mainArtist, simplifiedAlbum].filter { !$0.isEmpty }.joined(separator: " ")
+            if fullQuery != primaryQuery { queries.append(fullQuery) }
         }
-        let bestQuery = queryParts.joined(separator: " ")
-        guard let encoded = bestQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        if !cleanName.isEmpty && cleanName != simplifiedName {
+            queries.append([cleanName, mainArtist].filter { !$0.isEmpty }.joined(separator: " "))
+        }
 
         var foundArtUrl: String? = nil
 
         if let token = getDeveloperToken() {
-            let sf = storefront.lowercased()
-            let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=songs&limit=1"
-            if let url = URL(string: urlStr) {
-                var request = URLRequest(url: url)
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Accept")
-                request.timeoutInterval = 3.0
+            let storefronts = [storefront.lowercased(), "us"]
+            for sf in storefronts {
+                if foundArtUrl != nil { break }
+                for q in queries {
+                    if foundArtUrl != nil { break }
+                    guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                    let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=songs&limit=1"
+                    guard let url = URL(string: urlStr) else { continue }
+                    var request = URLRequest(url: url)
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    request.setValue("application/json", forHTTPHeaderField: "Accept")
+                    request.timeoutInterval = 2.5
 
-                if let (data, response) = try? await session.data(for: request),
-                   let http = response as? HTTPURLResponse, http.statusCode == 200,
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let results = json["results"] as? [String: Any],
-                   let songs = results["songs"] as? [String: Any],
-                   let dataArr = songs["data"] as? [[String: Any]],
-                   let first = dataArr.first,
-                   let attrs = first["attributes"] as? [String: Any],
-                   let artObj = attrs["artwork"] as? [String: Any],
-                   let artTmpl = artObj["url"] as? String {
-                    let artUrl = artTmpl
-                        .replacingOccurrences(of: "{w}x{h}", with: "600x600")
-                        .replacingOccurrences(of: "{w}", with: "600")
-                        .replacingOccurrences(of: "{h}", with: "600")
-                        .replacingOccurrences(of: "{f}", with: "jpg")
-                    foundArtUrl = artUrl
+                    if let (data, response) = try? await session.data(for: request),
+                       let http = response as? HTTPURLResponse, http.statusCode == 200,
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let results = json["results"] as? [String: Any],
+                       let songs = results["songs"] as? [String: Any],
+                       let dataArr = songs["data"] as? [[String: Any]],
+                       let first = dataArr.first,
+                       let attrs = first["attributes"] as? [String: Any],
+                       let artObj = attrs["artwork"] as? [String: Any],
+                       let artTmpl = artObj["url"] as? String {
+                        let artUrl = artTmpl
+                            .replacingOccurrences(of: "{w}x{h}", with: "600x600")
+                            .replacingOccurrences(of: "{w}", with: "600")
+                            .replacingOccurrences(of: "{h}", with: "600")
+                            .replacingOccurrences(of: "{f}", with: "jpg")
+                        foundArtUrl = artUrl
+                    }
                 }
             }
         }
 
         // Fallback to iTunes Store Search API (works universally without token)
         if foundArtUrl == nil {
-            let itunesUrlStr = "https://itunes.apple.com/search?term=\(encoded)&entity=song&limit=1"
-            if let itunesUrl = URL(string: itunesUrlStr) {
+            for q in queries {
+                if foundArtUrl != nil { break }
+                guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                let itunesUrlStr = "https://itunes.apple.com/search?term=\(encoded)&entity=song&limit=1"
+                guard let itunesUrl = URL(string: itunesUrlStr) else { continue }
                 var req = URLRequest(url: itunesUrl)
                 req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", forHTTPHeaderField: "User-Agent")
-                req.timeoutInterval = 3.0
+                req.timeoutInterval = 2.5
 
                 if let (data, response) = try? await session.data(for: req),
                    let http = response as? HTTPURLResponse, http.statusCode == 200,
@@ -364,9 +548,7 @@ public final class MusicKitManager: @unchecked Sendable {
         if let artUrl = foundArtUrl, !artUrl.isEmpty {
             lock.lock()
             trackArtworkCache[cacheKey] = artUrl
-            if cleanAlbum.isEmpty {
-                trackArtworkCache["\(cleanName.lowercased())|\(cleanArtist.lowercased())"] = artUrl
-            }
+            trackArtworkCache["\(cleanName.lowercased())|\(cleanArtist.lowercased())"] = artUrl
             lock.unlock()
             return artUrl
         }

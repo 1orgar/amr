@@ -19,6 +19,8 @@ public final class MenuManager: NSObject {
 
     private var clientCountItem: NSMenuItem?
     private var bitrateItem: NSMenuItem?
+    private var musicAppItem: NSMenuItem?
+    private var launchAtLoginItem: NSMenuItem?
 
     private override init() {
         super.init()
@@ -55,16 +57,28 @@ public final class MenuManager: NSObject {
         self.bitrateItem = bitItem
         menu.addItem(bitItem)
 
+        // 4. Music.app Status
+        let mAppItem = NSMenuItem(title: "Music.app: 🟢 Запущен", action: #selector(toggleMusicAppClicked), keyEquivalent: "")
+        mAppItem.target = self
+        self.musicAppItem = mAppItem
+        menu.addItem(mAppItem)
+
         menu.addItem(NSMenuItem.separator())
 
-        // 4. Dedicated Settings Window
+        // 5. Launch at Login
+        let loginItem = NSMenuItem(title: "Запускать при входе в систему", action: #selector(toggleLaunchAtLoginClicked), keyEquivalent: "")
+        loginItem.target = self
+        self.launchAtLoginItem = loginItem
+        menu.addItem(loginItem)
+
+        // 6. Dedicated Settings Window
         let settingsItem = NSMenuItem(title: "⚙️ Настройки...", action: #selector(openSettingsClicked), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
 
         menu.addItem(NSMenuItem.separator())
 
-        // 5. Quit
+        // 7. Quit
         let quitItem = NSMenuItem(title: "Завершить Apple Music Remote", action: #selector(quitClicked), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -128,9 +142,36 @@ public final class MenuManager: NSObject {
 
         // 3. Client Count
         updateClientCount(WebSocketServer.shared.clientCount)
+
+        // 4. Music.app & Launch at Login status
+        let isMusicRunning = MusicAppProvider.shared.isMusicAppRunning
+        if isMusicRunning {
+            musicAppItem?.title = "Music.app: 🟢 Запущен"
+        } else {
+            musicAppItem?.title = "Music.app: ⚪ Запустить"
+        }
+
+        LaunchAtLoginManager.shared.refreshStatus()
+        launchAtLoginItem?.state = LaunchAtLoginManager.shared.isEnabled ? .on : .off
     }
 
     // MARK: - Actions
+
+    @objc private func toggleMusicAppClicked() {
+        if !MusicAppProvider.shared.isMusicAppRunning {
+            MusicAppProvider.shared.launchMusicApp { [weak self] _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self?.updateMenuState()
+                }
+            }
+        }
+    }
+
+    @objc private func toggleLaunchAtLoginClicked() {
+        let newState = !LaunchAtLoginManager.shared.isEnabled
+        _ = LaunchAtLoginManager.shared.setEnabled(newState)
+        updateMenuState()
+    }
 
     @objc private func openSettingsClicked() {
         SettingsWindow.shared.show()

@@ -51,13 +51,15 @@ public final class WebSocketServer: @unchecked Sendable {
         guard !observersSetup else { return }
         observersSetup = true
 
-        let handler: (Notification) -> Void = { [weak self] _ in
+        let handler: (Notification) -> Void = { [weak self] notif in
             guard let self = self else { return }
+            BitPerfectLogMonitor.shared.resetTrackState()
+            QueueManager.shared.handleTrackNotification(userInfo: notif.userInfo)
             self.notifDebounceItem?.cancel()
             let work = DispatchWorkItem { [weak self] in
                 guard let self = self else { return }
-                if MusicBridge.shared.isRadioActive() || MusicBridge.shared.getCurrentOriginalPlaylistName() == "Очередь AMR" {
-                    MusicBridge.shared.syncCurrentTrackToAMRQueue(clearQueue: false)
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.lastPlayerStatusCache = nil
                 }
                 self.broadcastStatus(includeQueue: true)
             }
@@ -332,7 +334,7 @@ public final class WebSocketServer: @unchecked Sendable {
         }
     }
 
-    private func decodeWebSocketFrames(buffer: inout Data) -> [(opcode: UInt8, payload: Data)] {
+    internal func decodeWebSocketFrames(buffer: inout Data) -> [(opcode: UInt8, payload: Data)] {
         var results: [(opcode: UInt8, payload: Data)] = []
         while buffer.count >= 2 {
             let b0 = buffer[buffer.startIndex]
@@ -396,7 +398,7 @@ public final class WebSocketServer: @unchecked Sendable {
         return results
     }
 
-    private func makeWebSocketFrame(payload: Data, opcode: UInt8) -> Data {
+    internal func makeWebSocketFrame(payload: Data, opcode: UInt8) -> Data {
         var frame = Data()
         frame.append(0x80 | (opcode & 0x0F))
         let count = payload.count
@@ -415,14 +417,14 @@ public final class WebSocketServer: @unchecked Sendable {
         return frame
     }
 
-    private func webSocketAccept(for key: String) -> String {
+    internal func webSocketAccept(for key: String) -> String {
         let magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
         let combined = key.trimmingCharacters(in: .whitespacesAndNewlines) + magic
         let digest = Insecure.SHA1.hash(data: Data(combined.utf8))
         return Data(digest).base64EncodedString()
     }
 
-    private func extractHeader(named name: String, from headerString: String) -> String? {
+    internal func extractHeader(named name: String, from headerString: String) -> String? {
         let lines = headerString.components(separatedBy: "\r\n")
         let target = name.lowercased() + ":"
         for line in lines {
@@ -456,23 +458,75 @@ public final class WebSocketServer: @unchecked Sendable {
             switch path {
             case "/", "/index.html":
                 let content = loadWebAsset(filename: "index.html") ?? WebUIContent.indexHTML
-                sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: Data(content.utf8), connection: connection)
+                sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0)
             case "/style.css":
                 let content = loadWebAsset(filename: "style.css") ?? WebUIContent.styleCSS
-                sendHTTPResponse(status: "200 OK", contentType: "text/css; charset=utf-8", body: Data(content.utf8), connection: connection)
+                sendHTTPResponse(status: "200 OK", contentType: "text/css; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0)
             case "/app.js":
                 let content = loadWebAsset(filename: "app.js") ?? WebUIContent.appJS
-                sendHTTPResponse(status: "200 OK", contentType: "application/javascript; charset=utf-8", body: Data(content.utf8), connection: connection)
+                sendHTTPResponse(status: "200 OK", contentType: "application/javascript; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0)
             case "/manifest.json":
                 let content = loadWebAsset(filename: "manifest.json") ?? WebUIContent.manifestJSON
                 sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: Data(content.utf8), connection: connection)
+            case "/sw.js":
+                let content = loadWebAsset(filename: "sw.js") ?? WebUIContent.swJS
+                sendHTTPResponse(status: "200 OK", contentType: "application/javascript; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0)
             case "/apple-touch-icon.svg":
                 let content = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
                 sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(content.utf8), connection: connection)
+            case "/apple-touch-icon.png", "/apple-touch-icon-180.png", "/apple-touch-icon-192.png", "/apple-touch-icon-512.png", "/apple-touch-icon-precomposed.png":
+                let filename = String(path.dropFirst())
+                let lookupName = filename == "apple-touch-icon-precomposed.png" ? "apple-touch-icon.png" : filename
+                if let data = loadWebBinaryAsset(subpath: lookupName) {
+                    sendHTTPResponse(status: "200 OK", contentType: "image/png", body: data, connection: connection, cacheSeconds: 86400 * 7)
+                } else {
+                    let svg = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
+                    sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(svg.utf8), connection: connection)
+                }
+            case "/favicon.ico":
+                if let data = loadWebBinaryAsset(subpath: "apple-touch-icon-180.png") ?? loadWebBinaryAsset(subpath: "apple-touch-icon.png") {
+                    sendHTTPResponse(status: "200 OK", contentType: "image/png", body: data, connection: connection, cacheSeconds: 86400 * 7)
+                } else {
+                    sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
+                }
             case let p where p.hasPrefix("/assets/"):
                 let sub = String(p.dropFirst("/assets/".count))
                 if let data = loadWebBinaryAsset(subpath: "assets/\(sub)") {
-                    let cType = sub.hasSuffix(".png") ? "image/png" : (sub.hasSuffix(".jpg") || sub.hasSuffix(".jpeg") ? "image/jpeg" : (sub.hasSuffix(".svg") ? "image/svg+xml" : "application/octet-stream"))
+                    let cType: String
+                    if sub.hasSuffix(".m4a") || sub.hasSuffix(".mp4") {
+                        cType = "audio/mp4"
+                    } else if sub.hasSuffix(".wav") {
+                        cType = "audio/wav"
+                    } else if sub.hasSuffix(".mp3") {
+                        cType = "audio/mpeg"
+                    } else if sub.hasSuffix(".png") {
+                        cType = "image/png"
+                    } else if sub.hasSuffix(".jpg") || sub.hasSuffix(".jpeg") {
+                        cType = "image/jpeg"
+                    } else if sub.hasSuffix(".svg") {
+                        cType = "image/svg+xml"
+                    } else {
+                        cType = "application/octet-stream"
+                    }
+                    if let rangeHeader = extractHeader(named: "Range", from: headerString),
+                       rangeHeader.hasPrefix("bytes=") {
+                        let spec = String(rangeHeader.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                        let parts = spec.components(separatedBy: "-")
+                        if parts.count >= 2 {
+                            let startStr = parts[0]
+                            let endStr = parts[1]
+                            let total = data.count
+                            var start = Int(startStr) ?? 0
+                            var end = endStr.isEmpty ? (total - 1) : (Int(endStr) ?? (total - 1))
+                            if start < 0 { start = 0 }
+                            if end >= total { end = total - 1 }
+                            if start <= end && start < total {
+                                let chunk = data.subdata(in: start..<(end + 1))
+                                sendPartialHTTPResponse(contentType: cType, rangeStart: start, rangeEnd: end, totalLength: total, body: chunk, connection: connection, cacheSeconds: 86400 * 30)
+                                return
+                            }
+                        }
+                    }
                     sendHTTPResponse(status: "200 OK", contentType: cType, body: data, connection: connection, cacheSeconds: 86400 * 30)
                     return
                 }
@@ -480,50 +534,127 @@ public final class WebSocketServer: @unchecked Sendable {
             case "/api/artwork":
                 let artData = MusicBridge.shared.getCurrentTrackArtwork()
                 if let art = artData, !art.isEmpty {
-                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
+                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 0)
                 } else {
                     let curStatus = MusicBridge.shared.getPlayerStatus()
                     if let trackArt = curStatus.track?.artworkUrl, !trackArt.isEmpty, trackArt.hasPrefix("http") {
-                        let redirectResp = "HTTP/1.1 302 Found\r\nLocation: \(trackArt)\r\nCache-Control: public, max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
-                        connection.send(content: Data(redirectResp.utf8), completion: .contentProcessed({ _ in
-                            connection.cancel()
-                        }))
+                        sendRedirect(location: trackArt, connection: connection, cacheSeconds: 0)
                     } else {
-                        let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
-                        sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                        var trackName = curStatus.track?.name ?? ""
+                        var trackArtist = curStatus.track?.artist ?? ""
+                        var trackAlbum = curStatus.track?.album ?? ""
+                        if let qIdx = fullPath.firstIndex(of: "?") {
+                            let qs = String(fullPath[fullPath.index(after: qIdx)...])
+                            for pair in qs.components(separatedBy: "&") {
+                                let parts = pair.components(separatedBy: "=")
+                                if parts.count == 2 {
+                                    let val = parts[1].removingPercentEncoding ?? ""
+                                    if parts[0] == "name" && !val.isEmpty { trackName = val }
+                                    else if parts[0] == "artist" && !val.isEmpty { trackArtist = val }
+                                    else if parts[0] == "album" && !val.isEmpty { trackAlbum = val }
+                                }
+                            }
+                        }
+                        if !trackName.isEmpty {
+                            if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: trackName, artist: trackArtist, album: trackAlbum), !cached.isEmpty {
+                                sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
+                                return
+                            }
+                            Task {
+                                if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: trackName, artist: trackArtist, album: trackAlbum) {
+                                    self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
+                                } else {
+                                    self.sendDefaultArtwork(connection: connection)
+                                }
+                            }
+                            return
+                        }
+                        sendDefaultArtwork(connection: connection)
                     }
                 }
-            case let p where p.hasPrefix("/api/artwork/track"):
-                var trackId = 0
+            case let p where p.hasPrefix("/api/artwork/search"):
+                var trackName = ""
+                var trackArtist = ""
+                var trackAlbum = ""
                 if let qIdx = fullPath.firstIndex(of: "?") {
                     let qs = String(fullPath[fullPath.index(after: qIdx)...])
                     for pair in qs.components(separatedBy: "&") {
                         let parts = pair.components(separatedBy: "=")
-                        if parts.count == 2 && parts[0] == "id" {
-                            trackId = Int(parts[1]) ?? 0
+                        if parts.count == 2 {
+                            let val = parts[1].removingPercentEncoding ?? ""
+                            if parts[0] == "name" { trackName = val }
+                            else if parts[0] == "artist" { trackArtist = val }
+                            else if parts[0] == "album" { trackAlbum = val }
+                        }
+                    }
+                }
+                let lowName = trackName.lowercased()
+                if lowName.contains("моя станция") {
+                    sendRedirect(location: "/assets/stations/CoverPersonal.png", connection: connection, cacheSeconds: 86400)
+                    return
+                } else if lowName.contains("станция открытий") {
+                    sendRedirect(location: "/assets/stations/CoverDiscovery.png", connection: connection, cacheSeconds: 86400)
+                    return
+                } else if lowName.contains("сейчас на повторе") {
+                    sendRedirect(location: "/assets/stations/CoverHeavyRotation.svg", connection: connection, cacheSeconds: 86400)
+                    return
+                } else if lowName.contains("apple music 1") {
+                    sendRedirect(location: "/assets/stations/CoverAppleMusic1.png", connection: connection, cacheSeconds: 86400)
+                    return
+                }
+
+                if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: trackName, artist: trackArtist, album: trackAlbum), !cached.isEmpty {
+                    sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
+                } else {
+                    Task {
+                        if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: trackName, artist: trackArtist, album: trackAlbum) {
+                            self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
+                        } else {
+                            self.sendDefaultArtwork(connection: connection)
+                        }
+                    }
+                }
+            case let p where p.hasPrefix("/api/artwork/track"):
+                var trackId = 0
+                var paramName = ""
+                var paramArtist = ""
+                var paramAlbum = ""
+                if let qIdx = fullPath.firstIndex(of: "?") {
+                    let qs = String(fullPath[fullPath.index(after: qIdx)...])
+                    for pair in qs.components(separatedBy: "&") {
+                        let parts = pair.components(separatedBy: "=")
+                        if parts.count == 2 {
+                            let val = parts[1].removingPercentEncoding ?? ""
+                            if parts[0] == "id" { trackId = Int(val) ?? 0 }
+                            else if parts[0] == "name" { paramName = val }
+                            else if parts[0] == "artist" { paramArtist = val }
+                            else if parts[0] == "album" { paramAlbum = val }
                         }
                     }
                 }
                 if trackId > 0, let art = MusicBridge.shared.getTrackArtwork(id: trackId), !art.isEmpty {
                     sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
-                } else if trackId > 0, let meta = MusicBridge.shared.getTrackMetadata(id: trackId) {
-                    if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: meta.name, artist: meta.artist, album: meta.album), !cached.isEmpty {
-                        let redirectResp = "HTTP/1.1 302 Found\r\nLocation: \(cached)\r\nCache-Control: public, max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
-                        connection.send(content: Data(redirectResp.utf8), completion: .contentProcessed({ _ in connection.cancel() }))
-                    } else {
-                        Task {
-                            if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: meta.name, artist: meta.artist, album: meta.album) {
-                                let redirectResp = "HTTP/1.1 302 Found\r\nLocation: \(cloudArt)\r\nCache-Control: public, max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
-                                connection.send(content: Data(redirectResp.utf8), completion: .contentProcessed({ _ in connection.cancel() }))
-                            } else {
-                                let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
-                                sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                } else {
+                    let meta = (trackId > 0) ? MusicBridge.shared.getTrackMetadata(id: trackId) : nil
+                    let effName = !paramName.isEmpty ? paramName : (meta?.name ?? "")
+                    let effArtist = !paramArtist.isEmpty ? paramArtist : (meta?.artist ?? "")
+                    let effAlbum = !paramAlbum.isEmpty ? paramAlbum : (meta?.album ?? "")
+
+                    if !effName.isEmpty {
+                        if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: effName, artist: effArtist, album: effAlbum), !cached.isEmpty {
+                            sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
+                        } else {
+                            Task {
+                                if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: effName, artist: effArtist, album: effAlbum) {
+                                    self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
+                                } else {
+                                    self.sendDefaultArtwork(connection: connection)
+                                }
                             }
                         }
+                    } else {
+                        sendDefaultArtwork(connection: connection)
                     }
-                } else {
-                    let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
-                    sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
                 }
             case let p where p.hasPrefix("/api/artwork/playlist"):
                 var plName = ""
@@ -549,18 +680,13 @@ public final class WebSocketServer: @unchecked Sendable {
                             cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: plName, storefront: "us")
                         }
                         if let artUrl = cloudArtUrl, !artUrl.isEmpty {
-                            let redirectResp = "HTTP/1.1 302 Found\r\nLocation: \(artUrl)\r\nCache-Control: public, max-age=86400\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
-                            connection.send(content: Data(redirectResp.utf8), completion: .contentProcessed({ _ in
-                                connection.cancel()
-                            }))
+                            self.sendRedirect(location: artUrl, connection: connection, cacheSeconds: 86400)
                             return
                         }
-                        let fallback = self.loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
-                        self.sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                        self.sendDefaultArtwork(connection: connection)
                     }
                 } else {
-                    let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
-                    sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 86400)
+                    sendDefaultArtwork(connection: connection)
                 }
             case "/api/status":
                 let status = MusicBridge.shared.getPlayerStatus()
@@ -569,8 +695,78 @@ public final class WebSocketServer: @unchecked Sendable {
                 } else {
                     sendHTTPResponse(status: "500 Internal Server Error", contentType: "text/plain", body: Data("{}".utf8), connection: connection)
                 }
+            case let p where p.hasPrefix("/api/duck"):
+                var reduction = 80.0
+                var timeout: Double? = nil
+                if let components = URLComponents(string: fullPath) {
+                    if let redStr = components.queryItems?.first(where: { $0.name == "reduction" || $0.name == "percent" })?.value, let val = Double(redStr) {
+                        reduction = val
+                    }
+                    if let toStr = components.queryItems?.first(where: { $0.name == "timeout" || $0.name == "duration" })?.value, let val = Double(toStr) {
+                        timeout = val
+                    }
+                }
+                let res = MusicBridge.shared.activateDucking(reductionPercent: reduction, timeout: timeout)
+                broadcastStatus(includeQueue: false)
+                let respObj: [String: Any] = [
+                    "status": "ok",
+                    "is_ducked": true,
+                    "original_volume": res.originalVolume,
+                    "ducked_volume": res.duckedVolume,
+                    "volume": res.duckedVolume
+                ]
+                let data = (try? JSONSerialization.data(withJSONObject: respObj)) ?? Data("{}".utf8)
+                sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
+
+            case "/api/unduck":
+                let res = MusicBridge.shared.deactivateDucking()
+                broadcastStatus(includeQueue: false)
+                let respObj: [String: Any] = [
+                    "status": "ok",
+                    "is_ducked": false,
+                    "restored_volume": res.restoredVolume,
+                    "volume": res.restoredVolume
+                ]
+                let data = (try? JSONSerialization.data(withJSONObject: respObj)) ?? Data("{}".utf8)
+                sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
+
             default:
                 sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
+            }
+        } else if method == "POST" && (path == "/api/duck" || path == "/api/unduck") {
+            if path == "/api/duck" {
+                var reduction = 80.0
+                var timeout: Double? = nil
+                if let json = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any] {
+                    if let num = (json["reduction"] as? NSNumber) ?? (json["percent"] as? NSNumber) {
+                        reduction = num.doubleValue
+                    }
+                    if let num = (json["timeout"] as? NSNumber) ?? (json["duration"] as? NSNumber) {
+                        timeout = num.doubleValue
+                    }
+                }
+                let res = MusicBridge.shared.activateDucking(reductionPercent: reduction, timeout: timeout)
+                broadcastStatus(includeQueue: false)
+                let respObj: [String: Any] = [
+                    "status": "ok",
+                    "is_ducked": true,
+                    "original_volume": res.originalVolume,
+                    "ducked_volume": res.duckedVolume,
+                    "volume": res.duckedVolume
+                ]
+                let data = (try? JSONSerialization.data(withJSONObject: respObj)) ?? Data("{}".utf8)
+                sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
+            } else {
+                let res = MusicBridge.shared.deactivateDucking()
+                broadcastStatus(includeQueue: false)
+                let respObj: [String: Any] = [
+                    "status": "ok",
+                    "is_ducked": false,
+                    "restored_volume": res.restoredVolume,
+                    "volume": res.restoredVolume
+                ]
+                let data = (try? JSONSerialization.data(withJSONObject: respObj)) ?? Data("{}".utf8)
+                sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
             }
         } else if method == "POST" && path == "/api/media" {
             Task {
@@ -642,13 +838,70 @@ public final class WebSocketServer: @unchecked Sendable {
             let ok = bridge.setVolume(vol)
             resultData["success"] = ok
             resultData["volume"] = vol
+        case "set_lock_volume_100", "lock_volume_100":
+            let enabled = (params["enabled"] as? Bool) ?? (params["lock"] as? Bool) ?? (params["lock_volume_100"] as? Bool) ?? true
+            PlaybackStateStore.shared.isVolumeLockedTo100 = enabled
+            if enabled {
+                _ = bridge.setVolume(100)
+            }
+            resultData["success"] = true
+            resultData["lock_volume_100"] = enabled
+            broadcastStatus(includeQueue: false)
+
+        case "duck", "activate_ducking":
+            let reduction = (params["reduction"] as? Double) ?? ((params["reduction"] as? NSNumber)?.doubleValue) ?? (params["percent"] as? Double) ?? ((params["percent"] as? NSNumber)?.doubleValue) ?? 80.0
+            let timeout = (params["timeout"] as? Double) ?? ((params["timeout"] as? NSNumber)?.doubleValue) ?? (params["duration"] as? Double) ?? ((params["duration"] as? NSNumber)?.doubleValue)
+            let res = bridge.activateDucking(reductionPercent: reduction, timeout: timeout)
+            resultData["success"] = true
+            resultData["is_ducked"] = true
+            resultData["original_volume"] = res.originalVolume
+            resultData["ducked_volume"] = res.duckedVolume
+            resultData["volume"] = res.duckedVolume
+            broadcastStatus(includeQueue: false)
+
+        case "unduck", "deactivate_ducking":
+            let res = bridge.deactivateDucking()
+            resultData["success"] = true
+            resultData["is_ducked"] = false
+            resultData["restored_volume"] = res.restoredVolume
+            resultData["volume"] = res.restoredVolume
+            broadcastStatus(includeQueue: false)
+
+        case "set_ducking", "ducking":
+            let enabled = (params["enabled"] as? Bool) ?? (params["active"] as? Bool) ?? true
+            if enabled {
+                let reduction = (params["reduction"] as? Double) ?? ((params["reduction"] as? NSNumber)?.doubleValue) ?? (params["percent"] as? Double) ?? ((params["percent"] as? NSNumber)?.doubleValue) ?? 80.0
+                let timeout = (params["timeout"] as? Double) ?? ((params["timeout"] as? NSNumber)?.doubleValue) ?? (params["duration"] as? Double) ?? ((params["duration"] as? NSNumber)?.doubleValue)
+                let res = bridge.activateDucking(reductionPercent: reduction, timeout: timeout)
+                resultData["success"] = true
+                resultData["is_ducked"] = true
+                resultData["original_volume"] = res.originalVolume
+                resultData["ducked_volume"] = res.duckedVolume
+                resultData["volume"] = res.duckedVolume
+            } else {
+                let res = bridge.deactivateDucking()
+                resultData["success"] = true
+                resultData["is_ducked"] = false
+                resultData["restored_volume"] = res.restoredVolume
+                resultData["volume"] = res.restoredVolume
+            }
             broadcastStatus(includeQueue: false)
 
         case "search_and_play":
-            let query = (params["query"] as? String) ?? ""
-            let ok = await bridge.searchAndPlay(query: query)
-            resultData["success"] = ok
-            resultData["query"] = query
+            let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
+            let res = await bridge.searchAndPlayDetailed(query: query)
+            resultData["success"] = res.success
+            if let st = res.station {
+                resultData["station"] = st
+                resultData["mode"] = "random_station"
+            }
+            if let q = res.query {
+                resultData["query"] = q
+                resultData["mode"] = "search"
+                if let cnt = res.count {
+                    resultData["count"] = cnt
+                }
+            }
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.broadcastStatus(includeQueue: true)
             }
@@ -688,16 +941,82 @@ public final class WebSocketServer: @unchecked Sendable {
                 resultData["data"] = dict
             }
 
+        case "search":
+            let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
+            let country = (params["country"] as? String) ?? "ru"
+            let source = (params["scope"] as? String) ?? (params["source"] as? String) ?? "all"
+            let results = await CloudCatalogService.shared.search(query: query, country: country, source: source)
+            if let enc = try? JSONEncoder().encode(results),
+               let obj = try? JSONSerialization.jsonObject(with: enc) as? [String: Any] {
+                resultData["data"] = obj
+            }
+            resultData["success"] = true
+
+        case "play_cloud":
+            let url = params["url"] as? String
+            let storeId = params["id"] as? String
+            let name = (params["name"] as? String) ?? (params["title"] as? String) ?? ""
+            let artist = (params["artist"] as? String) ?? ""
+            let numericId = (params["numeric_id"] as? Int) ?? (params["numericId"] as? Int)
+            let type = (params["type"] as? String)?.lowercased()
+            let shuffle = (params["shuffle"] as? Bool) ?? false
+            var isAlbum = (type == "album")
+            var albumId = storeId ?? ""
+            if !isAlbum, let u = url, u.contains("/album/"), !u.contains("?i="), !u.contains("/song/") {
+                isAlbum = true
+                if albumId.isEmpty {
+                    let clean = u.components(separatedBy: "?").first ?? u
+                    if let lastSegment = clean.split(separator: "/").last, !lastSegment.isEmpty {
+                        albumId = String(lastSegment)
+                    }
+                }
+            }
+            let ok: Bool
+            if isAlbum && !albumId.isEmpty {
+                ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, shuffle: shuffle)
+            } else {
+                ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId)
+            }
+            resultData["success"] = ok
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
+        case "play_station":
+            let name = (params["name"] as? String) ?? "Radio"
+            let url = (params["url"] as? String) ?? ""
+            let type = (params["type"] as? String) ?? ""
+            let trackTitle = (params["title"] as? String) ?? (params["track"] as? String) ?? ""
+            let artistName = (params["artist"] as? String) ?? ""
+            let ok = await bridge.playStation(url: url, name: name, type: type, trackTitle: trackTitle, artistName: artistName)
+            resultData["success"] = ok
+            resultData["name"] = name
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.broadcastStatus(includeQueue: true)
+            }
+
         default:
             resultData = ["status": "error", "message": "Unknown endpoint: \(endpoint)"]
         }
 
-        let respData = (try? JSONSerialization.data(withJSONObject: resultData)) ?? Data("{\"status\":\"ok\"}".utf8)
+        var respData = Data("{\"status\":\"ok\"}".utf8)
+        if JSONSerialization.isValidJSONObject(resultData), let data = try? JSONSerialization.data(withJSONObject: resultData) {
+            respData = data
+        } else {
+            let safeMap: [String: Any] = [
+                "status": resultData["status"] as? String ?? "ok",
+                "endpoint": resultData["endpoint"] as? String ?? endpoint,
+                "success": (resultData["success"] as? Bool) ?? true
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: safeMap) {
+                respData = data
+            }
+        }
         sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: respData, connection: connection)
     }
 
     private func sendHTTPResponse(status: String, contentType: String, body: Data, connection: NWConnection, cacheSeconds: Int = 0) {
-        var header = "HTTP/1.1 \(status)\r\nContent-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n"
+        var header = "HTTP/1.1 \(status)\r\nContent-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nAccept-Ranges: bytes\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: Range, Content-Type\r\nConnection: close\r\n"
         if cacheSeconds > 0 {
             header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
         } else {
@@ -711,6 +1030,30 @@ public final class WebSocketServer: @unchecked Sendable {
         }))
     }
 
+    private func sendPartialHTTPResponse(contentType: String, rangeStart: Int, rangeEnd: Int, totalLength: Int, body: Data, connection: NWConnection, cacheSeconds: Int = 2592000) {
+        var header = "HTTP/1.1 206 Partial Content\r\nContent-Type: \(contentType)\r\nContent-Range: bytes \(rangeStart)-\(rangeEnd)/\(totalLength)\r\nContent-Length: \(body.count)\r\nAccept-Ranges: bytes\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type\r\n"
+        if cacheSeconds > 0 {
+            header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
+        } else {
+            header += "Cache-Control: no-cache\r\n"
+        }
+        header += "Connection: close\r\n\r\n"
+        var respData = Data(header.utf8)
+        respData.append(body)
+        connection.send(content: respData, completion: .contentProcessed({ [weak connection] _ in
+            connection?.cancel()
+        }))
+    }
+
+    private func sendDefaultArtwork(connection: NWConnection) {
+        if let pngData = loadWebBinaryAsset(subpath: "apple-touch-icon-512.png") ?? loadWebBinaryAsset(subpath: "apple-touch-icon.png") {
+            sendHTTPResponse(status: "200 OK", contentType: "image/png", body: pngData, connection: connection, cacheSeconds: 0)
+        } else {
+            let fallback = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
+            sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(fallback.utf8), connection: connection, cacheSeconds: 0)
+        }
+    }
+
     private func sendCORSPreflight(connection: NWConnection) {
         let header = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak connection] _ in
@@ -718,7 +1061,20 @@ public final class WebSocketServer: @unchecked Sendable {
         }))
     }
 
-    private func loadWebAsset(filename: String) -> String? {
+    private func sendRedirect(location: String, connection: NWConnection, cacheSeconds: Int = 0) {
+        var header = "HTTP/1.1 302 Found\r\nLocation: \(location)\r\nContent-Length: 0\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n"
+        if cacheSeconds > 0 {
+            header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
+        } else {
+            header += "Cache-Control: no-cache, no-store, must-revalidate\r\n"
+        }
+        header += "\r\n"
+        connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak connection] _ in
+            connection?.cancel()
+        }))
+    }
+
+    internal func loadWebAsset(filename: String) -> String? {
         if let resourcePath = Bundle.main.resourcePath {
             let filePath = (resourcePath as NSString).appendingPathComponent("Web/\(filename)")
             if FileManager.default.fileExists(atPath: filePath),
@@ -734,7 +1090,7 @@ public final class WebSocketServer: @unchecked Sendable {
         return nil
     }
 
-    private func loadWebBinaryAsset(subpath: String) -> Data? {
+    internal func loadWebBinaryAsset(subpath: String) -> Data? {
         if let resourcePath = Bundle.main.resourcePath {
             let filePath = (resourcePath as NSString).appendingPathComponent("Web/\(subpath)")
             if FileManager.default.fileExists(atPath: filePath),
@@ -807,20 +1163,16 @@ public final class WebSocketServer: @unchecked Sendable {
         case "next", "next_track":
             let ok = bridge.nextTrack()
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            broadcastStatus(includeQueue: true)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.35) { [weak self] in
-                self?.broadcastStatus(includeQueue: true)
-            }
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            let isRadio = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isRadioPlayback }
+            broadcastStatus(includeQueue: !isRadio)
 
         case "previous", "prev", "previous_track":
             let ok = bridge.previousTrack()
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            broadcastStatus(includeQueue: true)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.35) { [weak self] in
-                self?.broadcastStatus(includeQueue: true)
-            }
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            let isRadio = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isRadioPlayback }
+            broadcastStatus(includeQueue: !isRadio)
 
         case "seek":
             let pos = (params["position"] as? Double) ?? (params["pos"] as? Double) ?? 0
@@ -849,6 +1201,53 @@ public final class WebSocketServer: @unchecked Sendable {
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "volume": volInt], id: id, to: connection)
             broadcastStatus(includeQueue: false)
 
+        case "duck", "activate_ducking":
+            let reduction = (params["reduction"] as? Double) ?? ((params["reduction"] as? NSNumber)?.doubleValue) ?? (params["percent"] as? Double) ?? ((params["percent"] as? NSNumber)?.doubleValue) ?? 80.0
+            let timeout = (params["timeout"] as? Double) ?? ((params["timeout"] as? NSNumber)?.doubleValue) ?? (params["duration"] as? Double) ?? ((params["duration"] as? NSNumber)?.doubleValue)
+            let res = bridge.activateDucking(reductionPercent: reduction, timeout: timeout)
+            sendSuccess(action: action, data: [
+                "status": "ok",
+                "is_ducked": true,
+                "original_volume": res.originalVolume,
+                "ducked_volume": res.duckedVolume,
+                "volume": res.duckedVolume
+            ], id: id, to: connection)
+            broadcastStatus(includeQueue: false)
+
+        case "unduck", "deactivate_ducking":
+            let res = bridge.deactivateDucking()
+            sendSuccess(action: action, data: [
+                "status": "ok",
+                "is_ducked": false,
+                "restored_volume": res.restoredVolume,
+                "volume": res.restoredVolume
+            ], id: id, to: connection)
+            broadcastStatus(includeQueue: false)
+
+        case "set_ducking", "ducking":
+            let enabled = (params["enabled"] as? Bool) ?? (params["active"] as? Bool) ?? true
+            if enabled {
+                let reduction = (params["reduction"] as? Double) ?? ((params["reduction"] as? NSNumber)?.doubleValue) ?? (params["percent"] as? Double) ?? ((params["percent"] as? NSNumber)?.doubleValue) ?? 80.0
+                let timeout = (params["timeout"] as? Double) ?? ((params["timeout"] as? NSNumber)?.doubleValue) ?? (params["duration"] as? Double) ?? ((params["duration"] as? NSNumber)?.doubleValue)
+                let res = bridge.activateDucking(reductionPercent: reduction, timeout: timeout)
+                sendSuccess(action: action, data: [
+                    "status": "ok",
+                    "is_ducked": true,
+                    "original_volume": res.originalVolume,
+                    "ducked_volume": res.duckedVolume,
+                    "volume": res.duckedVolume
+                ], id: id, to: connection)
+            } else {
+                let res = bridge.deactivateDucking()
+                sendSuccess(action: action, data: [
+                    "status": "ok",
+                    "is_ducked": false,
+                    "restored_volume": res.restoredVolume,
+                    "volume": res.restoredVolume
+                ], id: id, to: connection)
+            }
+            broadcastStatus(includeQueue: false)
+
         case "set_shuffle", "shuffle":
             let enabled = (params["enabled"] as? Bool) ?? (params["shuffle"] as? Bool) ?? false
             let ok = bridge.setShuffle(enabled)
@@ -866,11 +1265,35 @@ public final class WebSocketServer: @unchecked Sendable {
             broadcastStatus(includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
 
+        case "set_lock_volume_100", "lock_volume_100":
+            let enabled = (params["enabled"] as? Bool) ?? (params["lock"] as? Bool) ?? (params["lock_volume_100"] as? Bool) ?? true
+            PlaybackStateStore.shared.isVolumeLockedTo100 = enabled
+            if enabled {
+                _ = bridge.setVolume(100)
+            }
+            broadcastStatus(includeQueue: false)
+            sendSuccess(action: action, data: ["status": "ok", "lock_volume_100": enabled], id: id, to: connection)
+
         case "search_and_play":
             let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
             Task {
-                let ok = await bridge.searchAndPlay(query: query)
-                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "query": query], id: id, to: connection)
+                let res = await bridge.searchAndPlayDetailed(query: query)
+                var respData: [String: Any] = [
+                    "status": res.success ? "ok" : "error",
+                    "success": res.success
+                ]
+                if let st = res.station {
+                    respData["station"] = st
+                    respData["mode"] = "random_station"
+                }
+                if let q = res.query {
+                    respData["query"] = q
+                    respData["mode"] = "search"
+                    if let cnt = res.count {
+                        respData["count"] = cnt
+                    }
+                }
+                self.sendSuccess(action: action, data: respData, id: id, to: connection)
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 self.broadcastStatus(includeQueue: true)
             }
@@ -896,7 +1319,7 @@ public final class WebSocketServer: @unchecked Sendable {
             let name = (params["name"] as? String) ?? (params["playlist"] as? String) ?? ""
             Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
-                var tracks = bridge.getPlaylistTracks(name: name)
+                var tracks = name == "Сейчас на повторе" ? bridge.getRecentlyPlayed(limit: 50) : bridge.getPlaylistTracks(name: name)
                 self.sendSuccess(action: action, data: PlaylistTracksResponse(playlist: name, tracks: tracks), id: id, to: connection)
 
                 let hasMissing = tracks.contains { !$0.hasArtwork || $0.artworkUrl.isEmpty }
@@ -936,9 +1359,15 @@ public final class WebSocketServer: @unchecked Sendable {
         case "play_station":
             let url = (params["url"] as? String) ?? ""
             let name = (params["name"] as? String) ?? "Apple Music Radio"
-            let ok = bridge.playStation(url: url, name: name)
-            broadcastStatus(includeQueue: true)
-            sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "station": name], id: id, to: connection)
+            let type = (params["type"] as? String) ?? ""
+            let trackTitle = (params["title"] as? String) ?? (params["track"] as? String) ?? ""
+            let artistName = (params["artist"] as? String) ?? ""
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let ok = await bridge.playStation(url: url, name: name, type: type, trackTitle: trackTitle, artistName: artistName)
+                self.broadcastStatus(includeQueue: true)
+                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "station": name], id: id, to: connection)
+            }
 
         case "play_hero_card":
             let index = (params["index"] as? Int) ?? 0
@@ -989,7 +1418,42 @@ public final class WebSocketServer: @unchecked Sendable {
             let shuffle = (params["shuffle"] as? Bool) ?? false
             let trackIndex = (params["track_index"] as? Int) ?? (params["index"] as? Int) ?? 1
             let startIndex = max(0, trackIndex - 1)
-            let ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, startIndex: startIndex, shuffle: shuffle)
+
+            var customTracks = [TrackInfo]()
+            if let rawTracks = params["tracks"] as? [[String: Any]] {
+                for (idx, item) in rawTracks.enumerated() {
+                    let tid = (item["id"] as? String) ?? "\(idx + 1)"
+                    let numId = (item["numeric_id"] as? Int) ?? (item["numericId"] as? Int)
+                    let tName = (item["name"] as? String) ?? ""
+                    let tArtist = (item["artist"] as? String) ?? artist
+                    let tAlbum = (item["album"] as? String) ?? name
+                    let tUrl = item["url"] as? String
+                    let tArt = (item["artwork_url"] as? String) ?? (item["artwork"] as? String) ?? ""
+                    let isLoc = (item["is_local"] as? Bool) ?? (item["isLocal"] as? Bool) ?? false
+                    let dur = (item["duration"] as? Double) ?? 0.0
+                    customTracks.append(TrackInfo(
+                        id: tid,
+                        numericId: numId,
+                        name: tName,
+                        artist: tArtist,
+                        album: tAlbum,
+                        duration: dur,
+                        hasArtwork: !tArt.isEmpty,
+                        artworkUrl: tArt,
+                        favorited: false,
+                        isLocal: isLoc,
+                        url: tUrl,
+                        index: idx + 1
+                    ))
+                }
+            }
+
+            let ok: Bool
+            if !customTracks.isEmpty {
+                ok = await bridge.playAlbumWithTracks(tracks: customTracks, name: name, artist: artist, startIndex: startIndex, shuffle: shuffle)
+            } else {
+                ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, startIndex: startIndex, shuffle: shuffle)
+            }
             broadcastStatus(includeQueue: true)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "album": name], id: id, to: connection)
 
@@ -1020,14 +1484,17 @@ public final class WebSocketServer: @unchecked Sendable {
                 }
             }
 
-            let ok: Bool
-            if isAlbum && !albumId.isEmpty {
-                ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, shuffle: shuffle)
-            } else {
-                ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId)
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                let ok: Bool
+                if isAlbum && !albumId.isEmpty {
+                    ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, shuffle: shuffle)
+                } else {
+                    ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId)
+                }
+                self.broadcastStatus(includeQueue: true)
+                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
             }
-            broadcastStatus(includeQueue: true)
-            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
 
         case "play_search_results":
             let shuffle = (params["shuffle"] as? Bool) ?? false
@@ -1069,7 +1536,9 @@ public final class WebSocketServer: @unchecked Sendable {
             let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
             let country = (params["country"] as? String) ?? "ru"
             let source = (params["scope"] as? String) ?? (params["source"] as? String) ?? "all"
-            let results = await cloud.search(query: query, country: country, source: source)
+            let limit = (params["limit"] as? Int) ?? 50
+            let offset = (params["offset"] as? Int) ?? 0
+            let results = await cloud.search(query: query, country: country, source: source, limit: limit, offset: offset)
             sendSuccess(action: action, data: results, id: id, to: connection)
 
         case "get_developer_token":
@@ -1396,8 +1865,8 @@ public final class WebSocketServer: @unchecked Sendable {
         }
     }
 
-    public func broadcastStatus(includeQueue: Bool = false) {
-        let status = MusicBridge.shared.getPlayerStatus()
+    public func broadcastStatus(status customStatus: PlayerStatus? = nil, includeQueue: Bool = false) {
+        let status = customStatus ?? MusicBridge.shared.getPlayerStatus()
         clientLock.lock()
         let active = Array(clients.values)
         clientLock.unlock()
@@ -1431,11 +1900,18 @@ public final class WebSocketServer: @unchecked Sendable {
         stopPollerTimer()
 
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
-        timer.schedule(deadline: .now() + 1.0, repeating: 1.0)
+        timer.schedule(deadline: .now() + 3.0, repeating: 3.0)
         timer.setEventHandler { [weak self] in
             guard let self = self else { return }
 
+            // If NO clients connected, do NOT poll Music.app at all!
             let hasClients = self.clientCount > 0
+            guard hasClients else { return }
+
+            // Guard against bombarding Music.app while a track skip is actively buffering
+            if PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.isTransitioningTrack }) {
+                return
+            }
 
             // Auto-advance check for cloud queue
             MusicBridge.shared.checkAndAutoAdvanceCloudQueue()
@@ -1450,16 +1926,14 @@ public final class WebSocketServer: @unchecked Sendable {
             let posJumped = abs(pos - self.lastKnownPosition) > 2.5
             let isPlaying = (state == "playing")
 
-            if stateChanged || trackChanged || posJumped || (hasClients && isPlaying && Date().timeIntervalSince(self.lastBroadcastTime) >= 1.0) {
+            if stateChanged || trackChanged || posJumped || (isPlaying && Date().timeIntervalSince(self.lastBroadcastTime) >= 3.0) {
                 self.lastKnownState = state
                 self.lastKnownPosition = pos
                 if !trackId.isEmpty {
                     self.lastKnownTrackId = trackId
                 }
                 self.lastBroadcastTime = Date()
-                if hasClients || stateChanged || trackChanged {
-                    self.broadcastStatus(includeQueue: trackChanged)
-                }
+                self.broadcastStatus(includeQueue: trackChanged)
             }
         }
         timer.resume()

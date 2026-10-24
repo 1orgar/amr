@@ -31,6 +31,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     public private(set) var currentDetectedBitDepth: Int?
     public private(set) var currentDetectedBitRate: Int?
     public private(set) var currentQualityDescription: String = "44.1 кГц (Lossless)"
+    public private(set) var isFormatLockedForCurrentTrack: Bool = false
 
     public var onFormatChanged: ((Double, Int?, String) -> Void)?
 
@@ -44,7 +45,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     private var debounceWorkItem: DispatchWorkItem?
 
     // Common standard audio sample rates
-    private static let standardRates: [Double] = [
+    public static let standardRates: [Double] = [
         44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0, 352800.0, 384000.0, 705600.0, 768000.0
     ]
 
@@ -76,7 +77,21 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             self.pendingRate = nil
             self.pendingBitDepth = nil
             self.currentDetectedBitDepth = nil
-            NSLog("[BitPerfectLogMonitor] 🔄 Track state reset on track change")
+            self.isFormatLockedForCurrentTrack = false
+            NSLog("[BitPerfectLogMonitor] 🔄 Track state reset on track change (Format lock released)")
+        }
+    }
+
+    public func reportLocalTrackFormat(sampleRate: Double, bitDepth: Int = 16) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.isFormatLockedForCurrentTrack else { return }
+            guard let normalized = self.normalizeRate(sampleRate) else { return }
+            let depth = bitDepth > 0 ? bitDepth : (normalized > 48000.0 ? 24 : 16)
+            self.debounceWorkItem?.cancel()
+            self.debounceWorkItem = nil
+            self.isFormatLockedForCurrentTrack = true
+            self.confirmSampleRate(normalized, bitDepth: depth, reason: "LocalTrackMetadata")
         }
     }
 
@@ -147,6 +162,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             proc.terminationHandler = nil
             if proc.isRunning {
                 proc.terminate()
+                kill(proc.processIdentifier, SIGKILL)
             }
             process = nil
         }
@@ -201,7 +217,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
            let rawRate = Double(message[rateRange]),
            let rate = normalizeRate(rawRate),
            let depth = Int(message[depthRange]) {
-            sampleRateDetected(rate, bitDepth: depth, reason: "ALACDecoder: \(message)")
+            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: true, reason: "ALACDecoder: \(message)")
             return
         }
 
@@ -213,40 +229,40 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
            let rawRate = Double(message[rateRange]),
            let rate = normalizeRate(rawRate),
            let depth = Int(message[depthRange]) {
-            sampleRateDetected(rate, bitDepth: depth, reason: "FigPlaybackReport: \(message)")
+            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: true, reason: "FigPlaybackReport: \(message)")
             return
         }
 
-        // 4. CoreMedia AudioQueue build
+        // 4. CoreMedia AudioQueue build (generic preliminary)
         if let match = Self.audioQueueBuildPattern.firstMatch(in: message, options: [], range: fullRange),
            match.numberOfRanges > 1,
            let rateRange = Range(match.range(at: 1), in: message),
            let rawRate = Double(message[rateRange]),
            let rate = normalizeRate(rawRate) {
             let depth = (rate > 48000.0) ? 24 : 16
-            sampleRateDetected(rate, bitDepth: depth, reason: "subaq_buildCAAudioQueue: \(message)")
+            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: false, reason: "subaq_buildCAAudioQueue: \(message)")
             return
         }
 
-        // 5. CoreMedia AudioQueue startup sync
+        // 5. CoreMedia AudioQueue startup sync (generic preliminary)
         if let match = Self.audioQueueSyncPattern.firstMatch(in: message, options: [], range: fullRange),
            match.numberOfRanges > 1,
            let rateRange = Range(match.range(at: 1), in: message),
            let rawRate = Double(message[rateRange]),
            let rate = normalizeRate(rawRate) {
             let depth = (rate > 48000.0) ? 24 : 16
-            sampleRateDetected(rate, bitDepth: depth, reason: "subaq_performStartupSync: \(message)")
+            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: false, reason: "subaq_performStartupSync: \(message)")
             return
         }
 
-        // 6. Generic decoder (AAC, MP3, etc.)
+        // 6. Generic decoder (AAC, MP3, etc. - preliminary)
         if let match = Self.genericDecoderPattern.firstMatch(in: message, options: [], range: fullRange),
            match.numberOfRanges > 1,
            let rateRange = Range(match.range(at: 1), in: message),
            let rawRate = Double(message[rateRange]),
            let rate = normalizeRate(rawRate) {
             let depth = (rate > 48000.0) ? 24 : 16
-            sampleRateDetected(rate, bitDepth: depth, reason: "GenericDecoder: \(message)")
+            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: false, reason: "GenericDecoder: \(message)")
             return
         }
     }
@@ -310,7 +326,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         options: []
     )
 
-    private func normalizeRate(_ val: Double) -> Double? {
+    public func normalizeRate(_ val: Double) -> Double? {
         guard val > 0 else { return nil }
         var hz = val
         if val < 1000.0 {
@@ -324,17 +340,38 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         return hz
     }
 
+    // MARK: - DAC Reconnect / Device Switch Support
+
+    public func reapplyCurrentFormat() {
+        guard isEnabled, let rate = currentDetectedSampleRate else { return }
+        let bitDepth = currentDetectedBitDepth ?? (rate > 48000.0 ? 24 : 16)
+        NSLog("[BitPerfectLogMonitor] 🔄 Reapplying current format to audio device: %.1f kHz, %d-бит", rate / 1000.0, bitDepth)
+        applyFormat(rate: rate, bitDepth: bitDepth)
+    }
+
     // MARK: - Debounce & Apply
 
-    private func sampleRateDetected(_ rate: Double, bitDepth: Int, reason: String) {
-        // Filter out unreasonable rates
-        guard rate >= 44100.0 && rate <= 768000.0 else { return }
-
-        if pendingRate == rate && pendingBitDepth == bitDepth {
+    private func sampleRateDetected(_ rate: Double, bitDepth: Int, isAuthoritative: Bool, reason: String) {
+        // 1. If format is already locked for the active playing track, ignore logs completely!
+        // This prevents next-track pre-buffering (gapless preloading) from disrupting the current song.
+        if isFormatLockedForCurrentTrack {
             return
         }
 
-        if debounceWorkItem == nil && currentDetectedSampleRate == rate && currentDetectedBitDepth == bitDepth {
+        // Filter out unreasonable rates
+        guard rate >= 44100.0 && rate <= 768000.0 else { return }
+
+        // 2. Authoritative ALAC / Fig report: lock track format immediately and apply!
+        if isAuthoritative {
+            debounceWorkItem?.cancel()
+            debounceWorkItem = nil
+            isFormatLockedForCurrentTrack = true
+            confirmSampleRate(rate, bitDepth: bitDepth, reason: reason)
+            return
+        }
+
+        // 3. Preliminary / fallback logs: debounce for 0.6s to allow authoritative decoder to arrive first
+        if pendingRate == rate && pendingBitDepth == bitDepth {
             return
         }
 
@@ -344,10 +381,12 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         debounceWorkItem?.cancel()
         let item = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
+            guard !self.isFormatLockedForCurrentTrack else { return }
+            self.isFormatLockedForCurrentTrack = true
             self.confirmSampleRate(rate, bitDepth: bitDepth, reason: reason)
         }
         debounceWorkItem = item
-        queue.asyncAfter(deadline: .now() + 0.25, execute: item)
+        queue.asyncAfter(deadline: .now() + 0.6, execute: item)
     }
 
     private func confirmSampleRate(_ rate: Double, bitDepth: Int, reason: String) {
@@ -376,7 +415,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         CoreAudioDeviceManager.shared.setFormat(sampleRate: rate, bitDepth: bitDepth)
     }
 
-    private func formatQualityString(rate: Double, bitDepth: Int) -> String {
+    public func formatQualityString(rate: Double, bitDepth: Int) -> String {
         let khz = rate / 1000.0
         let khzStr = (khz.truncatingRemainder(dividingBy: 1) == 0) ? String(format: "%.0f", khz) : String(format: "%.1f", khz)
 

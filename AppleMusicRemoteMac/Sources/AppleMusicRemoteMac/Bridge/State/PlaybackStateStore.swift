@@ -32,6 +32,8 @@ public final class PlaybackStateStore: @unchecked Sendable {
     // Cloud / Auto-Advance Tracking
     public var lastWasPlayingCloud: Bool = false
     public var lastCloudPlayTime: Date?
+    public var currentTrackPlaybackConfirmed: Bool = false
+    public var hasTriggeredAdvanceForCurrentTrack: Bool = false
 
     // Cached History & Upcoming
     public var latestHistoryTracks: [TrackInfo] = []
@@ -41,10 +43,29 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public var seekTargetPosition: Double?
     public var seekTargetDate: Date = .distantPast
 
+    // Track Skip & Stream Transition Debounce
+    public var lastSkipTime: Date = .distantPast
+    public var isTransitioningTrack: Bool {
+        Date().timeIntervalSince(lastSkipTime) < 1.2
+    }
+
     // Status & Queue Caches
     public var lastPlayerStatusCache: (timestamp: Date, status: PlayerStatus)?
     public var playbackQueueCache: (timestamp: Date, info: PlaybackQueueInfo)?
     public var trackMetadataCache: [Int: (name: String, artist: String, album: String)] = [:]
+
+    // Volume Lock State (Bit-Perfect 100% volume mode)
+    public var isVolumeLockedTo100: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: "LockVolume100") == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: "LockVolume100")
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "LockVolume100")
+        }
+    }
 
     private init() {}
 
@@ -56,9 +77,15 @@ public final class PlaybackStateStore: @unchecked Sendable {
         return block()
     }
 
-    public func invalidateStatusCache() {
+    public func invalidateStatusCache(optimisticState: String? = nil) {
         lock.lock()
-        lastPlayerStatusCache = nil
+        if let opt = optimisticState, let current = lastPlayerStatusCache {
+            var updatedStatus = current.status
+            updatedStatus.playerState = opt
+            lastPlayerStatusCache = (timestamp: Date.distantPast, status: updatedStatus)
+        } else {
+            lastPlayerStatusCache = nil
+        }
         lock.unlock()
     }
 
@@ -91,6 +118,24 @@ public final class PlaybackStateStore: @unchecked Sendable {
         isCustomQueuePlayback = false
         activeCustomQueue.removeAll()
         activeCustomQueueName = nil
+        currentTrackPlaybackConfirmed = false
+        hasTriggeredAdvanceForCurrentTrack = false
+        lastWasPlayingCloud = false
+        lastCloudPlayTime = nil
+    }
+
+    public func resetCustomQueue() {
+        lock.lock()
+        defer { lock.unlock() }
+        isCustomQueuePlayback = false
+        activeCustomQueue.removeAll()
+        activeCustomQueueIndex = 0
+        activeCustomQueueName = nil
+        playbackQueueCache = nil
+        currentTrackPlaybackConfirmed = false
+        hasTriggeredAdvanceForCurrentTrack = false
+        lastWasPlayingCloud = false
+        lastCloudPlayTime = nil
     }
 
     public func setSeekTarget(position: Double) {

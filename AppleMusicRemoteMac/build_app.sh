@@ -33,6 +33,8 @@ swiftc -parse-as-library \
     -framework CoreImage \
     -framework CoreAudio \
     -framework CryptoKit \
+    -framework ServiceManagement \
+    "$DIR/Sources/AppleMusicRemoteMac/System/LaunchAtLoginManager.swift" \
     "$DIR/Sources/AppleMusicRemoteMac/Models/Models.swift" \
     "$DIR/Sources/AppleMusicRemoteMac/CoreAudio/CoreAudioDeviceManager.swift" \
     "$DIR/Sources/AppleMusicRemoteMac/CoreAudio/BitPerfectLogMonitor.swift" \
@@ -41,6 +43,7 @@ swiftc -parse-as-library \
     "$DIR/Sources/AppleMusicRemoteMac/Bridge/Protocols/MusicScriptingBridge.swift" \
     "$DIR/Sources/AppleMusicRemoteMac/Bridge/Execution/AppleScriptExecutor.swift" \
     "$DIR/Sources/AppleMusicRemoteMac/Bridge/Audio/AudioQualityDetector.swift" \
+    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Audio/AudioDuckingController.swift" \
     "$DIR/Sources/AppleMusicRemoteMac/Bridge/Artwork/ArtworkService.swift" \
     "$DIR/Sources/AppleMusicRemoteMac/Bridge/State/PlaybackStateStore.swift" \
     "$DIR/Sources/AppleMusicRemoteMac/Bridge/Transport/PlaybackTransportController.swift" \

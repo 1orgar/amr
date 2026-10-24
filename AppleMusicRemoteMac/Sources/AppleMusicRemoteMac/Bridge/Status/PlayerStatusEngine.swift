@@ -2,17 +2,17 @@
 //  PlayerStatusEngine.swift
 //  AppleMusicRemoteMac
 //
-//  Aggregates player status from Music.app ScriptingBridge, active custom queues,
+//  Aggregates player status from Music.app via atomic AppleScript queries, active custom queues,
 //  radio playback, optimistic seek compensation, and real-time audio quality.
 //
 
 import Foundation
-import ScriptingBridge
 
 public final class PlayerStatusEngine: @unchecked Sendable {
     public static let shared = PlayerStatusEngine()
 
     private let statusLock = NSLock()
+    private var lastTrackSignature: String?
 
     private init() {}
 
@@ -38,20 +38,76 @@ public final class PlayerStatusEngine: @unchecked Sendable {
     }
 
     public func getPlayerStatus() -> PlayerStatus {
-        let cached = PlaybackStateStore.shared.withLock {
-            PlaybackStateStore.shared.lastPlayerStatusCache
+        var status = computePlayerStatus()
+        status.isDucked = AudioDuckingController.shared.isDucked
+        status.isVolumeLockedTo100 = PlaybackStateStore.shared.isVolumeLockedTo100
+        return status
+    }
+
+    private func computePlayerStatus() -> PlayerStatus {
+        let (cached, isTransitioning) = PlaybackStateStore.shared.withLock {
+            (PlaybackStateStore.shared.lastPlayerStatusCache, PlaybackStateStore.shared.isTransitioningTrack)
         }
-        if let cached = cached, Date().timeIntervalSince(cached.timestamp) < 0.25 {
-            return cached.status
+        let cacheMaxAge = isTransitioning ? 0.8 : 1.2
+        if let cached = cached {
+            let age = Date().timeIntervalSince(cached.timestamp)
+            if age < cacheMaxAge {
+                var status = cached.status
+                if status.playerState == "playing" {
+                    let optimisticPos = status.position + age
+                    status.position = status.duration > 0 ? min(optimisticPos, status.duration) : optimisticPos
+                }
+                return status
+            }
         }
 
-        guard statusLock.lock(before: Date().addingTimeInterval(1.0)) else {
+        guard statusLock.lock(before: Date().addingTimeInterval(0.4)) else {
             if let cached = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache }) {
-                return cached.status
+                let age = Date().timeIntervalSince(cached.timestamp)
+                var status = cached.status
+                if status.playerState == "playing" {
+                    let optimisticPos = status.position + age
+                    status.position = status.duration > 0 ? min(optimisticPos, status.duration) : optimisticPos
+                }
+                return status
             }
             return PlayerStatus()
         }
         defer { statusLock.unlock() }
+
+        // Double check cache after lock
+        if let cached = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache }) {
+            let age = Date().timeIntervalSince(cached.timestamp)
+            if age < 0.3 {
+                var status = cached.status
+                if status.playerState == "playing" {
+                    let optimisticPos = status.position + age
+                    status.position = status.duration > 0 ? min(optimisticPos, status.duration) : optimisticPos
+                }
+                return status
+            }
+        }
+
+        // Fast path: if Music.app is closed, avoid running AppleScript or triggering app launch
+        if !MusicAppProvider.shared.isMusicAppRunning {
+            let stoppedStatus = PlayerStatus(
+                playerState: "stopped",
+                position: 0,
+                duration: 0,
+                volume: 50,
+                shuffle: false,
+                repeatMode: "off",
+                playlist: "Музыка",
+                isRadio: false,
+                audioQuality: "Lossless (Остановлен)",
+                isMusicAppRunning: false,
+                track: nil
+            )
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.lastPlayerStatusCache = (Date(), stoppedStatus)
+            }
+            return stoppedStatus
+        }
 
         let (isRadio, stationName, isCustom, customQueue, customIndex, customName, isShufActive, origPl) = PlaybackStateStore.shared.withLock {
             (
@@ -66,39 +122,214 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             )
         }
 
-        guard let app = MusicAppProvider.shared.getMusicApp() else {
+        let script = """
+        tell application "Music"
+            try
+                with timeout of 2.5 seconds
+                    set pState to (player state as string)
+                    set pVol to 100
+                    try
+                        set pVol to sound volume
+                    end try
+                    if pState is "stopped" then
+                        return "stopped||0||" & pVol & "||0||||||||0||false||off||false||||||0||0||false"
+                    end if
+                    set pPos to 0
+                    try
+                        set pPos to player position
+                    end try
+                    set shuf to false
+                    try
+                        set shuf to (shuffle enabled as boolean)
+                    end try
+                    set sRep to "off"
+                    try
+                        set sRep to (song repeat as string)
+                    end try
+                    set plName to ""
+                    try
+                        set curPl to current playlist
+                        if curPl is not missing value then
+                            set plName to (name of curPl as string)
+                        end if
+                    end try
+                    set ct to missing value
+                    try
+                        set ct to current track
+                    end try
+                    if ct is not missing value then
+                        set dur to 0
+                        try
+                            set dur to (duration of ct as real)
+                        end try
+                        set nm to ""
+                        try
+                            set nm to (name of ct as string)
+                        end try
+                        set art to ""
+                        try
+                            set art to (artist of ct as string)
+                        end try
+                        set alb to ""
+                        try
+                            set alb to (album of ct as string)
+                        end try
+                        set dbid to 0
+                        try
+                            set dbid to (database ID of ct as integer)
+                        end try
+                        set hasLoc to false
+                        try
+                            if (class of ct as string) is "file track" then
+                                set hasLoc to true
+                            end if
+                        end try
+                        set knd to ""
+                        set br to 0
+                        set sr to 0
+                        try
+                            set knd to (kind of ct as string)
+                            set br to (bit rate of ct as integer)
+                            set sr to (sample rate of ct as integer)
+                        end try
+                        set isFav to false
+                        try
+                            set isFav to (favorited of ct as boolean)
+                        end try
+                        return pState & "||" & pPos & "||" & pVol & "||" & dur & "||" & nm & "||" & art & "||" & alb & "||" & dbid & "||" & shuf & "||" & sRep & "||" & hasLoc & "||" & plName & "||" & knd & "||" & br & "||" & sr & "||" & isFav
+                    end if
+                    return pState & "||" & pPos & "||" & pVol & "||0||||||||0||" & shuf & "||" & sRep & "||false||" & plName & "||||0||0||false"
+                end timeout
+            on error
+                return "error"
+            end try
+        end tell
+        """
+
+        var (ok, rawOut) = AppleScriptExecutor.shared.execute(script)
+        if !ok || rawOut == nil || rawOut?.isEmpty == true || rawOut == "error" {
+            Thread.sleep(forTimeInterval: 0.05)
+            (ok, rawOut) = AppleScriptExecutor.shared.execute(script)
+        }
+        guard ok, let out = rawOut, !out.isEmpty, out != "error" else {
+            if let cached = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache }) {
+                return cached.status
+            }
             return PlayerStatus()
         }
 
+        let parts = out.components(separatedBy: "||")
+        guard parts.count >= 12 else {
+            if let cached = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache }) {
+                return cached.status
+            }
+            return PlayerStatus()
+        }
+
+        let rawState = parts[0].lowercased()
+        let stateStr = (rawState == "playing") ? "playing" : ((rawState == "paused") ? "paused" : "stopped")
+        let rawPosStr = parts[1].replacingOccurrences(of: ",", with: ".")
+        let rawPos = Double(rawPosStr) ?? 0.0
+        let vol = Int(parts[2]) ?? 100
+        let rawDurStr = parts[3].replacingOccurrences(of: ",", with: ".")
+        var dur = Double(rawDurStr) ?? 0.0
+        var tName = parts[4]
+        var tArtist = parts[5]
+        var tAlbum = parts[6]
+        let dbId = Int(parts[7]) ?? 0
+        let shuf = (parts[8].lowercased() == "true") || isShufActive
+        let repMode = parts[9]
+        let hasLoc = (parts[10].lowercased() == "true")
+        let curPlNameRaw = parts[11]
+
+        let knd = parts.count > 12 ? parts[12] : ""
+        let bRate = parts.count > 13 ? (Int(parts[13]) ?? 0) : 0
+        let sRate = parts.count > 14 ? (Int(parts[14]) ?? 0) : 0
+        let isFavorited = parts.count > 15 ? (parts[15].lowercased() == "true") : false
+
+        let currentTrackSig = "\(stateStr):\(dbId):\(tName):\(tArtist)"
+        if let lastSig = lastTrackSignature, lastSig != currentTrackSig {
+            if !tName.isEmpty && stateStr == "playing" {
+                NSLog("[PlayerStatusEngine] 🎵 Track changed to '%@' (Natural progression) - resetting Bit-Perfect lock", currentTrackSig)
+                BitPerfectLogMonitor.shared.resetTrackState()
+            } else if stateStr == "stopped" && !lastSig.starts(with: "stopped") {
+                BitPerfectLogMonitor.shared.resetTrackState()
+            }
+        }
+        lastTrackSignature = currentTrackSig
+
+        let isStreamTrack = (!hasLoc && !tName.isEmpty)
+        var isRadioDetected = isRadio
+        if !curPlNameRaw.isEmpty && curPlNameRaw != "Музыка" && curPlNameRaw != "Music" && curPlNameRaw != "Медиатека" {
+            isRadioDetected = false
+            if isRadio {
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.isRadioPlayback = false
+                    PlaybackStateStore.shared.activeStationName = nil
+                }
+            }
+        } else if let orig = origPl, !orig.isEmpty {
+            isRadioDetected = false
+            if isRadio {
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.isRadioPlayback = false
+                    PlaybackStateStore.shared.activeStationName = nil
+                }
+            }
+        } else if isStreamTrack && curPlNameRaw.isEmpty {
+            isRadioDetected = true
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.isRadioPlayback = true
+            }
+        }
+
+        let pos = computeOptimisticPosition(rawPosition: rawPos, isPlaying: (stateStr == "playing"), duration: dur)
+
         // 1. Radio / Station Playback Mode
-        if isRadio {
-            let pState = app.playerState
-            let stateStr = (pState == .playing) ? "playing" : ((pState == .paused) ? "paused" : "stopped")
-            let curTrack = app.currentTrack
-            let tName = (curTrack?.value(forKey: "name") as? String) ?? (stationName ?? "Apple Music Radio")
-            let tArtist = (curTrack?.value(forKey: "artist") as? String) ?? "Apple Music"
-            let tAlbum = (curTrack?.value(forKey: "album") as? String) ?? ""
-            let dur = (curTrack?.value(forKey: "duration") as? Double) ?? 0
-            let pos = computeOptimisticPosition(rawPosition: app.playerPosition, isPlaying: (pState == .playing), duration: dur)
+        if isRadioDetected {
+            let radName = tName.isEmpty ? (stationName ?? "Apple Music Radio") : tName
+            let radArtist = tArtist.isEmpty ? "Apple Music" : tArtist
+
+            if dbId > 0 && !tName.isEmpty {
+                PlaybackStateStore.shared.setTrackMetadata(id: dbId, name: tName, artist: tArtist, album: tAlbum)
+            }
 
             var hasArt = false
-            if let arts = curTrack?.value(forKey: "artworks") as? SBElementArray, arts.count > 0 {
+            var artUrl = ""
+
+            let checkName = radName.lowercased()
+            if checkName.contains("моя станция") {
+                artUrl = "/assets/stations/CoverPersonal.png"
+                hasArt = true
+            } else if checkName.contains("станция открытий") {
+                artUrl = "/assets/stations/CoverDiscovery.png"
+                hasArt = true
+            } else if checkName.contains("сейчас на повторе") {
+                artUrl = "/assets/stations/CoverHeavyRotation.svg"
+                hasArt = true
+            } else if checkName.contains("apple music 1") {
+                artUrl = "/assets/stations/CoverAppleMusic1.png"
                 hasArt = true
             }
 
-            let dbId = (curTrack?.value(forKey: "databaseID") as? Int) ?? 0
-            var artUrl = hasArt ? (dbId > 0 ? "/api/artwork/track?id=\(dbId)" : "/api/artwork") : ""
-            if artUrl.isEmpty {
-                if let local = ArtworkService.shared.findLocalTrackArtwork(name: tName, artist: tArtist) {
-                    artUrl = local
-                    hasArt = true
-                } else if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
+            if artUrl.isEmpty && !radName.isEmpty {
+                if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: radName, artist: radArtist, album: tAlbum), !cached.isEmpty {
                     artUrl = cached
                     hasArt = true
+                } else if let local = ArtworkService.shared.findLocalTrackArtwork(name: radName, artist: radArtist) {
+                    artUrl = local
+                    hasArt = true
                 } else {
-                    Task.detached(priority: .utility) {
-                        if let fetched = await MusicKitManager.shared.searchTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !fetched.isEmpty {
-                            WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                    let encName = radName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    let encArtist = radArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    let encAlbum = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    artUrl = "/api/artwork/search?name=\(encName)&artist=\(encArtist)&album=\(encAlbum)"
+                    hasArt = true
+                    Task.detached(priority: .userInitiated) {
+                        if let fetched = await MusicKitManager.shared.searchTrackArtwork(name: radName, artist: radArtist, album: tAlbum), !fetched.isEmpty {
+                            if !PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.isTransitioningTrack }) {
+                                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                            }
                         }
                     }
                 }
@@ -107,13 +338,13 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             let track = TrackInfo(
                 id: "\(dbId)",
                 numericId: dbId,
-                name: tName,
-                artist: tArtist,
+                name: radName,
+                artist: radArtist,
                 album: tAlbum,
                 duration: dur > 0 ? dur : 0,
                 hasArtwork: hasArt,
                 artworkUrl: artUrl,
-                favorited: false,
+                favorited: isFavorited,
                 isLocal: false
             )
 
@@ -121,7 +352,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 playerState: stateStr,
                 position: pos,
                 duration: dur > 0 ? dur : 0,
-                volume: app.soundVolume,
+                volume: vol,
                 shuffle: false,
                 repeatMode: "off",
                 playlist: stationName ?? "Apple Music Radio",
@@ -136,18 +367,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             return status
         }
 
-        // 2. Standard or Custom Queue Playback
-        let pState = app.playerState
-        var stateStr = "stopped"
-        switch pState {
-        case .playing: stateStr = "playing"
-        case .paused: stateStr = "paused"
-        case .fastForwarding: stateStr = "fast forwarding"
-        case .rewinding: stateStr = "rewinding"
-        default: stateStr = "stopped"
-        }
-
-        if pState == .stopped {
+        // 2. Stopped state handling
+        if stateStr == "stopped" {
             if isCustom && customIndex < customQueue.count {
                 let qTrack = customQueue[customIndex]
                 let artUrl = qTrack.artworkUrl
@@ -155,8 +376,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                     playerState: "stopped",
                     position: 0,
                     duration: qTrack.duration,
-                    volume: app.soundVolume,
-                    shuffle: app.shuffleEnabled,
+                    volume: vol,
+                    shuffle: shuf,
                     repeatMode: "off",
                     playlist: customName ?? "Очередь",
                     isRadio: false,
@@ -183,8 +404,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 playerState: stateStr,
                 position: 0,
                 duration: 0,
-                volume: app.soundVolume,
-                shuffle: app.shuffleEnabled,
+                volume: vol,
+                shuffle: shuf,
                 repeatMode: "off",
                 playlist: "Музыка",
                 isRadio: false,
@@ -197,16 +418,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             return status
         }
 
-        let curTrack = app.currentTrack
-        var tName = (curTrack?.value(forKey: "name") as? String) ?? ""
-        var tArtist = (curTrack?.value(forKey: "artist") as? String) ?? ""
-        var tAlbum = (curTrack?.value(forKey: "album") as? String) ?? ""
-        var dur = (curTrack?.value(forKey: "duration") as? Double) ?? 0
-        let pos = computeOptimisticPosition(rawPosition: app.playerPosition, isPlaying: (pState == .playing), duration: dur)
-        let vol = app.soundVolume
-        let shuf = isShufActive || app.shuffleEnabled
-
-        // Enrich with active custom queue if track is numeric stream or empty
+        // 3. Enrich with active custom queue if track is numeric stream or empty
         if isCustom && customIndex < customQueue.count {
             let curQueueTrack = customQueue[customIndex]
             let isNumeric = !tName.isEmpty && tName.allSatisfy { $0.isNumber }
@@ -218,55 +430,49 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             }
         }
 
-        var repMode = "off"
-        let r = app.songRepeat
-        switch r {
-        case .one: repMode = "one"
-        case .all: repMode = "all"
-        default: repMode = "off"
-        }
-
-        var hasArt = false
-        var isFavorited = false
-        if let arts = curTrack?.value(forKey: "artworks") as? SBElementArray, arts.count > 0 {
-            hasArt = true
-        }
-        if let fav = curTrack?.value(forKey: "favorited") as? Bool, fav {
-            isFavorited = true
-        }
-
         var currentPlName = "Музыка"
         if isCustom, let qn = customName, !qn.isEmpty {
             currentPlName = qn
-        } else if let pName = app.currentPlaylist?.value(forKey: "name") as? String, !pName.isEmpty {
-            if pName == "Очередь AMR" {
+        } else if !curPlNameRaw.isEmpty && curPlNameRaw != "Музыка" && curPlNameRaw != "Music" && curPlNameRaw != "Медиатека" {
+            if curPlNameRaw == "Очередь AMR" {
                 currentPlName = origPl ?? "Очередь"
             } else {
-                currentPlName = pName
+                currentPlName = curPlNameRaw
             }
+        } else if let orig = origPl, !orig.isEmpty {
+            currentPlName = orig
         }
 
         var trackObj: TrackInfo? = nil
-        let dbId = (curTrack?.value(forKey: "databaseID") as? Int) ?? 0
+        if dbId > 0 && !tName.isEmpty {
+            PlaybackStateStore.shared.setTrackMetadata(id: dbId, name: tName, artist: tArtist, album: tAlbum)
+        }
+
         if !tName.isEmpty {
-            var artUrl = hasArt ? (dbId > 0 ? "/api/artwork/track?id=\(dbId)" : "/api/artwork") : ""
+            let encName = tName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let encArtist = tArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let encAlbum = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            var artUrl = ""
+
+            if hasLoc && dbId > 0 {
+                artUrl = "/api/artwork/track?id=\(dbId)&name=\(encName)&artist=\(encArtist)&album=\(encAlbum)"
+            }
+
             if artUrl.isEmpty && isCustom && customIndex < customQueue.count {
                 let customArt = customQueue[customIndex].artworkUrl
                 if !customArt.isEmpty {
                     artUrl = customArt
-                    hasArt = true
                 }
             }
             if artUrl.isEmpty {
-                if let local = ArtworkService.shared.findLocalTrackArtwork(name: tName, artist: tArtist) {
-                    artUrl = local
-                    hasArt = true
-                } else if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
+                if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
                     artUrl = cached
-                    hasArt = true
+                } else if let local = ArtworkService.shared.findLocalTrackArtwork(name: tName, artist: tArtist) {
+                    artUrl = local
                 } else {
-                    Task.detached(priority: .utility) {
-                        if let fetched = await MusicKitManager.shared.searchTrackArtwork(name: tName, artist: tArtist), !fetched.isEmpty {
+                    artUrl = "/api/artwork/search?name=\(encName)&artist=\(encArtist)&album=\(encAlbum)"
+                    Task.detached(priority: .userInitiated) {
+                        if let fetched = await MusicKitManager.shared.searchTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !fetched.isEmpty {
                             WebSocketServer.shared.broadcastStatus(includeQueue: false)
                         }
                     }
@@ -279,19 +485,19 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 artist: tArtist,
                 album: tAlbum,
                 duration: dur,
-                hasArtwork: hasArt,
+                hasArtwork: !artUrl.isEmpty,
                 artworkUrl: artUrl,
                 favorited: isFavorited,
-                isLocal: !isCustom
+                isLocal: hasLoc
             )
         }
 
         var curQuality = "AAC (256 kbps)"
-        if let ct = curTrack {
-            let bRate = ct.sbBitRate
-            let sRate = ct.sbSampleRate
-            let knd = ct.sbKind
+        if hasLoc {
             curQuality = AudioQualityDetector.determineAudioQuality(kind: knd, bitRate: bRate, sampleRate: sRate)
+            if stateStr == "playing" && sRate > 0 && BitPerfectLogMonitor.shared.isEnabled {
+                BitPerfectLogMonitor.shared.reportLocalTrackFormat(sampleRate: Double(sRate), bitDepth: sRate > 48000 ? 24 : 16)
+            }
         }
 
         if BitPerfectLogMonitor.shared.isEnabled, let rate = BitPerfectLogMonitor.shared.currentDetectedSampleRate {

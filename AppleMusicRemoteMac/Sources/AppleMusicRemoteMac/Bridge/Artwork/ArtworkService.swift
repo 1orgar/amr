@@ -60,6 +60,11 @@ public final class ArtworkService: @unchecked Sendable {
 
     private func getCurrentTrackArtworkUnlocked() -> Data? {
         guard let app = MusicAppProvider.shared.getMusicApp(), let curTrack = app.currentTrack else { return nil }
+        // Cloud / streaming track:
+        // On macOS Music.app, if a track is not a local file (location == nil),
+        // curTrack.sbArtworks retains the ghost artwork from previous tracks.
+        guard curTrack.value(forKey: "location") != nil else { return nil }
+
         if let artworks = curTrack.sbArtworks, let firstArt = artworks.firstObject as? SBObject {
             if let desc = firstArt.value(forKey: "data") as? NSAppleEventDescriptor {
                 let d = desc.data
@@ -85,6 +90,20 @@ public final class ArtworkService: @unchecked Sendable {
         return nil
     }
 
+    public func clearTrackArtworkCache(id: Int? = nil) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let id = id {
+            artworkCache.removeObject(forKey: "track_\(id)" as NSString)
+            negativeArtworkIds.remove(id)
+        } else {
+            artworkCache.removeAllObjects()
+            negativeArtworkIds.removeAll()
+            cachedCurArtworkKey = ""
+            cachedCurArtworkUri = ""
+        }
+    }
+
     public func getCachedTrackArtwork(id: Int) -> Data? {
         guard id > 0 else { return nil }
         let cacheKey = "track_\(id)" as NSString
@@ -95,6 +114,25 @@ public final class ArtworkService: @unchecked Sendable {
 
     public func getTrackArtwork(id: Int) -> Data? {
         guard id > 0 else { return nil }
+
+        let cacheKey = "track_\(id)" as NSString
+        if let cached = artworkCache.object(forKey: cacheKey) as Data? {
+            return cached
+        }
+
+        // Fast path 1: Check if requested id matches currently playing track (must be local file track)
+        if let app = MusicAppProvider.shared.getMusicApp(), let curTrack = app.currentTrack {
+            if let curId = curTrack.value(forKey: "databaseID") as? Int, curId == id {
+                if curTrack.value(forKey: "location") != nil, let d = getCurrentTrackArtwork() {
+                    lock.lock()
+                    negativeArtworkIds.remove(id)
+                    lock.unlock()
+                    artworkCache.setObject(d as NSData, forKey: cacheKey)
+                    return d
+                }
+            }
+        }
+
         lock.lock()
         if negativeArtworkIds.contains(id) {
             lock.unlock()
@@ -102,79 +140,30 @@ public final class ArtworkService: @unchecked Sendable {
         }
         lock.unlock()
 
-        let cacheKey = "track_\(id)" as NSString
-        if let cached = artworkCache.object(forKey: cacheKey) as Data? {
-            return cached
-        }
-
-        // Fast path 1: Check if requested id matches currently playing track
-        if let app = MusicAppProvider.shared.getMusicApp(), let curTrack = app.currentTrack {
-            if let curId = curTrack.value(forKey: "databaseID") as? Int, curId == id {
-                if let d = getCurrentTrackArtwork() {
-                    artworkCache.setObject(d as NSData, forKey: cacheKey)
-                    return d
-                }
-            }
-        }
-
-        let origPl = PlaybackStateStore.shared.withLock {
-            PlaybackStateStore.shared.currentOriginalPlaylistName ?? ""
-        }
-        let escapedPlName = origPl.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-
+        // Fast path 2: Retrieve embedded track artwork from Music.app via indexed database ID lookup
         let script = """
         tell application "Music"
-            with timeout of 2 seconds
-                try
-                    set qPl to user playlist "Очередь AMR"
-                    set t to (first track of qPl whose database ID is \(id))
+            try
+                with timeout of 1.5 seconds
+                    set t to (first track of library playlist 1 whose database ID is \(id))
                     if (count of artworks of t) > 0 then
                         return raw data of artwork 1 of t
                     end if
-                end try
-                try
-                    if current playlist is not missing value then
-                        set t to (first track of current playlist whose database ID is \(id))
-                        if (count of artworks of t) > 0 then
-                            return raw data of artwork 1 of t
-                        end if
-                    end if
-                end try
-                if "\(escapedPlName)" is not "" then
-                    try
-                        set p to playlist "\(escapedPlName)"
-                        set t to (first track of p whose database ID is \(id))
-                        if (count of artworks of t) > 0 then
-                            return raw data of artwork 1 of t
-                        end if
-                    end try
-                end if
-                try
-                    set t to (first track whose database ID is \(id))
-                    if (count of artworks of t) > 0 then
-                        return raw data of artwork 1 of t
-                    end if
-                end try
-                return missing value
-            end timeout
+                end timeout
+            end try
+            return missing value
         end tell
         """
-
-        guard let desc = AppleScriptExecutor.shared.executeDescriptor(script), desc.descriptorType != typeNull else {
-            lock.lock()
-            negativeArtworkIds.insert(id)
-            lock.unlock()
-            return nil
-        }
-        let d = desc.data
-        if !d.isEmpty, let img = NSImage(data: d) {
-            if let jpeg = jpegData(from: img, maxDimension: 400) {
+        if let desc = AppleScriptExecutor.shared.executeDescriptor(script), !desc.data.isEmpty {
+            let d = desc.data
+            if let img = NSImage(data: d), let jpeg = jpegData(from: img, maxDimension: 600) {
                 artworkCache.setObject(jpeg as NSData, forKey: cacheKey)
                 return jpeg
             }
             artworkCache.setObject(d as NSData, forKey: cacheKey)
             return d
         }
+
         lock.lock()
         negativeArtworkIds.insert(id)
         lock.unlock()

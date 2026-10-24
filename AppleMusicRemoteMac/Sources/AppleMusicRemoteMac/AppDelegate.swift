@@ -46,7 +46,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
             MenuManager.shared.updateMenuState()
         }
 
-
+        // 5. Observe System Sleep / Wake to restore network listeners & multicast discovery
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
+            NSLog("[AppDelegate] ☀️ System woke from sleep. Restoring SSDP multicast and UPnP...")
+            SSDPService.shared.restart()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                UPnPMediaRendererServer.shared.notifySubscribers(force: true)
+                WebSocketServer.shared.broadcastStatus(includeQueue: true)
+            }
+        }
 
         NSLog("[AppDelegate] Apple Music Remote initialized successfully.")
     }

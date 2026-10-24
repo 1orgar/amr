@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    name: Build Universal DMG & Publish Release
+    runs-on: macos-14
+    timeout-minutes: 25
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcrun swift --version
+
+      - name: Run Swift Unit Tests (Blocking)
+        run: |
+          xcrun swift test --package-path AppleMusicRemoteMac
+
+      - name: Build Universal DMG (Intel x86_64 + Apple Silicon arm64)
+        run: |
+          chmod +x ./build_universal_dmg.sh
+          ./build_universal_dmg.sh
+          shasum -a 256 AppleMusicRemoteMac-Universal.dmg > AppleMusicRemoteMac-Universal.dmg.sha256
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            AppleMusicRemoteMac-Universal.dmg
+            AppleMusicRemoteMac-Universal.dmg.sha256
+          draft: false
+          prerelease: false
+          generate_release_notes: true

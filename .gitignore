@@ -31,5 +31,19 @@ scratch/
 *.tmp
 *.log
 
-# Sensitive Keys (Security)
+# Sensitive Keys & Credentials (Security)
 AuthKey_*.p8
+*.pem
+*.key
+*.p12
+
+# Release artifacts & packages
+*.dmg
+*.zip
+*.tar.gz
+node_modules/
+package-lock.json
+
+# Tooling & indexes
+.codegraph/
+.gemini/

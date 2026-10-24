@@ -13,10 +13,16 @@ import CoreAudio
 public final class SettingsWindow: NSWindowController {
     public static let shared = SettingsWindow()
 
+    // UI Elements - System & Autonomy
+    private var launchAtLoginCheckbox: NSButton!
+    private var musicAppStatusLabel: NSTextField!
+    private var launchMusicButton: NSButton!
+
     // UI Elements - Audio
     private var devicePopUp: NSPopUpButton!
     private var sampleRatePopUp: NSPopUpButton!
     private var bitPerfectCheckbox: NSButton!
+    private var lockVolume100Checkbox: NSButton!
     private var streamQualityLabel: NSTextField!
 
     // UI Elements - UPnP
@@ -32,7 +38,7 @@ public final class SettingsWindow: NSWindowController {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 530),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 600),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -68,6 +74,31 @@ public final class SettingsWindow: NSWindowController {
         container.spacing = 18
         container.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 24, right: 24)
         container.translatesAutoresizingMaskIntoConstraints = false
+
+        // --- 0. System & Autonomy Section ---
+        let systemSectionHeader = makeSectionHeader("⚙️ Автономность и система")
+        container.addArrangedSubview(systemSectionHeader)
+
+        launchAtLoginCheckbox = NSButton(
+            checkboxWithTitle: "Запускать Apple Music Remote при входе в систему",
+            target: self,
+            action: #selector(launchAtLoginToggled(_:))
+        )
+        launchAtLoginCheckbox.font = NSFont.systemFont(ofSize: 12)
+        container.addArrangedSubview(launchAtLoginCheckbox)
+
+        let musicRow = NSStackView()
+        musicRow.orientation = .horizontal
+        musicRow.spacing = 10
+        musicAppStatusLabel = NSTextField(labelWithString: "Статус Music.app: Запущен")
+        musicAppStatusLabel.font = NSFont.systemFont(ofSize: 12)
+        launchMusicButton = NSButton(title: "Запустить Music.app", target: self, action: #selector(launchMusicAppClicked))
+        launchMusicButton.bezelStyle = .rounded
+        musicRow.addArrangedSubview(musicAppStatusLabel)
+        musicRow.addArrangedSubview(launchMusicButton)
+        container.addArrangedSubview(musicRow)
+
+        container.addArrangedSubview(makeDivider())
 
         // --- 1. Audio Output Section ---
         let audioSectionHeader = makeSectionHeader("🎧 Вывод звука и Bit-Perfect")
@@ -107,6 +138,15 @@ public final class SettingsWindow: NSWindowController {
         )
         bitPerfectCheckbox.font = NSFont.systemFont(ofSize: 12)
         container.addArrangedSubview(bitPerfectCheckbox)
+
+        // Lock Volume 100% Checkbox
+        lockVolume100Checkbox = NSButton(
+            checkboxWithTitle: "Устанавливать громкость 100% (Bit-Perfect)",
+            target: self,
+            action: #selector(lockVolume100Toggled(_:))
+        )
+        lockVolume100Checkbox.font = NSFont.systemFont(ofSize: 12)
+        container.addArrangedSubview(lockVolume100Checkbox)
 
         // Stream Quality Label
         streamQualityLabel = NSTextField(labelWithString: "Текущий поток: 44.1 кГц (Lossless)")
@@ -231,6 +271,13 @@ public final class SettingsWindow: NSWindowController {
     }
 
     public func refreshState() {
+        // 0. System & Autonomy
+        LaunchAtLoginManager.shared.refreshStatus()
+        launchAtLoginCheckbox.state = LaunchAtLoginManager.shared.isEnabled ? .on : .off
+        let isMusicRunning = MusicAppProvider.shared.isMusicAppRunning
+        musicAppStatusLabel.stringValue = isMusicRunning ? "Статус Music.app: 🟢 Запущен" : "Статус Music.app: ⚪ Не запущен"
+        launchMusicButton.isHidden = isMusicRunning
+
         // 1. Audio Devices
         devices = CoreAudioDeviceManager.shared.getOutputDevices()
         devicePopUp.removeAllItems()
@@ -247,6 +294,7 @@ public final class SettingsWindow: NSWindowController {
         // Bit-Perfect switch
         bitPerfectCheckbox.state = BitPerfectLogMonitor.shared.isEnabled ? .on : .off
         sampleRatePopUp.isEnabled = !BitPerfectLogMonitor.shared.isEnabled
+        lockVolume100Checkbox.state = PlaybackStateStore.shared.isVolumeLockedTo100 ? .on : .off
         streamQualityLabel.stringValue = "Текущий поток: \(BitPerfectLogMonitor.shared.currentQualityDescription)"
 
         // 2. UPnP
@@ -310,9 +358,39 @@ public final class SettingsWindow: NSWindowController {
                 self?.refreshState()
             }
         }
+
+        MusicAppProvider.shared.onMusicAppLaunched = { [weak self] in
+            DispatchQueue.main.async {
+                self?.refreshState()
+            }
+        }
+
+        MusicAppProvider.shared.onMusicAppTerminated = { [weak self] in
+            DispatchQueue.main.async {
+                self?.refreshState()
+            }
+        }
     }
 
     // MARK: - Actions
+
+    @objc private func launchAtLoginToggled(_ sender: NSButton) {
+        let enable = (sender.state == .on)
+        let success = LaunchAtLoginManager.shared.setEnabled(enable)
+        if !success {
+            sender.state = LaunchAtLoginManager.shared.isEnabled ? .on : .off
+        }
+        MenuManager.shared.updateMenuState()
+    }
+
+    @objc private func launchMusicAppClicked() {
+        MusicAppProvider.shared.launchMusicApp { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self?.refreshState()
+                MenuManager.shared.updateMenuState()
+            }
+        }
+    }
 
     @objc private func deviceSelectionChanged(_ sender: NSPopUpButton) {
         let devID = AudioDeviceID(sender.selectedTag())
@@ -335,6 +413,15 @@ public final class SettingsWindow: NSWindowController {
         BitPerfectLogMonitor.shared.isEnabled = isEnabled
         sampleRatePopUp.isEnabled = !isEnabled
         MenuManager.shared.updateMenuState()
+    }
+
+    @objc private func lockVolume100Toggled(_ sender: NSButton) {
+        let enabled = (sender.state == .on)
+        PlaybackStateStore.shared.isVolumeLockedTo100 = enabled
+        if enabled {
+            _ = MusicBridge.shared.setVolume(100)
+        }
+        WebSocketServer.shared.broadcastStatus(includeQueue: false)
     }
 
     @objc private func saveFriendlyNameClicked() {

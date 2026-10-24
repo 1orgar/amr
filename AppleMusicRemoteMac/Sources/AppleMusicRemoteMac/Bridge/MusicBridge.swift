@@ -144,6 +144,26 @@ public final class MusicBridge: @unchecked Sendable {
         PlaybackTransportController.shared.addCurrentTrackToLibrary()
     }
 
+    // MARK: - Audio Ducking
+
+    @discardableResult
+    public func activateDucking(reductionPercent: Double = 80.0, timeout: Double? = nil) -> (success: Bool, duckedVolume: Int, originalVolume: Int) {
+        AudioDuckingController.shared.activate(reductionPercent: reductionPercent, timeout: timeout)
+    }
+
+    @discardableResult
+    public func deactivateDucking() -> (success: Bool, restoredVolume: Int) {
+        AudioDuckingController.shared.deactivate()
+    }
+
+    public var isAudioDucked: Bool {
+        AudioDuckingController.shared.isDucked
+    }
+
+    public func getAudioDuckingStatus() -> (isDucked: Bool, originalVolume: Int?, currentVolume: Int) {
+        AudioDuckingController.shared.getStatus()
+    }
+
     // MARK: - Queue & History Management
 
     public func getRecentlyPlayed(limit: Int = 30) -> [TrackInfo] {
@@ -196,8 +216,16 @@ public final class MusicBridge: @unchecked Sendable {
         PlaybackRouter.shared.playPlaylist(name: name, trackId: trackId, trackIndex: trackIndex, shuffle: shuffle)
     }
 
-    public func playStation(url: String, name: String) -> Bool {
-        PlaybackRouter.shared.playStation(url: url, name: name)
+    public func playStation(url: String, name: String) async -> Bool {
+        await PlaybackRouter.shared.playStation(url: url, name: name)
+    }
+
+    public func playStation(url: String, name: String, type: String, trackTitle: String, artistName: String) async -> Bool {
+        await PlaybackRouter.shared.playStation(url: url, name: name, type: type, trackTitle: trackTitle, artistName: artistName)
+    }
+
+    public func playAlbumWithTracks(tracks: [TrackInfo], name: String, artist: String, startIndex: Int = 0, shuffle: Bool = false) async -> Bool {
+        await PlaybackRouter.shared.playAlbumWithTracks(tracks: tracks, name: name, artist: artist, startIndex: startIndex, shuffle: shuffle)
     }
 
     public func playAlbum(id: String, name: String, artist: String, startIndex: Int = 0, shuffle: Bool = false) async -> Bool {
@@ -222,6 +250,10 @@ public final class MusicBridge: @unchecked Sendable {
 
     public func playSearchResults(tracks: [TrackInfo], shuffle: Bool) async -> Bool {
         await PlaybackRouter.shared.playSearchResults(tracks: tracks, shuffle: shuffle)
+    }
+
+    public func searchAndPlayDetailed(query: String) async -> PlaybackRouter.SearchAndPlayResult {
+        await PlaybackRouter.shared.searchAndPlayDetailed(query: query)
     }
 
     public func searchAndPlay(query: String) async -> Bool {

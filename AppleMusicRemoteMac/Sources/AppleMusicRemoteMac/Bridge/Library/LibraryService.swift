@@ -14,6 +14,7 @@ public final class LibraryService: @unchecked Sendable {
     public static let shared = LibraryService()
 
     private let lock = NSLock()
+    private var playlistsCache: (timestamp: Date, playlists: [PlaylistInfo])?
     private var playlistTracksCache: [String: (timestamp: Date, tracks: [TrackInfo])] = [:]
     private var librarySongsCache: (timestamp: Date, tracks: [TrackInfo])?
     private var cachedHomeFeed: [String: Any]?
@@ -23,7 +24,15 @@ public final class LibraryService: @unchecked Sendable {
 
     // MARK: - Playlists
 
-    public func getPlaylists() -> [PlaylistInfo] {
+    public func getPlaylists(forceRefresh: Bool = false) -> [PlaylistInfo] {
+        lock.lock()
+        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 30.0 {
+            let list = cached.playlists
+            lock.unlock()
+            return list
+        }
+        lock.unlock()
+
         var result = [PlaylistInfo]()
         var seenNames = Set<String>()
 
@@ -95,7 +104,13 @@ public final class LibraryService: @unchecked Sendable {
         }
 
         NSLog("[LibraryService] getPlaylists returning %d playlists", result.count)
-        return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let sorted = result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        if !sorted.isEmpty {
+            lock.lock()
+            playlistsCache = (timestamp: Date(), playlists: sorted)
+            lock.unlock()
+        }
+        return sorted
     }
 
     public func getPlaylistsWithArtworks() async -> [PlaylistInfo] {
@@ -204,12 +219,19 @@ public final class LibraryService: @unchecked Sendable {
                     let fav = favsDesc?.atIndex(i)?.booleanValue ?? false
 
                     if self.isValidTrack(name: tName, artist: tArtist, duration: dur) {
+                        if dbId > 0 {
+                            PlaybackStateStore.shared.setTrackMetadata(id: dbId, name: tName, artist: tArtist, album: tAlbum)
+                        }
+
                         var artUrl = ""
                         if dbId > 0 {
                             if let cached = ArtworkService.shared.getCachedTrackArtwork(id: dbId) {
                                 artUrl = "data:image/jpeg;base64,\(cached.base64EncodedString())"
                             } else {
-                                artUrl = "/api/artwork/track?id=\(dbId)"
+                                let encN = tName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                                let encA = tArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                                let encAl = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                                artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
                             }
                         } else if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
                             artUrl = cached
@@ -378,6 +400,13 @@ public final class LibraryService: @unchecked Sendable {
                     let fav = favsDesc?.atIndex(i)?.booleanValue ?? false
 
                     if isValidTrack(name: tName, artist: tArtist, duration: dur) {
+                        if dbId > 0 {
+                            PlaybackStateStore.shared.setTrackMetadata(id: dbId, name: tName, artist: tArtist, album: tAlbum)
+                        }
+                        let encN = tName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                        let encA = tArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                        let encAl = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                        let artUrl = (dbId > 0) ? "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)" : ""
                         result.append(TrackInfo(
                             id: "\(dbId)",
                             numericId: dbId,
@@ -385,8 +414,8 @@ public final class LibraryService: @unchecked Sendable {
                             artist: tArtist,
                             album: tAlbum,
                             duration: dur,
-                            hasArtwork: false,
-                            artworkUrl: "",
+                            hasArtwork: !artUrl.isEmpty,
+                            artworkUrl: artUrl,
                             favorited: fav,
                             isLocal: true,
                             index: i
