@@ -5341,6 +5341,14 @@ body.ui-blocked #busy-overlay {
 
     row.addEventListener('click', () => {
       setUIBusy(true, 'Запуск трека...');
+      if (currentSearchSongs && currentSearchSongs.length > 0) {
+        const sId = `${s.id || s.trackId || ''}`;
+        const idx = currentSearchSongs.findIndex(x => (sId && `${x.id || x.trackId || ''}` === sId) || ((x.name || x.trackName) === (s.name || s.trackName) && (x.artist || x.artistName) === (s.artist || s.artistName)));
+        if (idx !== -1) {
+          playSearchResultsList(currentSearchSongs, false, idx);
+          return;
+        }
+      }
       send({
         action: 'play_cloud',
         params: {
@@ -5555,7 +5563,7 @@ body.ui-blocked #busy-overlay {
     }
   }
 
-  function playSearchResultsList(songs, shuffle) {
+  function playSearchResultsList(songs, shuffle, startIndex = 0) {
     if (!songs || songs.length === 0) return;
     const formatted = songs.map(s => ({
       id: `${s.id || s.trackId || ''}`,
@@ -5572,6 +5580,7 @@ body.ui-blocked #busy-overlay {
       action: 'play_search_results',
       params: {
         tracks: formatted,
+        startIndex: startIndex,
         shuffle: Boolean(shuffle)
       }
     });

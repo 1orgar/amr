@@ -103,6 +103,29 @@ final class PlaybackRouterTests: XCTestCase {
         XCTAssertFalse(store.hasTriggeredAdvanceForCurrentTrack)
     }
 
+    func testPlaySearchResultsWithStartIndexSetsCorrectActiveIndexAndUpcoming() async {
+        let router = PlaybackRouter.shared
+        let tracks = [
+            TrackInfo(id: "c1", name: "Sonne", artist: "Rammstein", isLocal: false, url: "https://music.apple.com/station/item/ra.1"),
+            TrackInfo(id: "c2", name: "Du Hast", artist: "Rammstein", isLocal: false, url: "https://music.apple.com/station/item/ra.2"),
+            TrackInfo(id: "c3", name: "Deutschland", artist: "Rammstein", isLocal: false, url: "https://music.apple.com/station/item/ra.3")
+        ]
+
+        // Start directly on track 1 (Du Hast)
+        _ = await router.playSearchResults(tracks: tracks, startIndex: 1, shuffle: false)
+
+        let store = PlaybackStateStore.shared
+        XCTAssertTrue(store.isCustomQueuePlayback)
+        XCTAssertEqual(store.activeCustomQueueIndex, 1)
+        XCTAssertEqual(store.activeCustomQueue.count, 3)
+        // History should contain track 0 (Sonne)
+        XCTAssertEqual(store.latestHistoryTracks.count, 1)
+        XCTAssertEqual(store.latestHistoryTracks[0].name, "Sonne")
+        // Upcoming should contain track 2 (Deutschland)
+        XCTAssertEqual(store.latestUpcomingTracks.count, 1)
+        XCTAssertEqual(store.latestUpcomingTracks[0].name, "Deutschland")
+    }
+
     func testSearchAndPlayDetailedEmptyQueryPicksStation() async {
         let router = PlaybackRouter.shared
         let res = await router.searchAndPlayDetailed(query: "")

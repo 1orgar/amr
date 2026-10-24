@@ -17,6 +17,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
         // 1. Setup Menu Bar UI
         MenuManager.shared.setup()
 
+        // 2. Check and enforce 100% volume in Music.app if volume lock is enabled
+        PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+        }
+
         // 2. Setup WebSocket server delegate & start server
         WebSocketServer.shared.delegate = self
         let started = WebSocketServer.shared.start(port: 8080)

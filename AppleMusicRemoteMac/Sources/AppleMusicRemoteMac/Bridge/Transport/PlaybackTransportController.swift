@@ -99,7 +99,8 @@ public final class PlaybackTransportController: @unchecked Sendable {
                 if nextIdx < PlaybackStateStore.shared.activeCustomQueue.count {
                     return QueueManager.shared.playQueueIndexUnlocked(nextIdx)
                 }
-                return false
+                // End of custom queue reached: stay on last track, NEVER fall through to app.nextTrack()!
+                return true
             }
             if handled { return true }
         }
@@ -121,7 +122,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
     public func previousTrack() -> Bool {
         transportLock.lock()
         let now = Date()
-        if now.timeIntervalSince(lastPrevTrackTime) < 0.8 {
+        if now.timeIntervalSince(lastPrevTrackTime) < 0.6 {
             transportLock.unlock()
             return true
         }
@@ -136,30 +137,46 @@ public final class PlaybackTransportController: @unchecked Sendable {
             PlaybackStateStore.shared.invalidateQueueCache()
         }
 
-        let isCustom = PlaybackStateStore.shared.withLock {
-            PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty
+        // Radio Playback: Apple Music Radio cannot go back to past songs. Rewind to 0:00 without exiting radio!
+        let isRadio = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isRadioPlayback }
+        if isRadio {
+            return seek(to: 0.0)
+        }
+
+        let (isCustom, activeIdx) = PlaybackStateStore.shared.withLock {
+            (
+                PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
+                PlaybackStateStore.shared.activeCustomQueueIndex
+            )
         }
 
         if isCustom {
-            let handled = PlaybackStateStore.shared.withLock { () -> Bool in
-                let prevIdx = PlaybackStateStore.shared.activeCustomQueueIndex - 1
-                if prevIdx >= 0 {
-                    return QueueManager.shared.playQueueIndexUnlocked(prevIdx)
-                }
-                return false
+            let appPos = MusicAppProvider.shared.getMusicApp()?.playerPosition ?? 0.0
+            // Standard media player behavior: if track played > 3.0 seconds, restart to 0:00
+            if appPos > 3.0 {
+                return seek(to: 0.0)
             }
-            if handled { return true }
+            if activeIdx > 0 {
+                return PlaybackStateStore.shared.withLock {
+                    QueueManager.shared.playQueueIndexUnlocked(activeIdx - 1)
+                }
+            } else {
+                // At the start of custom queue: rewind to 0:00 of track 0, NEVER fall through to app.previousTrack()!
+                return seek(to: 0.0)
+            }
         }
 
+        // Standard Library Playlists
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
         if app.playerPosition > 3.0 {
-            app.playerPosition = 0
+            app.playerPosition = 0.0
             return true
         }
         if (app.currentPlaylist?.value(forKey: "name") as? String) == nil && (app.currentTrack?.value(forKey: "location") == nil) {
             PlaybackStateStore.shared.withLock {
                 PlaybackStateStore.shared.isRadioPlayback = true
             }
+            return seek(to: 0.0)
         }
         app.previousTrack()
         return true
@@ -174,6 +191,10 @@ public final class PlaybackTransportController: @unchecked Sendable {
     }
 
     public func setVolume(_ volume: Int) -> Bool {
+        if PlaybackStateStore.shared.isVolumeLockedTo100 && volume != 100 && !AudioDuckingController.shared.isDucked {
+            NSLog("[PlaybackTransportController] 🔒 Volume is locked to 100%% (Bit-Perfect). Rejecting volume change to %d%%", volume)
+            return false
+        }
         let clamped = max(0, min(100, volume))
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.simulatedVolume = clamped
@@ -186,6 +207,36 @@ public final class PlaybackTransportController: @unchecked Sendable {
             let script = "tell application \"Music\" to set sound volume to \(clamped)"
             _ = AppleScriptExecutor.shared.execute(script)
         }
+        PlaybackStateStore.shared.invalidateStatusCache()
+        return true
+    }
+
+    @discardableResult
+    public func checkAndEnforceVolumeLock() -> Bool {
+        guard PlaybackStateStore.shared.isVolumeLockedTo100 else { return false }
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.simulatedVolume = 100
+        }
+        guard MusicAppProvider.shared.isMusicAppRunning else {
+            return true
+        }
+        if let app = MusicAppProvider.shared.getMusicApp(), app.soundVolume != 100 {
+            NSLog("[PlaybackTransportController] 🔊 Enforcing 100%% volume lock in Music.app (was %d%%)", app.soundVolume)
+            app.soundVolume = 100
+        }
+        let script = """
+        tell application "Music"
+            try
+                if sound volume is not 100 then
+                    set sound volume to 100
+                end if
+                return "ok"
+            on error
+                return "error"
+            end try
+        end tell
+        """
+        _ = AppleScriptExecutor.shared.execute(script)
         PlaybackStateStore.shared.invalidateStatusCache()
         return true
     }

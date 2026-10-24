@@ -42,7 +42,7 @@ public final class BonjourAdvertiser: NSObject, NetServiceDelegate, @unchecked S
         service.includesPeerToPeer = true
 
         var txtDict: [String: Data] = [:]
-        txtDict["version"] = "2.0.0".data(using: .utf8)
+        txtDict["version"] = "2.1.0".data(using: .utf8)
         txtDict["platform"] = "macOS".data(using: .utf8)
         txtDict["protocol"] = "amr-ws".data(using: .utf8)
         txtDict["host"] = (Host.current().name ?? "localhost").data(using: .utf8)

@@ -754,11 +754,23 @@ public final class PlaybackRouter: @unchecked Sendable {
         return QueueManager.shared.playQueueIndexUnlocked(targetIndex)
     }
 
-    public func playSearchResults(tracks: [TrackInfo], shuffle: Bool) async -> Bool {
+    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool) async -> Bool {
         guard !tracks.isEmpty else { return false }
         var playList = tracks
+        var targetIndex = 0
+
         if shuffle {
             playList.shuffle()
+            if startIndex >= 0 && startIndex < tracks.count {
+                let sel = tracks[startIndex]
+                if let found = playList.firstIndex(where: { $0.id == sel.id }), found != 0 {
+                    let item = playList.remove(at: found)
+                    playList.insert(item, at: 0)
+                }
+            }
+            targetIndex = 0
+        } else if startIndex >= 0 && startIndex < playList.count {
+            targetIndex = startIndex
         }
 
         // Cleanly halt any previous audio/stream in Music.app first
@@ -769,6 +781,7 @@ public final class PlaybackRouter: @unchecked Sendable {
         if localTracks.count == playList.count && !localTracks.isEmpty {
             let dbIds = localTracks.compactMap { $0.numericId }
             let idListStr = dbIds.map { "\($0)" }.joined(separator: ", ")
+            let playTargetLine = (targetIndex > 0) ? "play track \(targetIndex + 1) of qPl" : "play qPl"
             let script = """
             tell application "Music"
                 stop
@@ -792,7 +805,7 @@ public final class PlaybackRouter: @unchecked Sendable {
                     end repeat
                     if (count of tracks of qPl) > 0 then
                         set shuffle enabled to false
-                        play qPl
+                        \(playTargetLine)
                         return "ok"
                     end if
                 end if
@@ -802,20 +815,29 @@ public final class PlaybackRouter: @unchecked Sendable {
             let (ok, res) = AppleScriptExecutor.shared.execute(script)
             if ok, res?.trimmingCharacters(in: .whitespacesAndNewlines) == "ok" {
                 BitPerfectLogMonitor.shared.resetTrackState()
+                var formattedQueue = [TrackInfo]()
+                for (idx, var t) in playList.enumerated() {
+                    t.index = idx + 1
+                    formattedQueue.append(t)
+                }
                 PlaybackStateStore.shared.withLock {
                     PlaybackStateStore.shared.isRadioPlayback = false
                     PlaybackStateStore.shared.activeStationName = nil
                     PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
                     PlaybackStateStore.shared.activeCustomQueueName = "Результаты поиска"
                     PlaybackStateStore.shared.isCustomQueuePlayback = true
-                    var formattedQueue = [TrackInfo]()
-                    for (idx, var t) in playList.enumerated() {
-                        t.index = idx + 1
-                        formattedQueue.append(t)
-                    }
                     PlaybackStateStore.shared.activeCustomQueue = formattedQueue
-                    PlaybackStateStore.shared.activeCustomQueueIndex = 0
-                    PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedQueue.dropFirst())
+                    PlaybackStateStore.shared.activeCustomQueueIndex = targetIndex
+                    if targetIndex + 1 < formattedQueue.count {
+                        PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedQueue[(targetIndex + 1)...])
+                    } else {
+                        PlaybackStateStore.shared.latestUpcomingTracks = []
+                    }
+                    if targetIndex > 0 {
+                        PlaybackStateStore.shared.latestHistoryTracks = Array(formattedQueue[0..<targetIndex].reversed())
+                    } else {
+                        PlaybackStateStore.shared.latestHistoryTracks = []
+                    }
                     PlaybackStateStore.shared.lastCloudPlayTime = Date()
                     PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
                     PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
@@ -835,8 +857,8 @@ public final class PlaybackRouter: @unchecked Sendable {
 
         // Mixed or Cloud tracks:
         var played = false
-        var startIndex = 0
-        for i in 0..<playList.count {
+        var actualPlayIndex = targetIndex
+        for i in targetIndex..<playList.count {
             let tr = playList[i]
             let ok = await playCloud(
                 url: tr.url,
@@ -847,30 +869,38 @@ public final class PlaybackRouter: @unchecked Sendable {
             )
             if ok {
                 played = true
-                startIndex = i
+                actualPlayIndex = i
                 break
             }
         }
 
         guard played else { return false }
 
-        let first = playList[startIndex]
-        let remaining = Array(playList.dropFirst(startIndex + 1))
+        var formattedQueue = [TrackInfo]()
+        for (idx, var t) in playList.enumerated() {
+            t.index = idx + 1
+            formattedQueue.append(t)
+        }
+        let curTrack = formattedQueue[actualPlayIndex]
 
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isRadioPlayback = false
             PlaybackStateStore.shared.activeStationName = nil
-            PlaybackStateStore.shared.currentOriginalPlaylistName = (first.numericId != nil && first.numericId! > 0) ? "Очередь AMR" : nil
+            PlaybackStateStore.shared.currentOriginalPlaylistName = (curTrack.numericId != nil && curTrack.numericId! > 0) ? "Очередь AMR" : nil
             PlaybackStateStore.shared.activeCustomQueueName = "Результаты поиска"
             PlaybackStateStore.shared.isCustomQueuePlayback = true
-            var formattedQueue = [first]
-            for (idx, var t) in remaining.enumerated() {
-                t.index = idx + 2
-                formattedQueue.append(t)
-            }
             PlaybackStateStore.shared.activeCustomQueue = formattedQueue
-            PlaybackStateStore.shared.activeCustomQueueIndex = 0
-            PlaybackStateStore.shared.latestUpcomingTracks = remaining
+            PlaybackStateStore.shared.activeCustomQueueIndex = actualPlayIndex
+            if actualPlayIndex + 1 < formattedQueue.count {
+                PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedQueue[(actualPlayIndex + 1)...])
+            } else {
+                PlaybackStateStore.shared.latestUpcomingTracks = []
+            }
+            if actualPlayIndex > 0 {
+                PlaybackStateStore.shared.latestHistoryTracks = Array(formattedQueue[0..<actualPlayIndex].reversed())
+            } else {
+                PlaybackStateStore.shared.latestHistoryTracks = []
+            }
             PlaybackStateStore.shared.lastCloudPlayTime = Date()
             PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
             PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false

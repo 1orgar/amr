@@ -231,7 +231,11 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         let stateStr = (rawState == "playing") ? "playing" : ((rawState == "paused") ? "paused" : "stopped")
         let rawPosStr = parts[1].replacingOccurrences(of: ",", with: ".")
         let rawPos = Double(rawPosStr) ?? 0.0
-        let vol = Int(parts[2]) ?? 100
+        var vol = Int(parts[2]) ?? 100
+        if PlaybackStateStore.shared.isVolumeLockedTo100 && vol != 100 && !AudioDuckingController.shared.isDucked {
+            PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+            vol = 100
+        }
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.simulatedVolume = vol
         }

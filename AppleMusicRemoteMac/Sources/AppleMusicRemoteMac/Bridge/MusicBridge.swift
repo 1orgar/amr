@@ -124,6 +124,11 @@ public final class MusicBridge: @unchecked Sendable {
         PlaybackTransportController.shared.setVolume(volume)
     }
 
+    @discardableResult
+    public func checkAndEnforceVolumeLock() -> Bool {
+        PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+    }
+
     public func setShuffle(_ enabled: Bool) -> Bool {
         PlaybackTransportController.shared.setShuffle(enabled)
     }
@@ -248,8 +253,8 @@ public final class MusicBridge: @unchecked Sendable {
         PlaybackRouter.shared.playCustomTracks(tracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName)
     }
 
-    public func playSearchResults(tracks: [TrackInfo], shuffle: Bool) async -> Bool {
-        await PlaybackRouter.shared.playSearchResults(tracks: tracks, shuffle: shuffle)
+    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool) async -> Bool {
+        await PlaybackRouter.shared.playSearchResults(tracks: tracks, startIndex: startIndex, shuffle: shuffle)
     }
 
     public func searchAndPlayDetailed(query: String) async -> PlaybackRouter.SearchAndPlayResult {

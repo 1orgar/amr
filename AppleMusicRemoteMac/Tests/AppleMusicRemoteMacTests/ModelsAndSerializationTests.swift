@@ -382,5 +382,63 @@ final class ModelsAndSerializationTests: XCTestCase {
             XCTAssertEqual(clamped, tc.expected, "Volume \(tc.input) should clamp to \(tc.expected)")
         }
     }
+
+    func testCheckAndEnforceVolumeLockWhenLockedSetsSimulatedVolumeTo100() {
+        let store = PlaybackStateStore.shared
+        let origLocked = store.isVolumeLockedTo100
+        let origVol = store.simulatedVolume
+        defer {
+            store.isVolumeLockedTo100 = origLocked
+            store.simulatedVolume = origVol
+        }
+
+        store.isVolumeLockedTo100 = true
+        store.simulatedVolume = 30
+
+        let enforced = PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+        XCTAssertTrue(enforced)
+        XCTAssertEqual(store.simulatedVolume, 100)
+    }
+
+    func testCheckAndEnforceVolumeLockWhenUnlockedDoesNotEnforce() {
+        let store = PlaybackStateStore.shared
+        let origLocked = store.isVolumeLockedTo100
+        let origVol = store.simulatedVolume
+        defer {
+            store.isVolumeLockedTo100 = origLocked
+            store.simulatedVolume = origVol
+        }
+
+        store.isVolumeLockedTo100 = false
+        store.simulatedVolume = 45
+
+        let enforced = PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+        XCTAssertFalse(enforced)
+        XCTAssertEqual(store.simulatedVolume, 45)
+    }
+
+    func testSetVolumeRespectsVolumeLockState() {
+        let store = PlaybackStateStore.shared
+        let origLocked = store.isVolumeLockedTo100
+        let origVol = store.simulatedVolume
+        defer {
+            store.isVolumeLockedTo100 = origLocked
+            store.simulatedVolume = origVol
+        }
+
+        // When locked, attempting to set volume to 50 should be rejected
+        store.isVolumeLockedTo100 = true
+        let rejected = PlaybackTransportController.shared.setVolume(50)
+        XCTAssertFalse(rejected)
+
+        // Setting volume to 100 should be accepted
+        let accepted100 = PlaybackTransportController.shared.setVolume(100)
+        XCTAssertTrue(accepted100)
+
+        // When unlocked, setting volume to 50 should be accepted
+        store.isVolumeLockedTo100 = false
+        let accepted50 = PlaybackTransportController.shared.setVolume(50)
+        XCTAssertTrue(accepted50)
+    }
 }
 

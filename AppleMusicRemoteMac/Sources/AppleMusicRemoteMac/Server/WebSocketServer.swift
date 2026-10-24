@@ -1566,10 +1566,11 @@ public final class WebSocketServer: @unchecked Sendable {
                     ))
                 }
             }
+            let startIndex = (params["startIndex"] as? Int) ?? (params["track_index"] as? Int).map { max(0, $0 - 1) } ?? 0
             let targetTracks = trackInfos
             Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
-                let ok = await bridge.playSearchResults(tracks: targetTracks, shuffle: shuffle)
+                let ok = await bridge.playSearchResults(tracks: targetTracks, startIndex: startIndex, shuffle: shuffle)
                 self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "count": targetTracks.count], id: id, to: connection)
                 self.broadcastStatus(includeQueue: true)
             }
@@ -1720,7 +1721,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 "port": self.port,
                 "primary_url": primaryUrl,
                 "ips": ips,
-                "version": "2.0.0",
+                "version": "2.1.0",
                 "platform": "macOS"
             ], id: id, to: connection)
 

@@ -134,7 +134,11 @@ public final class MusicAppProvider: @unchecked Sendable {
 
             PlaybackStateStore.shared.invalidateStatusCache()
             PlaybackStateStore.shared.invalidateQueueCache()
-            self?.onMusicAppLaunched?( )
+            self?.onMusicAppLaunched?()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+            }
 
             DispatchQueue.main.async {
                 MenuManager.shared.updateMenuState()

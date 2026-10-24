@@ -125,6 +125,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
         hasTriggeredAdvanceForCurrentTrack = false
         lastWasPlayingCloud = false
         lastCloudPlayTime = nil
+        lastSkipTime = .distantPast
     }
 
     public func resetCustomQueue() {
@@ -139,6 +140,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
         hasTriggeredAdvanceForCurrentTrack = false
         lastWasPlayingCloud = false
         lastCloudPlayTime = nil
+        lastSkipTime = .distantPast
     }
 
     public func setSeekTarget(position: Double) {

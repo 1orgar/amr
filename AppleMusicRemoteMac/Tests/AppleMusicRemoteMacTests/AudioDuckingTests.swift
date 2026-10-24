@@ -8,9 +8,15 @@ import XCTest
 
 final class AudioDuckingTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        PlaybackStateStore.shared.isVolumeLockedTo100 = false
+    }
+
     override func tearDown() {
-        super.tearDown()
+        PlaybackStateStore.shared.isVolumeLockedTo100 = true
         AudioDuckingController.shared.deactivate()
+        super.tearDown()
     }
 
     func testAudioDuckingActivationAndDeactivation() {

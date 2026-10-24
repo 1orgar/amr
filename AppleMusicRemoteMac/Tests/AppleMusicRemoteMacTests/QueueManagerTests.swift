@@ -316,4 +316,88 @@ final class QueueManagerTests: XCTestCase {
         ])
         XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
     }
+
+    func testQueueMonitoringIgnoresDrainingTrackDuringTransition() {
+        let track1 = TrackInfo(id: "1", name: "Sonne", artist: "Rammstein")
+        let track2 = TrackInfo(id: "2", name: "Du Hast", artist: "Rammstein")
+        let track3 = TrackInfo(id: "3", name: "Deutschland", artist: "Rammstein")
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2, track3]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0 // User switched back to track 0 (Sonne)
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
+            PlaybackStateStore.shared.lastSkipTime = Date() // Transitioning right now!
+        }
+
+        // Delayed notification arrives from Music.app for draining track 1 (Du Hast)
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "Du Hast",
+            "Artist": "Rammstein"
+        ])
+
+        // Must IGNORE Du Hast because it is transitioning to Sonne!
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+        XCTAssertFalse(PlaybackStateStore.shared.currentTrackPlaybackConfirmed)
+
+        // Now target track Sonne begins playing
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "Sonne",
+            "Artist": "Rammstein"
+        ])
+
+        // Correctly matches target track and confirms!
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+        XCTAssertTrue(PlaybackStateStore.shared.currentTrackPlaybackConfirmed)
+        XCTAssertFalse(PlaybackStateStore.shared.isTransitioningTrack)
+    }
+
+    func testPreviousTrackInRadioPlaybackRewindsWithoutExitingRadio() {
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.resetPlaybackState(originalPlaylist: nil, isRadio: true, stationName: "Rock Radio")
+        }
+
+        let res = PlaybackTransportController.shared.previousTrack()
+        XCTAssertTrue(res)
+        XCTAssertTrue(PlaybackStateStore.shared.isRadioPlayback)
+        XCTAssertEqual(PlaybackStateStore.shared.activeStationName, "Rock Radio")
+    }
+
+    func testPreviousTrackAtBeginningOfCustomQueueRewindsWithoutFallingOutOfQueue() {
+        let track1 = TrackInfo(id: "1", name: "Sonne", artist: "Rammstein")
+        let track2 = TrackInfo(id: "2", name: "Du Hast", artist: "Rammstein")
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+        }
+
+        let res = PlaybackTransportController.shared.previousTrack()
+        XCTAssertTrue(res)
+        // Must stay on index 0 and keep custom queue active
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+        XCTAssertTrue(PlaybackStateStore.shared.isCustomQueuePlayback)
+    }
+
+    func testNextTrackAtEndOfCustomQueueDoesNotFallThroughToAppNextTrack() {
+        let track1 = TrackInfo(id: "1", name: "Sonne", artist: "Rammstein")
+        let track2 = TrackInfo(id: "2", name: "Du Hast", artist: "Rammstein")
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 1 // Already at end of queue
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+        }
+
+        let res = PlaybackTransportController.shared.nextTrack()
+        XCTAssertTrue(res)
+        // Must remain on index 1 and keep custom queue active
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+        XCTAssertTrue(PlaybackStateStore.shared.isCustomQueuePlayback)
+    }
 }
