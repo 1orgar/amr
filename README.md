@@ -1,122 +1,124 @@
 # Apple Music Remote (AMR)
 
+**English** | [🇷🇺 Русская версия](README_RU.md)
+
 [![CI](https://github.com/1orgar/amr/actions/workflows/ci.yml/badge.svg)](https://github.com/1orgar/amr/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/1orgar/amr)](https://github.com/1orgar/amr/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014.0%2B-black.svg?logo=apple)](https://www.apple.com/macos/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Architecture: Universal 2](https://img.shields.io/badge/arch-arm64%20%7C%20x86__64-blue.svg)](https://developer.apple.com/documentation/apple-silicon)
 
-**Apple Music Remote (AMR)** — высокопроизводительный нативный сервер и пульт дистанционного управления для **Apple Music** на macOS. Создан специально для аудиофилов и ценителей качественного звука: воспроизведение идёт напрямую с вашего Mac через аппаратный ЦАП (DAC), обеспечивая честный **Bit-Perfect** вывод звука без системной передискретизации и потери качества.
+**Apple Music Remote (AMR)** is a high-performance native macOS server and modern remote control for **Apple Music**. Crafted specifically for audiophiles and discerning listeners: audio streams directly from your Mac to an external DAC, delivering true **Bit-Perfect** reproduction without system resamplers, DSP truncation, or loss of fidelity.
 
 ---
 
-## ✨ Ключевые возможности
+## ✨ Key Features
 
-### 🎧 Bit-Perfect аудиофильский вывод (CoreAudio)
-* **Аппаратная синхронизация частоты ЦАП**: автоматическое переключение частоты дискретизации внешнего ЦАП (44.1, 48, 88.2, 96, 176.4, 192 кГц) в точном соответствии с исходным качеством трека в Music.app.
-* **Режим Bit-Perfect 100%**: фиксация громкости macOS на 100% для исключения цифрового дизеринга и математической деградации разрядности звука (DSP truncation).
-* **Опциональный регулятор громкости**: если опция выключена в системных настройках macOS (`Настройки` в строке меню), в веб-плеере автоматически появляется плавный регулятор громкости (с кнопкой быстрого Mute) для наушников или акустики без аппаратной ручки громкости.
-* **Индикатор ЦАП в реальном времени**: постоянный бейдж качества аудиопотока и частоты ЦАП во всех представлениях интерфейса (в шапке Now Playing, на десктопе и на смартфонах).
+### 🎧 Bit-Perfect Audiophile Audio Output (CoreAudio)
+* **Automatic DAC Sample Rate Synchronization**: Instant hardware switching between 44.1, 48, 88.2, 96, 176.4, and 192 kHz to match the source track's native rate in Music.app bit-for-bit.
+* **100% Volume Lock Mode**: Keeps macOS / Music.app software volume pegged at 100% to eliminate digital volume dithering and word-length degradation.
+* **Optional Web Volume Control**: When volume lock is turned off via menu bar settings, the Web UI automatically displays a smooth volume slider (with an instant Mute button) for setups lacking a hardware volume pot.
+* **Real-Time DAC Badge**: Continuous stream format and hardware DAC rate indicators across all views (Now Playing header, desktop split view, and mobile devices).
 
-### 📱 Премиальный веб-интерфейс (PWA)
-* **OLED-монохромный дизайн**: глубокий черный `#000000`, плавные аппаратные анимации, акцент только на обложках альбомов. Никакого визуального шума.
-* **Сенсорные жесты**: свайп по обложке влево/вправо для переключения треков, свайп вниз для сворачивания полноэкранного плеера Now Playing в плавающий мини-плеер.
-* **Скраббер 60fps**: локальная оптимистичная шкала времени с фазовой подстройкой (PLL) для идеально плавного движения таймкода без скачков и лагов.
-* **Радиостанции в один клик**: создание персональных станций Apple Music по текущему треку или артисту прямо из плеера (📡).
-* **Синхронизация «Избранного»**: добавление треков в избранное («Любимые песни») Apple Music со звездочкой и тактильным откликом.
-* **Тренды, Чарты и Медиатека**: удобный доступ к чартам Apple Music (Россия / США), плейлистам медиатеки, недавним релизам и мгновенному каталожному поиску.
-* **Lock Screen & MediaSession**: непрерывная работа в фоне на iOS и Android с отображением обложки и элементов управления на экране блокировки смартфона.
+### 📱 Premium Web Remote (PWA)
+* **OLED Monochrome Aesthetic**: Pure black `#000000`, hardware-accelerated transitions, visual focus strictly on album artwork with zero clutter.
+* **Intuitive Touch Gestures**: Swipe artwork left/right to skip tracks; swipe down to collapse Now Playing into a floating mini-player.
+* **60fps Phase-Locked Scrubber**: Local optimistic timeline tracking for jitter-free, seamless timecode scrubbing.
+* **One-Click Radio Stations**: Instantly generate personal Apple Music stations based on the current track or artist directly from the player (📡).
+* **Favorites Synchronization**: Mark tracks as Favorite ("Favorite Songs") in Apple Music with instant visual and haptic confirmation.
+* **Charts, Trending & Library**: Full access to Apple Music editorial charts, user library playlists, recent releases, and instant cloud catalog search.
+* **Lock Screen & MediaSession**: Background audio playback integration on iOS and Android with lock screen artwork and transport controls.
 
-### 📻 UPnP / DLNA MediaRenderer (Интеграция с Home Assistant)
-* Полноценная поддержка протокола **UPnP A/V MediaRenderer (AVTransport / RenderingControl)**.
-* Автоматическое обнаружение через **SSDP Discovery** в локальной сети.
-* Поддержка интеграции с **Home Assistant**, умными колонками и DLNA-контроллерами: воспроизведение, пауза, остановка, перемотка, регулировка громкости.
-* Встроенная поддержка приглушения звука (Audio Ducking) для голосовых ассистентов.
+### 📻 UPnP / DLNA MediaRenderer (Home Assistant Integration)
+* Full support for **UPnP A/V MediaRenderer (AVTransport / RenderingControl)** standards.
+* Auto-discovery across local networks using **SSDP Discovery**.
+* Seamless integration with **Home Assistant**, smart speakers, and DLNA controllers: Play, Pause, Stop, Seek, and Volume control.
+* Built-in **Audio Ducking** for voice assistants (TTS announcements softly attenuate music and automatically restore level).
 
-### 🍏 100% Нативное приложение macOS (Menu Bar)
-* Написано полностью на **Swift** с использованием современных системных фреймворков (`CoreAudio`, `Network.framework`, `ScriptingBridge`, `ServiceManagement`).
-* Автономный бинарник **Universal 2** (`arm64` Apple Silicon + `x86_64` Intel).
-* Работает в строке меню macOS: статус Music.app, быстрый выбор аудиоустройства, частоты ЦАП, меню системных настроек и отображение QR-кода для мгновенного подключения смартфона.
-* Автозапуск при входе в систему (Launch at Login).
+### 🍏 100% Native macOS Menu Bar App
+* Built in Swift using native frameworks (`CoreAudio`, `Network.framework`, `ScriptingBridge`, `ServiceManagement`).
+* Standalone **Universal 2** binary (`arm64` Apple Silicon + `x86_64` Intel).
+* Menu bar companion: Music.app status, audio device and sample rate picker, settings window, and instant QR code display for pairing mobile devices.
+* Optional **Launch at Login** support.
 
 ---
 
-## 🏛 Архитектура
+## 🏛 Architecture
 
 ```
                         ┌──────────────────────────────────────┐
                         │      Apple Music Remote (Mac)        │
                         │                                      │
-  📱 iPhone / iPad      │  ┌────────────────────────────────┐  │      🎧 Внешний ЦАП
+  📱 iPhone / iPad      │  ┌────────────────────────────────┐  │      🎧 External DAC
   💻 Web / PWA          │  │     CoreAudio Device Manager   ├──┼────► (Bit-Perfect
-  (WebSocket / HTTP) ──►│  │   (Auto-Rate 44.1 - 192 kHz)   │  │       44.1-192kHz)
+  (WebSocket / HTTP) ──►│  │   (Auto-Rate 44.1 - 192 kHz)   │  │       44.1-192 kHz)
                         │  └────────────────────────────────┘  │
                         │                                      │
   🏠 Home Assistant     │  ┌────────────────────────────────┐  │      🎵 Apple Music
-  📻 UPnP / DLNA    ───►│  │  ScriptingBridge + MusicKit API├──┼────►  (Воспроизведение
-                        │  └────────────────────────────────┘  │       напрямую на Mac)
+  📻 UPnP / DLNA    ───►│  │  ScriptingBridge + MusicKit API├──┼────►  (Direct Mac
+                        │  └────────────────────────────────┘  │       playback)
                         └──────────────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Установка
+## 🚀 Installation
 
-### Готовая сборка (DMG)
-1. Перейдите на страницу [Релизов](https://github.com/1orgar/amr/releases).
-2. Скачайте образ `AppleMusicRemoteMac-Universal.dmg`.
-3. Откройте образ и перетащите `Apple Music Remote.app` в папку `Программы` (`/Applications`).
-4. Запустите приложение. В строке меню появится иконка 🎵.
-5. При первом запуске разрешите приложению управлять `Music.app` в диалоговом окне «Универсальный доступ / Автоматизация».
+### Pre-Built DMG
+1. Go to the [Releases](https://github.com/1orgar/amr/releases) page.
+2. Download `AppleMusicRemoteMac-Universal.dmg`.
+3. Open the disk image and drag `Apple Music Remote.app` into `/Applications`.
+4. Launch the app. A 🎵 icon will appear in your macOS menu bar.
+5. On first launch, grant permission to control `Music.app` in the macOS Accessibility / Automation prompt.
 
 ---
 
-## 🛠 Сборка из исходных кодов
+## 🛠 Building from Source
 
-### Требования
-* macOS 14.0 (Sonoma) или новее
-* Xcode 15.0+ или Command Line Tools (`xcrun`)
+### Requirements
+* macOS 14.0 (Sonoma) or newer
+* Xcode 15.0+ or Command Line Tools (`xcrun`)
 * Swift 5.9+
 
-### Клонирование репозитория
+### Clone the Repository
 ```bash
 git clone https://github.com/1orgar/amr.git
 cd amr
 ```
 
-### Запуск тестов
+### Running Tests
 
-#### Модульные тесты Swift (122 теста):
+#### Swift Unit Tests (132 tests):
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path AppleMusicRemoteMac
 ```
 
-#### Сквозные интеграционные тесты Python:
+#### End-to-End Integration Tests (Python):
 ```bash
 python3 -m unittest discover -s tests
 ```
 
-### Сборка приложения для текущего Mac
+### Build for Current Mac
 ```bash
 ./AppleMusicRemoteMac/build_app.sh
 ```
-Готовое приложение появится в папке `AppleMusicRemoteMac/build/AppleMusicRemoteMac.app`.
+The compiled bundle will be available at `AppleMusicRemoteMac/build/AppleMusicRemoteMac.app`.
 
-### Сборка универсального DMG (Intel + Apple Silicon)
+### Build Universal DMG (Intel + Apple Silicon)
 ```bash
 ./build_universal_dmg.sh
 ```
-Скрипт скомпилирует бинарники для `arm64` и `x86_64`, объединит их через `lipo`, подпишет код и упакует образ диска `AppleMusicRemoteMac-Universal.dmg`.
+This script compiles both `arm64` and `x86_64` targets, merges them via `lipo`, applies code signing, and creates `AppleMusicRemoteMac-Universal.dmg`.
 
 ---
 
-## 🔌 API и протоколы
+## 🔌 API & Protocols
 
-Сервер поднимает HTTP и WebSocket на порту `8080` (настраивается), а также UPnP MediaRenderer на порту `8090`.
+The server hosts HTTP and WebSocket services on port `8080` (configurable), and UPnP MediaRenderer on port `8090`.
 
-### WebSocket протокол (`ws://<mac-ip>:8080`)
+### WebSocket Protocol (`ws://<mac-ip>:8080`)
 
-Каждое сообщение передаётся в формате JSON:
+All messages use JSON:
 ```json
 {
   "action": "play_pause",
@@ -125,35 +127,35 @@ python3 -m unittest discover -s tests
 }
 ```
 
-#### Доступные действия:
-| Действие | Параметры | Описание |
+#### Available Actions:
+| Action | Parameters | Description |
 | :--- | :--- | :--- |
-| `play` | — | Начать воспроизведение |
-| `pause` | — | Приостановить воспроизведение |
-| `play_pause` | — | Переключить воспроизведение / паузу |
-| `next` | — | Следующий трек |
-| `previous` | — | Предыдущий трек |
-| `seek` | `{"position": 125.5}` | Перемотка на указанную секунду |
-| `set_volume` | `{"volume": 80}` | Установка громкости (0–100%) |
-| `set_lock_volume_100` | `{"enabled": true}` | Включение/выключение фиксации 100% громкости |
-| `set_shuffle` | `{"enabled": true}` | Включение/выключение случайного порядка |
-| `set_repeat` | `{"mode": "off"\|"one"\|"all"}` | Режим повтора треков |
-| `favorite` | — | Переключение отметки «Избранное» для текущего трека |
-| `play_station` | `{"type": "track"\|"artist", "title": "...", "artist": "..."}` | Запуск персональной станции Apple Music |
-| `search_and_play` | `{"query": "Depeche Mode"}` | Поиск и немедленный запуск трека/альбома |
-| `get_queue` | — | Запрос текущей очереди треков |
-| `get_playlists` | — | Запрос списка плейлистов медиатеки |
+| `play` | — | Resume playback |
+| `pause` | — | Pause playback |
+| `play_pause` | — | Toggle play / pause |
+| `next` | — | Next track |
+| `previous` | — | Previous track |
+| `seek` | `{"position": 125.5}` | Seek to timestamp in seconds |
+| `set_volume` | `{"volume": 80}` | Set volume (0–100%) |
+| `set_lock_volume_100` | `{"enabled": true}` | Enable / disable 100% volume lock |
+| `set_shuffle` | `{"enabled": true}` | Toggle shuffle mode |
+| `set_repeat` | `{"mode": "off"\|"one"\|"all"}` | Set repeat mode |
+| `favorite` | — | Toggle favorite status for current track |
+| `play_station` | `{"type": "track"\|"artist", "title": "...", "artist": "..."}` | Start personalized Apple Music station |
+| `search_and_play` | `{"query": "Depeche Mode"}` | Search catalog and start playback immediately |
+| `get_queue` | — | Fetch current playback queue |
+| `get_playlists` | — | Fetch user library playlists |
 
 ### HTTP REST API
 
-* `GET /api/status` — текущий статус плеера (`PlayerStatus` в JSON).
-* `POST /api/media` — отправка команд управления (`endpoint` и `params`).
-* `POST /api/duck` — временное приглушение звука (для Home Assistant TTS).
-* `POST /api/unduck` — восстановление исходной громкости.
-* `GET /api/artwork/track?id=...` — получение обложки трека в оригинальном качестве.
+* `GET /api/status` — Current playback status (`PlayerStatus` JSON).
+* `POST /api/media` — Dispatch media transport commands (`endpoint` & `params`).
+* `POST /api/duck` — Softly attenuate volume (for Home Assistant TTS announcements).
+* `POST /api/unduck` — Restore pre-duck volume level.
+* `GET /api/artwork/track?id=...` — Retrieve track artwork in native resolution.
 
 ---
 
-## 📄 Лицензия
+## 📄 License
 
-Проект распространяется под открытой лицензией [MIT](LICENSE).
+This project is licensed under the [MIT License](LICENSE).

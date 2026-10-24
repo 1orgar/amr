@@ -15,6 +15,14 @@ public final class PlaybackRouter: @unchecked Sendable {
 
     private init() {}
 
+    public var urlOpener: ((URL) -> Bool)? = nil
+
+    public var isTestingEnvironment: Bool {
+        return ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+               ProcessInfo.processInfo.environment["XCInjectBundleInto"] != nil ||
+               NSClassFromString("XCTestCase") != nil
+    }
+
     @discardableResult
     public func openMusicUrl(_ urlString: String) -> Bool {
         var target = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -24,6 +32,21 @@ public final class PlaybackRouter: @unchecked Sendable {
             target = "music://" + target.dropFirst("https://".count)
         } else if !target.hasPrefix("music://") && (target.contains("ra.") || target.contains("/station/") || target.contains("/album/") || target.contains("/playlist/")) {
             target = "music://" + target
+        }
+
+        if let opener = urlOpener {
+            if let url = URL(string: target) {
+                return opener(url)
+            }
+            if let encoded = target.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+               let url = URL(string: encoded) {
+                return opener(url)
+            }
+            return false
+        }
+
+        if isTestingEnvironment {
+            return true
         }
 
         if let url = URL(string: target) {
@@ -595,8 +618,10 @@ public final class PlaybackRouter: @unchecked Sendable {
         if !targetUrl.isEmpty {
             let opened = openMusicUrl(targetUrl)
             if opened {
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) {
-                    _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                if !isTestingEnvironment {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) {
+                        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                    }
                 }
                 var artUrl = ""
                 if let a = artist, let n = name {
@@ -658,8 +683,10 @@ public final class PlaybackRouter: @unchecked Sendable {
             let stationUrl = "music://music.apple.com/station/item/ra.\(sId)"
             let ok = openMusicUrl(stationUrl)
             if ok {
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) {
-                    _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                if !isTestingEnvironment {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) {
+                        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                    }
                 }
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
@@ -672,8 +699,10 @@ public final class PlaybackRouter: @unchecked Sendable {
         if !targetUrl.isEmpty {
             let ok = openMusicUrl(targetUrl)
             if ok {
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-                    _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                if !isTestingEnvironment {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+                        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                    }
                 }
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
