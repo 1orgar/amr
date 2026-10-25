@@ -35,6 +35,18 @@ public struct AudioOutputDevice: Identifiable, Hashable, Sendable {
         self.availableSampleRates = availableSampleRates
         self.isDefault = isDefault
     }
+
+    public var dictionary: [String: Any] {
+        [
+            "id": Int(id),
+            "uid": uid,
+            "name": name,
+            "icon": iconName,
+            "currentSampleRate": currentSampleRate,
+            "availableSampleRates": availableSampleRates,
+            "isDefault": isDefault
+        ]
+    }
 }
 
 public final class CoreAudioDeviceManager: @unchecked Sendable {

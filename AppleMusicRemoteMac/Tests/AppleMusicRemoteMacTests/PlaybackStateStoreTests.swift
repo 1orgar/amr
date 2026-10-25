@@ -51,4 +51,14 @@ final class PlaybackStateStoreTests: XCTestCase {
         XCTAssertTrue(store.activeCustomQueue.isEmpty)
         XCTAssertNil(store.activeCustomQueueName)
     }
+
+    func testOptimisticPauseTracking() {
+        let store = PlaybackStateStore.shared
+
+        store.invalidateStatusCache(optimisticState: "paused")
+        XCTAssertTrue(store.isUserPaused)
+
+        store.invalidateStatusCache(optimisticState: "playing")
+        XCTAssertFalse(store.isUserPaused)
+    }
 }

@@ -248,6 +248,50 @@ class TestAMRE2E(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(len(tracks), 1, "Queue must contain searched tracks")
         self.assertIn("звезда", tracks[0].get("name", "").lower(), "First track in queue must be the searched track")
 
+    async def test_10_play_pause_transport_control(self):
+        """Verifies play and pause commands toggle player state and Music.app responds accordingly."""
+        # 1. Send play
+        p_resp = await self._send_and_wait("play", {}, expected_id="req-play-cmd")
+        self.assertEqual(p_resp.get("status"), "ok")
+
+        # Give Music.app 1s to update
+        await asyncio.sleep(1.0)
+        st_resp = await self._send_and_wait("get_status", {}, expected_id="req-st-playing")
+        st_data = st_resp.get("data", {})
+        self.assertEqual(st_data.get("player_state"), "playing", "State should be playing after play")
+
+        # 2. Send pause
+        pause_resp = await self._send_and_wait("pause", {}, expected_id="req-pause-cmd")
+        self.assertEqual(pause_resp.get("status"), "ok")
+
+        # Give Music.app 0.5s to update
+        await asyncio.sleep(0.5)
+        st_paused = await self._send_and_wait("get_status", {}, expected_id="req-st-paused")
+        paused_data = st_paused.get("data", {})
+        self.assertEqual(paused_data.get("player_state"), "paused", "State should be paused after pause")
+
+        # Check native Music.app state via osascript
+        try:
+            native_state = subprocess.check_output([
+                "osascript", "-e", 'tell application "Music" to get player state as string'
+            ]).decode().strip()
+            self.assertEqual(native_state, "paused", "Music.app native state must be paused")
+        except Exception:
+            pass
+
+        # 3. Resume play again
+        p2_resp = await self._send_and_wait("play", {}, expected_id="req-play-cmd-2")
+        self.assertEqual(p2_resp.get("status"), "ok")
+        await asyncio.sleep(0.5)
+
+        # 4. Pause again (ensure multiple toggles work smoothly)
+        pause2_resp = await self._send_and_wait("pause", {}, expected_id="req-pause-cmd-2")
+        self.assertEqual(pause2_resp.get("status"), "ok")
+        await asyncio.sleep(0.5)
+        st_paused2 = await self._send_and_wait("get_status", {}, expected_id="req-st-paused-2")
+        self.assertEqual(st_paused2.get("data", {}).get("player_state"), "paused")
+
 if __name__ == "__main__":
     unittest.main()
+
 

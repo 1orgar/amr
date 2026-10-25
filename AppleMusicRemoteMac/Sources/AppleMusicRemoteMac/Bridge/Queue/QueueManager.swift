@@ -88,15 +88,24 @@ public final class QueueManager: @unchecked Sendable {
 
         // 0. Custom Queue Playback
         if hasCustomQueue {
-            let (activeIdx, isTransitioning) = PlaybackStateStore.shared.withLock {
-                (PlaybackStateStore.shared.activeCustomQueueIndex, PlaybackStateStore.shared.isTransitioningTrack)
+            let (activeIdx, isTransitioning, confirmed, lastPlayTime) = PlaybackStateStore.shared.withLock {
+                (
+                    PlaybackStateStore.shared.activeCustomQueueIndex,
+                    PlaybackStateStore.shared.isTransitioningTrack,
+                    PlaybackStateStore.shared.currentTrackPlaybackConfirmed,
+                    PlaybackStateStore.shared.lastCloudPlayTime
+                )
             }
+            let timeSincePlay = Date().timeIntervalSince(lastPlayTime ?? Date.distantPast)
             var matchedIdx = activeIdx
             if !curName.isEmpty && !isTransitioning && activeIdx < customQueue.count {
                 if isTrackMatching(expected: customQueue[activeIdx], candidateName: curName, candidateArtist: curArtist) {
                     matchedIdx = activeIdx
-                } else if let foundIdx = customQueue[activeIdx...].firstIndex(where: { isTrackMatching(expected: $0, candidateName: curName, candidateArtist: curArtist) }) {
-                    matchedIdx = foundIdx
+                } else if (confirmed || timeSincePlay >= 3.5) {
+                    let forwardWindowEnd = min(activeIdx + 3, customQueue.count)
+                    if let foundIdx = customQueue[activeIdx..<forwardWindowEnd].firstIndex(where: { isTrackMatching(expected: $0, candidateName: curName, candidateArtist: curArtist) }) {
+                        matchedIdx = foundIdx
+                    }
                 }
             }
 
@@ -828,6 +837,7 @@ public final class QueueManager: @unchecked Sendable {
         PlaybackStateStore.shared.activeCustomQueueIndex = index
         PlaybackStateStore.shared.isCustomQueuePlayback = true
         PlaybackStateStore.shared.isRadioPlayback = false
+        PlaybackStateStore.shared.isUserPaused = false
         PlaybackStateStore.shared.lastSkipTime = now
         PlaybackStateStore.shared.clearSeekTarget()
 
@@ -849,8 +859,33 @@ public final class QueueManager: @unchecked Sendable {
             PlaybackStateStore.shared.latestHistoryTracks = []
         }
 
+        // 1a. Fast local / cloud playback within "Очередь AMR" (SearchResults / Custom Queue)
+        if let plName = PlaybackStateStore.shared.currentOriginalPlaylistName, plName == "Очередь AMR" {
+            let targetTrackIndex = (track.index != nil && track.index! > 0) ? track.index! : (index + 1)
+            let script = """
+            tell application "Music"
+              try
+                set qPl to (first user playlist whose name is "Очередь AMR")
+                if qPl is not missing value and (count of tracks of qPl) >= \(targetTrackIndex) then
+                  set shuffle enabled to false
+                  play track \(targetTrackIndex) of qPl
+                  return "ok"
+                end if
+              on error
+              end try
+              return "error"
+            end tell
+            """
+            let (ok, out) = AppleScriptExecutor.shared.execute(script)
+            if ok && out?.trimmingCharacters(in: .whitespacesAndNewlines) == "ok" {
+                PlaybackStateStore.shared.invalidateQueueCache()
+                PlaybackStateStore.shared.invalidateStatusCache()
+                return true
+            }
+        }
+
         // 1. Fast local library playback using track index (ONLY if track is local library track and original playlist is specified)
-        if track.isLocal == true, let originalIndex = track.index, let plName = PlaybackStateStore.shared.currentOriginalPlaylistName, !plName.isEmpty {
+        if track.isLocal == true, let originalIndex = track.index, let plName = PlaybackStateStore.shared.currentOriginalPlaylistName, !plName.isEmpty, plName != "Очередь AMR" {
             let escapedPl = plName.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
             let script = """
             tell application "Music"
@@ -893,20 +928,44 @@ public final class QueueManager: @unchecked Sendable {
 
         // 1b. Try by numeric database ID if available (ONLY for local library tracks)
         if track.isLocal == true, let nid = track.numericId, nid > 0 {
+            let inMultiQueue = PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.isCustomQueuePlayback && PlaybackStateStore.shared.activeCustomQueue.count > 1
+            }
+            let deleteClause = inMultiQueue ? "" : """
+              if qPl is not missing value then
+                delete every track of qPl
+              end if
+            """
             let script = """
             tell application "Music"
               stop
+              set qPl to missing value
               try
-                set t to (first track of library playlist 1 whose database ID is \(nid))
-                play t
-                return "ok"
-              on error
-                try
-                  set t to (first track whose database ID is \(nid))
-                  play t
-                  return "ok"
-                end try
+                set qPl to playlist "Очередь AMR"
               end try
+              if qPl is missing value then
+                try
+                  set qPl to (make new user playlist with properties {name:"Очередь AMR"})
+                end try
+              end if
+              \(deleteClause)
+
+              set foundTrack to missing value
+              try
+                set foundTrack to (first track of library playlist 1 whose database ID is \(nid))
+              end try
+              if foundTrack is missing value then
+                try
+                  set foundTrack to (first track whose database ID is \(nid))
+                end try
+              end if
+
+              if foundTrack is not missing value and qPl is not missing value then
+                duplicate foundTrack to qPl
+                set shuffle enabled to false
+                play qPl
+                return "ok"
+              end if
               return "error"
             end tell
             """
@@ -943,13 +1002,21 @@ public final class QueueManager: @unchecked Sendable {
         }
 
         // 2. Fallback to Cloud / URL
+        let nextIdx = index + 1
+        let queueSnapshot = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.activeCustomQueue }
+        if nextIdx < queueSnapshot.count {
+            let nextTrack = queueSnapshot[nextIdx]
+            Task.detached(priority: .utility) {
+                _ = await MusicKitManager.shared.resolveTrackStation(title: nextTrack.name, artist: nextTrack.artist)
+            }
+        }
         return PlaybackRouter.shared.playCloudSync(url: track.url, id: track.id, name: track.name, artist: track.artist)
     }
 
     public func startQueueMonitoring() {
         stopQueueMonitoring()
         let timer = DispatchSource.makeTimerSource(queue: queueTimerQueue)
-        timer.schedule(deadline: .now() + 1.0, repeating: 1.0)
+        timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
         timer.setEventHandler { [weak self] in
             self?.checkAndAutoAdvanceCloudQueue()
         }
@@ -1012,7 +1079,7 @@ public final class QueueManager: @unchecked Sendable {
 
     public func handleTrackNotification(userInfo: [AnyHashable: Any]?) {
         guard let info = userInfo else { return }
-        let (isCustom, hasQueue, activeIdx, queueTracks, lastPlayTime, confirmed, isTransitioning) = PlaybackStateStore.shared.withLock {
+        let (isCustom, hasQueue, activeIdx, queueTracks, lastPlayTime, confirmed, isTransitioning, isUserPaused) = PlaybackStateStore.shared.withLock {
             (
                 PlaybackStateStore.shared.isCustomQueuePlayback,
                 !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
@@ -1020,21 +1087,32 @@ public final class QueueManager: @unchecked Sendable {
                 PlaybackStateStore.shared.activeCustomQueue,
                 PlaybackStateStore.shared.lastCloudPlayTime,
                 PlaybackStateStore.shared.currentTrackPlaybackConfirmed,
-                PlaybackStateStore.shared.isTransitioningTrack
+                PlaybackStateStore.shared.isTransitioningTrack,
+                PlaybackStateStore.shared.isUserPaused
             )
         }
         guard isCustom && hasQueue && activeIdx < queueTracks.count else { return }
 
         let state = (info["Player State"] as? String)?.lowercased() ?? ""
+        if isUserPaused || state == "paused" {
+            return
+        }
         let trackName = (info["Name"] as? String) ?? ""
         let artistName = info["Artist"] as? String
         let timeSincePlay = Date().timeIntervalSince(lastPlayTime ?? Date.distantPast)
 
-        // 1. If Music.app is stopped, ONLY advance if playback was ALREADY confirmed (song finished)
-        // If unconfirmed, Music.app is still buffering or switching streams, so do NOT skip!
+        // 1. If Music.app is stopped, ONLY advance if playback was confirmed AND track played to the end!
+        // If unconfirmed or stopped early (< 15s), Music.app is buffering, paused, or switching streams, so do NOT skip!
         if state == "stopped" {
+            if timeSincePlay < 15.0 {
+                return
+            }
             let alreadyTriggered = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack }
-            if confirmed && !alreadyTriggered && timeSincePlay >= 1.0 && activeIdx + 1 < queueTracks.count {
+            let status = PlayerStatusEngine.shared.getPlayerStatus()
+            let dur = status.duration > 0 ? status.duration : (queueTracks[activeIdx].duration > 0 ? queueTracks[activeIdx].duration : 180.0)
+            let pos = status.position
+            let isNearEnd = (dur > 15.0 && pos >= dur - 3.0) || (dur > 15.0 && timeSincePlay >= dur - 3.0) || (pos >= 30.0 && pos >= dur * 0.9)
+            if confirmed && !alreadyTriggered && isNearEnd && activeIdx + 1 < queueTracks.count {
                 PlaybackStateStore.shared.withLock {
                     PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
                     PlaybackStateStore.shared.lastWasPlayingCloud = false
@@ -1059,12 +1137,19 @@ public final class QueueManager: @unchecked Sendable {
         }
 
         // 3. During transition to target track, ignore mismatch from draining track
-        if isTransitioning {
+        if isTransitioning || (!confirmed && timeSincePlay < 3.5) {
             return
         }
 
-        // 4. If track matches forward in our custom queue, sync index to it
-        if let relativeIdx = queueTracks[activeIdx...].firstIndex(where: { isTrackMatching(expected: $0, candidateName: trackName, candidateArtist: artistName) }) {
+        // 4. If track is a past track in our custom queue, do not roll back and do not steer
+        if queueTracks[..<activeIdx].contains(where: { isTrackMatching(expected: $0, candidateName: trackName, candidateArtist: artistName) }) {
+            return
+        }
+
+        // 5. If track matches forward in our custom queue (within next 2 tracks), sync index to it
+        let forwardWindowEnd = min(activeIdx + 3, queueTracks.count)
+        if activeIdx < forwardWindowEnd,
+           let relativeIdx = queueTracks[activeIdx..<forwardWindowEnd].firstIndex(where: { isTrackMatching(expected: $0, candidateName: trackName, candidateArtist: artistName) }) {
             PlaybackStateStore.shared.withLock {
                 PlaybackStateStore.shared.activeCustomQueueIndex = relativeIdx
                 PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
@@ -1074,29 +1159,36 @@ public final class QueueManager: @unchecked Sendable {
             return
         }
 
-        // 5. If track is a past track in our custom queue, do not roll back and do not steer
-        if queueTracks[..<activeIdx].contains(where: { isTrackMatching(expected: $0, candidateName: trackName, candidateArtist: artistName) }) {
-            return
-        }
-
-        // 5. Track is foreign (not anywhere in our custom queue):
-        // ONLY steer if we ALREADY confirmed playback of our queue track AND the track has finished/played out
-        // (Music.app strayed into radio/autoplay recommendations).
-        // If unconfirmed or still in-flight, do NOT steer!
-        let alreadyTriggered = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack }
-        if confirmed && !alreadyTriggered && timeSincePlay >= 3.0 && activeIdx + 1 < queueTracks.count {
-            NSLog("[QueueManager] ⚡ Detected foreign track '%@' after confirmed playback. Steering to index %d: '%@'", trackName, activeIdx + 1, queueTracks[activeIdx + 1].name)
+        // 6. Track is foreign (not matching anything in customQueue):
+        // If Apple Music started an Autoplay radio track while we still have tracks left in customQueue,
+        // immediately stop foreign audio and advance to the next custom queue track!
+        if activeIdx + 1 < queueTracks.count && !isTransitioning {
+            let lastSkip = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastSkipTime }
+            if Date().timeIntervalSince(lastSkip) < 2.5 {
+                return
+            }
+            NSLog("[QueueManager] 🛡 Notification: Foreign track '%@' by '%@' while in custom queue! Stopping audio and advancing to %d: '%@'",
+                  trackName, artistName ?? "", activeIdx + 1, queueTracks[activeIdx + 1].name)
+            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
             PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.lastSkipTime = Date()
                 PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
                 PlaybackStateStore.shared.lastWasPlayingCloud = false
                 PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
                 _ = self.playQueueIndexUnlocked(activeIdx + 1)
             }
+            return
+        }
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.lastWasPlayingCloud = true
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
         }
     }
 
     public func checkAndAutoAdvanceCloudQueue() {
-        let (isCustom, hasQueue, activeIdx, queueTracks, lastPlayTime, lastWasPlaying, confirmed, isTransitioning) = PlaybackStateStore.shared.withLock {
+        let (isCustom, hasQueue, activeIdx, queueTracks, lastPlayTime, lastWasPlaying, confirmed, isTransitioning, isUserPaused) = PlaybackStateStore.shared.withLock {
             (
                 PlaybackStateStore.shared.isCustomQueuePlayback,
                 !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
@@ -1105,7 +1197,8 @@ public final class QueueManager: @unchecked Sendable {
                 PlaybackStateStore.shared.lastCloudPlayTime,
                 PlaybackStateStore.shared.lastWasPlayingCloud,
                 PlaybackStateStore.shared.currentTrackPlaybackConfirmed,
-                PlaybackStateStore.shared.isTransitioningTrack
+                PlaybackStateStore.shared.isTransitioningTrack,
+                PlaybackStateStore.shared.isUserPaused
             )
         }
         guard isCustom && hasQueue else {
@@ -1113,8 +1206,16 @@ public final class QueueManager: @unchecked Sendable {
             return
         }
 
+        if isUserPaused {
+            return
+        }
+
         let status = PlayerStatusEngine.shared.getPlayerStatus()
         let pState = status.playerState
+        if pState == "paused" {
+            return
+        }
+
         let pos = status.position
         var dur = status.duration
 
@@ -1136,15 +1237,19 @@ public final class QueueManager: @unchecked Sendable {
                         PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
                         PlaybackStateStore.shared.lastWasPlayingCloud = true
                         PlaybackStateStore.shared.lastSkipTime = .distantPast
-                        if pos >= 1.0 && pos < (dur > 2.0 ? dur - 2.0 : 1000.0) {
+                        if pos >= 1.0 && pos < (dur > 3.0 ? dur - 3.0 : 1000.0) {
                             PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
                         }
                     }
-                } else if isTransitioning {
+                } else if isTransitioning || (!confirmed && timeSincePlay < 3.5) {
                     // Still transitioning to activeIdx, ignore mismatch from draining track
                     return
-                } else if let relativeIdx = queueTracks[activeIdx...].firstIndex(where: { isTrackMatching(expected: $0, candidateName: curTrackName, candidateArtist: curArtist) }) {
-                    // Synced forward to a matching track in the queue
+                } else if queueTracks[..<activeIdx].contains(where: { isTrackMatching(expected: $0, candidateName: curTrackName, candidateArtist: curArtist) }) {
+                    // Past track in custom queue, do NOT roll forward or steer as foreign track
+                    return
+                } else if activeIdx < min(activeIdx + 3, queueTracks.count),
+                          let relativeIdx = queueTracks[activeIdx..<min(activeIdx + 3, queueTracks.count)].firstIndex(where: { isTrackMatching(expected: $0, candidateName: curTrackName, candidateArtist: curArtist) }) {
+                    // Synced forward to an immediate next track in the queue
                     PlaybackStateStore.shared.withLock {
                         PlaybackStateStore.shared.activeCustomQueueIndex = relativeIdx
                         PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
@@ -1152,53 +1257,100 @@ public final class QueueManager: @unchecked Sendable {
                         PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
                     }
                     return
-                } else if queueTracks[..<activeIdx].contains(where: { isTrackMatching(expected: $0, candidateName: curTrackName, candidateArtist: curArtist) }) {
-                    // Past track in custom queue, do NOT steer as foreign track
-                    return
-                } else if confirmed {
-                    // Foreign track playing while in custom queue (not anywhere in customQueue).
-                    // ONLY steer if the previous track was confirmed and played for at least 3 seconds!
-                    let alreadyTriggered = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack }
-                    if !alreadyTriggered && (timeSincePlay >= 3.0 || pos >= (dur > 0 ? dur - 1.5 : 1000.0)) {
-                        if activeIdx + 1 < queueTracks.count {
-                            NSLog("[QueueManager] 🔄 Steering foreign track '%@' back to queue index %d: '%@'", curTrackName, activeIdx + 1, queueTracks[activeIdx + 1].name)
-                            PlaybackStateStore.shared.withLock {
-                                PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
-                                PlaybackStateStore.shared.lastWasPlayingCloud = false
-                                PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
-                                _ = self.playQueueIndexUnlocked(activeIdx + 1)
-                            }
+                } else {
+                    // Foreign track playing while in custom queue
+                    if activeIdx + 1 < queueTracks.count && !isTransitioning {
+                        let lastSkip = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastSkipTime }
+                        if Date().timeIntervalSince(lastSkip) < 2.5 {
                             return
+                        }
+                        // Apple Music Autoplay started a foreign radio track while queue still has songs!
+                        NSLog("[QueueManager] 🛡 Poller: Foreign radio track '%@' by '%@' while in custom queue! Stopping audio and advancing to %d: '%@'",
+                              curTrackName, curArtist, activeIdx + 1, queueTracks[activeIdx + 1].name)
+                        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
+                        PlaybackStateStore.shared.withLock {
+                            PlaybackStateStore.shared.lastSkipTime = Date()
+                            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
+                            PlaybackStateStore.shared.lastWasPlayingCloud = false
+                            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
+                            _ = self.playQueueIndexUnlocked(activeIdx + 1)
+                        }
+                        return
+                    } else {
+                        PlaybackStateStore.shared.withLock {
+                            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+                            PlaybackStateStore.shared.lastWasPlayingCloud = true
+                            PlaybackStateStore.shared.lastSkipTime = .distantPast
                         }
                     }
                 }
             }
 
-            // Smooth advance before song finishes completely (1.5s before end to guarantee catching on 1.0s timer)
-            // ONLY if playback was confirmed or player has progressed
+            // Smooth advance before song finishes completely (3.0s before end)
             let alreadyTriggered = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack }
-            if confirmed && !alreadyTriggered && dur > 3.0 && pos > 1.0 && timeSincePlay >= 2.0 && pos >= (dur - 1.5) {
-                PlaybackStateStore.shared.withLock {
-                    PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
-                    PlaybackStateStore.shared.lastWasPlayingCloud = false
-                    PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
-                    if activeIdx + 1 < queueTracks.count {
-                        NSLog("[QueueManager] ⏭ Auto-advancing (smooth) to index %d: '%@'", activeIdx + 1, queueTracks[activeIdx + 1].name)
+            if confirmed && !alreadyTriggered && dur > 5.0 && pos > 1.0 && timeSincePlay >= 2.0 && (pos >= (dur - 3.0) || timeSincePlay >= (dur - 3.0)) {
+                if activeIdx + 1 < queueTracks.count {
+                    _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
+                    PlaybackStateStore.shared.withLock {
+                        PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
+                        PlaybackStateStore.shared.lastWasPlayingCloud = false
+                        PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
+                        NSLog("[QueueManager] ⏭ Preemptively auto-advancing (smooth) to index %d: '%@'", activeIdx + 1, queueTracks[activeIdx + 1].name)
                         _ = self.playQueueIndexUnlocked(activeIdx + 1)
+                    }
+                } else {
+                    // Queue finished! Transition to artist radio!
+                    let lastTrack = queueTracks[activeIdx]
+                    NSLog("[QueueManager] 📻 Custom queue reached end at index %d! Auto-transitioning to artist radio for '%@'", activeIdx, lastTrack.artist)
+                    PlaybackStateStore.shared.withLock {
+                        PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
+                        PlaybackStateStore.shared.isCustomQueuePlayback = false
+                        PlaybackStateStore.shared.activeCustomQueue.removeAll()
+                        PlaybackStateStore.shared.activeCustomQueueIndex = 0
+                    }
+                    self.stopQueueMonitoring()
+                    Task.detached(priority: .userInitiated) {
+                        _ = await PlaybackRouter.shared.playStation(
+                            url: "",
+                            name: "Станция «\(lastTrack.artist)»",
+                            type: "artist",
+                            trackTitle: lastTrack.name,
+                            artistName: lastTrack.artist
+                        )
                     }
                 }
             }
         } else if pState == "stopped" && lastWasPlaying && confirmed {
-            // Natural track finish: only advance if the track was confirmed playing
+            // Natural track finish: only advance if the track was confirmed playing AND actually reached near the end
             let alreadyTriggered = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack }
-            if timeSincePlay >= 1.5 && !alreadyTriggered {
-                PlaybackStateStore.shared.withLock {
-                    PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
-                    PlaybackStateStore.shared.lastWasPlayingCloud = false
-                    PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
-                    if activeIdx + 1 < queueTracks.count {
+            let isNearEnd = (dur > 15.0 && pos >= dur - 3.0) || (dur > 15.0 && timeSincePlay >= dur - 3.0) || (pos >= 30.0 && pos >= dur * 0.9)
+            if isNearEnd && !alreadyTriggered {
+                if activeIdx + 1 < queueTracks.count {
+                    PlaybackStateStore.shared.withLock {
+                        PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
+                        PlaybackStateStore.shared.lastWasPlayingCloud = false
+                        PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
                         NSLog("[QueueManager] ⏭ Auto-advancing (stopped) to index %d: '%@'", activeIdx + 1, queueTracks[activeIdx + 1].name)
                         _ = self.playQueueIndexUnlocked(activeIdx + 1)
+                    }
+                } else {
+                    let lastTrack = queueTracks[activeIdx]
+                    NSLog("[QueueManager] 📻 Custom queue finished (stopped)! Transitioning to artist radio for '%@'", lastTrack.artist)
+                    PlaybackStateStore.shared.withLock {
+                        PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = true
+                        PlaybackStateStore.shared.isCustomQueuePlayback = false
+                        PlaybackStateStore.shared.activeCustomQueue.removeAll()
+                        PlaybackStateStore.shared.activeCustomQueueIndex = 0
+                    }
+                    self.stopQueueMonitoring()
+                    Task.detached(priority: .userInitiated) {
+                        _ = await PlaybackRouter.shared.playStation(
+                            url: "",
+                            name: "Станция «\(lastTrack.artist)»",
+                            type: "artist",
+                            trackTitle: lastTrack.name,
+                            artistName: lastTrack.artist
+                        )
                     }
                 }
             }

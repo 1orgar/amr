@@ -43,10 +43,13 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public var seekTargetPosition: Double?
     public var seekTargetDate: Date = .distantPast
 
+    // User Pause Intent State
+    public var isUserPaused: Bool = false
+
     // Track Skip & Stream Transition Debounce
     public var lastSkipTime: Date = .distantPast
     public var isTransitioningTrack: Bool {
-        Date().timeIntervalSince(lastSkipTime) < 1.2
+        Date().timeIntervalSince(lastSkipTime) < 2.5
     }
 
     // Status & Queue Caches
@@ -82,10 +85,20 @@ public final class PlaybackStateStore: @unchecked Sendable {
 
     public func invalidateStatusCache(optimisticState: String? = nil) {
         lock.lock()
-        if let opt = optimisticState, let current = lastPlayerStatusCache {
-            var updatedStatus = current.status
-            updatedStatus.playerState = opt
-            lastPlayerStatusCache = (timestamp: Date.distantPast, status: updatedStatus)
+        if let opt = optimisticState {
+            if opt == "paused" || opt == "stopped" {
+                isUserPaused = true
+            } else if opt == "playing" {
+                isUserPaused = false
+            }
+            if let current = lastPlayerStatusCache {
+                var updatedStatus = current.status
+                updatedStatus.playerState = opt
+                lastPlayerStatusCache = (timestamp: Date(), status: updatedStatus)
+            } else {
+                let initialStatus = PlayerStatus(playerState: opt)
+                lastPlayerStatusCache = (timestamp: Date(), status: initialStatus)
+            }
         } else {
             lastPlayerStatusCache = nil
         }
@@ -114,6 +127,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public func resetPlaybackState(originalPlaylist: String? = nil, isRadio: Bool = false, stationName: String? = nil) {
         lock.lock()
         defer { lock.unlock() }
+        isUserPaused = false
         currentOriginalPlaylistName = originalPlaylist
         isRadioPlayback = isRadio
         activeStationName = stationName
@@ -131,10 +145,14 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public func resetCustomQueue() {
         lock.lock()
         defer { lock.unlock() }
+        isUserPaused = false
         isCustomQueuePlayback = false
         activeCustomQueue.removeAll()
         activeCustomQueueIndex = 0
         activeCustomQueueName = nil
+        isRadioPlayback = false
+        activeStationName = nil
+        currentOriginalPlaylistName = nil
         playbackQueueCache = nil
         currentTrackPlaybackConfirmed = false
         hasTriggeredAdvanceForCurrentTrack = false

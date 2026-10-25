@@ -27,7 +27,8 @@ public enum WebUIContent {
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=5">
+  <link rel="stylesheet" href="/style.css?v=8">
+  <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
 </head>
 <body>
   <!-- iOS Lock Screen & Background Media Keep-Alive -->
@@ -194,8 +195,8 @@ public enum WebUIContent {
       <!-- Desktop Navigation Tabs & Permanent DAC Badge -->
       <nav class="desktop-nav-header">
         <div class="desktop-nav-tabs">
-          <button class="nav-tab-btn" data-target="home">Главная</button>
-          <button class="nav-tab-btn active" data-target="library">Медиатека</button>
+          <button class="nav-tab-btn active" data-target="home">Главная</button>
+          <button class="nav-tab-btn" data-target="library">Медиатека</button>
           <button class="nav-tab-btn" data-target="queue">Очередь</button>
           <button class="nav-tab-btn" data-target="search">Поиск</button>
         </div>
@@ -253,7 +254,7 @@ public enum WebUIContent {
       </section>
 
       <!-- Library View -->
-      <section id="view-library" class="view-panel content-view active">
+      <section id="view-library" class="view-panel content-view">
         <!-- Playlists List -->
         <div id="playlists-browse-pane" class="library-pane">
           <header class="section-header">
@@ -318,14 +319,17 @@ public enum WebUIContent {
       </section>
 
       <!-- Home (Главная) View -->
-      <section id="view-home" class="view-panel content-view">
+      <section id="view-home" class="view-panel content-view active">
         <header class="section-header home-header">
           <div>
             <h1 class="main-home-title">Главная</h1>
           </div>
-          <div class="country-toggle" id="trends-country-toggle">
-            <button class="country-pill active" data-country="ru" type="button">RU</button>
-            <button class="country-pill" data-country="us" type="button">US</button>
+          <div class="header-account-badge hidden" id="header-account-badge">
+            <div class="account-badge-info">
+              <span class="account-badge-icon"></span>
+              <span class="account-badge-text" id="header-account-text">Apple ID</span>
+            </div>
+            <button class="btn-account-logout" id="btn-header-logout" type="button" title="Выйти из Apple ID">Выйти</button>
           </div>
         </header>
 
@@ -592,46 +596,149 @@ public enum WebUIContent {
     </div>
   </div>
 
-  <!-- Audio Quality Popover Modal -->
+  <!-- Signal Path Inspector Modal (Roon-like Audio Pipeline) -->
   <div id="quality-modal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-card">
+    <div class="modal-card signal-path-card">
       <div class="modal-header">
         <div class="modal-title-wrap">
-          <h3 class="modal-title">Параметры аудиопотока</h3>
-          <span class="modal-tag">BIT-PERFECT</span>
+          <h3 class="modal-title">Тракт сигнала</h3>
+          <span class="modal-tag">BIT-PERFECT DIRECT</span>
         </div>
         <button id="btn-close-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
       </div>
 
-      <div class="modal-body">
-        <div class="spec-row">
-          <span class="spec-label">Качество потока</span>
-          <span id="modal-spec-quality" class="spec-val">Lossless (ALAC)</span>
-        </div>
-        <div class="spec-row">
-          <span class="spec-label">Кодек / Сжатие</span>
-          <span class="spec-val">Apple Lossless (ALAC)</span>
-        </div>
-        <div class="spec-row">
-          <span class="spec-label">Режим вывода DAC</span>
-          <span class="spec-val highlight-green">Прямой эксклюзивный (CoreAudio)</span>
-        </div>
-        <div class="spec-row">
-          <span class="spec-label">Аппаратная частота</span>
-          <span id="modal-spec-rate" class="spec-val">Автосинхронизация (44.1 - 192 кГц)</span>
-        </div>
-        <div class="spec-row">
-          <span class="spec-label">Цифровая регулировка</span>
-          <span class="spec-val">Отключена (100% Bit-Perfect)</span>
+      <div class="modal-body signal-path-body">
+        <div class="signal-path-chain">
+          <!-- Step 1: Audio Source -->
+          <div class="signal-node" id="signal-node-source">
+            <div class="signal-node-dot"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">ИСТОЧНИК</span>
+                <span id="signal-source-badge" class="signal-node-format">ALAC Lossless</span>
+              </div>
+              <div id="signal-source-title" class="signal-node-name">Apple Music</div>
+              <div id="signal-source-details" class="signal-node-meta">24-bit / 192.0 kHz ALAC</div>
+            </div>
+          </div>
+
+          <div class="signal-connector">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Step 2: AMR Engine -->
+          <div class="signal-node" id="signal-node-engine">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">АУДИОДВИЖОК</span>
+                <span class="signal-node-format highlight-green">0.0 dB FS</span>
+              </div>
+              <div class="signal-node-name">AMR CoreAudio Engine</div>
+              <div class="signal-node-meta">Bit-Perfect 100% Lock • Zero DSP • Bypass микшера</div>
+            </div>
+          </div>
+
+          <div class="signal-connector">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Step 3: Hardware Output DAC -->
+          <div class="signal-node" id="signal-node-dac">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">ВЫХОДНОЙ ЦАП</span>
+                <span id="signal-dac-rate" class="signal-node-format">192.0 кГц</span>
+              </div>
+              <div id="signal-dac-name" class="signal-node-name">Аудиовыход</div>
+              <div id="signal-dac-details" class="signal-node-meta">Прямое подключение macOS CoreAudio</div>
+            </div>
+            <button id="btn-open-devices" class="btn-signal-action" type="button" title="Сменить устройство вывода">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              </svg>
+              <span>ЦАП</span>
+            </button>
+          </div>
         </div>
 
-        <div class="modal-explanation">
-          <p>В режиме Bit-Perfect цифровая шкала громкости в приложении зафиксирована на 100%, исключая математическую деградацию разрядности (DSP truncation). Регулируйте громкость на внешнем ЦАП или усилителе.</p>
+        <!-- Verified Bit-Perfect Card -->
+        <div class="signal-verified-card">
+          <div class="signal-verified-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+          </div>
+          <div class="signal-verified-info">
+            <div class="signal-verified-title">Bit-Perfect Verified</div>
+            <div class="signal-verified-desc">Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.</div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Audio Output Devices Modal -->
+  <div id="devices-modal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card devices-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Аудиоустройства вывода</h3>
+          <span class="modal-tag">COREAUDIO HAL</span>
+        </div>
+        <button id="btn-close-devices" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Выберите активный ЦАП или аудиовыход macOS</p>
+        <div id="audio-devices-list" class="audio-devices-list">
+          <div class="loading-state">Загрузка устройств...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mandatory Apple ID Auth Modal -->
+  <div id="modal-apple-auth" class="modal-backdrop auth-modal-backdrop hidden" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card auth-modal-card">
+      <div class="auth-modal-logo">
+        <svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor">
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 1.01-2.87-.94.04-2.08.63-2.75 1.41-.58.68-1.09 1.76-1.04 2.81 1.05.08 2.16-.57 2.78-1.35z"/>
+        </svg>
+      </div>
+      <h2 class="auth-modal-title">Подключите Apple ID</h2>
+      <p class="auth-modal-desc">
+        Для работы с каталогом, воспроизведения очередей в iCloud и персональных рекомендаций требуется авторизация в Apple Music.
+      </p>
+      <div class="auth-modal-features">
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Bit-Perfect звук в исходном качестве (ALAC / Hi-Res)</span>
+        </div>
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Синхронизация результатов поиска в iCloud-очереди</span>
+        </div>
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Персональная «Моя станция» и музыкальные открытия</span>
+        </div>
+      </div>
+      <div class="auth-modal-actions">
+        <button id="btn-auth-modal-login" class="btn-primary auth-btn-login" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 1.01-2.87-.94.04-2.08.63-2.75 1.41-.58.68-1.09 1.76-1.04 2.81 1.05.08 2.16-.57 2.78-1.35z"/>
+          </svg>
+          <span>Войти через Apple ID</span>
+        </button>
+      </div>
+      <div id="auth-modal-status" class="auth-modal-status hidden">
+        <div class="spinner-sm"></div>
+        <span>Инициализация MusicKit...</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Busy / Action Loading Overlay -->
   <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
@@ -641,7 +748,7 @@ public enum WebUIContent {
     </div>
   </div>
 
-  <script src="/app.js?v=5"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>
 
@@ -1568,6 +1675,18 @@ input {
   text-align: center;
 }
 
+.loading-state::before {
+  content: "";
+  display: block;
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: amr-spin 0.65s linear infinite;
+  margin-bottom: 4px;
+}
+
 /* Track List Elements */
 .track-list {
   display: flex;
@@ -2179,41 +2298,64 @@ input {
   line-height: 1.15;
 }
 
-.country-toggle {
+.header-account-badge {
   display: inline-flex;
   align-items: center;
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 20px;
-  padding: 3px;
-  gap: 2px;
+  padding: 3px 4px 3px 10px;
+  gap: 8px;
   flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-.country-pill {
-  padding: 5px 12px;
-  min-height: 28px;
+.account-badge-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.account-badge-icon {
+  font-size: 14px;
+  line-height: 1;
+  color: #ffffff;
+}
+
+.account-badge-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e5e5e7;
+  letter-spacing: -0.1px;
+}
+
+.btn-account-logout {
+  padding: 4px 10px;
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
-  font-size: 12px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 500;
-  color: var(--text-secondary);
-  background: transparent;
+  color: #8e8e93;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
   touch-action: manipulation;
 }
 
-.country-pill:hover {
-  color: var(--text-primary);
+.btn-account-logout:hover {
+  color: #ff453a;
+  background: rgba(255, 69, 58, 0.12);
+  border-color: rgba(255, 69, 58, 0.3);
 }
 
-.country-pill.active {
-  background: #ffffff;
-  color: #000000;
-  font-weight: 600;
+.btn-account-logout:active {
+  transform: scale(0.96);
 }
 
 /* Home Section Layout */
@@ -3321,6 +3463,35 @@ body.ui-blocked #busy-overlay {
   box-sizing: border-box;
 }
 
+.ctrl-btn.btn-loading::before {
+  margin-right: 0 !important;
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Play/Pause buttons should always remain interactive with visible SVGs */
+.control-play-main.btn-loading,
+.mini-btn.btn-loading,
+#btn-play-pause.btn-loading,
+#mini-btn-play-pause.btn-loading {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+.control-play-main.btn-loading svg,
+.mini-btn.btn-loading svg,
+#btn-play-pause.btn-loading svg,
+#mini-btn-play-pause.btn-loading svg {
+  display: block !important;
+}
+
+.control-play-main.btn-loading::before,
+.mini-btn.btn-loading::before,
+#btn-play-pause.btn-loading::before,
+#mini-btn-play-pause.btn-loading::before {
+  display: none !important;
+}
+
 
 /* Search Landing Categories (Genres) */
 #search-landing {
@@ -3543,6 +3714,430 @@ body.ui-blocked #busy-overlay {
   flex-shrink: 0;
 }
 
+/* ==========================================================================
+   v2.2.0 "Chopin" - Signal Path Inspector & Audio Device Switcher
+   ========================================================================== */
+
+/* Signal Path Inspector Modal Card */
+.signal-path-card {
+  max-width: 480px;
+  width: 92%;
+  background: #0d0d0f;
+  border: 1px solid #242428;
+  border-radius: 20px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.signal-path-body {
+  padding: 18px 20px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.signal-path-chain {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Signal Node */
+.signal-node {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #141416;
+  border: 1px solid #26262a;
+  border-radius: 14px;
+  padding: 14px 16px;
+  position: relative;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.signal-node-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #5c5c60;
+  margin-top: 5px;
+  flex-shrink: 0;
+  transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+.signal-node-dot.active {
+  background: #30d158;
+  box-shadow: 0 0 8px rgba(48, 209, 88, 0.6);
+}
+
+.signal-node-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.signal-node-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.signal-node-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #9e9ea3;
+  text-transform: uppercase;
+}
+
+.signal-node-format {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #242428;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.signal-node-format.highlight-green {
+  color: #30d158;
+  background: rgba(48, 209, 88, 0.12);
+}
+
+.signal-node-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signal-node-meta {
+  font-size: 12px;
+  color: #8e8e93;
+  line-height: 1.35;
+}
+
+/* Connector Between Nodes */
+.signal-connector {
+  display: flex;
+  justify-content: flex-start;
+  padding-left: 20px;
+  height: 18px;
+  position: relative;
+}
+
+.signal-connector-line {
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(to bottom, #30d158, #30d158);
+  opacity: 0.6;
+}
+
+/* Action button inside DAC node */
+.btn-signal-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #222226;
+  border: 1px solid #36363c;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  align-self: center;
+  flex-shrink: 0;
+  transition: background-color 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.btn-signal-action:hover {
+  background: #2c2c32;
+  border-color: #4a4a52;
+}
+
+.btn-signal-action:active {
+  transform: scale(0.96);
+}
+
+/* Bit-Perfect Verification Badge Card */
+.signal-verified-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(48, 209, 88, 0.08);
+  border: 1px solid rgba(48, 209, 88, 0.25);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.signal-verified-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(48, 209, 88, 0.15);
+  color: #30d158;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.signal-verified-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.signal-verified-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #30d158;
+  letter-spacing: 0.2px;
+}
+
+.signal-verified-desc {
+  font-size: 11px;
+  color: #9e9ea3;
+  line-height: 1.3;
+}
+
+/* Audio Devices Modal */
+.devices-modal-card {
+  max-width: 440px;
+  width: 90%;
+  background: #0f0f12;
+  border: 1px solid #242428;
+  border-radius: 20px;
+}
+
+.audio-devices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.audio-device-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #161619;
+  border: 1px solid #242428;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+  text-align: left;
+  width: 100%;
+}
+
+.audio-device-item:hover {
+  background: #1e1e23;
+  border-color: #38383e;
+}
+
+.audio-device-item.active {
+  background: #19231c;
+  border-color: rgba(48, 209, 88, 0.45);
+}
+
+.audio-device-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #222226;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.audio-device-item.active .audio-device-icon {
+  background: rgba(48, 209, 88, 0.2);
+  color: #30d158;
+}
+
+.audio-device-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audio-device-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audio-device-rate {
+  font-size: 12px;
+  color: #8e8e93;
+}
+
+.audio-device-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #38383e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.audio-device-item.active .audio-device-check {
+  background: #30d158;
+  border-color: #30d158;
+  color: #000000;
+}
+
+.audio-device-check svg {
+  display: none;
+}
+
+.audio-device-item.active .audio-device-check svg {
+  display: block;
+}
+
+/* Mandatory Apple ID Auth Modal */
+.auth-modal-backdrop {
+  z-index: 100000;
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.auth-modal-card {
+  max-width: 420px;
+  width: 100%;
+  background: #121214;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  padding: 32px 28px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  animation: authCardPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes authCardPop {
+  0% { transform: scale(0.94); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.auth-modal-logo {
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 18px auto;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #fa233b 0%, #fb5c74 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(250, 35, 59, 0.35);
+}
+
+.auth-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.4px;
+  margin: 0 0 8px 0;
+}
+
+.auth-modal-desc {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #9e9ea3;
+  margin: 0 0 22px 0;
+}
+
+.auth-modal-features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.auth-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #d1d1d6;
+}
+
+.auth-feature-icon {
+  color: #30d158;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.auth-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-btn-login {
+  width: 100%;
+  padding: 14px 20px;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.auth-btn-login:hover {
+  opacity: 0.92;
+}
+
+.auth-btn-login:active {
+  transform: scale(0.98);
+}
+
+.auth-modal-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: #8e8e93;
+}
+
 
 """##
 
@@ -3601,7 +4196,18 @@ body.ui-blocked #busy-overlay {
     searchScope: 'all',
     activeView: 'view-now-playing',
     lastNonPlayerView: 'view-home',
-    desktopActiveTab: 'library',
+    desktopActiveTab: 'home',
+
+    // Audio Devices & DAC
+    audioDeviceName: '',
+    audioDeviceSampleRate: 44100,
+    isBitPerfect: true,
+    audioDevices: [],
+
+    // Apple MusicKit & User Token
+    hasUserToken: false,
+    developerToken: '',
+    userStorefront: 'us',
 
     // Scrubber local tracking
     isScrubbing: false,
@@ -3648,7 +4254,9 @@ body.ui-blocked #busy-overlay {
     recentTracksFullList: document.getElementById('recent-tracks-full-list'),
     recentTotalCount: document.getElementById('recent-total-count'),
 
-    trendsCountryPills: document.querySelectorAll('.country-pill'),
+    headerAccountBadge: document.getElementById('header-account-badge'),
+    headerAccountText: document.getElementById('header-account-text'),
+    btnHeaderLogout: document.getElementById('btn-header-logout'),
     trendsStationsGrid: document.getElementById('home-stations-carousel') || document.getElementById('trends-stations-grid'),
     trendsAlbumsGrid: document.getElementById('home-albums-carousel') || document.getElementById('trends-albums-grid'),
     trendsGenresGrid: document.getElementById('home-genres-grid') || document.getElementById('trends-genres-grid'),
@@ -3754,11 +4362,24 @@ body.ui-blocked #busy-overlay {
     volumeThumb: document.getElementById('volume-thumb'),
     volumeLevelText: document.getElementById('volume-level-text'),
     playerBottomNotice: document.querySelector('.player-bottom-notice .dac-notice-text'),
-    // Modal
+    // Signal Path Modal
     qualityModal: document.getElementById('quality-modal'),
     btnCloseModal: document.getElementById('btn-close-modal'),
-    modalSpecQuality: document.getElementById('modal-spec-quality'),
-    modalSpecRate: document.getElementById('modal-spec-rate')
+    signalSourceBadge: document.getElementById('signal-source-badge'),
+    signalSourceTitle: document.getElementById('signal-source-title'),
+    signalSourceDetails: document.getElementById('signal-source-details'),
+    signalDacRate: document.getElementById('signal-dac-rate'),
+    signalDacName: document.getElementById('signal-dac-name'),
+    signalDacDetails: document.getElementById('signal-dac-details'),
+    btnOpenDevices: document.getElementById('btn-open-devices'),
+    // Audio Devices Modal
+    devicesModal: document.getElementById('devices-modal'),
+    btnCloseDevices: document.getElementById('btn-close-devices'),
+    audioDevicesList: document.getElementById('audio-devices-list'),
+    // Apple ID Auth Modal
+    modalAppleAuth: document.getElementById('modal-apple-auth'),
+    btnAuthModalLogin: document.getElementById('btn-auth-modal-login'),
+    authModalStatus: document.getElementById('auth-modal-status')
   };
 
   // --- Busy Overlay & Action Loading Controller ---
@@ -3852,6 +4473,9 @@ body.ui-blocked #busy-overlay {
       send({ action: 'get_queue' });
       send({ action: 'get_playlists' });
       send({ action: 'get_explore', params: { country: state.trends.country } });
+      send({ action: 'get_audio_devices' });
+      send({ action: 'get_user_token_status' });
+      send({ action: 'get_developer_token' });
     };
 
     socket.onmessage = function (event) {
@@ -3949,6 +4573,25 @@ body.ui-blocked #busy-overlay {
         updateSearchResults(data);
         break;
 
+      case 'get_audio_devices':
+      case 'audio_devices':
+      case 'audio_devices_changed':
+        updateAudioDevices(data);
+        break;
+
+      case 'get_user_token_status':
+      case 'user_token_status':
+      case 'set_user_token':
+        updateUserTokenStatus(data);
+        break;
+
+      case 'get_developer_token':
+        if (data && data.token) {
+          state.developerToken = data.token;
+          initMusicKit(data.token);
+        }
+        break;
+
       default:
         // Check if data has player properties
         if (data && (data.player_state || data.playerState)) {
@@ -3965,26 +4608,27 @@ body.ui-blocked #busy-overlay {
       'queue_changed', 'queue', 'get_queue',
       'play', 'pause', 'play_pause', 'next', 'previous',
       'play_album', 'play_album_tracks', 'play_playlist',
-      'play_station', 'play_recent', 'play_queue_index', 'play_cloud'
+      'play_station', 'play_hero_card', 'play_search_results',
+      'play_recent', 'play_queue_index', 'play_cloud'
     ];
-    if (state.isLaunchingStation) {
-      if (data && (data.player_state === 'playing' || data.playerState === 'playing')) {
+    if (busyDismissActions.includes(type) || msg.status === 'ok' || msg.status === 'error') {
+      if (state.isBusyAction) {
+        setUIBusy(false);
+      }
+      if (state.isLaunchingStation) {
         state.isLaunchingStation = false;
         if (state.stationLaunchTimeout) {
           clearTimeout(state.stationLaunchTimeout);
           state.stationLaunchTimeout = null;
         }
-        setUIBusy(false);
-      }
-    } else if (busyDismissActions.includes(type) || msg.status === 'ok' || msg.status === 'error') {
-      if (state.isBusyAction) {
-        setUIBusy(false);
       }
     }
   }
 
   function updatePlayerState(data) {
     if (!data) return;
+
+    clearTransportLoading();
 
     const oldTrack = state.track;
     const newTrack = data.track || null;
@@ -4049,6 +4693,16 @@ body.ui-blocked #busy-overlay {
     state.audioQuality = data.audio_quality || data.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
     state.track = newTrack;
 
+    if (data.audio_device_name !== undefined || data.audioDeviceName !== undefined) {
+      state.audioDeviceName = data.audio_device_name || data.audioDeviceName || '';
+    }
+    if (data.audio_device_sample_rate !== undefined || data.audioDeviceSampleRate !== undefined) {
+      state.audioDeviceSampleRate = Number(data.audio_device_sample_rate || data.audioDeviceSampleRate) || 44100;
+    }
+    if (data.is_bit_perfect !== undefined || data.isBitPerfect !== undefined) {
+      state.isBitPerfect = data.is_bit_perfect !== undefined ? Boolean(data.is_bit_perfect) : Boolean(data.isBitPerfect);
+    }
+
     if (data.lock_volume_100 !== undefined) {
       state.lockVolume100 = Boolean(data.lock_volume_100);
       try { localStorage.setItem('amr_lock_volume_100', String(state.lockVolume100)); } catch (e) {}
@@ -4065,6 +4719,9 @@ body.ui-blocked #busy-overlay {
     }
 
     renderNowPlaying();
+    if (dom.qualityModal && !dom.qualityModal.classList.contains('hidden')) {
+      updateSignalPathDetails();
+    }
   }
 
   function formatTime(seconds) {
@@ -4217,18 +4874,21 @@ body.ui-blocked #busy-overlay {
     if (dom.desktopDacText) dom.desktopDacText.textContent = dacText;
     if (dom.mobileDacText) dom.mobileDacText.textContent = dacText;
     if (dom.modalSpecQuality) dom.modalSpecQuality.textContent = state.audioQuality;
-
-    // Extract sample rate if present
-    if (state.audioQuality.includes('192')) {
-      dom.modalSpecRate.textContent = '192.0 кГц (Hi-Res Bit-Perfect)';
-    } else if (state.audioQuality.includes('96')) {
-      dom.modalSpecRate.textContent = '96.0 кГц (Hi-Res Bit-Perfect)';
-    } else if (state.audioQuality.includes('48')) {
-      dom.modalSpecRate.textContent = '48.0 кГц (Lossless Bit-Perfect)';
-    } else if (state.audioQuality.includes('44.1')) {
-      dom.modalSpecRate.textContent = '44.1 кГц (Lossless Bit-Perfect)';
-    } else {
-      dom.modalSpecRate.textContent = 'Автосинхронизация CoreAudio';
+    if (dom.modalSpecRate) {
+      if (state.audioQuality.includes('192')) {
+        dom.modalSpecRate.textContent = '192.0 кГц (Hi-Res Bit-Perfect)';
+      } else if (state.audioQuality.includes('96')) {
+        dom.modalSpecRate.textContent = '96.0 кГц (Hi-Res Bit-Perfect)';
+      } else if (state.audioQuality.includes('48')) {
+        dom.modalSpecRate.textContent = '48.0 кГц (Lossless Bit-Perfect)';
+      } else if (state.audioQuality.includes('44.1')) {
+        dom.modalSpecRate.textContent = '44.1 кГц (Lossless Bit-Perfect)';
+      } else {
+        dom.modalSpecRate.textContent = 'Автосинхронизация CoreAudio';
+      }
+    }
+    if (typeof updateSignalPathDetails === 'function') {
+      updateSignalPathDetails();
     }
 
     // Only update scrubber UI here if stopped or paused.
@@ -4686,11 +5346,45 @@ body.ui-blocked #busy-overlay {
     send({ action: isPlaying ? 'pause' : 'play' });
   }
 
-  let lastTransportActionTime = 0;
+  let transportLoadingTimer = null;
+  function setTransportLoading(action) {
+    if (transportLoadingTimer) clearTimeout(transportLoadingTimer);
+    if (action === 'next') {
+      dom.btnNext?.classList.add('btn-loading');
+      dom.miniBtnNext?.classList.add('btn-loading');
+    } else if (action === 'previous') {
+      dom.btnPrev?.classList.add('btn-loading');
+    }
+    transportLoadingTimer = setTimeout(clearTransportLoading, 2000);
+  }
+
+  function clearTransportLoading() {
+    if (transportLoadingTimer) {
+      clearTimeout(transportLoadingTimer);
+      transportLoadingTimer = null;
+    }
+    dom.btnNext?.classList.remove('btn-loading');
+    dom.miniBtnNext?.classList.remove('btn-loading');
+    dom.btnPrev?.classList.remove('btn-loading');
+    dom.btnPlayPause?.classList.remove('btn-loading');
+    dom.miniBtnPlayPause?.classList.remove('btn-loading');
+  }
+
+  let lastNextActionTime = 0;
+  let lastPrevActionTime = 0;
   function sendThrottledTransport(action) {
     const now = Date.now();
-    if (now - lastTransportActionTime < 500) return;
-    lastTransportActionTime = now;
+    if (action === 'next') {
+      if (now - lastNextActionTime < 400) return;
+      lastNextActionTime = now;
+    } else if (action === 'previous') {
+      if (now - lastPrevActionTime < 150) return;
+      lastPrevActionTime = now;
+    } else {
+      if (now - lastNextActionTime < 400) return;
+      lastNextActionTime = now;
+    }
+    setTransportLoading(action);
     triggerHaptic('medium');
     send({ action });
   }
@@ -4743,18 +5437,285 @@ body.ui-blocked #busy-overlay {
     connectWebSocket();
   });
 
-  // --- Audio Quality Modal Listeners ---
+  // --- Signal Path Inspector (Roon-like Pipeline) ---
+  function updateSignalPathDetails() {
+    const t = state.track;
+    const quality = state.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
+    const rateKhz = state.audioDeviceSampleRate ? (state.audioDeviceSampleRate / 1000).toFixed(1) : '44.1';
+
+    let formatBadge = 'ALAC Lossless';
+    const up = quality.toUpperCase();
+    if (up.includes('192') || up.includes('HI-RES')) {
+      formatBadge = 'ALAC Hi-Res';
+    } else if (up.includes('AAC')) {
+      formatBadge = 'AAC 256k';
+    } else if (up.includes('LOSSLESS') || up.includes('ALAC')) {
+      formatBadge = 'ALAC Lossless';
+    }
+
+    if (dom.signalSourceBadge) dom.signalSourceBadge.textContent = formatBadge;
+    if (dom.signalSourceTitle) {
+      dom.signalSourceTitle.textContent = t ? `${t.name} — ${t.artist}` : 'Apple Music';
+    }
+    if (dom.signalSourceDetails) {
+      dom.signalSourceDetails.textContent = quality;
+    }
+    if (dom.signalDacRate) {
+      dom.signalDacRate.textContent = `${rateKhz} кГц`;
+    }
+    if (dom.signalDacName) {
+      dom.signalDacName.textContent = state.audioDeviceName || 'Аудиовыход macOS';
+    }
+    if (dom.signalDacDetails) {
+      dom.signalDacDetails.textContent = `Прямое подключение macOS CoreAudio HAL (${rateKhz} кГц)`;
+    }
+  }
+
   const openQualityModal = () => {
     triggerHaptic('light');
-    dom.qualityModal.classList.remove('hidden');
+    updateSignalPathDetails();
+    if (dom.qualityModal) dom.qualityModal.classList.remove('hidden');
   };
-  dom.audioQualityBadge.addEventListener('click', openQualityModal);
+
+  if (dom.audioQualityBadge) dom.audioQualityBadge.addEventListener('click', openQualityModal);
   if (dom.desktopDacBadge) dom.desktopDacBadge.addEventListener('click', openQualityModal);
   if (dom.mobileDacBadge) dom.mobileDacBadge.addEventListener('click', openQualityModal);
 
-  dom.btnCloseModal.addEventListener('click', () => {
-    dom.qualityModal.classList.add('hidden');
-  });
+  if (dom.btnCloseModal) {
+    dom.btnCloseModal.addEventListener('click', () => {
+      if (dom.qualityModal) dom.qualityModal.classList.add('hidden');
+    });
+  }
+
+  // --- Audio Output Devices Modal (DAC Selector) ---
+  const openDevicesModal = () => {
+    triggerHaptic('light');
+    if (dom.devicesModal) {
+      dom.devicesModal.classList.remove('hidden');
+      send({ action: 'get_audio_devices' });
+    }
+  };
+
+  if (dom.btnOpenDevices) dom.btnOpenDevices.addEventListener('click', openDevicesModal);
+
+  if (dom.btnCloseDevices) {
+    dom.btnCloseDevices.addEventListener('click', () => {
+      if (dom.devicesModal) dom.devicesModal.classList.add('hidden');
+    });
+  }
+
+  if (dom.devicesModal) {
+    dom.devicesModal.addEventListener('click', (e) => {
+      if (e.target === dom.devicesModal) {
+        dom.devicesModal.classList.add('hidden');
+      }
+    });
+  }
+
+  function updateAudioDevices(data) {
+    let list = [];
+    if (Array.isArray(data)) {
+      list = data;
+    } else if (data && Array.isArray(data.devices)) {
+      list = data.devices;
+    }
+    state.audioDevices = list;
+
+    const defaultDev = list.find(d => d.isDefault);
+    if (defaultDev) {
+      state.audioDeviceName = defaultDev.name || state.audioDeviceName;
+      if (defaultDev.currentSampleRate) {
+        state.audioDeviceSampleRate = defaultDev.currentSampleRate;
+      }
+    }
+    renderAudioDevicesList();
+    updateSignalPathDetails();
+  }
+
+  function renderAudioDevicesList() {
+    if (!dom.audioDevicesList) return;
+    dom.audioDevicesList.innerHTML = '';
+
+    if (!state.audioDevices || state.audioDevices.length === 0) {
+      dom.audioDevicesList.innerHTML = '<div class="empty-state">Нет доступных аудиоустройств</div>';
+      return;
+    }
+
+    state.audioDevices.forEach(dev => {
+      const item = document.createElement('div');
+      item.className = `audio-device-item ${dev.isDefault ? 'active' : ''}`;
+      item.setAttribute('data-device-id', String(dev.id));
+
+      const rateText = dev.currentSampleRate ? `${(dev.currentSampleRate / 1000).toFixed(1)} кГц` : '44.1 кГц';
+      const ratesCount = Array.isArray(dev.availableSampleRates) ? dev.availableSampleRates.length : 0;
+      const subtitle = `${rateText} • Bit-Perfect ${ratesCount > 0 ? `(${ratesCount} частот)` : ''}`;
+
+      item.innerHTML = `
+        <div class="audio-device-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          </svg>
+        </div>
+        <div class="audio-device-info">
+          <div class="audio-device-name">${dev.name || 'Аудиовыход'}</div>
+          <div class="audio-device-meta">${subtitle}</div>
+        </div>
+        ${dev.isDefault ? '<span class="audio-device-badge active">Активен</span>' : '<span class="audio-device-badge">Выбрать</span>'}
+      `;
+
+      item.addEventListener('click', () => {
+        triggerHaptic('medium');
+        send({ action: 'set_audio_device', params: { id: dev.id, uid: dev.uid } });
+        state.audioDevices.forEach(d => { d.isDefault = (d.id === dev.id); });
+        state.audioDeviceName = dev.name;
+        if (dev.currentSampleRate) state.audioDeviceSampleRate = dev.currentSampleRate;
+        renderAudioDevicesList();
+        updateSignalPathDetails();
+      });
+
+      dom.audioDevicesList.appendChild(item);
+    });
+  }
+
+  // --- Apple MusicKit & User Token Handlers ---
+  let musicKitInstance = null;
+
+  function initMusicKit(devToken) {
+    if (!devToken) return;
+    state.developerToken = devToken;
+    const setup = () => {
+      if (window.MusicKit) {
+        try {
+          if (!musicKitInstance) {
+            window.MusicKit.configure({
+              developerToken: devToken,
+              app: {
+                name: 'Apple Music Remote',
+                build: '2.2.0'
+              }
+            });
+            musicKitInstance = window.MusicKit.getInstance();
+            if (musicKitInstance && musicKitInstance.isAuthorized) {
+              const uToken = musicKitInstance.musicUserToken;
+              if (uToken && !state.hasUserToken) {
+                send({ action: 'set_user_token', params: { user_token: uToken } });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('MusicKit configuration error:', e);
+        }
+      }
+    };
+    if (window.MusicKit) {
+      setup();
+    } else {
+      document.addEventListener('musickitloaded', setup);
+    }
+  }
+
+  function updateUserTokenStatus(data) {
+    const hasToken = Boolean(data && (data.has_user_token !== undefined ? data.has_user_token : data.hasUserToken));
+    state.hasUserToken = hasToken;
+    if (data && data.storefront) {
+      state.userStorefront = data.storefront;
+    }
+
+    if (hasToken) {
+      if (dom.modalAppleAuth) {
+        dom.modalAppleAuth.classList.add('hidden');
+        dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
+      }
+      if (dom.headerAccountBadge) {
+        dom.headerAccountBadge.classList.remove('hidden');
+      }
+      if (dom.headerAccountText) {
+        dom.headerAccountText.textContent = `Apple ID: ${(state.userStorefront || 'us').toUpperCase()}`;
+      }
+
+      const activeCountry = state.userStorefront || state.trends.country || 'us';
+      if (state.trends.country !== activeCountry) {
+        state.trends.country = activeCountry;
+        loadTrends(activeCountry);
+      }
+    } else {
+      if (dom.headerAccountBadge) {
+        dom.headerAccountBadge.classList.add('hidden');
+      }
+      if (dom.modalAppleAuth) {
+        dom.modalAppleAuth.classList.remove('hidden');
+        dom.modalAppleAuth.setAttribute('aria-hidden', 'false');
+      }
+    }
+  }
+
+  async function handleAppleIdLogin() {
+    triggerHaptic('medium');
+    if (dom.authModalStatus) {
+      dom.authModalStatus.classList.remove('hidden');
+      dom.authModalStatus.innerHTML = '<div class="spinner-sm"></div><span>Инициализация MusicKit...</span>';
+    }
+    if (dom.btnAuthModalLogin) {
+      dom.btnAuthModalLogin.disabled = true;
+    }
+
+    if (!window.MusicKit) {
+      if (dom.authModalStatus) dom.authModalStatus.innerHTML = '<span>Загрузка MusicKit.js... Повторите через 2 секунды</span>';
+      setTimeout(() => {
+        if (dom.btnAuthModalLogin) dom.btnAuthModalLogin.disabled = false;
+        if (dom.authModalStatus) dom.authModalStatus.classList.add('hidden');
+      }, 2500);
+      return;
+    }
+
+    if (!musicKitInstance && state.developerToken) {
+      initMusicKit(state.developerToken);
+    }
+
+    if (!musicKitInstance) {
+      send({ action: 'get_developer_token' });
+      if (dom.authModalStatus) dom.authModalStatus.innerHTML = '<div class="spinner-sm"></div><span>Получение ключа разработчика...</span>';
+      setTimeout(() => {
+        if (dom.btnAuthModalLogin) dom.btnAuthModalLogin.disabled = false;
+        if (state.developerToken && !musicKitInstance) {
+          initMusicKit(state.developerToken);
+        }
+      }, 1500);
+      return;
+    }
+
+    try {
+      if (dom.authModalStatus) dom.authModalStatus.innerHTML = '<div class="spinner-sm"></div><span>Ожидание авторизации Apple ID...</span>';
+      const uToken = await musicKitInstance.authorize();
+      if (uToken) {
+        send({ action: 'set_user_token', params: { user_token: uToken } });
+        updateUserTokenStatus({ has_user_token: true });
+      }
+    } catch (err) {
+      console.error('Apple Music authorization error:', err);
+    } finally {
+      if (dom.btnAuthModalLogin) dom.btnAuthModalLogin.disabled = false;
+      if (dom.authModalStatus) dom.authModalStatus.classList.add('hidden');
+    }
+  }
+
+  async function handleAppleIdLogout() {
+    triggerHaptic('medium');
+    if (musicKitInstance) {
+      try { await musicKitInstance.unauthorize(); } catch (e) {}
+    }
+    send({ action: 'set_user_token', params: { user_token: '' } });
+    updateUserTokenStatus({ has_user_token: false });
+  }
+
+  if (dom.btnAuthModalLogin) {
+    dom.btnAuthModalLogin.addEventListener('click', handleAppleIdLogin);
+  }
+
+  if (dom.btnHeaderLogout) {
+    dom.btnHeaderLogout.addEventListener('click', handleAppleIdLogout);
+  }
 
   // --- Station Creation Modal Listeners ---
   if (dom.btnCreateStation) {
@@ -5313,7 +6274,7 @@ body.ui-blocked #busy-overlay {
       action: 'search',
       params: {
         query: query,
-        country: 'ru',
+        country: state.userStorefront || state.trends.country || 'us',
         scope: scope,
         limit: 50,
         offset: offset
@@ -5705,13 +6666,8 @@ body.ui-blocked #busy-overlay {
     if (country) {
       state.trends.country = country;
     }
-    const c = state.trends.country || 'ru';
-
-    if (dom.trendsCountryPills) {
-      dom.trendsCountryPills.forEach(pill => {
-        pill.classList.toggle('active', pill.dataset.country === c);
-      });
-    }
+    const c = state.userStorefront || state.trends.country || 'us';
+    state.trends.country = c;
 
     const now = Date.now();
     if (!force && lastTrendsCountry === c && now - lastTrendsLoadedTime < 30000 && state.trends.stations && state.trends.stations.length > 0) {
@@ -6362,22 +7318,6 @@ body.ui-blocked #busy-overlay {
     executeSearch(cleanQ, state.searchScope);
   }
 
-  // Country pill toggles
-  if (dom.trendsCountryPills) {
-    dom.trendsCountryPills.forEach(pill => {
-      pill.addEventListener('click', () => {
-        const country = pill.dataset.country;
-        if (country && country !== state.trends.country) {
-          state.trends.country = country;
-          dom.trendsCountryPills.forEach(p => p.classList.toggle('active', p.dataset.country === country));
-          if (dom.trendsSongsList) dom.trendsSongsList.innerHTML = '<div class="loading-state">Загрузка топ-чартов...</div>';
-          if (dom.trendsAlbumsGrid) dom.trendsAlbumsGrid.innerHTML = '<div class="loading-state">Загрузка альбомов...</div>';
-          loadTrends(country);
-        }
-      });
-    });
-  }
-
   // --- Navigation & View Switching ---
 
   // Mobile Bottom Tab Bar
@@ -6451,6 +7391,16 @@ body.ui-blocked #busy-overlay {
     expandNowPlaying();
   });
 
+  // Synthetic click suppression after touch swipes
+  let ignoreSyntheticClickUntil = 0;
+  document.addEventListener('click', (e) => {
+    if (Date.now() < ignoreSyntheticClickUntil) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+
   // --- Artwork & Mini-Player Swipe Gestures ---
   function setupArtworkSwipeGestures() {
     const container = dom.artworkContainer;
@@ -6502,10 +7452,11 @@ body.ui-blocked #busy-overlay {
       wrapper.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.9, 0.4, 1)';
 
       const isFastSwipe = elapsed < 320;
-      const horizontalThreshold = isFastSwipe ? 35 : 60;
-      const verticalThreshold = isFastSwipe ? 45 : 75;
+      const horizontalThreshold = isFastSwipe ? 50 : 80;
+      const verticalThreshold = isFastSwipe ? 55 : 85;
 
       if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > horizontalThreshold) {
+        ignoreSyntheticClickUntil = Date.now() + 450;
         if (deltaX < 0) {
           // Swipe Left -> Next Track
           triggerHaptic('medium');
@@ -6590,20 +7541,21 @@ body.ui-blocked #busy-overlay {
       const elapsed = Date.now() - startTime;
       const dist = Math.hypot(deltaX, deltaY);
 
-      if (dist > 35) {
+      if (dist > 45) {
         if (Math.abs(deltaX) > Math.abs(deltaY)) {
-          if (deltaX < -35) {
+          ignoreSyntheticClickUntil = Date.now() + 450;
+          if (deltaX < -45) {
             // Swipe Left -> Next
             triggerHaptic('medium');
             sendThrottledTransport('next');
             return;
-          } else if (deltaX > 35) {
+          } else if (deltaX > 45) {
             // Swipe Right -> Previous
             triggerHaptic('medium');
             sendThrottledTransport('previous');
             return;
           }
-        } else if (deltaY < -35) {
+        } else if (deltaY < -45) {
           // Swipe Up -> Expand Now Playing
           expandNowPlaying();
           return;

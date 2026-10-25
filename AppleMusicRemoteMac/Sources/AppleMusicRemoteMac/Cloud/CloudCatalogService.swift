@@ -223,9 +223,10 @@ public final class CloudCatalogService: @unchecked Sendable {
         }
 
         if source == "library" {
+            let dedupedLocal = Self.deduplicateSongs(localSongDicts)
             return [
                 "artists": AnyCodable([]),
-                "songs": AnyCodable(localSongDicts),
+                "songs": AnyCodable(dedupedLocal),
                 "albums": AnyCodable([]),
                 "offset": AnyCodable(effectiveOffset),
                 "limit": AnyCodable(effectiveLimit),
@@ -260,8 +261,21 @@ public final class CloudCatalogService: @unchecked Sendable {
         if let appleMusicResults = await MusicKitManager.shared.searchAppleMusic(query: query, storefront: c, limit: effectiveLimit, offset: effectiveOffset) {
             var res = [String: AnyCodable]()
             let rawCloudSongs = (appleMusicResults["songs"] as? [[String: Any]]) ?? []
-            let enrichedCloudSongs = enrichWithLocal(rawCloudSongs)
-            let mergedSongs = localSongDicts + enrichedCloudSongs
+            let dedupedCloudSongs = Self.deduplicateSongs(rawCloudSongs)
+            let enrichedCloudSongs = enrichWithLocal(dedupedCloudSongs)
+            let cloudSongKeys = Set(enrichedCloudSongs.compactMap { song -> String? in
+                let n = (song["name"] as? String) ?? ""
+                let a = (song["artist"] as? String) ?? ""
+                let k = Self.normalizeTrackKey(name: n, artist: a)
+                return (!k.isEmpty && k != "|") ? k : nil
+            })
+            let uniqueLocalSongs = localSongDicts.filter { local in
+                let n = (local["name"] as? String) ?? ""
+                let a = (local["artist"] as? String) ?? ""
+                let k = Self.normalizeTrackKey(name: n, artist: a)
+                return !cloudSongKeys.contains(k)
+            }
+            let mergedSongs = Self.deduplicateSongs(enrichedCloudSongs + uniqueLocalSongs)
             res["songs"] = AnyCodable(mergedSongs)
             if let albums = appleMusicResults["albums"] as? [[String: Any]] {
                 res["albums"] = AnyCodable(albums)
@@ -285,16 +299,67 @@ public final class CloudCatalogService: @unchecked Sendable {
         async let albumsTask = fetchAlbums(query: encodedQ, country: c, limit: min(effectiveLimit, 20), offset: effectiveOffset)
 
         let (artists, rawSongs, albums) = await (artistsTask, songsTask, albumsTask)
-        let enrichedSongs = enrichWithLocal(rawSongs)
+        let dedupedRawSongs = Self.deduplicateSongs(rawSongs)
+        let enrichedSongs = enrichWithLocal(dedupedRawSongs)
+        let fallbackCloudKeys = Set(enrichedSongs.compactMap { song -> String? in
+            let n = (song["name"] as? String) ?? ""
+            let a = (song["artist"] as? String) ?? ""
+            let k = Self.normalizeTrackKey(name: n, artist: a)
+            return (!k.isEmpty && k != "|") ? k : nil
+        })
+        let fallbackUniqueLocal = localSongDicts.filter { local in
+            let n = (local["name"] as? String) ?? ""
+            let a = (local["artist"] as? String) ?? ""
+            let k = Self.normalizeTrackKey(name: n, artist: a)
+            return !fallbackCloudKeys.contains(k)
+        }
+        let mergedFallbackSongs = Self.deduplicateSongs(enrichedSongs + fallbackUniqueLocal)
 
         return [
             "artists": AnyCodable(artists),
-            "songs": AnyCodable(localSongDicts + enrichedSongs),
+            "songs": AnyCodable(mergedFallbackSongs),
             "albums": AnyCodable(albums),
             "offset": AnyCodable(effectiveOffset),
             "limit": AnyCodable(effectiveLimit),
             "has_more": AnyCodable(rawSongs.count >= effectiveLimit)
         ]
+    }
+
+    // MARK: - Track Normalization & Deduplication Helpers
+
+    public static func normalizeTrackKey(name: String, artist: String) -> String {
+        var n = name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if let regex = try? NSRegularExpression(pattern: "\\s*[\\[\\(].*?[\\]\\)]", options: []) {
+            n = regex.stringByReplacingMatches(in: n, options: [], range: NSRange(location: 0, length: n.utf16.count), withTemplate: "")
+        }
+        if let dashIdx = n.range(of: " - ") {
+            n = String(n[..<dashIdx.lowerBound])
+        }
+        let allowed = CharacterSet.alphanumerics.union(.whitespaces)
+        let cleanN = n.unicodeScalars.filter { allowed.contains($0) }.map { String($0) }.joined()
+        let cleanA = artist.lowercased().unicodeScalars.filter { allowed.contains($0) }.map { String($0) }.joined()
+        let normN = cleanN.split(separator: " ").joined(separator: " ")
+        let normA = cleanA.split(separator: " ").joined(separator: " ")
+        return "\(normN)|\(normA)"
+    }
+
+    public static func deduplicateSongs(_ songs: [[String: Any]]) -> [[String: Any]] {
+        var seen = Set<String>()
+        var result = [[String: Any]]()
+        for s in songs {
+            let n = (s["name"] as? String) ?? (s["trackName"] as? String) ?? ""
+            let a = (s["artist"] as? String) ?? (s["artistName"] as? String) ?? ""
+            let key = normalizeTrackKey(name: n, artist: a)
+            if !key.isEmpty && key != "|" {
+                if !seen.contains(key) {
+                    seen.insert(key)
+                    result.append(s)
+                }
+            } else {
+                result.append(s)
+            }
+        }
+        return result
     }
 
     private func fetchArtists(query: String, country: String, limit: Int = 8, offset: Int = 0) async -> [[String: Any]] {

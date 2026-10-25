@@ -17,11 +17,16 @@
 ### 🎧 Bit-Perfect Audiophile Audio Output (CoreAudio)
 * **Automatic DAC Sample Rate Synchronization**: Instant hardware switching between 44.1, 48, 88.2, 96, 176.4, and 192 kHz to match the source track's native rate in Music.app bit-for-bit.
 * **100% Volume Lock Mode**: Keeps macOS / Music.app software volume pegged at 100% to eliminate digital volume dithering and word-length degradation.
+* **Audiophile Signal Path Inspection (Тракт сигнала)**: Interactive Roon-style modal detailing every stage of the audio chain: Source stream (codec, bit depth, sample rate), AMR Bit-Perfect Engine (`0.0 dB FS`, zero DSP), and active Hardware Output DAC.
+* **In-App DAC Switcher**: Quickly switch between connected external DACs and CoreAudio output devices directly from the Web remote.
 * **Optional Web Volume Control**: When volume lock is turned off via menu bar settings, the Web UI automatically displays a smooth volume slider (with an instant Mute button) for setups lacking a hardware volume pot.
 * **Real-Time DAC Badge**: Continuous stream format and hardware DAC rate indicators across all views (Now Playing header, desktop split view, and mobile devices).
 
 ### 📱 Premium Web Remote (PWA)
 * **OLED Monochrome Aesthetic**: Pure black `#000000`, hardware-accelerated transitions, visual focus strictly on album artwork with zero clutter.
+* **Zero-Latency Transport Controls**: Non-blocking Play/Pause toggle with optimistic UI response, rapid double-click Previous skip, and desktop Spacebar hotkey.
+* **Automated Apple ID & Storefront Detection**: Detects your active regional storefront directly from macOS settings, eliminating manual country selectors.
+* **Clean Catalog Search with Deduplication**: Smart filtering of duplicate releases and album versions for clean, fast search results.
 * **Intuitive Touch Gestures**: Swipe artwork left/right to skip tracks; swipe down to collapse Now Playing into a floating mini-player.
 * **60fps Phase-Locked Scrubber**: Local optimistic timeline tracking for jitter-free, seamless timecode scrubbing.
 * **One-Click Radio Stations**: Instantly generate personal Apple Music stations based on the current track or artist directly from the player (📡).

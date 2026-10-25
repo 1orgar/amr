@@ -52,7 +52,18 @@
     searchScope: 'all',
     activeView: 'view-now-playing',
     lastNonPlayerView: 'view-home',
-    desktopActiveTab: 'library',
+    desktopActiveTab: 'home',
+
+    // Audio Devices & DAC
+    audioDeviceName: '',
+    audioDeviceSampleRate: 44100,
+    isBitPerfect: true,
+    audioDevices: [],
+
+    // Apple MusicKit & User Token
+    hasUserToken: false,
+    developerToken: '',
+    userStorefront: 'us',
 
     // Scrubber local tracking
     isScrubbing: false,
@@ -99,7 +110,9 @@
     recentTracksFullList: document.getElementById('recent-tracks-full-list'),
     recentTotalCount: document.getElementById('recent-total-count'),
 
-    trendsCountryPills: document.querySelectorAll('.country-pill'),
+    headerAccountBadge: document.getElementById('header-account-badge'),
+    headerAccountText: document.getElementById('header-account-text'),
+    btnHeaderLogout: document.getElementById('btn-header-logout'),
     trendsStationsGrid: document.getElementById('home-stations-carousel') || document.getElementById('trends-stations-grid'),
     trendsAlbumsGrid: document.getElementById('home-albums-carousel') || document.getElementById('trends-albums-grid'),
     trendsGenresGrid: document.getElementById('home-genres-grid') || document.getElementById('trends-genres-grid'),
@@ -205,11 +218,24 @@
     volumeThumb: document.getElementById('volume-thumb'),
     volumeLevelText: document.getElementById('volume-level-text'),
     playerBottomNotice: document.querySelector('.player-bottom-notice .dac-notice-text'),
-    // Modal
+    // Signal Path Modal
     qualityModal: document.getElementById('quality-modal'),
     btnCloseModal: document.getElementById('btn-close-modal'),
-    modalSpecQuality: document.getElementById('modal-spec-quality'),
-    modalSpecRate: document.getElementById('modal-spec-rate')
+    signalSourceBadge: document.getElementById('signal-source-badge'),
+    signalSourceTitle: document.getElementById('signal-source-title'),
+    signalSourceDetails: document.getElementById('signal-source-details'),
+    signalDacRate: document.getElementById('signal-dac-rate'),
+    signalDacName: document.getElementById('signal-dac-name'),
+    signalDacDetails: document.getElementById('signal-dac-details'),
+    btnOpenDevices: document.getElementById('btn-open-devices'),
+    // Audio Devices Modal
+    devicesModal: document.getElementById('devices-modal'),
+    btnCloseDevices: document.getElementById('btn-close-devices'),
+    audioDevicesList: document.getElementById('audio-devices-list'),
+    // Apple ID Auth Modal
+    modalAppleAuth: document.getElementById('modal-apple-auth'),
+    btnAuthModalLogin: document.getElementById('btn-auth-modal-login'),
+    authModalStatus: document.getElementById('auth-modal-status')
   };
 
   // --- Busy Overlay & Action Loading Controller ---
@@ -303,6 +329,9 @@
       send({ action: 'get_queue' });
       send({ action: 'get_playlists' });
       send({ action: 'get_explore', params: { country: state.trends.country } });
+      send({ action: 'get_audio_devices' });
+      send({ action: 'get_user_token_status' });
+      send({ action: 'get_developer_token' });
     };
 
     socket.onmessage = function (event) {
@@ -400,6 +429,25 @@
         updateSearchResults(data);
         break;
 
+      case 'get_audio_devices':
+      case 'audio_devices':
+      case 'audio_devices_changed':
+        updateAudioDevices(data);
+        break;
+
+      case 'get_user_token_status':
+      case 'user_token_status':
+      case 'set_user_token':
+        updateUserTokenStatus(data);
+        break;
+
+      case 'get_developer_token':
+        if (data && data.token) {
+          state.developerToken = data.token;
+          initMusicKit(data.token);
+        }
+        break;
+
       default:
         // Check if data has player properties
         if (data && (data.player_state || data.playerState)) {
@@ -416,26 +464,27 @@
       'queue_changed', 'queue', 'get_queue',
       'play', 'pause', 'play_pause', 'next', 'previous',
       'play_album', 'play_album_tracks', 'play_playlist',
-      'play_station', 'play_recent', 'play_queue_index', 'play_cloud'
+      'play_station', 'play_hero_card', 'play_search_results',
+      'play_recent', 'play_queue_index', 'play_cloud'
     ];
-    if (state.isLaunchingStation) {
-      if (data && (data.player_state === 'playing' || data.playerState === 'playing')) {
+    if (busyDismissActions.includes(type) || msg.status === 'ok' || msg.status === 'error') {
+      if (state.isBusyAction) {
+        setUIBusy(false);
+      }
+      if (state.isLaunchingStation) {
         state.isLaunchingStation = false;
         if (state.stationLaunchTimeout) {
           clearTimeout(state.stationLaunchTimeout);
           state.stationLaunchTimeout = null;
         }
-        setUIBusy(false);
-      }
-    } else if (busyDismissActions.includes(type) || msg.status === 'ok' || msg.status === 'error') {
-      if (state.isBusyAction) {
-        setUIBusy(false);
       }
     }
   }
 
   function updatePlayerState(data) {
     if (!data) return;
+
+    clearTransportLoading();
 
     const oldTrack = state.track;
     const newTrack = data.track || null;
@@ -500,6 +549,16 @@
     state.audioQuality = data.audio_quality || data.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
     state.track = newTrack;
 
+    if (data.audio_device_name !== undefined || data.audioDeviceName !== undefined) {
+      state.audioDeviceName = data.audio_device_name || data.audioDeviceName || '';
+    }
+    if (data.audio_device_sample_rate !== undefined || data.audioDeviceSampleRate !== undefined) {
+      state.audioDeviceSampleRate = Number(data.audio_device_sample_rate || data.audioDeviceSampleRate) || 44100;
+    }
+    if (data.is_bit_perfect !== undefined || data.isBitPerfect !== undefined) {
+      state.isBitPerfect = data.is_bit_perfect !== undefined ? Boolean(data.is_bit_perfect) : Boolean(data.isBitPerfect);
+    }
+
     if (data.lock_volume_100 !== undefined) {
       state.lockVolume100 = Boolean(data.lock_volume_100);
       try { localStorage.setItem('amr_lock_volume_100', String(state.lockVolume100)); } catch (e) {}
@@ -516,6 +575,9 @@
     }
 
     renderNowPlaying();
+    if (dom.qualityModal && !dom.qualityModal.classList.contains('hidden')) {
+      updateSignalPathDetails();
+    }
   }
 
   function formatTime(seconds) {
@@ -668,18 +730,21 @@
     if (dom.desktopDacText) dom.desktopDacText.textContent = dacText;
     if (dom.mobileDacText) dom.mobileDacText.textContent = dacText;
     if (dom.modalSpecQuality) dom.modalSpecQuality.textContent = state.audioQuality;
-
-    // Extract sample rate if present
-    if (state.audioQuality.includes('192')) {
-      dom.modalSpecRate.textContent = '192.0 кГц (Hi-Res Bit-Perfect)';
-    } else if (state.audioQuality.includes('96')) {
-      dom.modalSpecRate.textContent = '96.0 кГц (Hi-Res Bit-Perfect)';
-    } else if (state.audioQuality.includes('48')) {
-      dom.modalSpecRate.textContent = '48.0 кГц (Lossless Bit-Perfect)';
-    } else if (state.audioQuality.includes('44.1')) {
-      dom.modalSpecRate.textContent = '44.1 кГц (Lossless Bit-Perfect)';
-    } else {
-      dom.modalSpecRate.textContent = 'Автосинхронизация CoreAudio';
+    if (dom.modalSpecRate) {
+      if (state.audioQuality.includes('192')) {
+        dom.modalSpecRate.textContent = '192.0 кГц (Hi-Res Bit-Perfect)';
+      } else if (state.audioQuality.includes('96')) {
+        dom.modalSpecRate.textContent = '96.0 кГц (Hi-Res Bit-Perfect)';
+      } else if (state.audioQuality.includes('48')) {
+        dom.modalSpecRate.textContent = '48.0 кГц (Lossless Bit-Perfect)';
+      } else if (state.audioQuality.includes('44.1')) {
+        dom.modalSpecRate.textContent = '44.1 кГц (Lossless Bit-Perfect)';
+      } else {
+        dom.modalSpecRate.textContent = 'Автосинхронизация CoreAudio';
+      }
+    }
+    if (typeof updateSignalPathDetails === 'function') {
+      updateSignalPathDetails();
     }
 
     // Only update scrubber UI here if stopped or paused.
@@ -1137,17 +1202,59 @@
     send({ action: isPlaying ? 'pause' : 'play' });
   }
 
-  let lastTransportActionTime = 0;
+  let transportLoadingTimer = null;
+  function setTransportLoading(action) {
+    if (transportLoadingTimer) clearTimeout(transportLoadingTimer);
+    if (action === 'next') {
+      dom.btnNext?.classList.add('btn-loading');
+      dom.miniBtnNext?.classList.add('btn-loading');
+    } else if (action === 'previous') {
+      dom.btnPrev?.classList.add('btn-loading');
+    }
+    transportLoadingTimer = setTimeout(clearTransportLoading, 2000);
+  }
+
+  function clearTransportLoading() {
+    if (transportLoadingTimer) {
+      clearTimeout(transportLoadingTimer);
+      transportLoadingTimer = null;
+    }
+    dom.btnNext?.classList.remove('btn-loading');
+    dom.miniBtnNext?.classList.remove('btn-loading');
+    dom.btnPrev?.classList.remove('btn-loading');
+    dom.btnPlayPause?.classList.remove('btn-loading');
+    dom.miniBtnPlayPause?.classList.remove('btn-loading');
+  }
+
+  let lastNextActionTime = 0;
+  let lastPrevActionTime = 0;
   function sendThrottledTransport(action) {
     const now = Date.now();
-    if (now - lastTransportActionTime < 500) return;
-    lastTransportActionTime = now;
+    if (action === 'next') {
+      if (now - lastNextActionTime < 400) return;
+      lastNextActionTime = now;
+    } else if (action === 'previous') {
+      if (now - lastPrevActionTime < 150) return;
+      lastPrevActionTime = now;
+    } else {
+      if (now - lastNextActionTime < 400) return;
+      lastNextActionTime = now;
+    }
+    setTransportLoading(action);
     triggerHaptic('medium');
     send({ action });
   }
 
   dom.btnPlayPause.addEventListener('click', togglePlayPause);
   dom.miniBtnPlayPause.addEventListener('click', togglePlayPause);
+
+  // Desktop Spacebar shortcut for Play/Pause
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+      e.preventDefault();
+      togglePlayPause();
+    }
+  });
 
   dom.btnNext.addEventListener('click', () => sendThrottledTransport('next'));
   dom.miniBtnNext.addEventListener('click', (e) => {
@@ -1194,18 +1301,285 @@
     connectWebSocket();
   });
 
-  // --- Audio Quality Modal Listeners ---
+  // --- Signal Path Inspector (Roon-like Pipeline) ---
+  function updateSignalPathDetails() {
+    const t = state.track;
+    const quality = state.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
+    const rateKhz = state.audioDeviceSampleRate ? (state.audioDeviceSampleRate / 1000).toFixed(1) : '44.1';
+
+    let formatBadge = 'ALAC Lossless';
+    const up = quality.toUpperCase();
+    if (up.includes('192') || up.includes('HI-RES')) {
+      formatBadge = 'ALAC Hi-Res';
+    } else if (up.includes('AAC')) {
+      formatBadge = 'AAC 256k';
+    } else if (up.includes('LOSSLESS') || up.includes('ALAC')) {
+      formatBadge = 'ALAC Lossless';
+    }
+
+    if (dom.signalSourceBadge) dom.signalSourceBadge.textContent = formatBadge;
+    if (dom.signalSourceTitle) {
+      dom.signalSourceTitle.textContent = t ? `${t.name} — ${t.artist}` : 'Apple Music';
+    }
+    if (dom.signalSourceDetails) {
+      dom.signalSourceDetails.textContent = quality;
+    }
+    if (dom.signalDacRate) {
+      dom.signalDacRate.textContent = `${rateKhz} кГц`;
+    }
+    if (dom.signalDacName) {
+      dom.signalDacName.textContent = state.audioDeviceName || 'Аудиовыход macOS';
+    }
+    if (dom.signalDacDetails) {
+      dom.signalDacDetails.textContent = `Прямое подключение macOS CoreAudio HAL (${rateKhz} кГц)`;
+    }
+  }
+
   const openQualityModal = () => {
     triggerHaptic('light');
-    dom.qualityModal.classList.remove('hidden');
+    updateSignalPathDetails();
+    if (dom.qualityModal) dom.qualityModal.classList.remove('hidden');
   };
-  dom.audioQualityBadge.addEventListener('click', openQualityModal);
+
+  if (dom.audioQualityBadge) dom.audioQualityBadge.addEventListener('click', openQualityModal);
   if (dom.desktopDacBadge) dom.desktopDacBadge.addEventListener('click', openQualityModal);
   if (dom.mobileDacBadge) dom.mobileDacBadge.addEventListener('click', openQualityModal);
 
-  dom.btnCloseModal.addEventListener('click', () => {
-    dom.qualityModal.classList.add('hidden');
-  });
+  if (dom.btnCloseModal) {
+    dom.btnCloseModal.addEventListener('click', () => {
+      if (dom.qualityModal) dom.qualityModal.classList.add('hidden');
+    });
+  }
+
+  // --- Audio Output Devices Modal (DAC Selector) ---
+  const openDevicesModal = () => {
+    triggerHaptic('light');
+    if (dom.devicesModal) {
+      dom.devicesModal.classList.remove('hidden');
+      send({ action: 'get_audio_devices' });
+    }
+  };
+
+  if (dom.btnOpenDevices) dom.btnOpenDevices.addEventListener('click', openDevicesModal);
+
+  if (dom.btnCloseDevices) {
+    dom.btnCloseDevices.addEventListener('click', () => {
+      if (dom.devicesModal) dom.devicesModal.classList.add('hidden');
+    });
+  }
+
+  if (dom.devicesModal) {
+    dom.devicesModal.addEventListener('click', (e) => {
+      if (e.target === dom.devicesModal) {
+        dom.devicesModal.classList.add('hidden');
+      }
+    });
+  }
+
+  function updateAudioDevices(data) {
+    let list = [];
+    if (Array.isArray(data)) {
+      list = data;
+    } else if (data && Array.isArray(data.devices)) {
+      list = data.devices;
+    }
+    state.audioDevices = list;
+
+    const defaultDev = list.find(d => d.isDefault);
+    if (defaultDev) {
+      state.audioDeviceName = defaultDev.name || state.audioDeviceName;
+      if (defaultDev.currentSampleRate) {
+        state.audioDeviceSampleRate = defaultDev.currentSampleRate;
+      }
+    }
+    renderAudioDevicesList();
+    updateSignalPathDetails();
+  }
+
+  function renderAudioDevicesList() {
+    if (!dom.audioDevicesList) return;
+    dom.audioDevicesList.innerHTML = '';
+
+    if (!state.audioDevices || state.audioDevices.length === 0) {
+      dom.audioDevicesList.innerHTML = '<div class="empty-state">Нет доступных аудиоустройств</div>';
+      return;
+    }
+
+    state.audioDevices.forEach(dev => {
+      const item = document.createElement('div');
+      item.className = `audio-device-item ${dev.isDefault ? 'active' : ''}`;
+      item.setAttribute('data-device-id', String(dev.id));
+
+      const rateText = dev.currentSampleRate ? `${(dev.currentSampleRate / 1000).toFixed(1)} кГц` : '44.1 кГц';
+      const ratesCount = Array.isArray(dev.availableSampleRates) ? dev.availableSampleRates.length : 0;
+      const subtitle = `${rateText} • Bit-Perfect ${ratesCount > 0 ? `(${ratesCount} частот)` : ''}`;
+
+      item.innerHTML = `
+        <div class="audio-device-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          </svg>
+        </div>
+        <div class="audio-device-info">
+          <div class="audio-device-name">${dev.name || 'Аудиовыход'}</div>
+          <div class="audio-device-meta">${subtitle}</div>
+        </div>
+        ${dev.isDefault ? '<span class="audio-device-badge active">Активен</span>' : '<span class="audio-device-badge">Выбрать</span>'}
+      `;
+
+      item.addEventListener('click', () => {
+        triggerHaptic('medium');
+        send({ action: 'set_audio_device', params: { id: dev.id, uid: dev.uid } });
+        state.audioDevices.forEach(d => { d.isDefault = (d.id === dev.id); });
+        state.audioDeviceName = dev.name;
+        if (dev.currentSampleRate) state.audioDeviceSampleRate = dev.currentSampleRate;
+        renderAudioDevicesList();
+        updateSignalPathDetails();
+      });
+
+      dom.audioDevicesList.appendChild(item);
+    });
+  }
+
+  // --- Apple MusicKit & User Token Handlers ---
+  let musicKitInstance = null;
+
+  function initMusicKit(devToken) {
+    if (!devToken) return;
+    state.developerToken = devToken;
+    const setup = () => {
+      if (window.MusicKit) {
+        try {
+          if (!musicKitInstance) {
+            window.MusicKit.configure({
+              developerToken: devToken,
+              app: {
+                name: 'Apple Music Remote',
+                build: '2.2.0'
+              }
+            });
+            musicKitInstance = window.MusicKit.getInstance();
+            if (musicKitInstance && musicKitInstance.isAuthorized) {
+              const uToken = musicKitInstance.musicUserToken;
+              if (uToken && !state.hasUserToken) {
+                send({ action: 'set_user_token', params: { user_token: uToken } });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('MusicKit configuration error:', e);
+        }
+      }
+    };
+    if (window.MusicKit) {
+      setup();
+    } else {
+      document.addEventListener('musickitloaded', setup);
+    }
+  }
+
+  function updateUserTokenStatus(data) {
+    const hasToken = Boolean(data && (data.has_user_token !== undefined ? data.has_user_token : data.hasUserToken));
+    state.hasUserToken = hasToken;
+    if (data && data.storefront) {
+      state.userStorefront = data.storefront;
+    }
+
+    if (hasToken) {
+      if (dom.modalAppleAuth) {
+        dom.modalAppleAuth.classList.add('hidden');
+        dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
+      }
+      if (dom.headerAccountBadge) {
+        dom.headerAccountBadge.classList.remove('hidden');
+      }
+      if (dom.headerAccountText) {
+        dom.headerAccountText.textContent = `Apple ID: ${(state.userStorefront || 'us').toUpperCase()}`;
+      }
+
+      const activeCountry = state.userStorefront || state.trends.country || 'us';
+      if (state.trends.country !== activeCountry) {
+        state.trends.country = activeCountry;
+        loadTrends(activeCountry);
+      }
+    } else {
+      if (dom.headerAccountBadge) {
+        dom.headerAccountBadge.classList.add('hidden');
+      }
+      if (dom.modalAppleAuth) {
+        dom.modalAppleAuth.classList.remove('hidden');
+        dom.modalAppleAuth.setAttribute('aria-hidden', 'false');
+      }
+    }
+  }
+
+  async function handleAppleIdLogin() {
+    triggerHaptic('medium');
+    if (dom.authModalStatus) {
+      dom.authModalStatus.classList.remove('hidden');
+      dom.authModalStatus.innerHTML = '<div class="spinner-sm"></div><span>Инициализация MusicKit...</span>';
+    }
+    if (dom.btnAuthModalLogin) {
+      dom.btnAuthModalLogin.disabled = true;
+    }
+
+    if (!window.MusicKit) {
+      if (dom.authModalStatus) dom.authModalStatus.innerHTML = '<span>Загрузка MusicKit.js... Повторите через 2 секунды</span>';
+      setTimeout(() => {
+        if (dom.btnAuthModalLogin) dom.btnAuthModalLogin.disabled = false;
+        if (dom.authModalStatus) dom.authModalStatus.classList.add('hidden');
+      }, 2500);
+      return;
+    }
+
+    if (!musicKitInstance && state.developerToken) {
+      initMusicKit(state.developerToken);
+    }
+
+    if (!musicKitInstance) {
+      send({ action: 'get_developer_token' });
+      if (dom.authModalStatus) dom.authModalStatus.innerHTML = '<div class="spinner-sm"></div><span>Получение ключа разработчика...</span>';
+      setTimeout(() => {
+        if (dom.btnAuthModalLogin) dom.btnAuthModalLogin.disabled = false;
+        if (state.developerToken && !musicKitInstance) {
+          initMusicKit(state.developerToken);
+        }
+      }, 1500);
+      return;
+    }
+
+    try {
+      if (dom.authModalStatus) dom.authModalStatus.innerHTML = '<div class="spinner-sm"></div><span>Ожидание авторизации Apple ID...</span>';
+      const uToken = await musicKitInstance.authorize();
+      if (uToken) {
+        send({ action: 'set_user_token', params: { user_token: uToken } });
+        updateUserTokenStatus({ has_user_token: true });
+      }
+    } catch (err) {
+      console.error('Apple Music authorization error:', err);
+    } finally {
+      if (dom.btnAuthModalLogin) dom.btnAuthModalLogin.disabled = false;
+      if (dom.authModalStatus) dom.authModalStatus.classList.add('hidden');
+    }
+  }
+
+  async function handleAppleIdLogout() {
+    triggerHaptic('medium');
+    if (musicKitInstance) {
+      try { await musicKitInstance.unauthorize(); } catch (e) {}
+    }
+    send({ action: 'set_user_token', params: { user_token: '' } });
+    updateUserTokenStatus({ has_user_token: false });
+  }
+
+  if (dom.btnAuthModalLogin) {
+    dom.btnAuthModalLogin.addEventListener('click', handleAppleIdLogin);
+  }
+
+  if (dom.btnHeaderLogout) {
+    dom.btnHeaderLogout.addEventListener('click', handleAppleIdLogout);
+  }
 
   // --- Station Creation Modal Listeners ---
   if (dom.btnCreateStation) {
@@ -1764,7 +2138,7 @@
       action: 'search',
       params: {
         query: query,
-        country: 'ru',
+        country: state.userStorefront || state.trends.country || 'us',
         scope: scope,
         limit: 50,
         offset: offset
@@ -2156,13 +2530,8 @@
     if (country) {
       state.trends.country = country;
     }
-    const c = state.trends.country || 'ru';
-
-    if (dom.trendsCountryPills) {
-      dom.trendsCountryPills.forEach(pill => {
-        pill.classList.toggle('active', pill.dataset.country === c);
-      });
-    }
+    const c = state.userStorefront || state.trends.country || 'us';
+    state.trends.country = c;
 
     const now = Date.now();
     if (!force && lastTrendsCountry === c && now - lastTrendsLoadedTime < 30000 && state.trends.stations && state.trends.stations.length > 0) {
@@ -2813,22 +3182,6 @@
     executeSearch(cleanQ, state.searchScope);
   }
 
-  // Country pill toggles
-  if (dom.trendsCountryPills) {
-    dom.trendsCountryPills.forEach(pill => {
-      pill.addEventListener('click', () => {
-        const country = pill.dataset.country;
-        if (country && country !== state.trends.country) {
-          state.trends.country = country;
-          dom.trendsCountryPills.forEach(p => p.classList.toggle('active', p.dataset.country === country));
-          if (dom.trendsSongsList) dom.trendsSongsList.innerHTML = '<div class="loading-state">Загрузка топ-чартов...</div>';
-          if (dom.trendsAlbumsGrid) dom.trendsAlbumsGrid.innerHTML = '<div class="loading-state">Загрузка альбомов...</div>';
-          loadTrends(country);
-        }
-      });
-    });
-  }
-
   // --- Navigation & View Switching ---
 
   // Mobile Bottom Tab Bar
@@ -2902,6 +3255,16 @@
     expandNowPlaying();
   });
 
+  // Synthetic click suppression after touch swipes
+  let ignoreSyntheticClickUntil = 0;
+  document.addEventListener('click', (e) => {
+    if (Date.now() < ignoreSyntheticClickUntil) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+
   // --- Artwork & Mini-Player Swipe Gestures ---
   function setupArtworkSwipeGestures() {
     const container = dom.artworkContainer;
@@ -2953,10 +3316,11 @@
       wrapper.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.9, 0.4, 1)';
 
       const isFastSwipe = elapsed < 320;
-      const horizontalThreshold = isFastSwipe ? 35 : 60;
-      const verticalThreshold = isFastSwipe ? 45 : 75;
+      const horizontalThreshold = isFastSwipe ? 50 : 80;
+      const verticalThreshold = isFastSwipe ? 55 : 85;
 
       if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > horizontalThreshold) {
+        ignoreSyntheticClickUntil = Date.now() + 450;
         if (deltaX < 0) {
           // Swipe Left -> Next Track
           triggerHaptic('medium');
@@ -3041,20 +3405,21 @@
       const elapsed = Date.now() - startTime;
       const dist = Math.hypot(deltaX, deltaY);
 
-      if (dist > 35) {
+      if (dist > 45) {
         if (Math.abs(deltaX) > Math.abs(deltaY)) {
-          if (deltaX < -35) {
+          ignoreSyntheticClickUntil = Date.now() + 450;
+          if (deltaX < -45) {
             // Swipe Left -> Next
             triggerHaptic('medium');
             sendThrottledTransport('next');
             return;
-          } else if (deltaX > 35) {
+          } else if (deltaX > 45) {
             // Swipe Right -> Previous
             triggerHaptic('medium');
             sendThrottledTransport('previous');
             return;
           }
-        } else if (deltaY < -35) {
+        } else if (deltaY < -45) {
           // Swipe Up -> Expand Now Playing
           expandNowPlaying();
           return;

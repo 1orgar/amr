@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import CoreAudio
 import CryptoKit
 import Foundation
 import Network
@@ -69,6 +70,18 @@ public final class WebSocketServer: @unchecked Sendable {
 
         DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.Music.playerInfo"), object: nil, queue: notifQueue, using: handler)
         DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.iTunes.playerInfo"), object: nil, queue: notifQueue, using: handler)
+
+        CoreAudioDeviceManager.shared.onDevicesChanged = { [weak self] devices in
+            guard let self = self else { return }
+            let devList = devices.map { $0.dictionary }
+            self.broadcastEvent(name: "audio_devices_changed", data: ["devices": devList])
+            self.broadcastStatus(includeQueue: false)
+        }
+
+        CoreAudioDeviceManager.shared.onSampleRateChanged = { [weak self] _, _ in
+            guard let self = self else { return }
+            self.broadcastStatus(includeQueue: false)
+        }
     }
 
     // MARK: - Server Lifecycle
@@ -803,13 +816,17 @@ public final class WebSocketServer: @unchecked Sendable {
         switch endpoint {
         case "play":
             let ok = bridge.play()
+            var status = PlayerStatusEngine.shared.getPlayerStatus()
+            status.playerState = "playing"
+            broadcastStatus(status: status, includeQueue: false)
             resultData["success"] = ok
-            broadcastStatus(includeQueue: false)
 
         case "pause":
             let ok = bridge.pause()
+            var status = PlayerStatusEngine.shared.getPlayerStatus()
+            status.playerState = "paused"
+            broadcastStatus(status: status, includeQueue: false)
             resultData["success"] = ok
-            broadcastStatus(includeQueue: false)
 
         case "play_pause":
             let ok = bridge.playPause()
@@ -968,6 +985,7 @@ public final class WebSocketServer: @unchecked Sendable {
             let name = (params["name"] as? String) ?? (params["title"] as? String) ?? ""
             let artist = (params["artist"] as? String) ?? ""
             let numericId = (params["numeric_id"] as? Int) ?? (params["numericId"] as? Int)
+            let isLocal = (params["is_local"] as? Bool) ?? (params["isLocal"] as? Bool)
             let type = (params["type"] as? String)?.lowercased()
             let shuffle = (params["shuffle"] as? Bool) ?? false
             var isAlbum = (type == "album")
@@ -985,7 +1003,7 @@ public final class WebSocketServer: @unchecked Sendable {
             if isAlbum && !albumId.isEmpty {
                 ok = await bridge.playAlbum(id: albumId, name: name, artist: artist, shuffle: shuffle)
             } else {
-                ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId)
+                ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId, isLocal: isLocal)
             }
             resultData["success"] = ok
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -1164,30 +1182,38 @@ public final class WebSocketServer: @unchecked Sendable {
         switch action.lowercased() {
         case "play", "start":
             let ok = bridge.play()
+            var status = PlayerStatusEngine.shared.getPlayerStatus()
+            status.playerState = "playing"
+            broadcastStatus(status: status, includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
-            broadcastStatus(includeQueue: false)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 self?.broadcastStatus(includeQueue: false)
             }
 
         case "pause":
             let ok = bridge.pause()
+            var status = PlayerStatusEngine.shared.getPlayerStatus()
+            status.playerState = "paused"
+            broadcastStatus(status: status, includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
-            broadcastStatus(includeQueue: false)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 self?.broadcastStatus(includeQueue: false)
             }
 
         case "stop":
             let ok = bridge.stop()
+            var status = PlayerStatusEngine.shared.getPlayerStatus()
+            status.playerState = "stopped"
+            broadcastStatus(status: status, includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
-            broadcastStatus(includeQueue: false)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 self?.broadcastStatus(includeQueue: false)
             }
 
         case "play_pause", "toggle_play_pause":
             let ok = bridge.playPause()
+            let status = PlayerStatusEngine.shared.getPlayerStatus()
+            broadcastStatus(status: status, includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
             // ScriptingBridge needs ~150-250ms to reflect state changes in Music.app.
             // Avoid immediate broadcast of stale state; broadcast after 250ms and 600ms.
@@ -1508,6 +1534,7 @@ public final class WebSocketServer: @unchecked Sendable {
             let name = (params["name"] as? String) ?? (params["title"] as? String) ?? ""
             let artist = (params["artist"] as? String) ?? ""
             let numericId = (params["numeric_id"] as? Int) ?? (params["numericId"] as? Int)
+            let isLocal = (params["is_local"] as? Bool) ?? (params["isLocal"] as? Bool)
             let type = (params["type"] as? String)?.lowercased()
             let shuffle = (params["shuffle"] as? Bool) ?? false
 
@@ -1531,7 +1558,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 if targetIsAlbum && !targetAlbumId.isEmpty {
                     ok = await bridge.playAlbum(id: targetAlbumId, name: name, artist: artist, shuffle: shuffle)
                 } else {
-                    ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId)
+                    ok = await bridge.playCloud(url: url, id: storeId, name: name, artist: artist, numericId: numericId, isLocal: isLocal)
                 }
                 self.broadcastStatus(includeQueue: true)
                 self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
@@ -1577,7 +1604,10 @@ public final class WebSocketServer: @unchecked Sendable {
 
         case "search":
             let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
-            let country = (params["country"] as? String) ?? "ru"
+            var country = (params["country"] as? String) ?? "ru"
+            if MusicKitManager.shared.hasUserToken {
+                country = MusicKitManager.shared.getUserStorefront()
+            }
             let source = (params["scope"] as? String) ?? (params["source"] as? String) ?? "all"
             let limit = (params["limit"] as? Int) ?? 50
             let offset = (params["offset"] as? Int) ?? 0
@@ -1589,6 +1619,44 @@ public final class WebSocketServer: @unchecked Sendable {
                 sendSuccess(action: action, data: ["token": token], id: id, to: connection)
             } else {
                 sendError(action: action, error: "Developer token unavailable", id: id, to: connection)
+            }
+
+        case "set_user_token", "user_token":
+            if let token = (params["token"] as? String) ?? (params["user_token"] as? String), !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                MusicKitManager.shared.setUserToken(token.trimmingCharacters(in: .whitespacesAndNewlines))
+                sendSuccess(action: action, data: ["status": "ok", "has_user_token": true, "storefront": MusicKitManager.shared.getUserStorefront()], id: id, to: connection)
+            } else {
+                MusicKitManager.shared.clearUserToken()
+                sendSuccess(action: action, data: ["status": "ok", "has_user_token": false], id: id, to: connection)
+            }
+
+        case "get_user_token_status", "user_token_status":
+            let hasToken = MusicKitManager.shared.hasUserToken
+            sendSuccess(action: action, data: ["has_user_token": hasToken, "storefront": MusicKitManager.shared.getUserStorefront()], id: id, to: connection)
+
+        case "get_audio_devices", "audio_devices":
+            let devices = CoreAudioDeviceManager.shared.getOutputDevices().map { $0.dictionary }
+            let defaultDev = CoreAudioDeviceManager.shared.getDefaultOutputDevice()?.dictionary
+            sendSuccess(action: action, data: ["devices": devices, "current_device": defaultDev as Any], id: id, to: connection)
+
+        case "set_audio_device", "select_audio_device":
+            var targetId: AudioDeviceID?
+            if let idNum = params["id"] as? NSNumber {
+                targetId = AudioDeviceID(idNum.uint32Value)
+            } else if let idInt = params["id"] as? Int {
+                targetId = AudioDeviceID(idInt)
+            } else if let idStr = params["id"] as? String, let parsed = UInt32(idStr) {
+                targetId = AudioDeviceID(parsed)
+            } else if let uid = params["uid"] as? String {
+                targetId = CoreAudioDeviceManager.shared.getOutputDevices().first { $0.uid == uid }?.id
+            }
+
+            if let devId = targetId, CoreAudioDeviceManager.shared.setDefaultOutputDevice(id: devId) {
+                let updated = CoreAudioDeviceManager.shared.getOutputDevices().map { $0.dictionary }
+                sendSuccess(action: action, data: ["status": "ok", "device_id": Int(devId), "devices": updated], id: id, to: connection)
+                broadcastStatus(includeQueue: false)
+            } else {
+                sendError(action: action, error: "Failed to switch audio output device", id: id, to: connection)
             }
 
         case "get_catalog_charts", "catalog_charts", "charts":
@@ -1721,7 +1789,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 "port": self.port,
                 "primary_url": primaryUrl,
                 "ips": ips,
-                "version": "2.1.0",
+                "version": "2.2.0",
                 "platform": "macOS"
             ], id: id, to: connection)
 
@@ -1876,6 +1944,26 @@ public final class WebSocketServer: @unchecked Sendable {
         if let encoded = try? JSONEncoder().encode(env),
            let text = String(data: encoded, encoding: .utf8) {
             sendText(text, to: connection)
+        }
+    }
+
+    public func broadcastEvent<T: Encodable>(_ eventName: String, data: T) {
+        let env = EventEnvelope(event: eventName, type: eventName, data: data)
+        if let encoded = try? JSONEncoder().encode(env),
+           let text = String(data: encoded, encoding: .utf8) {
+            broadcastText(text)
+        }
+    }
+
+    public func broadcastEvent(name: String, data: [String: Any]) {
+        let envelope: [String: Any] = [
+            "event": name,
+            "type": name,
+            "data": sanitizeForJSON(data)
+        ]
+        if let json = try? JSONSerialization.data(withJSONObject: envelope),
+           let text = String(data: json, encoding: .utf8) {
+            broadcastText(text)
         }
     }
 

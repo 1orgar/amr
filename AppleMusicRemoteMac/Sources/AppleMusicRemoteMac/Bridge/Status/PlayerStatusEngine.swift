@@ -228,7 +228,11 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         }
 
         let rawState = parts[0].lowercased()
-        let stateStr = (rawState == "playing") ? "playing" : ((rawState == "paused") ? "paused" : "stopped")
+        let isUserPaused = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused }
+        var stateStr = (rawState == "playing") ? "playing" : ((rawState == "paused") ? "paused" : "stopped")
+        if isUserPaused && stateStr == "playing" {
+            stateStr = "paused"
+        }
         let rawPosStr = parts[1].replacingOccurrences(of: ",", with: ".")
         let rawPos = Double(rawPosStr) ?? 0.0
         var vol = Int(parts[2]) ?? 100
@@ -268,7 +272,9 @@ public final class PlayerStatusEngine: @unchecked Sendable {
 
         let isStreamTrack = (!hasLoc && !tName.isEmpty)
         var isRadioDetected = isRadio
-        if !curPlNameRaw.isEmpty && curPlNameRaw != "Музыка" && curPlNameRaw != "Music" && curPlNameRaw != "Медиатека" {
+        if isCustom {
+            isRadioDetected = false
+        } else if !curPlNameRaw.isEmpty && curPlNameRaw != "Музыка" && curPlNameRaw != "Music" && curPlNameRaw != "Медиатека" {
             isRadioDetected = false
             if isRadio {
                 PlaybackStateStore.shared.withLock {
@@ -523,6 +529,11 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             }
         }
 
+        let defDevice = CoreAudioDeviceManager.shared.getDefaultOutputDevice()
+        let devName = defDevice?.name ?? "Аудиоустройство"
+        let devRate = defDevice?.currentSampleRate ?? 44100.0
+        let isBp = BitPerfectLogMonitor.shared.isEnabled
+
         let status = PlayerStatus(
             playerState: stateStr,
             position: pos,
@@ -533,7 +544,10 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             playlist: currentPlName,
             isRadio: false,
             audioQuality: curQuality,
-            track: trackObj
+            track: trackObj,
+            audioDeviceName: devName,
+            audioDeviceSampleRate: devRate,
+            isBitPerfect: isBp
         )
 
         PlaybackStateStore.shared.withLock {

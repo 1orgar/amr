@@ -241,8 +241,8 @@ public final class MusicBridge: @unchecked Sendable {
         await PlaybackRouter.shared.playHeroCard(index: index, name: name, artist: artist, cardId: cardId, url: url, type: type)
     }
 
-    public func playCloud(url: String?, id: String?, name: String?, artist: String?, numericId: Int? = nil) async -> Bool {
-        await PlaybackRouter.shared.playCloud(url: url, id: id, name: name, artist: artist, numericId: numericId)
+    public func playCloud(url: String?, id: String?, name: String?, artist: String?, numericId: Int? = nil, isLocal: Bool? = nil) async -> Bool {
+        await PlaybackRouter.shared.playCloud(url: url, id: id, name: name, artist: artist, numericId: numericId, isLocal: isLocal)
     }
 
     public func playCloudSync(url: String?, id: String?, name: String?, artist: String?) -> Bool {

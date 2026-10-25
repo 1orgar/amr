@@ -494,7 +494,7 @@ public final class PlaybackRouter: @unchecked Sendable {
 
     // MARK: - Cloud Track Playback
 
-    public func playCloud(url: String?, id: String?, name: String?, artist: String?, numericId: Int? = nil) async -> Bool {
+    public func playCloud(url: String?, id: String?, name: String?, artist: String?, numericId: Int? = nil, isLocal: Bool? = nil) async -> Bool {
         _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
         BitPerfectLogMonitor.shared.resetTrackState()
         PlaybackStateStore.shared.withLock {
@@ -502,10 +502,18 @@ public final class PlaybackRouter: @unchecked Sendable {
             PlaybackStateStore.shared.activeStationName = nil
         }
 
-        let numId = numericId ?? (Int(id ?? "") ?? 0)
+        let numId = (isLocal == true) ? (numericId ?? (Int(id ?? "") ?? 0)) : 0
 
-        // 1. If numeric database ID exists (> 0), try local library playlist first
-        if numId > 0 {
+        // 1. If explicitly marked local library track, try local library playlist first
+        if numId > 0 && isLocal == true {
+            let inMultiTrackQueue = PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.isCustomQueuePlayback && PlaybackStateStore.shared.activeCustomQueue.count > 1
+            }
+            let deleteClause = inMultiTrackQueue ? "" : """
+                if qPl is not missing value then
+                    delete every track of qPl
+                end if
+            """
             let script = """
             tell application "Music"
                 stop
@@ -518,9 +526,7 @@ public final class PlaybackRouter: @unchecked Sendable {
                         set qPl to (make new user playlist with properties {name:"Очередь AMR"})
                     end try
                 end if
-                if qPl is not missing value then
-                    delete every track of qPl
-                end if
+                \(deleteClause)
 
                 set foundTrack to missing value
                 try
@@ -579,14 +585,17 @@ public final class PlaybackRouter: @unchecked Sendable {
                 )
 
                 PlaybackStateStore.shared.withLock {
-                    PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
-                    PlaybackStateStore.shared.activeCustomQueueName = "Очередь AMR"
-                    PlaybackStateStore.shared.isCustomQueuePlayback = true
-                    PlaybackStateStore.shared.activeCustomQueue = [tInfo]
-                    PlaybackStateStore.shared.activeCustomQueueIndex = 0
-                    PlaybackStateStore.shared.isShuffleQueueActive = false
-                    PlaybackStateStore.shared.activeShuffledQueue.removeAll()
-                    PlaybackStateStore.shared.activeShuffledPlaylistName = nil
+                    let inMultiTrackQueue = PlaybackStateStore.shared.isCustomQueuePlayback && PlaybackStateStore.shared.activeCustomQueue.count > 1
+                    if !inMultiTrackQueue {
+                        PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+                        PlaybackStateStore.shared.activeCustomQueueName = "Очередь AMR"
+                        PlaybackStateStore.shared.isCustomQueuePlayback = true
+                        PlaybackStateStore.shared.activeCustomQueue = [tInfo]
+                        PlaybackStateStore.shared.activeCustomQueueIndex = 0
+                        PlaybackStateStore.shared.isShuffleQueueActive = false
+                        PlaybackStateStore.shared.activeShuffledQueue.removeAll()
+                        PlaybackStateStore.shared.activeShuffledPlaylistName = nil
+                    }
                 }
                 LibraryService.shared.invalidatePlaylistCache(name: "Очередь AMR")
 
@@ -598,6 +607,7 @@ public final class PlaybackRouter: @unchecked Sendable {
         }
 
         // 2. Cloud Track Playback (Apple Music catalog track NOT in local library)
+        var targetUrl = ""
         var catalogSongId: String? = nil
         if let rawId = id, let n = Int(rawId), n > 0 {
             catalogSongId = rawId
@@ -605,9 +615,14 @@ public final class PlaybackRouter: @unchecked Sendable {
             catalogSongId = qi
         }
 
-        var targetUrl = ""
         if let sId = catalogSongId {
             targetUrl = "music://music.apple.com/station/item/ra.\(sId)"
+        } else if let a = artist, let n = name, !a.isEmpty, !n.isEmpty,
+                  let resolved = await MusicKitManager.shared.resolveTrackStation(title: n, artist: a) {
+            targetUrl = resolved
+        } else if let a = artist, !a.isEmpty,
+                  let aInfo = await MusicKitManager.shared.resolveArtistStation(artist: a) {
+            targetUrl = aInfo.stationUrl
         } else if let u = url, !u.isEmpty {
             targetUrl = u
             if targetUrl.hasPrefix("https://music.apple.com") {
@@ -671,7 +686,7 @@ public final class PlaybackRouter: @unchecked Sendable {
             PlaybackStateStore.shared.activeStationName = nil
         }
 
-        // 1. Try catalog song ID via radio station scheme (starts playing this exact song immediately without freezing)
+        // 1. Try catalog song ID via radio station scheme (seeds playback with this specific song)
         var songId: String? = nil
         if let rawId = id, let n = Int(rawId), n > 0 {
             songId = rawId
@@ -683,27 +698,53 @@ public final class PlaybackRouter: @unchecked Sendable {
             let stationUrl = "music://music.apple.com/station/item/ra.\(sId)"
             let ok = openMusicUrl(stationUrl)
             if ok {
-                if !isTestingEnvironment {
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) {
-                        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
-                    }
-                }
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
                 return true
             }
         }
 
-        // 2. Direct station, album, or playlist URL fallback
+        // 2. Try pre-resolved canonical track station from MusicKit cache
+        var resolvedStationUrl: String? = nil
+        if let n = name, let a = artist, !n.isEmpty, !a.isEmpty {
+            let cleanT = n.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let cleanA = a.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let cacheKey = "\(cleanT)|\(cleanA)"
+            if let cached = MusicKitManager.shared.getCachedTrackStation(for: cacheKey) {
+                resolvedStationUrl = cached.stationUrl
+            }
+        }
+
+        if let station = resolvedStationUrl, !station.isEmpty {
+            let ok = openMusicUrl(station)
+            if ok {
+                PlaybackStateStore.shared.invalidateQueueCache()
+                PlaybackStateStore.shared.invalidateStatusCache()
+                return true
+            }
+        }
+
+        // 3. If artist station is available in cache, fall back to it
+        if let a = artist, !a.isEmpty {
+            let cleanA = a.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if let cachedArtist = MusicKitManager.shared.getCachedArtistStation(for: cleanA) {
+                let ok = openMusicUrl(cachedArtist.stationUrl)
+                if ok {
+                    PlaybackStateStore.shared.withLock {
+                        PlaybackStateStore.shared.activeStationName = cachedArtist.canonicalName
+                    }
+                    PlaybackStateStore.shared.invalidateQueueCache()
+                    PlaybackStateStore.shared.invalidateStatusCache()
+                    return true
+                }
+            }
+        }
+
+        // 4. Direct station, album, or playlist URL fallback
         let targetUrl = url ?? ""
         if !targetUrl.isEmpty {
             let ok = openMusicUrl(targetUrl)
             if ok {
-                if !isTestingEnvironment {
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-                        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
-                    }
-                }
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
                 return true
@@ -805,9 +846,10 @@ public final class PlaybackRouter: @unchecked Sendable {
         // Cleanly halt any previous audio/stream in Music.app first
         _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
 
-        // Fast path for local tracks: batch-populate "Очередь AMR" in Music.app
-        let localTracks = playList.filter { ($0.numericId ?? 0) > 0 || $0.isLocal == true }
-        if localTracks.count == playList.count && !localTracks.isEmpty {
+        // Fast path for local tracks: batch-populate "Очередь AMR" in Music.app ONLY if ALL tracks are local
+        let localTracks = playList.filter { $0.isLocal == true && ($0.numericId ?? 0) > 0 }
+        let isAllLocal = (!playList.isEmpty && localTracks.count == playList.count)
+        if isAllLocal && targetIndex < localTracks.count {
             let dbIds = localTracks.compactMap { $0.numericId }
             let idListStr = dbIds.map { "\($0)" }.joined(separator: ", ")
             let playTargetLine = (targetIndex > 0) ? "play track \(targetIndex + 1) of qPl" : "play qPl"
@@ -868,6 +910,7 @@ public final class PlaybackRouter: @unchecked Sendable {
                         PlaybackStateStore.shared.latestHistoryTracks = []
                     }
                     PlaybackStateStore.shared.lastCloudPlayTime = Date()
+                    PlaybackStateStore.shared.lastSkipTime = Date()
                     PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
                     PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
                     PlaybackStateStore.shared.lastWasPlayingCloud = false
@@ -884,53 +927,138 @@ public final class PlaybackRouter: @unchecked Sendable {
             }
         }
 
-        // Mixed or Cloud tracks:
-        var played = false
-        var actualPlayIndex = targetIndex
-        for i in targetIndex..<playList.count {
-            let tr = playList[i]
-            let ok = await playCloud(
-                url: tr.url,
-                id: tr.id,
-                name: tr.name,
-                artist: tr.artist,
-                numericId: tr.numericId
-            )
-            if ok {
-                played = true
-                actualPlayIndex = i
-                break
+        // 2. Cloud Tracks with Apple ID Authorization (iCloud Playlist)
+        let hasCloudTracks = !isAllLocal
+        if hasCloudTracks && MusicKitManager.shared.hasUserToken {
+            let catalogIds = playList.compactMap { track -> String? in
+                let cleanId = track.id.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleanId.isEmpty && !cleanId.hasPrefix("local_") && Int(cleanId) != nil {
+                    return cleanId
+                }
+                return nil
+            }
+            if !catalogIds.isEmpty {
+                NSLog("[PlaybackRouter] ☁️ Creating temporary iCloud playlist for %d catalog search tracks", catalogIds.count)
+                _ = AppleScriptExecutor.shared.execute("""
+                tell application "Music"
+                    repeat with p in (every user playlist whose name is "Очередь AMR")
+                        try
+                            delete p
+                        end try
+                    end repeat
+                end tell
+                """)
+
+                if let _ = await MusicKitManager.shared.createTemporaryCloudPlaylist(name: "Очередь AMR", trackCatalogIds: catalogIds) {
+                    var synced = false
+                    for _ in 0..<12 {
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        let (chkOk, chkOut) = AppleScriptExecutor.shared.execute("""
+                        tell application "Music"
+                            try
+                                set p to (first user playlist whose name is "Очередь AMR")
+                                return count of tracks of p
+                            on error
+                                return -1
+                            end try
+                        end tell
+                        """)
+                        if chkOk, let cntStr = chkOut?.trimmingCharacters(in: .whitespacesAndNewlines), let cnt = Int(cntStr), cnt > 0 {
+                            synced = true
+                            NSLog("[PlaybackRouter] ✅ Music.app synced iCloud playlist 'Очередь AMR' with %d tracks", cnt)
+                            break
+                        }
+                    }
+
+                    if synced {
+                        let playTargetLine = (targetIndex > 0) ? "play track \(targetIndex + 1) of p" : "play p"
+                        let playScript = """
+                        tell application "Music"
+                            try
+                                set p to (first user playlist whose name is "Очередь AMR")
+                                set shuffle enabled to \(shuffle ? "true" : "false")
+                                \(playTargetLine)
+                                return "ok"
+                            on error err
+                                return err
+                            end try
+                        end tell
+                        """
+                        let (pOk, pRes) = AppleScriptExecutor.shared.execute(playScript)
+                        if pOk && pRes?.trimmingCharacters(in: .whitespacesAndNewlines) == "ok" {
+                            BitPerfectLogMonitor.shared.resetTrackState()
+                            var formattedQueue = [TrackInfo]()
+                            for (idx, var t) in playList.enumerated() {
+                                t.index = idx + 1
+                                formattedQueue.append(t)
+                            }
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.isRadioPlayback = false
+                                PlaybackStateStore.shared.activeStationName = nil
+                                PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+                                PlaybackStateStore.shared.activeCustomQueueName = "Результаты поиска"
+                                PlaybackStateStore.shared.isCustomQueuePlayback = true
+                                PlaybackStateStore.shared.activeCustomQueue = formattedQueue
+                                PlaybackStateStore.shared.activeCustomQueueIndex = targetIndex
+                                if targetIndex + 1 < formattedQueue.count {
+                                    PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedQueue[(targetIndex + 1)...])
+                                } else {
+                                    PlaybackStateStore.shared.latestUpcomingTracks = []
+                                }
+                                if targetIndex > 0 {
+                                    PlaybackStateStore.shared.latestHistoryTracks = Array(formattedQueue[0..<targetIndex].reversed())
+                                } else {
+                                    PlaybackStateStore.shared.latestHistoryTracks = []
+                                }
+                                PlaybackStateStore.shared.lastCloudPlayTime = Date()
+                                PlaybackStateStore.shared.lastSkipTime = Date()
+                                PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+                                PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+                                PlaybackStateStore.shared.lastWasPlayingCloud = false
+                                PlaybackStateStore.shared.isShuffleQueueActive = false
+                                PlaybackStateStore.shared.activeShuffledQueue.removeAll()
+                                PlaybackStateStore.shared.playbackQueueCache = nil
+                            }
+                            QueueManager.shared.startQueueMonitoring()
+                            LibraryService.shared.invalidatePlaylistCache(name: "Очередь AMR")
+                            PlaybackStateStore.shared.invalidateQueueCache()
+                            PlaybackStateStore.shared.invalidateStatusCache()
+                            WebSocketServer.shared.broadcastStatus(includeQueue: true)
+                            return true
+                        }
+                    }
+                }
             }
         }
 
-        guard played else { return false }
-
+        // 3. Fallback: Autonomous sequencing loop
         var formattedQueue = [TrackInfo]()
         for (idx, var t) in playList.enumerated() {
             t.index = idx + 1
             formattedQueue.append(t)
         }
-        let curTrack = formattedQueue[actualPlayIndex]
+        let curTrack = formattedQueue[targetIndex]
 
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isRadioPlayback = false
             PlaybackStateStore.shared.activeStationName = nil
-            PlaybackStateStore.shared.currentOriginalPlaylistName = (curTrack.numericId != nil && curTrack.numericId! > 0) ? "Очередь AMR" : nil
+            PlaybackStateStore.shared.currentOriginalPlaylistName = nil
             PlaybackStateStore.shared.activeCustomQueueName = "Результаты поиска"
             PlaybackStateStore.shared.isCustomQueuePlayback = true
             PlaybackStateStore.shared.activeCustomQueue = formattedQueue
-            PlaybackStateStore.shared.activeCustomQueueIndex = actualPlayIndex
-            if actualPlayIndex + 1 < formattedQueue.count {
-                PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedQueue[(actualPlayIndex + 1)...])
+            PlaybackStateStore.shared.activeCustomQueueIndex = targetIndex
+            if targetIndex + 1 < formattedQueue.count {
+                PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedQueue[(targetIndex + 1)...])
             } else {
                 PlaybackStateStore.shared.latestUpcomingTracks = []
             }
-            if actualPlayIndex > 0 {
-                PlaybackStateStore.shared.latestHistoryTracks = Array(formattedQueue[0..<actualPlayIndex].reversed())
+            if targetIndex > 0 {
+                PlaybackStateStore.shared.latestHistoryTracks = Array(formattedQueue[0..<targetIndex].reversed())
             } else {
                 PlaybackStateStore.shared.latestHistoryTracks = []
             }
             PlaybackStateStore.shared.lastCloudPlayTime = Date()
+            PlaybackStateStore.shared.lastSkipTime = Date()
             PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
             PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
             PlaybackStateStore.shared.lastWasPlayingCloud = false
@@ -940,6 +1068,63 @@ public final class PlaybackRouter: @unchecked Sendable {
         }
 
         QueueManager.shared.startQueueMonitoring()
+
+        // Asynchronously pre-fetch artist and canonical track stations
+        if !curTrack.artist.isEmpty {
+            Task.detached(priority: .utility) {
+                _ = await MusicKitManager.shared.resolveArtistStation(artist: curTrack.artist)
+            }
+        }
+        let tracksToPrefetch = Array(playList.dropFirst(targetIndex + 1).prefix(5))
+        Task.detached(priority: .utility) {
+            for track in tracksToPrefetch {
+                _ = await MusicKitManager.shared.resolveTrackStation(title: track.name, artist: track.artist)
+            }
+        }
+
+        var played = false
+        var actualPlayIndex = targetIndex
+        for i in targetIndex..<playList.count {
+            let tr = playList[i]
+            let ok = await playCloud(
+                url: tr.url,
+                id: tr.id,
+                name: tr.name,
+                artist: tr.artist,
+                numericId: tr.numericId,
+                isLocal: tr.isLocal
+            )
+            if ok {
+                played = true
+                actualPlayIndex = i
+                break
+            }
+        }
+
+        guard played else {
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.isCustomQueuePlayback = false
+                PlaybackStateStore.shared.activeCustomQueue.removeAll()
+            }
+            return false
+        }
+
+        if actualPlayIndex != targetIndex {
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.activeCustomQueueIndex = actualPlayIndex
+                if actualPlayIndex + 1 < formattedQueue.count {
+                    PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedQueue[(actualPlayIndex + 1)...])
+                } else {
+                    PlaybackStateStore.shared.latestUpcomingTracks = []
+                }
+                if actualPlayIndex > 0 {
+                    PlaybackStateStore.shared.latestHistoryTracks = Array(formattedQueue[0..<actualPlayIndex].reversed())
+                } else {
+                    PlaybackStateStore.shared.latestHistoryTracks = []
+                }
+            }
+        }
+
         PlaybackStateStore.shared.invalidateQueueCache()
         PlaybackStateStore.shared.invalidateStatusCache()
         WebSocketServer.shared.broadcastStatus(includeQueue: true)

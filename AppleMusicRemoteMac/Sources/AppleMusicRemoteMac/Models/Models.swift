@@ -23,6 +23,9 @@ public struct PlayerStatus: Codable, Sendable {
     public var isDucked: Bool
     public var isVolumeLockedTo100: Bool
     public var track: TrackInfo?
+    public var audioDeviceName: String?
+    public var audioDeviceSampleRate: Double?
+    public var isBitPerfect: Bool?
 
     enum CodingKeys: String, CodingKey {
         case playerState = "player_state"
@@ -38,6 +41,9 @@ public struct PlayerStatus: Codable, Sendable {
         case isDucked = "is_ducked"
         case isVolumeLockedTo100 = "lock_volume_100"
         case track
+        case audioDeviceName = "audio_device_name"
+        case audioDeviceSampleRate = "audio_device_sample_rate"
+        case isBitPerfect = "is_bit_perfect"
     }
 
     public init(
@@ -53,7 +59,10 @@ public struct PlayerStatus: Codable, Sendable {
         isMusicAppRunning: Bool = true,
         isDucked: Bool = false,
         isVolumeLockedTo100: Bool = true,
-        track: TrackInfo? = nil
+        track: TrackInfo? = nil,
+        audioDeviceName: String? = nil,
+        audioDeviceSampleRate: Double? = nil,
+        isBitPerfect: Bool? = nil
     ) {
         self.playerState = playerState
         self.position = position
@@ -68,6 +77,9 @@ public struct PlayerStatus: Codable, Sendable {
         self.isDucked = isDucked
         self.isVolumeLockedTo100 = isVolumeLockedTo100
         self.track = track
+        self.audioDeviceName = audioDeviceName
+        self.audioDeviceSampleRate = audioDeviceSampleRate
+        self.isBitPerfect = isBitPerfect
     }
 
     public init(from decoder: Decoder) throws {
@@ -85,6 +97,9 @@ public struct PlayerStatus: Codable, Sendable {
         self.isDucked = try container.decodeIfPresent(Bool.self, forKey: .isDucked) ?? false
         self.isVolumeLockedTo100 = try container.decodeIfPresent(Bool.self, forKey: .isVolumeLockedTo100) ?? true
         self.track = try container.decodeIfPresent(TrackInfo.self, forKey: .track)
+        self.audioDeviceName = try container.decodeIfPresent(String.self, forKey: .audioDeviceName)
+        self.audioDeviceSampleRate = try container.decodeIfPresent(Double.self, forKey: .audioDeviceSampleRate)
+        self.isBitPerfect = try container.decodeIfPresent(Bool.self, forKey: .isBitPerfect)
     }
 }
 

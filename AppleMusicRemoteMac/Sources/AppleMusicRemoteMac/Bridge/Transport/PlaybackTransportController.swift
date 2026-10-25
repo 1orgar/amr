@@ -17,6 +17,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
     // MARK: - Core Playback Controls
 
     public func play() -> Bool {
+        PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused = false }
         PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "playing")
         MusicAppProvider.shared.ensureMusicAppRunning()
         if let app = MusicAppProvider.shared.getMusicApp() {
@@ -32,17 +33,18 @@ public final class PlaybackTransportController: @unchecked Sendable {
     }
 
     public func pause() -> Bool {
+        PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused = true }
         PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "paused")
         if let app = MusicAppProvider.shared.getMusicApp() {
             app.pause()
-            return true
         }
-        let (ok, _) = AppleScriptExecutor.shared.run("tell application \"Music\" to pause")
-        return ok
+        _ = AppleScriptExecutor.shared.run("tell application \"Music\" to pause")
+        return true
     }
 
     public func stop() -> Bool {
         PlaybackStateStore.shared.clearSeekTarget()
+        PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused = true }
         PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "stopped")
         if let app = MusicAppProvider.shared.getMusicApp() {
             app.pause()
@@ -57,14 +59,21 @@ public final class PlaybackTransportController: @unchecked Sendable {
     }
 
     public func playPause() -> Bool {
-        PlaybackStateStore.shared.invalidateStatusCache()
-        MusicAppProvider.shared.ensureMusicAppRunning()
-        if let app = MusicAppProvider.shared.getMusicApp() {
-            app.playpause()
-            return true
+        let isPlaying = PlaybackStateStore.shared.withLock {
+            if let cache = PlaybackStateStore.shared.lastPlayerStatusCache,
+               Date().timeIntervalSince(cache.timestamp) < 1.5 {
+                return cache.status.playerState == "playing"
+            }
+            if let app = MusicAppProvider.shared.getMusicApp() {
+                return app.playerState == .playing
+            }
+            return !PlaybackStateStore.shared.isUserPaused
         }
-        let (ok, _) = AppleScriptExecutor.shared.run("tell application \"Music\" to playpause")
-        return ok
+        if isPlaying {
+            return pause()
+        } else {
+            return play()
+        }
     }
 
     private let transportLock = NSLock()
@@ -94,15 +103,13 @@ public final class PlaybackTransportController: @unchecked Sendable {
         }
 
         if isCustom {
-            let handled = PlaybackStateStore.shared.withLock { () -> Bool in
+            PlaybackStateStore.shared.withLock {
                 let nextIdx = PlaybackStateStore.shared.activeCustomQueueIndex + 1
                 if nextIdx < PlaybackStateStore.shared.activeCustomQueue.count {
-                    return QueueManager.shared.playQueueIndexUnlocked(nextIdx)
+                    _ = QueueManager.shared.playQueueIndexUnlocked(nextIdx)
                 }
-                // End of custom queue reached: stay on last track, NEVER fall through to app.nextTrack()!
-                return true
             }
-            if handled { return true }
+            return true
         }
 
         if let app = MusicAppProvider.shared.getMusicApp() {
@@ -122,10 +129,12 @@ public final class PlaybackTransportController: @unchecked Sendable {
     public func previousTrack() -> Bool {
         transportLock.lock()
         let now = Date()
-        if now.timeIntervalSince(lastPrevTrackTime) < 0.6 {
+        let timeSinceLastClick = now.timeIntervalSince(lastPrevTrackTime)
+        if timeSinceLastClick < 0.15 {
             transportLock.unlock()
             return true
         }
+        let isRapidRepeat = timeSinceLastClick < 1.5
         lastPrevTrackTime = now
         transportLock.unlock()
 
@@ -152,8 +161,8 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
         if isCustom {
             let appPos = MusicAppProvider.shared.getMusicApp()?.playerPosition ?? 0.0
-            // Standard media player behavior: if track played > 3.0 seconds, restart to 0:00
-            if appPos > 3.0 {
+            // Standard media player behavior: if track played > 3.0 seconds AND this is not a rapid double click, restart to 0:00
+            if appPos > 3.0 && !isRapidRepeat {
                 return seek(to: 0.0)
             }
             if activeIdx > 0 {
@@ -168,7 +177,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
         // Standard Library Playlists
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
-        if app.playerPosition > 3.0 {
+        if app.playerPosition > 3.0 && !isRapidRepeat {
             app.playerPosition = 0.0
             return true
         }
@@ -328,15 +337,20 @@ public final class PlaybackTransportController: @unchecked Sendable {
         let currentTrackScript = """
         tell application "Music"
           try
-            duplicate current track to library playlist 1
+            duplicate current track to first source
             return "ok"
           on error
             try
-              set libPl to first library playlist
-              duplicate current track to libPl
+              duplicate current track to library playlist 1
               return "ok"
             on error
-              return "error"
+              try
+                set libPl to first library playlist
+                duplicate current track to libPl
+                return "ok"
+              on error
+                return "error"
+              end try
             end try
           end try
         end tell

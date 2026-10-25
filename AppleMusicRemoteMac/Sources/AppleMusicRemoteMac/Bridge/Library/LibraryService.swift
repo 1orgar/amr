@@ -660,14 +660,24 @@ public final class LibraryService: @unchecked Sendable {
             let script = """
             tell application "Music"
               try
-                duplicate (first track of current playlist whose database ID is \(tid)) to library playlist 1
+                duplicate (first track of current playlist whose database ID is \(tid)) to first source
                 return "ok"
               on error
                 try
-                  duplicate (first track of library playlist 1 whose database ID is \(tid)) to library playlist 1
+                  duplicate (first track of current playlist whose database ID is \(tid)) to library playlist 1
                   return "ok"
                 on error
-                  return "error"
+                  try
+                    duplicate (first track of library playlist 1 whose database ID is \(tid)) to first source
+                    return "ok"
+                  on error
+                    try
+                      duplicate (first track of library playlist 1 whose database ID is \(tid)) to library playlist 1
+                      return "ok"
+                    on error
+                      return "error"
+                    end try
+                  end try
                 end try
               end try
             end tell
@@ -682,10 +692,15 @@ public final class LibraryService: @unchecked Sendable {
             let script = """
             tell application "Music"
               try
-                duplicate (first track whose name is "\(escN)" and artist is "\(escA)") to library playlist 1
+                duplicate (first track whose name is "\(escN)" and artist is "\(escA)") to first source
                 return "ok"
               on error
-                return "error"
+                try
+                  duplicate (first track whose name is "\(escN)" and artist is "\(escA)") to library playlist 1
+                  return "ok"
+                on error
+                  return "error"
+                end try
               end try
             end tell
             """

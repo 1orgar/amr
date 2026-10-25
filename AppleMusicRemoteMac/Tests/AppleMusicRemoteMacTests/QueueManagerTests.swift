@@ -400,4 +400,48 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
         XCTAssertTrue(PlaybackStateStore.shared.isCustomQueuePlayback)
     }
+
+    func testPlayQueueIndexUnlockedInAMRQueueUpdatesUpcomingAndHistory() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Sonne", artist: "Rammstein", isLocal: true, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Du Hast", artist: "Rammstein", isLocal: true, index: 2)
+        let track3 = TrackInfo(id: "3", numericId: 103, name: "Ich will", artist: "Rammstein", isLocal: true, index: 3)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2, track3]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+        }
+
+        // Navigate to index 1 (Du Hast)
+        _ = QueueManager.shared.playQueueIndexUnlocked(1)
+
+        PlaybackStateStore.shared.withLock {
+            XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks.count, 1)
+            XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks[0].name, "Ich will")
+            XCTAssertEqual(PlaybackStateStore.shared.latestHistoryTracks.count, 1)
+            XCTAssertEqual(PlaybackStateStore.shared.latestHistoryTracks[0].name, "Sonne")
+            XCTAssertTrue(PlaybackStateStore.shared.isTransitioningTrack)
+        }
+
+        // Navigate back to index 0 (Sonne)
+        _ = QueueManager.shared.playQueueIndexUnlocked(0)
+
+        PlaybackStateStore.shared.withLock {
+            XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks.count, 2)
+            XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks[0].name, "Du Hast")
+            XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks[1].name, "Ich will")
+            XCTAssertEqual(PlaybackStateStore.shared.latestHistoryTracks.count, 0)
+        }
+    }
+
+    func testTransitioningDebounceWindowIs2Point5Seconds() {
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastSkipTime = Date().addingTimeInterval(-2.0)
+            XCTAssertTrue(PlaybackStateStore.shared.isTransitioningTrack, "At 2.0s, track must still be transitioning")
+
+            PlaybackStateStore.shared.lastSkipTime = Date().addingTimeInterval(-2.6)
+            XCTAssertFalse(PlaybackStateStore.shared.isTransitioningTrack, "At 2.6s, track transition debounce must be expired")
+        }
+    }
 }

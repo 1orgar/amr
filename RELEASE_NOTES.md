@@ -1,43 +1,51 @@
-# Apple Music Remote 2.1.0 — "Beethoven"
+# Apple Music Remote 2.2.0 — "Chopin"
 
-Minor release **v2.1.0 ("Beethoven")** introduces queue navigation fixes for search results and custom playlists, guarantees queue integrity when skipping backward and forward without falling through into Apple Music radio streams of unrelated artists, enforces 100% Bit-Perfect volume lock at application startup and in runtime, and expands the automated unit test suite.
+Major release **v2.2.0 ("Chopin")** introduces an interactive audiophile Signal Path modal, real-time DAC device selection directly from the Web remote, automated Apple ID storefront detection with first-run authentication, catalog search deduplication, a comprehensive transport control overhaul (flawless play/pause responsiveness, zero-delay toggle, and keyboard controls), and expands automated test coverage to 146 unit and integration tests.
 
 ---
 
 ### ✨ What's New & What Changed:
 
-#### 1. 🔄 Queue Navigation Integrity
-* **Transition State Protection (`isTransitioningTrack`)**:
-  - Eliminated race conditions when skipping to the previous track: while the target track is buffering in Music.app, trailing audio from the prior track is isolated and can no longer prematurely advance the active queue index.
-  - Whole-queue matching properly distinguishes between current track confirmation, natural forward progression, and history protection against false rollbacks.
-  - Prevented false-positive foreign track steering for songs already present in the active queue.
-* **Queue Boundary Safeguards & Radio Fallthrough Prevention**:
-  - In `PlaybackTransportController.nextTrack()`, eliminated fallthrough to system `app.nextTrack()` at the boundary of custom queues, which previously caused Apple Music radio to autoplay songs by unrelated artists.
-  - Smart `previousTrack()`: if playback elapsed time > 3.0s, rewinds the current track to `0:00`; if < 3.0s, steps back to `activeIdx - 1`; on the first track of the queue, rewinds to `0:00` without escaping into previous library playlists.
-  - For radio stations, calling "Previous Track" rewinds the live stream to `0:00` without dropping out of radio mode.
-* **Full Queue Preservation for Search Results**:
-  - `playSearchResults(tracks:startIndex:shuffle:)` now supports an arbitrary `startIndex`, preserving all search results in the active queue.
-  - Clicking any song in Web UI search results immediately queues the entire list starting from the clicked track, properly populating history and upcoming tracks.
+#### 1. 🎛️ Audiophile Signal Path & DAC Switcher (Тракт сигнала)
+* **Interactive Signal Path Modal**:
+  - Visualized audio chain inspection displaying every node in the pipeline:
+    1. **Source**: Audio stream format, bit depth, and native sample rate (e.g., *ALAC Lossless 24-bit / 192.0 kHz*).
+    2. **AMR Engine**: Active volume lock (`0.0 dB FS`), zero-DSP processing, and mixer bypass status.
+    3. **Hardware Output**: Currently connected external DAC / macOS CoreAudio output device and active hardware sampling rate.
+* **In-App DAC Selector**:
+  - Switch active CoreAudio output devices and DACs directly from the Web interface without opening macOS System Settings.
+* **Persistent Status Pill**:
+  - Real-time DAC and stream format indicator in Now Playing view and desktop navigation header.
 
-#### 2. 🔊 100% Volume Lock for Bit-Perfect Mode
-* **Startup Validation & Enforcement**:
-  - On `AppleMusicRemoteMac` launch, the "keep volume at 100% in Music.app" setting (`isVolumeLockedTo100`) is checked. If enabled, Music.app volume is automatically set to 100% via ScriptingBridge & AppleScript.
-* **Music.app Launch Observer**:
-  - If Music.app is launched after AMR, `NSWorkspace.didLaunchApplicationNotification` immediately validates and locks volume to 100%.
-* **Runtime Volume Drift Recovery**:
-  - `PlayerStatusEngine` continuously monitors software volume: if an inadvertent reduction is detected (and Audio Ducking is inactive), volume is immediately restored to 100%.
-  - External volume modification requests are rejected when Bit-Perfect mode is active.
+#### 2. 🆔 Seamless Apple ID Auto-Detection & Storefront Sync
+* **Automatic Storefront Resolution**:
+  - Automatically queries the active Apple ID storefront from macOS Apple Music settings (`MusicKitManager.getUserStorefront()`).
+  - Removed manual country picker from home navigation in favor of auto-synced regional storefronts (`us`, `ru`, etc.).
+* **First-Run Auth Modal**:
+  - Clean, dedicated authentication modal presented when an Apple Music User Token is needed, guiding the user to sign in securely via MusicKit JS before interacting with catalog features.
+  - Compact Apple ID account badge in the header displaying signed-in status with one-click sign out.
 
-#### 3. 🧪 Test Suite Expansion & CI Stabilization
-* Test suite expanded to **132 automated unit tests** (100% pass rate):
-  - `testQueueMonitoringIgnoresDrainingTrackDuringTransition`
-  - `testPreviousTrackInRadioPlaybackRewindsWithoutExitingRadio`
-  - `testPreviousTrackAtBeginningOfCustomQueueRewindsWithoutFallingOutOfQueue`
-  - `testNextTrackAtEndOfCustomQueueDoesNotFallThroughToAppNextTrack`
-  - `testPlaySearchResultsWithStartIndexSetsCorrectActiveIndexAndUpcoming`
-  - `testCheckAndEnforceVolumeLockWhenLockedSetsSimulatedVolumeTo100`
-  - `testCheckAndEnforceVolumeLockWhenUnlockedDoesNotEnforce`
-  - `testSetVolumeRespectsVolumeLockState`
-* **CI Test Isolation**:
-  - Isolated AppleScript and `NSWorkspace` calls during unit test runs to eliminate headless AppleEvent timeouts and Cocoa runloop observer inconsistencies on GitHub Actions runners.
-  - Split Release workflow on GitHub Actions into a blocking test gate job and a dependent build-and-publish job to ensure release assets are never built if tests fail.
+#### 3. 🔍 Search Deduplication
+* **Catalog Result Sanitization**:
+  - Eliminated duplicate track entries in search results caused by overlapping standard, deluxe, and remastered album editions.
+  - Clean, streamlined track listings (e.g. Guano Apes search reduced from 50 redundant items to 39 unique tracks).
+
+#### 4. ⏯️ Transport Control & Pause Button Overhaul
+* **Pause / Play Reliability**:
+  - Fixed an unhandled frontend TypeError where obsolete DOM element references aborted `togglePlayPause()` before the WebSocket command was dispatched.
+  - Removed `.btn-loading` from transport play/pause buttons, ensuring instant, non-blocking click response and keeping SVG icons visible.
+  - Eliminated backend race condition in `PlaybackTransportController.pause()` where rapid state checks could mistakenly trigger `playpause` and resume playback.
+  - Added strict `isUserPaused` intent preservation in `PlayerStatusEngine` to prevent transient AppleScript queries from prematurely flipping state back to `playing`.
+  - Immediate optimistic status broadcasts for `pause`, `play`, `stop`, and `play_pause`.
+* **Desktop Spacebar Control**:
+  - Global Spacebar shortcut toggles Play/Pause when focus is not on input elements.
+* **Smart Navigation Tweaks**:
+  - Rapid double-press on Previous Track (< 1.5s) immediately skips to the previous song in queue instead of rewinding to 0:00.
+  - Single-step Next skip in custom queues preventing double-skipping.
+
+#### 5. 🧪 Test Suite Expansion (146 Tests + E2E)
+* **146 Automated Swift Tests** (`AppleMusicRemoteMacTests`, 100% pass rate):
+  - Added `PlaybackTransportControllerTests` covering `pause()`, `play()`, `stop()`, and `playPause()` toggles.
+  - Validated state store resetting across test cases.
+* **End-to-End Automated Testing**:
+  - Added `test_10_play_pause_transport_control` in `test_amr_e2e.py` verifying bidirectional play/pause cycling, WebSocket status events, and native macOS `Music.app` state via AppleScript.

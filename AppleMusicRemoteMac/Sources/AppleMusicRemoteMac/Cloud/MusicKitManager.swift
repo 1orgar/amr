@@ -21,6 +21,7 @@ public final class MusicKitManager: @unchecked Sendable {
     private var tokenExpiry: Date?
     private var privateKey: P256.Signing.PrivateKey?
     private var trackArtworkCache: [String: String] = [:]
+    private var userToken: String?
 
     public struct ArtistStationInfo: Sendable {
         public let artistId: Int
@@ -57,13 +58,198 @@ public final class MusicKitManager: @unchecked Sendable {
 
     private let session: URLSession
 
+    private static var storageDefaults: UserDefaults {
+        UserDefaults(suiteName: "org.ksholokhov.AppleMusicRemoteMac") ?? UserDefaults.standard
+    }
+
+    public private(set) var userStorefront: String = (UserDefaults(suiteName: "org.ksholokhov.AppleMusicRemoteMac") ?? UserDefaults.standard).string(forKey: "AppleMusicUserStorefront") ?? UserDefaults.standard.string(forKey: "AppleMusicUserStorefront") ?? "us"
+
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 10.0
         config.timeoutIntervalForResource = 15.0
         self.session = URLSession(configuration: config)
 
+        let defs = Self.storageDefaults
+        self.userToken = defs.string(forKey: "AppleMusicUserToken") ?? UserDefaults.standard.string(forKey: "AppleMusicUserToken")
+        self.userStorefront = defs.string(forKey: "AppleMusicUserStorefront") ?? UserDefaults.standard.string(forKey: "AppleMusicUserStorefront") ?? "us"
         loadPrivateKey()
+        if self.userToken != nil && !self.userToken!.isEmpty {
+            Task.detached(priority: .utility) { [weak self] in
+                _ = await self?.fetchUserStorefront()
+            }
+        }
+    }
+
+    // MARK: - User Token & Cloud Library Playlists
+
+    public var hasUserToken: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return userToken != nil && !userToken!.isEmpty
+    }
+
+    public func getUserToken() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return userToken
+    }
+
+    public func getUserStorefront() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return userStorefront
+    }
+
+    public func fetchUserStorefront() async -> String {
+        guard let devToken = getDeveloperToken(), let uToken = getUserToken(), !uToken.isEmpty else {
+            return self.getUserStorefront()
+        }
+        guard let url = URL(string: "https://api.music.apple.com/v1/me/storefront") else { return self.getUserStorefront() }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
+        req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
+        do {
+            let (data, resp) = try await session.data(for: req)
+            if let http = resp as? HTTPURLResponse, http.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let arr = json["data"] as? [[String: Any]],
+               let first = arr.first,
+               let sfId = first["id"] as? String, !sfId.isEmpty {
+                let lower = sfId.lowercased()
+                lock.lock()
+                self.userStorefront = lower
+                Self.storageDefaults.set(lower, forKey: "AppleMusicUserStorefront")
+                UserDefaults.standard.set(lower, forKey: "AppleMusicUserStorefront")
+                lock.unlock()
+                NSLog("[MusicKitManager] 🌍 Detected active Apple ID storefront: '%@'", lower)
+                return lower
+            }
+        } catch {
+            NSLog("[MusicKitManager] Error fetching user storefront: %@", error.localizedDescription)
+        }
+        return self.getUserStorefront()
+    }
+
+    public func setUserToken(_ token: String) {
+        lock.lock()
+        self.userToken = token
+        Self.storageDefaults.set(token, forKey: "AppleMusicUserToken")
+        UserDefaults.standard.set(token, forKey: "AppleMusicUserToken")
+        lock.unlock()
+        NSLog("[MusicKitManager] ✅ Saved Apple Music User Token (len: %d)", token.count)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            _ = await self?.fetchUserStorefront()
+        }
+    }
+
+    public func clearUserToken() {
+        lock.lock()
+        self.userToken = nil
+        Self.storageDefaults.removeObject(forKey: "AppleMusicUserToken")
+        UserDefaults.standard.removeObject(forKey: "AppleMusicUserToken")
+        lock.unlock()
+        NSLog("[MusicKitManager] Cleared Apple Music User Token")
+    }
+
+    public func createTemporaryCloudPlaylist(name: String = "Очередь AMR", trackCatalogIds: [String]) async -> String? {
+        guard let devToken = getDeveloperToken(), let uToken = getUserToken(), !uToken.isEmpty else {
+            NSLog("[MusicKitManager] Cannot create iCloud playlist: missing developer or user token")
+            return nil
+        }
+        guard let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists") else { return nil }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
+        req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let payload: [String: Any] = [
+            "attributes": [
+                "name": name,
+                "description": "Временный плейлист AMR для результатов поиска"
+            ]
+        ]
+
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+        req.httpBody = body
+
+        var createdPlaylistId: String?
+        do {
+            let (data, resp) = try await session.data(for: req)
+            guard let http = resp as? HTTPURLResponse else { return nil }
+            if http.statusCode == 200 || http.statusCode == 201 {
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let arr = json["data"] as? [[String: Any]],
+                   let first = arr.first,
+                   let plId = first["id"] as? String {
+                    createdPlaylistId = plId
+                    NSLog("[MusicKitManager] ✅ Created temporary iCloud playlist: '%@'", plId)
+                }
+            } else {
+                let errStr = String(data: data, encoding: .utf8) ?? ""
+                NSLog("[MusicKitManager] ❌ Failed to create iCloud playlist (status %d): %@", http.statusCode, errStr)
+                return nil
+            }
+        } catch {
+            NSLog("[MusicKitManager] ❌ Error creating temporary iCloud playlist: %@", error.localizedDescription)
+            return nil
+        }
+
+        guard let plId = createdPlaylistId, !trackCatalogIds.isEmpty else {
+            return createdPlaylistId
+        }
+
+        // Step 2: Add tracks in batch via POST /v1/me/library/playlists/{id}/tracks
+        guard let addUrl = URL(string: "https://api.music.apple.com/v1/me/library/playlists/\(plId)/tracks") else {
+            return plId
+        }
+        var addReq = URLRequest(url: addUrl)
+        addReq.httpMethod = "POST"
+        addReq.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
+        addReq.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
+        addReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let trackData = trackCatalogIds.map { ["id": $0, "type": "songs"] }
+        let addPayload: [String: Any] = ["data": trackData]
+        guard let addBody = try? JSONSerialization.data(withJSONObject: addPayload) else { return plId }
+        addReq.httpBody = addBody
+
+        do {
+            let (addData, addResp) = try await session.data(for: addReq)
+            if let addHttp = addResp as? HTTPURLResponse, (addHttp.statusCode == 200 || addHttp.statusCode == 201 || addHttp.statusCode == 204) {
+                NSLog("[MusicKitManager] ✅ Successfully populated %d tracks into iCloud playlist '%@'", trackCatalogIds.count, plId)
+            } else {
+                let addErr = String(data: addData, encoding: .utf8) ?? ""
+                NSLog("[MusicKitManager] ⚠️ Warning adding tracks to playlist (status %d): %@", (addResp as? HTTPURLResponse)?.statusCode ?? 0, addErr)
+            }
+        } catch {
+            NSLog("[MusicKitManager] ⚠️ Error adding tracks to playlist: %@", error.localizedDescription)
+        }
+
+        return plId
+    }
+
+    public func deleteTemporaryCloudPlaylist(playlistId: String) async -> Bool {
+        guard let devToken = getDeveloperToken(), let uToken = getUserToken(), !uToken.isEmpty else { return false }
+        guard let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists/\(playlistId)") else { return false }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
+        req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
+
+        do {
+            let (_, resp) = try await session.data(for: req)
+            if let http = resp as? HTTPURLResponse, (http.statusCode == 200 || http.statusCode == 204) {
+                NSLog("[MusicKitManager] 🗑 Deleted temporary iCloud playlist: '%@'", playlistId)
+                return true
+            }
+        } catch {
+            NSLog("[MusicKitManager] Error deleting iCloud playlist: %@", error.localizedDescription)
+        }
+        return false
     }
 
     // MARK: - Key Loading
@@ -315,25 +501,25 @@ public final class MusicKitManager: @unchecked Sendable {
     }
 
 
-    private func getCachedArtistStation(for key: String) -> ArtistStationInfo? {
+    public func getCachedArtistStation(for key: String) -> ArtistStationInfo? {
         lock.lock()
         defer { lock.unlock() }
         return artistStationCache[key.lowercased()]
     }
 
-    private func setCachedArtistStation(_ info: ArtistStationInfo, for key: String) {
+    public func setCachedArtistStation(_ info: ArtistStationInfo, for key: String) {
         lock.lock()
         defer { lock.unlock() }
         artistStationCache[key.lowercased()] = info
     }
 
-    private func getCachedTrackStation(for key: String) -> TrackStationInfo? {
+    public func getCachedTrackStation(for key: String) -> TrackStationInfo? {
         lock.lock()
         defer { lock.unlock() }
         return trackStationCache[key.lowercased()]
     }
 
-    private func setCachedTrackStation(_ info: TrackStationInfo, for key: String) {
+    public func setCachedTrackStation(_ info: TrackStationInfo, for key: String) {
         lock.lock()
         defer { lock.unlock() }
         trackStationCache[key.lowercased()] = info
