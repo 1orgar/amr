@@ -1,8 +1,6 @@
 import Foundation
 
-// MARK: - Embedded Web UI Assets (Fallback when files not on disk)
-
-public enum WebUIContent {
+public struct WebUIContent {
     public static let indexHTML = ##"""
 <!DOCTYPE html>
 <html lang="ru">
@@ -27,7 +25,7 @@ public enum WebUIContent {
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=8">
+  <link rel="stylesheet" href="/style.css?v=9">
   <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
 </head>
 <body>
@@ -748,7 +746,7 @@ public enum WebUIContent {
     </div>
   </div>
 
-  <script src="/app.js?v=8"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>
 
@@ -5033,6 +5031,20 @@ body.ui-blocked #busy-overlay {
   let silentAudioEl = null;
   let silentAudioUnlocked = false;
 
+  function attachSilentAudioListeners(el) {
+    if (!el || el._amrListenersAttached) return;
+    el._amrListenersAttached = true;
+
+    const onAudioStateChange = () => {
+      setupMediaSession();
+      updateMediaSession();
+    };
+
+    ['play', 'playing', 'pause', 'canplay', 'loadedmetadata'].forEach((evt) => {
+      el.addEventListener(evt, onAudioStateChange, { passive: true });
+    });
+  }
+
   function initSilentAudio() {
     if (!silentAudioEl) {
       silentAudioEl = document.getElementById('bg-silent-audio');
@@ -5048,6 +5060,7 @@ body.ui-blocked #busy-overlay {
       silentAudioEl.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;';
       document.body.appendChild(silentAudioEl);
     }
+    attachSilentAudioListeners(silentAudioEl);
     return silentAudioEl;
   }
 
@@ -5061,15 +5074,20 @@ body.ui-blocked #busy-overlay {
         if (p !== undefined) {
           p.then(() => {
             silentAudioUnlocked = true;
+            setupMediaSession();
+            updateMediaSession();
           }).catch((err) => {
             console.warn('[AudioKeepAlive] play error:', err);
           });
         }
+      } else {
+        setupMediaSession();
       }
     } else {
       if (!el.paused) {
         el.pause();
       }
+      setupMediaSession();
     }
   }
 
@@ -5089,14 +5107,27 @@ body.ui-blocked #busy-overlay {
           if (state.playerState !== 'playing') {
             el.pause();
           }
+          setupMediaSession();
           updateMediaSession();
         }).catch(() => {});
       }
+    } else {
+      setupMediaSession();
     }
   }
 
   ['pointerdown', 'touchstart', 'touchend', 'click'].forEach(evt => {
     window.addEventListener(evt, unlockAudioOnUserGesture, { passive: true });
+  });
+
+  // Re-bind MediaSession on app wake, unlock, or tab switch
+  ['visibilitychange', 'pageshow', 'focus'].forEach((evt) => {
+    window.addEventListener(evt, () => {
+      if (!document.hidden) {
+        setupMediaSession();
+        updateMediaSession();
+      }
+    }, { passive: true });
   });
 
   // Global tactile feedback on all interactive elements
@@ -5122,6 +5153,8 @@ body.ui-blocked #busy-overlay {
         syncSilentAudio(true);
         state.playerState = 'playing';
         renderNowPlaying();
+        setupMediaSession();
+        updateMediaSession();
         send({ action: 'play' });
       });
 
@@ -5130,6 +5163,8 @@ body.ui-blocked #busy-overlay {
         syncSilentAudio(false);
         state.playerState = 'paused';
         renderNowPlaying();
+        setupMediaSession();
+        updateMediaSession();
         send({ action: 'pause' });
       });
 
@@ -5154,13 +5189,15 @@ body.ui-blocked #busy-overlay {
       });
 
       // Disable seekbackward & seekforward so iOS Lock Screen, Dynamic Island,
-      // and Control Center display Previous / Next Track buttons (⏮ / ⏭) instead of ±10s buttons.
+      // and Control Center display Previous / Next Track buttons (⏮ / ⏭) instead of ±10s/±15s buttons.
       try { navigator.mediaSession.setActionHandler('seekbackward', null); } catch (e) {}
       try { navigator.mediaSession.setActionHandler('seekforward', null); } catch (e) {}
 
       navigator.mediaSession.setActionHandler('stop', () => {
         triggerHaptic('medium');
         syncSilentAudio(false);
+        setupMediaSession();
+        updateMediaSession();
         send({ action: 'stop' });
       });
     } catch (err) {
@@ -5170,6 +5207,9 @@ body.ui-blocked #busy-overlay {
 
   function updateMediaSession() {
     if (!('mediaSession' in navigator)) return;
+
+    // Ensure action handlers are persistently bound to the active WebKit MediaSession
+    setupMediaSession();
 
     const isPlaying = state.playerState === 'playing';
     syncSilentAudio(isPlaying);
@@ -5391,6 +5431,14 @@ body.ui-blocked #busy-overlay {
 
   dom.btnPlayPause.addEventListener('click', togglePlayPause);
   dom.miniBtnPlayPause.addEventListener('click', togglePlayPause);
+
+  // Desktop Spacebar shortcut for Play/Pause
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+      e.preventDefault();
+      togglePlayPause();
+    }
+  });
 
   dom.btnNext.addEventListener('click', () => sendThrottledTransport('next'));
   dom.miniBtnNext.addEventListener('click', (e) => {
@@ -7729,7 +7777,7 @@ bindGenreCards();
 
     public static let swJS = ##"""
 // Apple Music Remote (AMR) - Service Worker for PWA
-const CACHE_NAME = 'amr-shell-v5';
+const CACHE_NAME = 'amr-shell-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
