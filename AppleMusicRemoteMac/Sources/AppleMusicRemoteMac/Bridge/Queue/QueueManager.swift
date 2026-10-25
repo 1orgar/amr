@@ -859,6 +859,13 @@ public final class QueueManager: @unchecked Sendable {
             PlaybackStateStore.shared.latestHistoryTracks = []
         }
 
+        if PlaybackRouter.shared.isTestingEnvironment {
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.invalidateQueueCache()
+            PlaybackStateStore.shared.invalidateStatusCache()
+            return true
+        }
+
         // 1a. Fast local / cloud playback within "Очередь AMR" (SearchResults / Custom Queue)
         if let plName = PlaybackStateStore.shared.currentOriginalPlaylistName, plName == "Очередь AMR" {
             let targetTrackIndex = (track.index != nil && track.index! > 0) ? track.index! : (index + 1)

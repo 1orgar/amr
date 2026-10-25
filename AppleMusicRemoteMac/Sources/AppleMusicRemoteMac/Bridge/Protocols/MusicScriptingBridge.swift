@@ -173,12 +173,17 @@ public final class MusicAppProvider: @unchecked Sendable {
 
     @discardableResult
     public func ensureMusicAppRunning() -> Bool {
+        if PlaybackRouter.shared.isTestingEnvironment { return false }
         if isMusicAppRunning { return true }
         return launchMusicApp()
     }
 
     @discardableResult
     public func launchMusicApp(completion: ((Bool) -> Void)? = nil) -> Bool {
+        if PlaybackRouter.shared.isTestingEnvironment {
+            completion?(false)
+            return false
+        }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") else {
             completion?(false)
             return false

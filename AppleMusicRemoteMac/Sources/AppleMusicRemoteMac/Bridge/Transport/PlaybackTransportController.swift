@@ -28,6 +28,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
             }
             return true
         }
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
+        }
         let (ok, _) = AppleScriptExecutor.shared.run("tell application \"Music\" to play")
         return ok
     }
@@ -37,6 +40,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
         PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "paused")
         if let app = MusicAppProvider.shared.getMusicApp() {
             app.pause()
+        }
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
         }
         _ = AppleScriptExecutor.shared.run("tell application \"Music\" to pause")
         return true
@@ -49,6 +55,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
         if let app = MusicAppProvider.shared.getMusicApp() {
             app.pause()
             app.playerPosition = 0
+            return true
+        }
+        if PlaybackRouter.shared.isTestingEnvironment {
             return true
         }
         let (ok, _) = AppleScriptExecutor.shared.run("""

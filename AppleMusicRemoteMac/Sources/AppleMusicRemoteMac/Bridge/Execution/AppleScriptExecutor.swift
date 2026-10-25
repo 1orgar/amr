@@ -19,6 +19,9 @@ public final class AppleScriptExecutor: @unchecked Sendable {
     /// Safely prevents deadlocks by using timed lock acquisition and injecting
     /// IPC timeouts directly inside the `tell application "Music"` block.
     public func executeDescriptor(_ source: String) -> NSAppleEventDescriptor? {
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return nil
+        }
         if !MusicAppProvider.shared.isMusicAppRunning && source.contains("tell application \"Music\"") {
             return nil
         }

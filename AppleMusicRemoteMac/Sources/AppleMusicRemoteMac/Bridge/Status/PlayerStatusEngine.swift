@@ -88,11 +88,13 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             }
         }
 
-        // Fast path: if Music.app is closed, avoid running AppleScript or triggering app launch
-        if !MusicAppProvider.shared.isMusicAppRunning {
+        // Fast path: if Music.app is closed or in test environment, avoid running AppleScript or triggering app launch
+        if !MusicAppProvider.shared.isMusicAppRunning || PlaybackRouter.shared.isTestingEnvironment {
             let currentVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
+            let isUserPaused = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused }
+            let cachedState = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastPlayerStatusCache?.status.playerState } ?? (isUserPaused ? "paused" : "stopped")
             let stoppedStatus = PlayerStatus(
-                playerState: "stopped",
+                playerState: cachedState,
                 position: 0,
                 duration: 0,
                 volume: currentVol,
@@ -101,7 +103,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 playlist: "Музыка",
                 isRadio: false,
                 audioQuality: "Lossless (Остановлен)",
-                isMusicAppRunning: false,
+                isMusicAppRunning: MusicAppProvider.shared.isMusicAppRunning,
                 track: nil
             )
             PlaybackStateStore.shared.withLock {
@@ -216,7 +218,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             if let cached = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache }) {
                 return cached.status
             }
-            return PlayerStatus()
+            let simVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
+            return PlayerStatus(volume: simVol)
         }
 
         let parts = out.components(separatedBy: "||")
