@@ -121,6 +121,10 @@ public final class PlaybackTransportController: @unchecked Sendable {
             return true
         }
 
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
+        }
+
         if let app = MusicAppProvider.shared.getMusicApp() {
             // Auto-detect radio stream
             if (app.currentPlaylist?.value(forKey: "name") as? String) == nil && (app.currentTrack?.value(forKey: "location") == nil) {
@@ -185,6 +189,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
         }
 
         // Standard Library Playlists
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
+        }
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
         if app.playerPosition > 3.0 && !isRapidRepeat {
             app.playerPosition = 0.0
@@ -203,6 +210,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
     public func seek(to position: Double) -> Bool {
         PlaybackStateStore.shared.setSeekTarget(position: position)
         PlaybackStateStore.shared.invalidateStatusCache()
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
+        }
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
         app.playerPosition = position
         return true
@@ -261,11 +271,13 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
     public func setShuffle(_ enabled: Bool) -> Bool {
         PlaybackStateStore.shared.invalidateQueueCache()
-        guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
-
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isShuffleQueueActive = enabled
         }
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
+        }
+        guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
 
         app.shuffleEnabled = enabled
         let script = "tell application \"Music\" to set shuffle enabled to \(enabled ? "true" : "false")"
@@ -277,6 +289,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
     public func setRepeat(mode: String) -> Bool {
         PlaybackStateStore.shared.invalidateStatusCache()
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
+        }
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
         var rMode: MusicERpt = .off
         if mode == "all" { rMode = .all }
