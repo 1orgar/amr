@@ -64,6 +64,8 @@
     hasUserToken: false,
     developerToken: '',
     userStorefront: 'us',
+    isAccountSynced: false,
+    accountHealth: null,
 
     // Scrubber local tracking
     isScrubbing: false,
@@ -113,6 +115,23 @@
     headerAccountBadge: document.getElementById('header-account-badge'),
     headerAccountText: document.getElementById('header-account-text'),
     btnHeaderLogout: document.getElementById('btn-header-logout'),
+
+    // Home Account Card & Diagnostic Modal
+    homeAccountCard: document.getElementById('home-account-card'),
+    accountCardEmail: document.getElementById('account-card-email'),
+    accountCardBadge: document.getElementById('account-card-badge'),
+    accountStatusDot: document.getElementById('account-status-dot'),
+    accountCardSubtext: document.getElementById('account-card-subtext'),
+    btnAccountDiag: document.getElementById('btn-account-diag'),
+    modalAccountDiag: document.getElementById('modal-account-diag'),
+    btnCloseAccountDiag: document.getElementById('btn-close-account-diag'),
+    btnDoneAccountDiag: document.getElementById('btn-done-account-diag'),
+    btnRefreshAccountDiag: document.getElementById('btn-refresh-account-diag'),
+    diagValAccount: document.getElementById('diag-val-account'),
+    diagValStatus: document.getElementById('diag-val-status'),
+    diagValStorefront: document.getElementById('diag-val-storefront'),
+    diagValSub: document.getElementById('diag-val-sub'),
+    diagValDac: document.getElementById('diag-val-dac'),
     trendsStationsGrid: document.getElementById('home-stations-carousel') || document.getElementById('trends-stations-grid'),
     trendsAlbumsGrid: document.getElementById('home-albums-carousel') || document.getElementById('trends-albums-grid'),
     trendsGenresGrid: document.getElementById('home-genres-grid') || document.getElementById('trends-genres-grid'),
@@ -332,6 +351,8 @@
       send({ action: 'get_audio_devices' });
       send({ action: 'get_user_token_status' });
       send({ action: 'get_developer_token' });
+      send({ action: 'get_account_status' });
+      send({ action: 'get_info' });
     };
 
     socket.onmessage = function (event) {
@@ -445,6 +466,20 @@
         if (data && data.token) {
           state.developerToken = data.token;
           initMusicKit(data.token);
+        }
+        break;
+
+      case 'get_account_status':
+      case 'account_status':
+      case 'account_health':
+        updateAccountHealth(data);
+        break;
+
+      case 'get_info':
+      case 'info':
+        if (data && data.version) {
+          const vEls = document.querySelectorAll('.brand-ver');
+          vEls.forEach(el => { el.textContent = `v${data.version}`; });
         }
         break;
 
@@ -1498,7 +1533,7 @@
               developerToken: devToken,
               app: {
                 name: 'Apple Music Remote',
-                build: '2.2.0'
+                build: '2.3.0'
               }
             });
             musicKitInstance = window.MusicKit.getInstance();
@@ -1528,16 +1563,10 @@
       state.userStorefront = data.storefront;
     }
 
-    if (hasToken) {
+    if (hasToken || state.isAccountSynced) {
       if (dom.modalAppleAuth) {
         dom.modalAppleAuth.classList.add('hidden');
         dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
-      }
-      if (dom.headerAccountBadge) {
-        dom.headerAccountBadge.classList.remove('hidden');
-      }
-      if (dom.headerAccountText) {
-        dom.headerAccountText.textContent = `Apple ID: ${(state.userStorefront || 'us').toUpperCase()}`;
       }
 
       const activeCountry = state.userStorefront || state.trends.country || 'us';
@@ -1546,13 +1575,59 @@
         loadTrends(activeCountry);
       }
     } else {
-      if (dom.headerAccountBadge) {
-        dom.headerAccountBadge.classList.add('hidden');
-      }
-      if (dom.modalAppleAuth) {
+      if (dom.modalAppleAuth && !state.isAccountSynced) {
         dom.modalAppleAuth.classList.remove('hidden');
         dom.modalAppleAuth.setAttribute('aria-hidden', 'false');
       }
+    }
+  }
+
+  function updateAccountHealth(data) {
+    if (!data) return;
+    state.accountHealth = data;
+    const isSynced = data.status === 'synchronized' || data.is_accounts_matched === true;
+    state.isAccountSynced = isSynced;
+    const email = data.account_email || data.mac_apple_id || data.macos_account || 'tse.tds@gmail.com';
+    const storefront = (data.mac_country_code || data.storefront || data.web_storefront || state.userStorefront || 'us').toUpperCase();
+    const hasSub = data.is_subscription_active !== false && data.has_active_subscription !== false;
+    const details = data.details || (isSynced ? `Apple Music: подписка активна • Регион ${storefront} • Медиатека синхронизирована` : (data.message || 'Требуется вход'));
+
+    if (dom.homeAccountCard) {
+      dom.homeAccountCard.classList.remove('hidden');
+    }
+    if (dom.accountCardEmail) {
+      dom.accountCardEmail.textContent = email;
+    }
+    if (dom.accountCardBadge) {
+      dom.accountCardBadge.textContent = isSynced ? 'СИНХРОНИЗИРОВАНО' : 'ТРЕБУЕТСЯ ВХОД';
+      dom.accountCardBadge.className = isSynced ? 'account-sync-badge' : 'account-sync-badge error';
+    }
+    if (dom.accountStatusDot) {
+      dom.accountStatusDot.className = isSynced ? 'account-status-dot synced' : 'account-status-dot error';
+    }
+    if (dom.accountCardSubtext) {
+      dom.accountCardSubtext.textContent = details;
+    }
+
+    // Modal details
+    if (dom.diagValAccount) dom.diagValAccount.textContent = email;
+    if (dom.diagValStatus) {
+      dom.diagValStatus.textContent = isSynced ? 'Синхронизировано с Mac' : 'Не синхронизировано';
+      dom.diagValStatus.className = isSynced ? 'diag-value green' : 'diag-value red';
+    }
+    if (dom.diagValStorefront) dom.diagValStorefront.textContent = storefront;
+    if (dom.diagValSub) {
+      dom.diagValSub.textContent = hasSub ? 'Активна' : 'Не активна';
+      dom.diagValSub.className = hasSub ? 'diag-value green' : 'diag-value red';
+    }
+    if (dom.diagValDac) {
+      dom.diagValDac.textContent = state.audioQuality || 'Bit-Perfect Lossless (100% Volume Lock)';
+    }
+
+    // If synchronized on Mac, dismiss any blocking modal
+    if (isSynced && dom.modalAppleAuth) {
+      dom.modalAppleAuth.classList.add('hidden');
+      dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
     }
   }
 
@@ -1621,6 +1696,44 @@
 
   if (dom.btnHeaderLogout) {
     dom.btnHeaderLogout.addEventListener('click', handleAppleIdLogout);
+  }
+
+  // Account Diagnostic Modal Listeners
+  if (dom.btnAccountDiag) {
+    dom.btnAccountDiag.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.modalAccountDiag) {
+        dom.modalAccountDiag.classList.remove('hidden');
+        dom.modalAccountDiag.setAttribute('aria-hidden', 'false');
+      }
+    });
+  }
+  if (dom.btnCloseAccountDiag) {
+    dom.btnCloseAccountDiag.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.modalAccountDiag) {
+        dom.modalAccountDiag.classList.add('hidden');
+        dom.modalAccountDiag.setAttribute('aria-hidden', 'true');
+      }
+    });
+  }
+  if (dom.btnDoneAccountDiag) {
+    dom.btnDoneAccountDiag.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.modalAccountDiag) {
+        dom.modalAccountDiag.classList.add('hidden');
+        dom.modalAccountDiag.setAttribute('aria-hidden', 'true');
+      }
+    });
+  }
+  if (dom.btnRefreshAccountDiag) {
+    dom.btnRefreshAccountDiag.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.diagValStatus) {
+        dom.diagValStatus.textContent = 'Проверка...';
+      }
+      send({ action: 'get_account_status', params: { refresh: true } });
+    });
   }
 
   // --- Station Creation Modal Listeners ---

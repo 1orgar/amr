@@ -392,6 +392,19 @@ input {
   text-transform: uppercase;
 }
 
+.brand-ver {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-left: 4px;
+  text-transform: none;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .quality-badge {
   display: flex;
   align-items: center;
@@ -1541,64 +1554,230 @@ input {
   line-height: 1.15;
 }
 
-.header-account-badge {
-  display: inline-flex;
+/* Home Account Card */
+.home-account-card {
+  display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  padding: 3px 4px 3px 10px;
-  gap: 8px;
-  flex-shrink: 0;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
-.account-badge-info {
-  display: inline-flex;
+.home-account-card:hover {
+  border-color: var(--border-focus);
+}
+
+.account-card-left {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
 }
 
-.account-badge-icon {
-  font-size: 14px;
-  line-height: 1;
-  color: #ffffff;
-}
-
-.account-badge-text {
-  font-size: 12px;
-  font-weight: 500;
-  color: #e5e5e7;
-  letter-spacing: -0.1px;
-}
-
-.btn-account-logout {
-  padding: 4px 10px;
-  min-height: 24px;
-  display: inline-flex;
+.account-card-avatar {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--surface-card-subtle);
+  border: 1px solid var(--border-subtle);
+  display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #8e8e93;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-  touch-action: manipulation;
+  flex-shrink: 0;
 }
 
-.btn-account-logout:hover {
+.apple-logo-icon {
+  font-size: 20px;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.account-status-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #30d158;
+  border: 2px solid var(--surface-card);
+  box-shadow: 0 0 6px rgba(48, 209, 88, 0.4);
+}
+
+.account-status-dot.error {
+  background: #ff453a;
+  box-shadow: 0 0 6px rgba(255, 69, 58, 0.4);
+}
+
+.account-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.account-card-email-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.account-email {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-sync-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #30d158;
+  background: rgba(48, 209, 88, 0.12);
+  border: 1px solid rgba(48, 209, 88, 0.25);
+  border-radius: 6px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.account-sync-badge.error {
   color: #ff453a;
   background: rgba(255, 69, 58, 0.12);
-  border-color: rgba(255, 69, 58, 0.3);
+  border-color: rgba(255, 69, 58, 0.25);
 }
 
-.btn-account-logout:active {
-  transform: scale(0.96);
+.account-card-subtext {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-card-actions {
+  flex-shrink: 0;
+}
+
+.btn-account-diag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-account-diag:hover {
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+  background: var(--surface-hover);
+}
+
+@media (max-width: 480px) {
+  .home-account-card {
+    padding: 10px 12px;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .account-card-left {
+    gap: 10px;
+  }
+  .account-card-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+  }
+  .apple-logo-icon {
+    font-size: 17px;
+  }
+  .account-email {
+    font-size: 13px;
+  }
+  .account-sync-badge {
+    font-size: 8.5px;
+    padding: 1.5px 5px;
+  }
+  .account-card-subtext {
+    font-size: 11px;
+  }
+  .btn-account-diag {
+    padding: 5px 8px;
+    font-size: 11px;
+    gap: 2px;
+  }
+}
+
+/* Diagnostic Details Modal */
+.account-diag-modal-card {
+  max-width: 460px;
+  width: 90%;
+}
+
+.diag-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.diag-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-card-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+
+.diag-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.diag-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 13px;
+  text-align: right;
+}
+
+.diag-value.green {
+  color: #30d158;
+}
+
+.diag-value.red {
+  color: #ff453a;
+}
+
+.diag-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 
 /* Home Section Layout */

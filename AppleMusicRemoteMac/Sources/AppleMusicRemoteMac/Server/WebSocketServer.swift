@@ -1023,6 +1023,15 @@ public final class WebSocketServer: @unchecked Sendable {
                 self?.broadcastStatus(includeQueue: true)
             }
 
+        case "get_account_status", "account_health":
+            let force = (params["refresh"] as? Bool) ?? false
+            let health = await AccountHealthService.shared.checkAccountHealth(forceRefresh: force)
+            if let enc = try? JSONEncoder().encode(health),
+               let dict = try? JSONSerialization.jsonObject(with: enc) as? [String: Any] {
+                resultData["data"] = dict
+            }
+            resultData["success"] = true
+
         default:
             resultData = ["status": "error", "message": "Unknown endpoint: \(endpoint)"]
         }
@@ -1782,6 +1791,11 @@ public final class WebSocketServer: @unchecked Sendable {
                 sendError(action: action, error: "Missing parameters for artwork", id: id, to: connection)
             }
 
+        case "get_account_status", "account_health":
+            let force = (params["refresh"] as? Bool) ?? false
+            let health = await AccountHealthService.shared.checkAccountHealth(forceRefresh: force)
+            sendSuccess(action: action, data: health, id: id, to: connection)
+
         case "get_info", "info":
             let ips = getLANIPAddresses()
             let primaryUrl = ips.first.map { "http://\($0):\(self.port)" } ?? "http://localhost:\(self.port)"
@@ -1789,7 +1803,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 "port": self.port,
                 "primary_url": primaryUrl,
                 "ips": ips,
-                "version": "2.2.0",
+                "version": "2.3.0",
                 "platform": "macOS"
             ], id: id, to: connection)
 

@@ -21,7 +21,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=9">
+  <link rel="stylesheet" href="/style.css?v=230">
   <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
 </head>
 <body>
@@ -46,7 +46,7 @@
       <header class="player-top-header">
         <div class="brand-pill">
           <span class="brand-dot"></span>
-          <span class="brand-title">APPLE MUSIC REMOTE</span>
+          <span class="brand-title">AMR <span class="brand-ver" id="brand-ver">v2.3.0</span></span>
         </div>
         <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
           <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -207,7 +207,7 @@
       <header class="mobile-top-bar">
         <div class="brand-pill">
           <span class="brand-dot"></span>
-          <span class="brand-title">AMR</span>
+          <span class="brand-title">AMR <span class="brand-ver">v2.3.0</span></span>
         </div>
         <button id="mobile-dac-badge" class="quality-badge mobile-dac-badge" type="button" title="Параметры потока и ЦАП">
           <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -318,16 +318,33 @@
           <div>
             <h1 class="main-home-title">Главная</h1>
           </div>
-          <div class="header-account-badge hidden" id="header-account-badge">
-            <div class="account-badge-info">
-              <span class="account-badge-icon"></span>
-              <span class="account-badge-text" id="header-account-text">Apple ID</span>
-            </div>
-            <button class="btn-account-logout" id="btn-header-logout" type="button" title="Выйти из Apple ID">Выйти</button>
-          </div>
         </header>
 
         <div class="scroll-pane home-scroll-pane">
+          <!-- Account Status Card on Home -->
+          <div class="home-account-card" id="home-account-card">
+            <div class="account-card-left">
+              <div class="account-card-avatar">
+                <span class="apple-logo-icon"></span>
+                <span class="account-status-dot synced" id="account-status-dot" title="Синхронизировано"></span>
+              </div>
+              <div class="account-card-info">
+                <div class="account-card-email-row">
+                  <span class="account-email" id="account-card-email">tse.tds@gmail.com</span>
+                  <span class="account-sync-badge" id="account-card-badge">СИНХРОНИЗИРОВАНО</span>
+                </div>
+                <div class="account-card-subtext" id="account-card-subtext">Apple Music: подписка активна • Регион US • Медиатека синхронизирована</div>
+              </div>
+            </div>
+            <div class="account-card-actions">
+              <button class="btn-account-diag" id="btn-account-diag" type="button" title="Диагностика аккаунта">
+                <span>Диагностика</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
           <!-- 1. Hero Carousel (Подборка лучших) -->
           <div class="home-section" id="home-hero-section">
             <h2 class="home-section-title">Подборка лучших</h2>
@@ -734,6 +751,42 @@
     </div>
   </div>
 
+  <!-- Account Diagnostic Modal -->
+  <div id="modal-account-diag" class="modal-backdrop hidden" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card account-diag-modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Apple ID & Медиатека</h3>
+        <button id="btn-close-account-diag" class="btn-close-modal" type="button" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="diag-details-list">
+        <div class="diag-detail-item">
+          <span class="diag-label">Учетная запись Mac:</span>
+          <span class="diag-value" id="diag-val-account">tse.tds@gmail.com</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Статус синхронизации:</span>
+          <span class="diag-value green" id="diag-val-status">Синхронизировано с Mac</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Регион Apple Music:</span>
+          <span class="diag-value" id="diag-val-storefront">US</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Подписка Apple Music:</span>
+          <span class="diag-value green" id="diag-val-sub">Активна</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Bit-Perfect CoreAudio:</span>
+          <span class="diag-value" id="diag-val-dac">Lossless / Hi-Res (100% Volume Lock)</span>
+        </div>
+      </div>
+      <div class="diag-modal-actions">
+        <button id="btn-refresh-account-diag" class="btn-secondary" type="button">Проверить заново</button>
+        <button id="btn-done-account-diag" class="btn-primary" type="button">Готово</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Busy / Action Loading Overlay -->
   <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
     <div class="busy-card">
@@ -742,6 +795,6 @@
     </div>
   </div>
 
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=230"></script>
 </body>
 </html>
