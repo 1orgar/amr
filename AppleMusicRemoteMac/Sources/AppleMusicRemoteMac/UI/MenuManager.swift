@@ -116,12 +116,12 @@ public final class MenuManager: NSObject {
             let bitDepth: Int
             if let detected = BitPerfectLogMonitor.shared.currentDetectedSampleRate {
                 rate = detected
-                bitDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate > 48000.0 ? 24 : 16)
+                bitDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate >= 48000.0 ? 24 : 16)
             } else {
                 let audioParams = MusicBridge.shared.getCurrentTrackAudioParams()
                 if let trackRate = audioParams.sampleRate {
                     rate = trackRate
-                    bitDepth = audioParams.bitDepth ?? (rate > 48000.0 ? 24 : 16)
+                    bitDepth = audioParams.bitDepth ?? (rate >= 48000.0 ? 24 : 16)
                 } else if let curDev = CoreAudioDeviceManager.shared.getOutputDevices().first(where: { $0.isDefault }) {
                     rate = curDev.currentSampleRate
                     bitDepth = 24

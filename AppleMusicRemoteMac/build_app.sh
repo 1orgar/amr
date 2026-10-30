@@ -22,6 +22,11 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 SDK_PATH="$(xcrun --show-sdk-path)"
 
 echo "⚡ Compiling Swift sources with swiftc..."
+SWIFT_SOURCES=()
+while IFS= read -r -d '' file; do
+    SWIFT_SOURCES+=("$file")
+done < <(find "$DIR/Sources/AppleMusicRemoteMac" -name "*.swift" -print0)
+
 swiftc -parse-as-library \
     -O \
     -sdk "$SDK_PATH" \
@@ -34,34 +39,7 @@ swiftc -parse-as-library \
     -framework CoreAudio \
     -framework CryptoKit \
     -framework ServiceManagement \
-    "$DIR/Sources/AppleMusicRemoteMac/System/LaunchAtLoginManager.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Models/Models.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/CoreAudio/CoreAudioDeviceManager.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/CoreAudio/BitPerfectLogMonitor.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/UPnP/SSDPService.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/UPnP/UPnPMediaRendererServer.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Protocols/MusicScriptingBridge.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Execution/AppleScriptExecutor.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Audio/AudioQualityDetector.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Audio/AudioDuckingController.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Artwork/ArtworkService.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/State/PlaybackStateStore.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Transport/PlaybackTransportController.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Status/PlayerStatusEngine.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Queue/QueueManager.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Routing/PlaybackRouter.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/Library/LibraryService.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Bridge/MusicBridge.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Cloud/MusicKitManager.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Cloud/CloudCatalogService.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Server/BonjourAdvertiser.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Server/WebSocketServer.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/Server/WebUIContent.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/UI/QRCodeWindow.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/UI/SettingsWindow.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/UI/MenuManager.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/AppDelegate.swift" \
-    "$DIR/Sources/AppleMusicRemoteMac/App.swift" \
+    "${SWIFT_SOURCES[@]}" \
     -o "$MACOS_DIR/$APP_NAME"
 
 # Copy Web UI Assets into App Bundle
@@ -98,9 +76,9 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
     <key>CFBundleIdentifier</key>
     <string>org.ksholokhov.amr.mac</string>
     <key>CFBundleVersion</key>
-    <string>2.2.0</string>
+    <string>2.3.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.2.0</string>
+    <string>2.3.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
@@ -118,6 +96,7 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
     <key>NSBonjourServices</key>
     <array>
         <string>_applemusicremote._tcp</string>
+        <string>_musc._tcp</string>
     </array>
 </dict>
 </plist>

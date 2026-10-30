@@ -59,6 +59,8 @@ public final class PlaybackStateStore: @unchecked Sendable {
 
     // Volume State (simulated when Music.app is not active or in test runners)
     public var simulatedVolume: Int = 50
+    public var preDLNAVolume: Int = 100
+    public var isDLNAMuted: Bool = false
 
     // Volume Lock State (Bit-Perfect 100% volume mode)
     public var isVolumeLockedTo100: Bool {

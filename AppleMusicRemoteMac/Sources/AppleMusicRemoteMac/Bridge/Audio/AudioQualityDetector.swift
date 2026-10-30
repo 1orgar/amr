@@ -84,7 +84,7 @@ public final class AudioQualityDetector: @unchecked Sendable {
             bitRate = br.intValue
         }
         if let sr = sampleRate {
-            bitDepth = (sr > 48000.0) ? 24 : 16
+            bitDepth = (sr >= 48000.0) ? 24 : 16
         }
         return (sampleRate, bitDepth, bitRate)
     }

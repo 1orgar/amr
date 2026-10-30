@@ -88,8 +88,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             }
         }
 
-        // Fast path: if Music.app is closed or in test environment, avoid running AppleScript or triggering app launch
-        if !MusicAppProvider.shared.isMusicAppRunning || PlaybackRouter.shared.isTestingEnvironment {
+        // Fast path: if Music.app is closed, unhealthy, or in test environment, avoid running AppleScript or triggering app launch
+        if !MusicAppProvider.shared.isMusicAppRunning || !MusicAppLifecycleManager.shared.isHealthy || PlaybackRouter.shared.isTestingEnvironment {
             let currentVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
             let isUserPaused = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused }
             let cachedState = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastPlayerStatusCache?.status.playerState } ?? (isUserPaused ? "paused" : "stopped")
@@ -103,7 +103,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 playlist: "Музыка",
                 isRadio: false,
                 audioQuality: "Lossless (Остановлен)",
-                isMusicAppRunning: MusicAppProvider.shared.isMusicAppRunning,
+                isMusicAppRunning: MusicAppLifecycleManager.shared.isHealthy,
                 track: nil
             )
             PlaybackStateStore.shared.withLock {
@@ -188,11 +188,15 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                             end if
                         end try
                         set knd to ""
-                        set br to 0
-                        set sr to 0
                         try
                             set knd to (kind of ct as string)
+                        end try
+                        set br to 0
+                        try
                             set br to (bit rate of ct as integer)
+                        end try
+                        set sr to 0
+                        try
                             set sr to (sample rate of ct as integer)
                         end try
                         set isFav to false
@@ -265,8 +269,16 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         let currentTrackSig = "\(stateStr):\(dbId):\(tName):\(tArtist)"
         if let lastSig = lastTrackSignature, lastSig != currentTrackSig {
             if !tName.isEmpty && stateStr == "playing" {
-                NSLog("[PlayerStatusEngine] 🎵 Track changed to '%@' (Natural progression) - resetting Bit-Perfect lock", currentTrackSig)
-                BitPerfectLogMonitor.shared.resetTrackState()
+                var preRate: Double? = sRate > 0 ? Double(sRate) : nil
+                var preDepth: Int? = (preRate != nil && preRate! >= 48000.0) ? 24 : nil
+                if let cached = BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName) {
+                    preRate = cached.sampleRate
+                    preDepth = cached.bitDepth
+                } else if preDepth == nil, let sr = preRate {
+                    preDepth = (sr >= 48000.0) ? 24 : (bRate > 1000 ? 24 : 16)
+                }
+                NSLog("[PlayerStatusEngine] 🎵 Track changed to '%@' (pre-inspected format: %.1f kHz, %d-bit)", currentTrackSig, (preRate ?? 44100.0) / 1000.0, preDepth ?? 16)
+                BitPerfectLogMonitor.shared.resetTrackState(expectedSampleRate: preRate, expectedBitDepth: preDepth)
             } else if stateStr == "stopped" && !lastSig.starts(with: "stopped") {
                 BitPerfectLogMonitor.shared.resetTrackState()
             }
@@ -499,6 +511,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                     }
                 }
             }
+            let effectiveTrackRate = sRate > 0 ? sRate : BitPerfectLogMonitor.shared.currentDetectedSampleRate.map { Int($0) }
+            let effectiveTrackDepth = (effectiveTrackRate != nil && effectiveTrackRate! >= 48000) ? 24 : (BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (bRate > 1000 ? 24 : 16))
             trackObj = TrackInfo(
                 id: "\(dbId)",
                 numericId: dbId,
@@ -509,20 +523,23 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 hasArtwork: !artUrl.isEmpty,
                 artworkUrl: artUrl,
                 favorited: isFavorited,
-                isLocal: hasLoc
+                isLocal: hasLoc,
+                sampleRate: effectiveTrackRate,
+                bitDepth: effectiveTrackDepth
             )
         }
 
         var curQuality = "AAC (256 kbps)"
         if hasLoc {
             curQuality = AudioQualityDetector.determineAudioQuality(kind: knd, bitRate: bRate, sampleRate: sRate)
-            if stateStr == "playing" && sRate > 0 && BitPerfectLogMonitor.shared.isEnabled {
-                BitPerfectLogMonitor.shared.reportLocalTrackFormat(sampleRate: Double(sRate), bitDepth: sRate > 48000 ? 24 : 16)
-            }
+        }
+        if stateStr == "playing" && sRate > 0 && BitPerfectLogMonitor.shared.isEnabled {
+            let depth = sRate >= 48000 ? 24 : (bRate > 1000 ? 24 : 16)
+            BitPerfectLogMonitor.shared.reportLocalTrackFormat(sampleRate: Double(sRate), bitDepth: depth)
         }
 
         if BitPerfectLogMonitor.shared.isEnabled, let rate = BitPerfectLogMonitor.shared.currentDetectedSampleRate {
-            let depth = BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate > 48000.0 ? 24 : 16)
+            let depth = BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate >= 48000.0 ? 24 : 16)
             let khz = rate / 1000.0
             let khzStr = (khz.truncatingRemainder(dividingBy: 1) == 0) ? String(format: "%.0f", khz) : String(format: "%.1f", khz)
             if rate > 48000.0 {
@@ -532,9 +549,17 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             }
         }
 
+        let activeDLNA = DLNADiscoveryManager.shared.getActiveRenderer()
         let defDevice = CoreAudioDeviceManager.shared.getDefaultOutputDevice()
-        let devName = defDevice?.name ?? "Аудиоустройство"
-        let devRate = defDevice?.currentSampleRate ?? 44100.0
+        let devName: String
+        let devRate: Double
+        if let dlna = activeDLNA {
+            devName = dlna.friendlyName
+            devRate = Double(AudioProcessTapService.shared.sampleRate)
+        } else {
+            devName = defDevice?.name ?? "Аудиоустройство"
+            devRate = defDevice?.currentSampleRate ?? 44100.0
+        }
         let isBp = BitPerfectLogMonitor.shared.isEnabled
 
         let status = PlayerStatus(

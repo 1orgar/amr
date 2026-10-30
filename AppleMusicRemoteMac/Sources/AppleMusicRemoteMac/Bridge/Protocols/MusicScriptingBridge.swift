@@ -105,6 +105,10 @@ public final class MusicAppProvider: @unchecked Sendable {
         !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty
     }
 
+    public var isMusicAppHealthy: Bool {
+        isMusicAppRunning && MusicAppLifecycleManager.shared.isHealthy
+    }
+
     private init() {
         setupLifecycleObservers()
     }
@@ -134,10 +138,13 @@ public final class MusicAppProvider: @unchecked Sendable {
 
             PlaybackStateStore.shared.invalidateStatusCache()
             PlaybackStateStore.shared.invalidateQueueCache()
+            MusicAppLifecycleManager.shared.handleAppLaunched(pid: app.processIdentifier)
             self?.onMusicAppLaunched?()
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+            if !PlaybackRouter.shared.isTestingEnvironment {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+                }
             }
 
             DispatchQueue.main.async {
@@ -161,6 +168,7 @@ public final class MusicAppProvider: @unchecked Sendable {
             self?.lock.unlock()
 
             PlaybackStateStore.shared.resetPlaybackState()
+            MusicAppLifecycleManager.shared.handleAppTerminated(pid: app.processIdentifier)
             self?.onMusicAppTerminated?()
 
             DispatchQueue.main.async {

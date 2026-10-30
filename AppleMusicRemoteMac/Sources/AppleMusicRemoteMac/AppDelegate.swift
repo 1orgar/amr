@@ -30,13 +30,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
             NSLog("[AppDelegate] Warning: Could not start WebSocket server on port 8080")
         }
 
-        // 3. Start UPnP / DLNA MediaRenderer Server & SSDP Discovery
-        let upnpStarted = UPnPMediaRendererServer.shared.start(port: 8090)
+        // 3. Start UPnP / DLNA MediaRenderer Server & SSDP Discovery (if enabled)
+        let upnpStarted = UPnPMediaRendererServer.shared.startIfEnabled(port: 8090)
         if upnpStarted {
-            SSDPService.shared.start(httpPort: 8090)
             NSLog("[AppDelegate] 📻 UPnP MediaRenderer & SSDP active on port 8090.")
-        } else {
-            NSLog("[AppDelegate] Warning: Could not start UPnP server on port 8090")
         }
 
         // 4. Start Bit-Perfect Unified Log Monitoring & CoreAudio Listeners
@@ -55,19 +52,31 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
         // 5. Observe System Sleep / Wake to restore network listeners & multicast discovery
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
             NSLog("[AppDelegate] ☀️ System woke from sleep. Restoring SSDP multicast and UPnP...")
-            SSDPService.shared.restart()
+            if UPnPMediaRendererServer.shared.isEnabled {
+                SSDPService.shared.restart()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    UPnPMediaRendererServer.shared.notifySubscribers(force: true)
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                UPnPMediaRendererServer.shared.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
             }
         }
+
+        // 6. Start Music.app Lifecycle Watchdog & Fault Tolerance Monitor
+        MusicAppLifecycleManager.shared.startWatchdog()
+
+        // 7. Start DLNA Discovery Manager if enabled
+        DLNADiscoveryManager.shared.startIfEnabled()
 
         NSLog("[AppDelegate] Apple Music Remote initialized successfully.")
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
         NSLog("[AppDelegate] Terminating Apple Music Remote...")
+        MusicAppLifecycleManager.shared.stopWatchdog()
         BitPerfectLogMonitor.shared.stop()
+        DLNADiscoveryManager.shared.stop()
         SSDPService.shared.stop()
         UPnPMediaRendererServer.shared.stop()
         WebSocketServer.shared.stop()

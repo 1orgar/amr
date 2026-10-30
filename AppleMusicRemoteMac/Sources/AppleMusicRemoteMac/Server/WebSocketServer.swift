@@ -23,10 +23,23 @@ public final class WebSocketServer: @unchecked Sendable {
 
     private var listener: NWListener?
     private var clients: [UUID: NWConnection] = [:]
+    private var liveStreamConnections: [UUID: NWConnection] = [:]
+    private let liveStreamLock = NSLock()
     private let clientLock = NSRecursiveLock()
     private let sendLock = NSRecursiveLock()
     private var isRunning = false
     public private(set) var port: Int = 8080
+
+    public func closeLiveStreamConnections() {
+        liveStreamLock.lock()
+        let conns = Array(liveStreamConnections.values)
+        liveStreamConnections.removeAll()
+        liveStreamLock.unlock()
+        for conn in conns {
+            conn.cancel()
+        }
+        NSLog("[WebSocketServer] 🔌 Closed %d active live audio stream connection(s).", conns.count)
+    }
 
     private var pollerTimer: DispatchSourceTimer?
     private var lastKnownState: String = ""
@@ -81,6 +94,20 @@ public final class WebSocketServer: @unchecked Sendable {
         CoreAudioDeviceManager.shared.onSampleRateChanged = { [weak self] _, _ in
             guard let self = self else { return }
             self.broadcastStatus(includeQueue: false)
+        }
+
+        MusicAppLifecycleManager.shared.onStateChanged = { [weak self] event in
+            guard let self = self else { return }
+            self.broadcastEvent(name: "music_app_lifecycle", data: [
+                "state": event.state.rawValue,
+                "reason": event.reason,
+                "is_healthy": event.isHealthy,
+                "restart_count": event.restartCount,
+                "cooldown_remaining": event.cooldownRemaining
+            ])
+            if event.state == .running {
+                self.broadcastStatus(includeQueue: true)
+            }
         }
     }
 
@@ -543,52 +570,74 @@ public final class WebSocketServer: @unchecked Sendable {
                     sendHTTPResponse(status: "200 OK", contentType: cType, body: data, connection: connection, cacheSeconds: 86400 * 30)
                     return
                 }
-                sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
-            case "/api/artwork":
+            case "/stream/live.wav", "/stream/live":
+                if method == "HEAD" {
+                    let headResp = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                    connection.send(content: Data(headResp.utf8), completion: .contentProcessed({ [weak connection] _ in
+                        connection?.cancel()
+                    }))
+                    return
+                }
+                handleLiveAudioStream(connection: connection, headerString: headerString, fullPath: fullPath)
+                return
+            case let p where p == "/api/artwork" || p == "/api/artwork.jpg" || p == "/artwork.jpg" || p.hasPrefix("/api/artwork.jpg?") || p.hasPrefix("/api/artwork?"):
+                // 1. Try local track artwork from Music.app
                 let artData = MusicBridge.shared.getCurrentTrackArtwork()
                 if let art = artData, !art.isEmpty {
                     sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 0)
-                } else {
-                    let curStatus = MusicBridge.shared.getPlayerStatus()
-                    if let trackArt = curStatus.track?.artworkUrl, !trackArt.isEmpty, trackArt.hasPrefix("http") {
-                        sendRedirect(location: trackArt, connection: connection, cacheSeconds: 0)
-                    } else {
-                        var trackName = curStatus.track?.name ?? ""
-                        var trackArtist = curStatus.track?.artist ?? ""
-                        var trackAlbum = curStatus.track?.album ?? ""
-                        if let qIdx = fullPath.firstIndex(of: "?") {
-                            let qs = String(fullPath[fullPath.index(after: qIdx)...])
-                            for pair in qs.components(separatedBy: "&") {
-                                let parts = pair.components(separatedBy: "=")
-                                if parts.count == 2 {
-                                    let val = parts[1].removingPercentEncoding ?? ""
-                                    if parts[0] == "name" && !val.isEmpty { trackName = val }
-                                    else if parts[0] == "artist" && !val.isEmpty { trackArtist = val }
-                                    else if parts[0] == "album" && !val.isEmpty { trackAlbum = val }
-                                }
+                    return
+                }
+
+                // 2. Try current player status track artworkUrl
+                let curStatus = MusicBridge.shared.getPlayerStatus()
+                let trackArt = curStatus.track?.artworkUrl ?? ""
+
+                if !trackArt.isEmpty && (trackArt.hasPrefix("http://") || trackArt.hasPrefix("https://")) {
+                    if let disk = ArtworkDiskCache.shared.get(key: trackArt) {
+                        sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: disk, connection: connection, cacheSeconds: 86400)
+                        return
+                    }
+                    if let url = URL(string: trackArt) {
+                        let req = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
+                        URLSession.shared.dataTask(with: req) { [weak self] data, response, _ in
+                            guard let self = self else { return }
+                            if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
+                                ArtworkDiskCache.shared.set(key: trackArt, data: d)
+                                let mime = http.mimeType ?? "image/jpeg"
+                                self.sendHTTPResponse(status: "200 OK", contentType: mime, body: d, connection: connection, cacheSeconds: 86400)
+                            } else {
+                                self.sendDefaultArtwork(connection: connection)
                             }
-                        }
-                        let tName = trackName
-                        let tArtist = trackArtist
-                        let tAlbum = trackAlbum
-                        if !tName.isEmpty {
-                            if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
-                                sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
-                                return
-                            }
-                            Task { [weak self] in
-                                guard let self = self else { return }
-                                if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: tName, artist: tArtist, album: tAlbum) {
-                                    self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
-                                } else {
-                                    self.sendDefaultArtwork(connection: connection)
-                                }
-                            }
-                            return
-                        }
-                        sendDefaultArtwork(connection: connection)
+                        }.resume()
+                        return
                     }
                 }
+
+                // 3. Check cached track artwork via MusicKit / Search
+                let tName = curStatus.track?.name ?? ""
+                let tArtist = curStatus.track?.artist ?? ""
+                let tAlbum = curStatus.track?.album ?? ""
+                if !tName.isEmpty, let cloudUrlStr = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum),
+                   !cloudUrlStr.isEmpty, let url = URL(string: cloudUrlStr) {
+                    if let disk = ArtworkDiskCache.shared.get(key: cloudUrlStr) {
+                        sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: disk, connection: connection, cacheSeconds: 86400)
+                        return
+                    }
+                    let req = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
+                    URLSession.shared.dataTask(with: req) { [weak self] data, response, _ in
+                        guard let self = self else { return }
+                        if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
+                            ArtworkDiskCache.shared.set(key: cloudUrlStr, data: d)
+                            let mime = http.mimeType ?? "image/jpeg"
+                            self.sendHTTPResponse(status: "200 OK", contentType: mime, body: d, connection: connection, cacheSeconds: 86400)
+                        } else {
+                            self.sendDefaultArtwork(connection: connection)
+                        }
+                    }.resume()
+                    return
+                }
+
+                sendDefaultArtwork(connection: connection)
             case let p where p.hasPrefix("/api/artwork/search"):
                 var trackName = ""
                 var trackArtist = ""
@@ -818,6 +867,9 @@ public final class WebSocketServer: @unchecked Sendable {
             let ok = bridge.play()
             var status = PlayerStatusEngine.shared.getPlayerStatus()
             status.playerState = "playing"
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.play()
+            }
             broadcastStatus(status: status, includeQueue: false)
             resultData["success"] = ok
 
@@ -825,12 +877,23 @@ public final class WebSocketServer: @unchecked Sendable {
             let ok = bridge.pause()
             var status = PlayerStatusEngine.shared.getPlayerStatus()
             status.playerState = "paused"
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.pause()
+            }
             broadcastStatus(status: status, includeQueue: false)
             resultData["success"] = ok
 
         case "play_pause":
             let ok = bridge.playPause()
             resultData["success"] = ok
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                let st = PlayerStatusEngine.shared.getPlayerStatus()
+                if st.isPlaying {
+                    DLNADiscoveryManager.shared.play()
+                } else {
+                    DLNADiscoveryManager.shared.pause()
+                }
+            }
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.25) { [weak self] in
                 self?.broadcastStatus(includeQueue: false)
             }
@@ -852,6 +915,9 @@ public final class WebSocketServer: @unchecked Sendable {
         case "stop":
             let ok = bridge.stop()
             resultData["success"] = ok
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.stop()
+            }
             broadcastStatus(includeQueue: false)
 
         case "set_volume":
@@ -1052,6 +1118,101 @@ public final class WebSocketServer: @unchecked Sendable {
         sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: respData, connection: connection)
     }
 
+    private func handleLiveAudioStream(connection: NWConnection, headerString: String, fullPath: String) {
+        let subscriberID = UUID()
+        liveStreamLock.lock()
+        liveStreamConnections[subscriberID] = connection
+        liveStreamLock.unlock()
+
+        var requestedRate: Int? = nil
+        var requestedBits: Int? = nil
+        if let qIdx = fullPath.firstIndex(of: "?") {
+            let qs = String(fullPath[fullPath.index(after: qIdx)...])
+            for pair in qs.components(separatedBy: "&") {
+                let parts = pair.components(separatedBy: "=")
+                if parts.count == 2 {
+                    if parts[0] == "rate", let r = Int(parts[1]), r > 0 {
+                        requestedRate = r
+                    } else if (parts[0] == "bits" || parts[0] == "depth"), let b = Int(parts[1]), (b == 16 || b == 24) {
+                        requestedBits = b
+                    }
+                }
+            }
+        }
+
+        let detectedDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth
+        let effectiveRate = requestedRate ?? AudioProcessTapService.shared.sampleRate
+        let effectiveBits = requestedBits ?? detectedDepth ?? (effectiveRate >= 48000 ? 24 : 16)
+
+        AudioProcessTapService.shared.setFormat(sampleRate: effectiveRate, bitDepth: effectiveBits)
+
+        let httpHeader = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+
+        let wavHeader = AudioProcessTapService.shared.makeWAVHeader(sampleRate: effectiveRate, bitDepth: effectiveBits)
+        var initData = Data(httpHeader.utf8)
+        initData.append(wavHeader)
+
+        NSLog("[WebSocketServer] 📻 Client connected to /stream/live.wav at \(effectiveRate) Hz, \(effectiveBits)-bit (subscriber: \(subscriberID))")
+
+        connection.send(content: initData, isComplete: false, completion: .contentProcessed({ error in
+            if let error = error {
+                NSLog("[WebSocketServer] ❌ Failed to send live stream header: \(error)")
+                connection.cancel()
+                return
+            }
+        }))
+
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .cancelled, .failed:
+                NSLog("[WebSocketServer] 🔌 Live stream client disconnected (subscriber: \(subscriberID))")
+                AudioProcessTapService.shared.removeSubscriber(id: subscriberID)
+                self?.liveStreamLock.lock()
+                self?.liveStreamConnections.removeValue(forKey: subscriberID)
+                self?.liveStreamLock.unlock()
+            default:
+                break
+            }
+        }
+
+        AudioProcessTapService.shared.addSubscriber(id: subscriberID) { [weak connection] chunk in
+            guard let conn = connection else { return }
+            conn.send(content: chunk, isComplete: false, completion: .contentProcessed({ [weak conn] error in
+                if let error = error {
+                    NSLog("[WebSocketServer] ⚠️ Failed to send audio chunk: \(error). Closing stream.")
+                    AudioProcessTapService.shared.removeSubscriber(id: subscriberID)
+                    conn?.cancel()
+                }
+            }))
+        }
+    }
+
+    private func makeWAVHeader(sampleRate: Int, channels: Int, bitsPerSample: Int) -> Data {
+        var header = Data()
+        header.append(contentsOf: "RIFF".utf8)
+        var chunkSize: UInt32 = 0x7FFFFFFF
+        header.append(Data(bytes: &chunkSize, count: 4))
+        header.append(contentsOf: "WAVEfmt ".utf8)
+        var subchunk1Size: UInt32 = 16
+        header.append(Data(bytes: &subchunk1Size, count: 4))
+        var audioFormat: UInt16 = 1
+        header.append(Data(bytes: &audioFormat, count: 2))
+        var numChannels = UInt16(channels)
+        header.append(Data(bytes: &numChannels, count: 2))
+        var sRate = UInt32(sampleRate)
+        header.append(Data(bytes: &sRate, count: 4))
+        var byteRate = UInt32(sampleRate * channels * bitsPerSample / 8)
+        header.append(Data(bytes: &byteRate, count: 4))
+        var blockAlign = UInt16(channels * bitsPerSample / 8)
+        header.append(Data(bytes: &blockAlign, count: 2))
+        var bits = UInt16(bitsPerSample)
+        header.append(Data(bytes: &bits, count: 2))
+        header.append(contentsOf: "data".utf8)
+        var dataSize: UInt32 = 0x7FFFFFFF - 36
+        header.append(Data(bytes: &dataSize, count: 4))
+        return header
+    }
+
     private func sendHTTPResponse(status: String, contentType: String, body: Data, connection: NWConnection, cacheSeconds: Int = 0) {
         var header = "HTTP/1.1 \(status)\r\nContent-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nAccept-Ranges: bytes\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: Range, Content-Type\r\nConnection: close\r\n"
         if cacheSeconds > 0 {
@@ -1193,6 +1354,9 @@ public final class WebSocketServer: @unchecked Sendable {
             let ok = bridge.play()
             var status = PlayerStatusEngine.shared.getPlayerStatus()
             status.playerState = "playing"
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.play()
+            }
             broadcastStatus(status: status, includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { [weak self] in
@@ -1203,6 +1367,9 @@ public final class WebSocketServer: @unchecked Sendable {
             let ok = bridge.pause()
             var status = PlayerStatusEngine.shared.getPlayerStatus()
             status.playerState = "paused"
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.pause()
+            }
             broadcastStatus(status: status, includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { [weak self] in
@@ -1213,6 +1380,9 @@ public final class WebSocketServer: @unchecked Sendable {
             let ok = bridge.stop()
             var status = PlayerStatusEngine.shared.getPlayerStatus()
             status.playerState = "stopped"
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.stopPlayback()
+            }
             broadcastStatus(status: status, includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { [weak self] in
@@ -1222,6 +1392,13 @@ public final class WebSocketServer: @unchecked Sendable {
         case "play_pause", "toggle_play_pause":
             let ok = bridge.playPause()
             let status = PlayerStatusEngine.shared.getPlayerStatus()
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                if status.isPlaying {
+                    DLNADiscoveryManager.shared.play()
+                } else {
+                    DLNADiscoveryManager.shared.pause()
+                }
+            }
             broadcastStatus(status: status, includeQueue: false)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
             // ScriptingBridge needs ~150-250ms to reflect state changes in Music.app.
@@ -1644,26 +1821,108 @@ public final class WebSocketServer: @unchecked Sendable {
             sendSuccess(action: action, data: ["has_user_token": hasToken, "storefront": MusicKitManager.shared.getUserStorefront()], id: id, to: connection)
 
         case "get_audio_devices", "audio_devices":
-            let devices = CoreAudioDeviceManager.shared.getOutputDevices().map { $0.dictionary }
-            let defaultDev = CoreAudioDeviceManager.shared.getDefaultOutputDevice()?.dictionary
-            sendSuccess(action: action, data: ["devices": devices, "current_device": defaultDev as Any], id: id, to: connection)
+            let isDLNAActive = DLNADiscoveryManager.shared.hasActiveRenderer
+            var devices = CoreAudioDeviceManager.shared.getOutputDevices().map { dev -> [String: Any] in
+                var dict = dev.dictionary
+                if isDLNAActive {
+                    dict["isDefault"] = false
+                }
+                return dict
+            }
+            if DLNADiscoveryManager.shared.isEnabled {
+                devices.append(contentsOf: DLNADiscoveryManager.shared.getDiscoveredDevices())
+            }
+            let currentDev: [String: Any]?
+            if let activeDLNA = DLNADiscoveryManager.shared.getActiveRenderer() {
+                currentDev = activeDLNA.dictionary
+            } else {
+                currentDev = CoreAudioDeviceManager.shared.getDefaultOutputDevice()?.dictionary
+            }
+            sendSuccess(action: action, data: ["devices": devices, "current_device": currentDev as Any], id: id, to: connection)
+
+        case "get_dlna_discovery_status":
+            let isEnabled = DLNADiscoveryManager.shared.isEnabled
+            let count = DLNADiscoveryManager.shared.getDiscoveredCount()
+            sendSuccess(action: action, data: ["enabled": isEnabled, "discovered_count": count], id: id, to: connection)
+
+        case "set_dlna_discovery":
+            let enabled = (params["enabled"] as? Bool) ?? false
+            DLNADiscoveryManager.shared.setEnabled(enabled)
+            broadcastAudioDevices()
+            sendSuccess(action: action, data: ["enabled": enabled, "status": "ok"], id: id, to: connection)
+
+        case "get_local_dmr_status":
+            let isEnabled = UPnPMediaRendererServer.shared.isEnabled
+            sendSuccess(action: action, data: ["enabled": isEnabled], id: id, to: connection)
+
+        case "set_local_dmr":
+            let enabled = (params["enabled"] as? Bool) ?? false
+            UPnPMediaRendererServer.shared.setEnabled(enabled)
+            sendSuccess(action: action, data: ["enabled": enabled, "status": "ok"], id: id, to: connection)
 
         case "set_audio_device", "select_audio_device":
+            let uidParam = (params["uid"] as? String) ?? ""
+            let idNum = (params["id"] as? NSNumber)?.intValue ?? (params["id"] as? Int)
+
+            // 1. Check if target is a DLNA MediaRenderer
+            let isDLNATarget = uidParam.hasPrefix("dlna:") ||
+                               (idNum != nil && DLNADiscoveryManager.shared.getDiscoveredRenderers().contains(where: { $0.numericId == idNum }))
+
+            if isDLNATarget {
+                let targetUID: String
+                if uidParam.hasPrefix("dlna:") {
+                    targetUID = uidParam
+                } else if let id = idNum, let found = DLNADiscoveryManager.shared.getDiscoveredRenderers().first(where: { $0.numericId == id }) {
+                    targetUID = "dlna:\(found.id)"
+                } else {
+                    targetUID = uidParam
+                }
+
+                if let dlnaDev = DLNADiscoveryManager.shared.selectRenderer(uid: targetUID) {
+                    AudioProcessTapService.shared.startCapture()
+
+                    // Send UPnP AVTransport SetAVTransportURI & Play
+                    let (streamURL, imageURL, fullTitle, metadata) = DLNADiscoveryManager.shared.resolveStreamAndImageURLs()
+                    let status = MusicBridge.shared.getPlayerStatus()
+
+                    DLNADiscoveryManager.shared.setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { success, _ in
+                        if success, status.isPlaying, !dlnaDev.isBluOS {
+                            DLNADiscoveryManager.shared.play()
+                        }
+                    }
+
+                    broadcastAudioDevices()
+                    broadcastStatus(includeQueue: false)
+                    sendSuccess(action: action, data: ["status": "ok", "device_uid": targetUID, "name": dlnaDev.friendlyName], id: id, to: connection)
+                    return
+                } else {
+                    sendError(action: action, error: "DLNA renderer not found or offline", id: id, to: connection)
+                    return
+                }
+            }
+
+            // 2. Otherwise target is a local CoreAudio device
             var targetId: AudioDeviceID?
-            if let idNum = params["id"] as? NSNumber {
-                targetId = AudioDeviceID(idNum.uint32Value)
-            } else if let idInt = params["id"] as? Int {
-                targetId = AudioDeviceID(idInt)
+            if let num = idNum {
+                targetId = AudioDeviceID(num)
             } else if let idStr = params["id"] as? String, let parsed = UInt32(idStr) {
                 targetId = AudioDeviceID(parsed)
-            } else if let uid = params["uid"] as? String {
-                targetId = CoreAudioDeviceManager.shared.getOutputDevices().first { $0.uid == uid }?.id
+            } else if !uidParam.isEmpty {
+                targetId = CoreAudioDeviceManager.shared.getOutputDevices().first { $0.uid == uidParam }?.id
             }
 
             if let devId = targetId, CoreAudioDeviceManager.shared.setDefaultOutputDevice(id: devId) {
+                // If DLNA was active, stop DLNA playback and deselect renderer
+                if DLNADiscoveryManager.shared.hasActiveRenderer {
+                    DLNADiscoveryManager.shared.stopPlayback()
+                    DLNADiscoveryManager.shared.deselectRenderer()
+                    AudioProcessTapService.shared.stopCapture()
+                }
+
+                broadcastAudioDevices()
+                broadcastStatus(includeQueue: false)
                 let updated = CoreAudioDeviceManager.shared.getOutputDevices().map { $0.dictionary }
                 sendSuccess(action: action, data: ["status": "ok", "device_id": Int(devId), "devices": updated], id: id, to: connection)
-                broadcastStatus(includeQueue: false)
             } else {
                 sendError(action: action, error: "Failed to switch audio output device", id: id, to: connection)
             }
@@ -2037,6 +2296,28 @@ public final class WebSocketServer: @unchecked Sendable {
         }
 
         UPnPMediaRendererServer.shared.notifySubscribers(status: status)
+        DLNADiscoveryManager.shared.handleTrackChanged(status: status)
+    }
+
+    public func broadcastAudioDevices() {
+        let isDLNAActive = DLNADiscoveryManager.shared.hasActiveRenderer
+        var devices = CoreAudioDeviceManager.shared.getOutputDevices().map { dev -> [String: Any] in
+            var dict = dev.dictionary
+            if isDLNAActive {
+                dict["isDefault"] = false
+            }
+            return dict
+        }
+        if DLNADiscoveryManager.shared.isEnabled {
+            devices.append(contentsOf: DLNADiscoveryManager.shared.getDiscoveredDevices())
+        }
+        var data: [String: Any] = ["devices": devices]
+        if let activeDLNA = DLNADiscoveryManager.shared.getActiveRenderer() {
+            data["current_device"] = activeDLNA.dictionary
+        } else if let defaultDev = CoreAudioDeviceManager.shared.getDefaultOutputDevice()?.dictionary {
+            data["current_device"] = defaultDev
+        }
+        broadcastEvent(name: "audio_devices", data: data)
     }
 
     // MARK: - Periodic Monitoring Timer
@@ -2052,6 +2333,9 @@ public final class WebSocketServer: @unchecked Sendable {
             // If NO clients connected, do NOT poll Music.app at all!
             let hasClients = self.clientCount > 0
             guard hasClients else { return }
+
+            // Guard against polling when Music.app is hung, recovering, or in cooldown
+            guard MusicAppLifecycleManager.shared.isHealthy else { return }
 
             // Guard against bombarding Music.app while a track skip is actively buffering
             if PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.isTransitioningTrack }) {

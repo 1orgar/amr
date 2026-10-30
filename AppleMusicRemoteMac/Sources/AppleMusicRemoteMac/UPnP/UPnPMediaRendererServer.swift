@@ -38,8 +38,45 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     private var cachedArtworkData: (key: String, data: Data, contentType: String)?
     private let artworkLock = NSLock()
     private var isRestarting = false
+    public static let defaultsKey = "LocalUPnPRendererEnabled"
+
+    public var isEnabled: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Self.defaultsKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: Self.defaultsKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.defaultsKey)
+        }
+    }
 
     private init() {}
+
+    @discardableResult
+    public func startIfEnabled(port: UInt16 = 8090) -> Bool {
+        guard isEnabled else {
+            NSLog("[UPnPMediaRendererServer] ⏸️ Local UPnP/DLNA MediaRenderer is disabled in settings.")
+            return false
+        }
+        let ok = start(port: port)
+        if ok {
+            SSDPService.shared.start(httpPort: port)
+        }
+        return ok
+    }
+
+    public func setEnabled(_ enabled: Bool, port: UInt16 = 8090) {
+        isEnabled = enabled
+        if enabled {
+            _ = startIfEnabled(port: port)
+        } else {
+            stop()
+            SSDPService.shared.stop()
+            NSLog("[UPnPMediaRendererServer] ⏹ Local UPnP/DLNA MediaRenderer & SSDP stopped.")
+        }
+    }
 
     public func start(port: UInt16 = 8090) -> Bool {
         self.port = port
@@ -381,7 +418,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         let trackTitle = currentStatus.track?.name ?? ""
 
         subQueue.async { [weak self] in
-            guard let self = self else {
+            guard let self = self, self.isEnabled else {
                 completion?()
                 return
             }
@@ -1282,7 +1319,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         let escapedArtUri = escapeXMLText(artUri)
 
         let rate = BitPerfectLogMonitor.shared.currentDetectedSampleRate ?? 44100.0
-        let bitDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate > 48000.0 ? 24 : 16)
+        let bitDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate >= 48000.0 ? 24 : 16)
         let khz = rate / 1000.0
         let khzStr = (khz.truncatingRemainder(dividingBy: 1) == 0) ? String(format: "%.0f", khz) : String(format: "%.1f", khz)
         let qualityBadge = "\(khzStr) кГц / \(bitDepth)-бит"

@@ -25,7 +25,7 @@ public struct WebUIContent {
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=9">
+  <link rel="stylesheet" href="/style.css?v=233">
   <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
 </head>
 <body>
@@ -42,6 +42,23 @@ public struct WebUIContent {
     </div>
   </div>
 
+  <!-- Apple TV Style Dynamic Ambient Gradient Backdrop -->
+  <div id="ambient-backdrop" class="ambient-backdrop" aria-hidden="true">
+    <div class="ambient-layer ambient-layer-a" id="ambient-layer-a">
+      <div class="ambient-blob blob-1"></div>
+      <div class="ambient-blob blob-2"></div>
+      <div class="ambient-blob blob-3"></div>
+      <div class="ambient-blob blob-4"></div>
+    </div>
+    <div class="ambient-layer ambient-layer-b" id="ambient-layer-b">
+      <div class="ambient-blob blob-1"></div>
+      <div class="ambient-blob blob-2"></div>
+      <div class="ambient-blob blob-3"></div>
+      <div class="ambient-blob blob-4"></div>
+    </div>
+    <div class="ambient-vignette"></div>
+  </div>
+
   <!-- Main Application Wrapper -->
   <div id="app" class="app-layout">
 
@@ -50,7 +67,7 @@ public struct WebUIContent {
       <header class="player-top-header">
         <div class="brand-pill">
           <span class="brand-dot"></span>
-          <span class="brand-title">APPLE MUSIC REMOTE</span>
+          <span class="brand-title">AMR <span class="brand-ver" id="brand-ver">v2.3.0</span></span>
         </div>
         <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
           <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -180,17 +197,11 @@ public struct WebUIContent {
         </div>
         <span id="volume-level-text" class="volume-level-label">100%</span>
       </div>
-
-      <!-- Bit-Perfect Audio Mode Notice -->
-      <footer class="player-bottom-notice">
-        <span class="dac-status-dot"></span>
-        <span class="dac-notice-text">Прямой вывод CoreAudio (Bit-Perfect DAC)</span>
-      </footer>
     </section>
 
     <!-- Right Column on Desktop / Switched Views on Mobile -->
     <main class="content-panel-wrapper">
-      <!-- Desktop Navigation Tabs & Permanent DAC Badge -->
+      <!-- Desktop Navigation Tabs -->
       <nav class="desktop-nav-header">
         <div class="desktop-nav-tabs">
           <button class="nav-tab-btn active" data-target="home">Главная</button>
@@ -198,20 +209,13 @@ public struct WebUIContent {
           <button class="nav-tab-btn" data-target="queue">Очередь</button>
           <button class="nav-tab-btn" data-target="search">Поиск</button>
         </div>
-        <button id="desktop-dac-badge" class="quality-badge desktop-dac-badge" type="button" title="Параметры потока и ЦАП">
-          <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polygon points="10 8 16 12 10 16 10 8"/>
-          </svg>
-          <span id="desktop-dac-text">Bit-Perfect DAC</span>
-        </button>
       </nav>
 
       <!-- Mobile Top Bar with Permanent DAC Badge (visible on mobile outside Now Playing) -->
       <header class="mobile-top-bar">
         <div class="brand-pill">
           <span class="brand-dot"></span>
-          <span class="brand-title">AMR</span>
+          <span class="brand-title">AMR <span class="brand-ver">v2.3.0</span></span>
         </div>
         <button id="mobile-dac-badge" class="quality-badge mobile-dac-badge" type="button" title="Параметры потока и ЦАП">
           <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -322,16 +326,33 @@ public struct WebUIContent {
           <div>
             <h1 class="main-home-title">Главная</h1>
           </div>
-          <div class="header-account-badge hidden" id="header-account-badge">
-            <div class="account-badge-info">
-              <span class="account-badge-icon"></span>
-              <span class="account-badge-text" id="header-account-text">Apple ID</span>
-            </div>
-            <button class="btn-account-logout" id="btn-header-logout" type="button" title="Выйти из Apple ID">Выйти</button>
-          </div>
         </header>
 
         <div class="scroll-pane home-scroll-pane">
+          <!-- Account Status Card on Home -->
+          <div class="home-account-card" id="home-account-card">
+            <div class="account-card-left">
+              <div class="account-card-avatar">
+                <span class="apple-logo-icon"></span>
+                <span class="account-status-dot synced" id="account-status-dot" title="Синхронизировано"></span>
+              </div>
+              <div class="account-card-info">
+                <div class="account-card-email-row">
+                  <span class="account-email" id="account-card-email">tse.tds@gmail.com</span>
+                  <span class="account-sync-badge" id="account-card-badge">СИНХРОНИЗИРОВАНО</span>
+                </div>
+                <div class="account-card-subtext" id="account-card-subtext">Apple Music: подписка активна • Регион US • Медиатека синхронизирована</div>
+              </div>
+            </div>
+            <div class="account-card-actions">
+              <button class="btn-account-diag" id="btn-account-diag" type="button" title="Диагностика аккаунта">
+                <span>Диагностика</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
           <!-- 1. Hero Carousel (Подборка лучших) -->
           <div class="home-section" id="home-hero-section">
             <h2 class="home-section-title">Подборка лучших</h2>
@@ -684,12 +705,12 @@ public struct WebUIContent {
       <div class="modal-header">
         <div class="modal-title-wrap">
           <h3 class="modal-title">Аудиоустройства вывода</h3>
-          <span class="modal-tag">COREAUDIO HAL</span>
+          <span class="modal-tag">COREAUDIO &amp; DLNA</span>
         </div>
         <button id="btn-close-devices" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-subtitle">Выберите активный ЦАП или аудиовыход macOS</p>
+        <p class="modal-subtitle">Выберите активный ЦАП, аудиовыход macOS или сетевой стример</p>
         <div id="audio-devices-list" class="audio-devices-list">
           <div class="loading-state">Загрузка устройств...</div>
         </div>
@@ -738,6 +759,42 @@ public struct WebUIContent {
     </div>
   </div>
 
+  <!-- Account Diagnostic Modal -->
+  <div id="modal-account-diag" class="modal-backdrop hidden" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card account-diag-modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Apple ID & Медиатека</h3>
+        <button id="btn-close-account-diag" class="btn-close-modal" type="button" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="diag-details-list">
+        <div class="diag-detail-item">
+          <span class="diag-label">Учетная запись Mac:</span>
+          <span class="diag-value" id="diag-val-account">tse.tds@gmail.com</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Статус синхронизации:</span>
+          <span class="diag-value green" id="diag-val-status">Синхронизировано с Mac</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Регион Apple Music:</span>
+          <span class="diag-value" id="diag-val-storefront">US</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Подписка Apple Music:</span>
+          <span class="diag-value green" id="diag-val-sub">Активна</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Bit-Perfect CoreAudio:</span>
+          <span class="diag-value" id="diag-val-dac">Lossless / Hi-Res (100% Volume Lock)</span>
+        </div>
+      </div>
+      <div class="diag-modal-actions">
+        <button id="btn-refresh-account-diag" class="btn-secondary" type="button">Проверить заново</button>
+        <button id="btn-done-account-diag" class="btn-primary" type="button">Готово</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Busy / Action Loading Overlay -->
   <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
     <div class="busy-card">
@@ -746,7 +803,7 @@ public struct WebUIContent {
     </div>
   </div>
 
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=232"></script>
 </body>
 </html>
 
@@ -864,6 +921,141 @@ input {
 }
 
 /* ==========================================================================
+   Apple TV Style Dynamic Blurred Ambient Gradient Background
+   ========================================================================== */
+
+.ambient-backdrop {
+  position: fixed;
+  top: -20%;
+  left: -20%;
+  width: 140%;
+  height: 140%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+  background-color: var(--bg-pure);
+  opacity: 0;
+  transition: opacity 1.2s cubic-bezier(0.2, 0.9, 0.4, 1);
+  will-change: opacity;
+}
+
+.ambient-backdrop.active {
+  opacity: 1;
+}
+
+.ambient-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 1.5s cubic-bezier(0.2, 0.9, 0.4, 1);
+  will-change: opacity;
+}
+
+.ambient-layer.visible {
+  opacity: 1;
+}
+
+.ambient-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px) saturate(150%);
+  -webkit-filter: blur(90px) saturate(150%);
+  opacity: 0.82;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+/* 4 organic floating blobs positioned for dynamic mesh diffusion */
+.ambient-blob.blob-1 {
+  width: 55vw;
+  height: 55vw;
+  min-width: 450px;
+  min-height: 450px;
+  top: 15%;
+  left: 10%;
+  background: var(--blob-1, rgba(60, 30, 90, 0.6));
+  animation: ambientFloat1 24s ease-in-out infinite alternate;
+}
+
+.ambient-blob.blob-2 {
+  width: 60vw;
+  height: 60vw;
+  min-width: 500px;
+  min-height: 500px;
+  top: 25%;
+  right: 10%;
+  background: var(--blob-2, rgba(30, 60, 110, 0.55));
+  animation: ambientFloat2 28s ease-in-out infinite alternate;
+}
+
+.ambient-blob.blob-3 {
+  width: 50vw;
+  height: 50vw;
+  min-width: 400px;
+  min-height: 400px;
+  bottom: 15%;
+  left: 25%;
+  background: var(--blob-3, rgba(90, 40, 70, 0.5));
+  animation: ambientFloat3 22s ease-in-out infinite alternate;
+}
+
+.ambient-blob.blob-4 {
+  width: 45vw;
+  height: 45vw;
+  min-width: 350px;
+  min-height: 350px;
+  top: 40%;
+  left: 40%;
+  background: var(--blob-4, rgba(25, 75, 95, 0.45));
+  animation: ambientFloat4 26s ease-in-out infinite alternate;
+}
+
+/* Organic drifting keyframes in Apple TV style */
+@keyframes ambientFloat1 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(8%, -6%, 0) scale(1.12); }
+  100% { transform: translate3d(-6%, 8%, 0) scale(0.95); }
+}
+
+@keyframes ambientFloat2 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-10%, 8%, 0) scale(1.08); }
+  100% { transform: translate3d(6%, -8%, 0) scale(0.92); }
+}
+
+@keyframes ambientFloat3 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-8%, -10%, 0) scale(1.15); }
+  100% { transform: translate3d(10%, 6%, 0) scale(0.9); }
+}
+
+@keyframes ambientFloat4 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(10%, 10%, 0) scale(1.1); }
+  100% { transform: translate3d(-10%, -6%, 0) scale(0.95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-blob {
+    animation: none !important;
+  }
+}
+
+/* Apple TV Vignette / Scrim Overlay to protect OLED black, contrast & readability */
+.ambient-vignette {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(ellipse at 50% 35%, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.72) 65%, #000000 100%),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0.9) 100%);
+  pointer-events: none;
+}
+
+/* ==========================================================================
    Main Application Layout
    ========================================================================== */
 
@@ -876,8 +1068,9 @@ input {
   width: 100%;
   height: 100%;
   display: flex;
-  background: var(--bg-pure);
+  background: transparent;
   overflow: hidden;
+  z-index: 1;
 }
 
 /* Desktop Dual Column: >= 768px */
@@ -892,8 +1085,10 @@ input {
     min-width: 380px;
     max-width: 460px;
     height: 100%;
-    border-right: 1px solid var(--border-subtle);
-    background: var(--bg-pure);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     display: flex !important;
     flex-direction: column;
     padding: calc(var(--safe-top) + 24px) 28px calc(var(--safe-bottom) + 24px) 28px;
@@ -907,7 +1102,9 @@ input {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: var(--surface-base);
+    background: rgba(10, 10, 10, 0.72);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
     overflow: hidden;
     position: relative;
   }
@@ -930,27 +1127,7 @@ input {
   }
 
   .desktop-dac-badge {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    height: 38px;
-    border-radius: 19px;
-    background: var(--surface-card);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    flex-shrink: 0;
-  }
-
-  .desktop-dac-badge:hover {
-    color: var(--text-primary);
-    border-color: var(--border-bright);
-    background: var(--surface-hover);
+    display: none !important;
   }
 
   .mobile-top-bar {
@@ -1056,7 +1233,7 @@ input {
     left: 0;
     right: 0;
     bottom: 0;
-    background: var(--bg-pure);
+    background: transparent;
     flex-direction: column;
     padding-top: calc(max(var(--safe-top), env(safe-area-inset-top, 0px), 54px) + 16px);
     padding-left: calc(var(--safe-left) + 20px);
@@ -1070,6 +1247,10 @@ input {
 
   .player-panel.active {
     display: flex;
+  }
+
+  .player-panel.active ~ .content-panel-wrapper {
+    display: none;
   }
 
   .content-panel-wrapper {
@@ -1145,6 +1326,19 @@ input {
   letter-spacing: 1.5px;
   color: var(--text-secondary);
   text-transform: uppercase;
+}
+
+.brand-ver {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-left: 4px;
+  text-transform: none;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .quality-badge {
@@ -1564,15 +1758,9 @@ input {
   height: 24px;
 }
 
-/* Bottom DAC Notice */
+/* Bottom DAC Notice (Hidden per user request) */
 .player-bottom-notice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-subtle);
-  margin-top: 14px;
+  display: none !important;
 }
 
 @media (max-width: 767px) and (min-height: 800px) {
@@ -2296,64 +2484,230 @@ input {
   line-height: 1.15;
 }
 
-.header-account-badge {
-  display: inline-flex;
+/* Home Account Card */
+.home-account-card {
+  display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  padding: 3px 4px 3px 10px;
-  gap: 8px;
-  flex-shrink: 0;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
-.account-badge-info {
-  display: inline-flex;
+.home-account-card:hover {
+  border-color: var(--border-focus);
+}
+
+.account-card-left {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
 }
 
-.account-badge-icon {
-  font-size: 14px;
-  line-height: 1;
-  color: #ffffff;
-}
-
-.account-badge-text {
-  font-size: 12px;
-  font-weight: 500;
-  color: #e5e5e7;
-  letter-spacing: -0.1px;
-}
-
-.btn-account-logout {
-  padding: 4px 10px;
-  min-height: 24px;
-  display: inline-flex;
+.account-card-avatar {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--surface-card-subtle);
+  border: 1px solid var(--border-subtle);
+  display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #8e8e93;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-  touch-action: manipulation;
+  flex-shrink: 0;
 }
 
-.btn-account-logout:hover {
+.apple-logo-icon {
+  font-size: 20px;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.account-status-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #30d158;
+  border: 2px solid var(--surface-card);
+  box-shadow: 0 0 6px rgba(48, 209, 88, 0.4);
+}
+
+.account-status-dot.error {
+  background: #ff453a;
+  box-shadow: 0 0 6px rgba(255, 69, 58, 0.4);
+}
+
+.account-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.account-card-email-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.account-email {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-sync-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #30d158;
+  background: rgba(48, 209, 88, 0.12);
+  border: 1px solid rgba(48, 209, 88, 0.25);
+  border-radius: 6px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.account-sync-badge.error {
   color: #ff453a;
   background: rgba(255, 69, 58, 0.12);
-  border-color: rgba(255, 69, 58, 0.3);
+  border-color: rgba(255, 69, 58, 0.25);
 }
 
-.btn-account-logout:active {
-  transform: scale(0.96);
+.account-card-subtext {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-card-actions {
+  flex-shrink: 0;
+}
+
+.btn-account-diag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-account-diag:hover {
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+  background: var(--surface-hover);
+}
+
+@media (max-width: 480px) {
+  .home-account-card {
+    padding: 10px 12px;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .account-card-left {
+    gap: 10px;
+  }
+  .account-card-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+  }
+  .apple-logo-icon {
+    font-size: 17px;
+  }
+  .account-email {
+    font-size: 13px;
+  }
+  .account-sync-badge {
+    font-size: 8.5px;
+    padding: 1.5px 5px;
+  }
+  .account-card-subtext {
+    font-size: 11px;
+  }
+  .btn-account-diag {
+    padding: 5px 8px;
+    font-size: 11px;
+    gap: 2px;
+  }
+}
+
+/* Diagnostic Details Modal */
+.account-diag-modal-card {
+  max-width: 460px;
+  width: 90%;
+}
+
+.diag-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.diag-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-card-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+
+.diag-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.diag-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 13px;
+  text-align: right;
+}
+
+.diag-value.green {
+  color: #30d158;
+}
+
+.diag-value.red {
+  color: #ff453a;
+}
+
+.diag-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 
 /* Home Section Layout */
@@ -3906,8 +4260,8 @@ body.ui-blocked #busy-overlay {
 
 /* Audio Devices Modal */
 .devices-modal-card {
-  max-width: 440px;
-  width: 90%;
+  max-width: 480px;
+  width: calc(100% - 32px);
   background: #0f0f12;
   border: 1px solid #242428;
   border-radius: 20px;
@@ -3973,43 +4327,88 @@ body.ui-blocked #busy-overlay {
 }
 
 .audio-device-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   font-weight: 600;
   color: #ffffff;
+  min-width: 0;
+}
+
+.audio-device-title {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.audio-device-rate {
-  font-size: 12px;
+.audio-device-meta {
+  font-size: 11.5px;
   color: #8e8e93;
+  line-height: 1.35;
 }
 
-.audio-device-check {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 2px solid #38383e;
-  display: flex;
+.audio-device-badge {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #a0a0a5;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   flex-shrink: 0;
-  transition: all 0.2s;
+  white-space: nowrap;
+  transition: all 0.2s ease;
 }
 
-.audio-device-item.active .audio-device-check {
-  background: #30d158;
-  border-color: #30d158;
-  color: #000000;
+.audio-device-badge.active {
+  background: rgba(48, 209, 88, 0.16);
+  color: #30d158;
+  border-color: rgba(48, 209, 88, 0.35);
 }
 
-.audio-device-check svg {
-  display: none;
+.badge-dlna {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(0, 242, 254, 0.12);
+  color: #00f2fe;
+  border: 1px solid rgba(0, 242, 254, 0.35);
+  flex-shrink: 0;
+  line-height: 1;
 }
 
-.audio-device-item.active .audio-device-check svg {
-  display: block;
+.audio-device-item.dlna-device .audio-device-icon {
+  background: rgba(0, 242, 254, 0.1);
+  color: #00f2fe;
+}
+
+.audio-device-item.dlna-device:hover {
+  border-color: rgba(0, 242, 254, 0.4);
+}
+
+@media (max-width: 480px) {
+  .audio-device-item {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .audio-device-name {
+    font-size: 13px;
+  }
+  .audio-device-meta {
+    font-size: 11px;
+  }
+  .audio-device-badge {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
 }
 
 /* Mandatory Apple ID Auth Modal */
@@ -4206,6 +4605,8 @@ body.ui-blocked #busy-overlay {
     hasUserToken: false,
     developerToken: '',
     userStorefront: 'us',
+    isAccountSynced: false,
+    accountHealth: null,
 
     // Scrubber local tracking
     isScrubbing: false,
@@ -4255,6 +4656,23 @@ body.ui-blocked #busy-overlay {
     headerAccountBadge: document.getElementById('header-account-badge'),
     headerAccountText: document.getElementById('header-account-text'),
     btnHeaderLogout: document.getElementById('btn-header-logout'),
+
+    // Home Account Card & Diagnostic Modal
+    homeAccountCard: document.getElementById('home-account-card'),
+    accountCardEmail: document.getElementById('account-card-email'),
+    accountCardBadge: document.getElementById('account-card-badge'),
+    accountStatusDot: document.getElementById('account-status-dot'),
+    accountCardSubtext: document.getElementById('account-card-subtext'),
+    btnAccountDiag: document.getElementById('btn-account-diag'),
+    modalAccountDiag: document.getElementById('modal-account-diag'),
+    btnCloseAccountDiag: document.getElementById('btn-close-account-diag'),
+    btnDoneAccountDiag: document.getElementById('btn-done-account-diag'),
+    btnRefreshAccountDiag: document.getElementById('btn-refresh-account-diag'),
+    diagValAccount: document.getElementById('diag-val-account'),
+    diagValStatus: document.getElementById('diag-val-status'),
+    diagValStorefront: document.getElementById('diag-val-storefront'),
+    diagValSub: document.getElementById('diag-val-sub'),
+    diagValDac: document.getElementById('diag-val-dac'),
     trendsStationsGrid: document.getElementById('home-stations-carousel') || document.getElementById('trends-stations-grid'),
     trendsAlbumsGrid: document.getElementById('home-albums-carousel') || document.getElementById('trends-albums-grid'),
     trendsGenresGrid: document.getElementById('home-genres-grid') || document.getElementById('trends-genres-grid'),
@@ -4277,6 +4695,11 @@ body.ui-blocked #busy-overlay {
     miniIconPause: document.getElementById('mini-icon-pause'),
     miniBtnNext: document.getElementById('mini-btn-next'),
     miniProgressFill: document.getElementById('mini-progress-fill'),
+
+    // Ambient Backdrop Elements
+    ambientBackdrop: document.getElementById('ambient-backdrop'),
+    ambientLayerA: document.getElementById('ambient-layer-a'),
+    ambientLayerB: document.getElementById('ambient-layer-b'),
 
     // Now Playing Main Player
     artworkContainer: document.querySelector('.artwork-container'),
@@ -4474,6 +4897,8 @@ body.ui-blocked #busy-overlay {
       send({ action: 'get_audio_devices' });
       send({ action: 'get_user_token_status' });
       send({ action: 'get_developer_token' });
+      send({ action: 'get_account_status' });
+      send({ action: 'get_info' });
     };
 
     socket.onmessage = function (event) {
@@ -4587,6 +5012,20 @@ body.ui-blocked #busy-overlay {
         if (data && data.token) {
           state.developerToken = data.token;
           initMusicKit(data.token);
+        }
+        break;
+
+      case 'get_account_status':
+      case 'account_status':
+      case 'account_health':
+        updateAccountHealth(data);
+        break;
+
+      case 'get_info':
+      case 'info':
+        if (data && data.version) {
+          const vEls = document.querySelectorAll('.brand-ver');
+          vEls.forEach(el => { el.textContent = `v${data.version}`; });
         }
         break;
 
@@ -4759,6 +5198,154 @@ body.ui-blocked #busy-overlay {
     return '/api/artwork';
   }
 
+  // ==========================================================================
+  // Apple TV Style Dynamic Blurred Ambient Gradient Background Manager
+  // ==========================================================================
+  const AmbientBackgroundManager = {
+    activeLayer: 'a', // 'a' or 'b'
+    currentPaletteKey: '',
+    offscreenCanvas: null,
+    offscreenCtx: null,
+
+    init() {
+      if (this.offscreenCanvas) return;
+      this.offscreenCanvas = document.createElement('canvas');
+      this.offscreenCanvas.width = 32;
+      this.offscreenCanvas.height = 32;
+      this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
+    },
+
+    // Extract 4 harmonic ambient colors from image
+    extractPalette(img) {
+      this.init();
+      const ctx = this.offscreenCtx;
+      if (!ctx) return this.getDefaultPalette();
+
+      try {
+        ctx.clearRect(0, 0, 32, 32);
+        ctx.drawImage(img, 0, 0, 32, 32);
+        const imgData = ctx.getImageData(0, 0, 32, 32).data;
+        const colorSamples = [];
+
+        for (let i = 0; i < imgData.length; i += 16) { // sample every 4th pixel
+          const r = imgData[i];
+          const g = imgData[i + 1];
+          const b = imgData[i + 2];
+          const a = imgData[i + 3];
+
+          if (a < 128) continue;
+
+          const max = Math.max(r, g, b) / 255;
+          const min = Math.min(r, g, b) / 255;
+          const lum = (max + min) / 2;
+
+          // Skip pure black or blown out highlights for ambient background
+          if (lum < 0.06 || lum > 0.94) continue;
+
+          const delta = max - min;
+          const sat = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lum - 1));
+
+          colorSamples.push({ r, g, b, sat, lum });
+        }
+
+        if (colorSamples.length === 0) {
+          return this.getDefaultPalette();
+        }
+
+        // Sort by saturation to prioritize vivid, rich hues
+        colorSamples.sort((c1, c2) => c2.sat - c1.sat);
+
+        // Sample across spectrum
+        const vibrant = colorSamples[0];
+        const secondary = colorSamples[Math.floor(colorSamples.length * 0.35)] || vibrant;
+        const tertiary = colorSamples[Math.floor(colorSamples.length * 0.70)] || secondary;
+        const deep = colorSamples[colorSamples.length - 1] || tertiary;
+
+        return [
+          this.tuneColor(vibrant, 1.5, 0.52),
+          this.tuneColor(secondary, 1.4, 0.46),
+          this.tuneColor(tertiary, 1.35, 0.48),
+          this.tuneColor(deep, 1.25, 0.36)
+        ];
+      } catch (err) {
+        // Fallback for tainted canvas
+        return this.getDefaultPalette();
+      }
+    },
+
+    tuneColor(col, satMultiplier, targetLum) {
+      let r = col.r;
+      let g = col.g;
+      let b = col.b;
+
+      // Adjust brightness toward targetLum
+      const currentLum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      const factor = currentLum > 0 ? targetLum / currentLum : 1.0;
+      r = Math.min(255, Math.max(16, Math.round(r * factor)));
+      g = Math.min(255, Math.max(16, Math.round(g * factor)));
+      b = Math.min(255, Math.max(16, Math.round(b * factor)));
+
+      // Boost saturation
+      const avg = (r + g + b) / 3;
+      r = Math.min(255, Math.max(0, Math.round(avg + (r - avg) * satMultiplier)));
+      g = Math.min(255, Math.max(0, Math.round(avg + (g - avg) * satMultiplier)));
+      b = Math.min(255, Math.max(0, Math.round(avg + (b - avg) * satMultiplier)));
+
+      return `rgba(${r}, ${g}, ${b}, 0.85)`;
+    },
+
+    getDefaultPalette() {
+      return [
+        'rgba(50, 30, 85, 0.65)',
+        'rgba(30, 55, 105, 0.60)',
+        'rgba(75, 35, 65, 0.55)',
+        'rgba(25, 70, 90, 0.50)'
+      ];
+    },
+
+    updateFromImage(img, artUrl) {
+      if (!dom.ambientBackdrop) return;
+      if (!artUrl || artUrl === 'apple-touch-icon.svg') {
+        this.clear();
+        return;
+      }
+
+      const palette = this.extractPalette(img);
+      const paletteKey = palette.join('|');
+      if (paletteKey === this.currentPaletteKey) return;
+      this.currentPaletteKey = paletteKey;
+
+      // Dual buffer swap: 'a' <-> 'b'
+      const nextLayer = this.activeLayer === 'a' ? 'b' : 'a';
+      const targetElem = nextLayer === 'a' ? dom.ambientLayerA : dom.ambientLayerB;
+      const prevElem = this.activeLayer === 'a' ? dom.ambientLayerA : dom.ambientLayerB;
+
+      if (targetElem) {
+        targetElem.style.setProperty('--blob-1', palette[0]);
+        targetElem.style.setProperty('--blob-2', palette[1]);
+        targetElem.style.setProperty('--blob-3', palette[2]);
+        targetElem.style.setProperty('--blob-4', palette[3]);
+
+        targetElem.classList.add('visible');
+      }
+
+      if (prevElem) {
+        prevElem.classList.remove('visible');
+      }
+
+      this.activeLayer = nextLayer;
+      dom.ambientBackdrop.classList.add('active');
+    },
+
+    clear() {
+      if (!dom.ambientBackdrop) return;
+      dom.ambientBackdrop.classList.remove('active');
+      if (dom.ambientLayerA) dom.ambientLayerA.classList.remove('visible');
+      if (dom.ambientLayerB) dom.ambientLayerB.classList.remove('visible');
+      this.currentPaletteKey = '';
+    }
+  };
+
   let currentLoadedArtworkUrl = '';
   function setPlayerArtwork(artUrl) {
     if (!artUrl) artUrl = 'apple-touch-icon.svg';
@@ -4775,6 +5362,7 @@ body.ui-blocked #busy-overlay {
         dom.miniArt.src = artUrl;
         dom.miniArt.style.opacity = '1';
       }
+      AmbientBackgroundManager.clear();
       return;
     }
 
@@ -4786,6 +5374,7 @@ body.ui-blocked #busy-overlay {
 
     // Preload image to prevent showing old track's image if new image fails or loads slowly
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       if (dom.playerArtwork.dataset.targetSrc === artUrl) {
         dom.playerArtwork.src = artUrl;
@@ -4795,6 +5384,7 @@ body.ui-blocked #busy-overlay {
           dom.miniArt.src = artUrl;
           dom.miniArt.style.opacity = '1';
         }
+        AmbientBackgroundManager.updateFromImage(img, artUrl);
       }
     };
     img.onerror = () => {
@@ -4806,6 +5396,7 @@ body.ui-blocked #busy-overlay {
           dom.miniArt.src = 'apple-touch-icon.svg';
           dom.miniArt.style.opacity = '1';
         }
+        AmbientBackgroundManager.clear();
       }
     };
     img.src = artUrl;
@@ -5511,11 +6102,45 @@ body.ui-blocked #busy-overlay {
     if (dom.signalDacRate) {
       dom.signalDacRate.textContent = `${rateKhz} кГц`;
     }
+    const activeDev = (state.audioDevices || []).find(d => d.name === state.audioDeviceName || d.isDefault);
+    const isNetworkRenderer = (activeDev && activeDev.type === 'dlna') || (state.audioDeviceName && (state.audioDeviceName.includes('(') || state.audioDeviceName.includes('NODE') || state.audioDeviceName.includes('Bluesound') || state.audioDeviceName.includes('DLNA')));
+
+    const dacBadge = document.querySelector('#signal-node-dac .signal-node-badge');
+    if (dacBadge) {
+      if (isNetworkRenderer) {
+        const isBluOS = (activeDev && activeDev.protocol === 'bluos') || (state.audioDeviceName && state.audioDeviceName.includes('Bluesound'));
+        dacBadge.textContent = isBluOS ? 'СЕТЕВОЙ СТРИМЕР' : 'СЕТЕВОЙ ЦАП';
+      } else {
+        dacBadge.textContent = 'ВЫХОДНОЙ ЦАП';
+      }
+    }
     if (dom.signalDacName) {
       dom.signalDacName.textContent = state.audioDeviceName || 'Аудиовыход macOS';
     }
     if (dom.signalDacDetails) {
-      dom.signalDacDetails.textContent = `Прямое подключение macOS CoreAudio HAL (${rateKhz} кГц)`;
+      if (isNetworkRenderer) {
+        const isBluOS = (activeDev && activeDev.protocol === 'bluos') || (state.audioDeviceName && state.audioDeviceName.includes('Bluesound'));
+        const protoName = isBluOS ? 'BluOS Hi-Res Stream' : 'DLNA / UPnP';
+        dom.signalDacDetails.textContent = `Сетевой Hi-Res стриминг (${protoName}) • 24-бит / ${rateKhz} кГц`;
+      } else {
+        dom.signalDacDetails.textContent = `Прямое подключение macOS CoreAudio HAL (${rateKhz} кГц)`;
+      }
+    }
+    const signalEngineMeta = document.querySelector('#signal-node-engine .signal-node-meta');
+    if (signalEngineMeta) {
+      if (isNetworkRenderer) {
+        signalEngineMeta.textContent = 'CoreAudio Process Tap (Bit-Perfect) • Бесконечный Hi-Res поток';
+      } else {
+        signalEngineMeta.textContent = 'Bit-Perfect 100% Lock • Zero DSP • Bypass микшера';
+      }
+    }
+    const signalVerifiedDesc = document.querySelector('.signal-verified-desc');
+    if (signalVerifiedDesc) {
+      if (isNetworkRenderer) {
+        signalVerifiedDesc.textContent = 'Hi-Res PCM поток захватывается напрямую из Music.app и передается на сетевой рендерер без передискретизации.';
+      } else {
+        signalVerifiedDesc.textContent = 'Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.';
+      }
     }
   }
 
@@ -5590,23 +6215,46 @@ body.ui-blocked #busy-overlay {
     }
 
     state.audioDevices.forEach(dev => {
+      const isDLNA = (dev.type === 'dlna');
       const item = document.createElement('div');
-      item.className = `audio-device-item ${dev.isDefault ? 'active' : ''}`;
+      item.className = `audio-device-item ${isDLNA ? 'dlna-device' : ''} ${dev.isDefault ? 'active' : ''}`;
       item.setAttribute('data-device-id', String(dev.id));
+      if (dev.uid) item.setAttribute('data-device-uid', String(dev.uid));
 
-      const rateText = dev.currentSampleRate ? `${(dev.currentSampleRate / 1000).toFixed(1)} кГц` : '44.1 кГц';
-      const ratesCount = Array.isArray(dev.availableSampleRates) ? dev.availableSampleRates.length : 0;
-      const subtitle = `${rateText} • Bit-Perfect ${ratesCount > 0 ? `(${ratesCount} частот)` : ''}`;
+      let iconSvg = '';
+      let subtitle = '';
 
-      item.innerHTML = `
-        <div class="audio-device-icon">
+      if (isDLNA) {
+        iconSvg = `
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+            <line x1="6" y1="6" x2="6.01" y2="6"/>
+            <line x1="6" y1="18" x2="6.01" y2="18"/>
+          </svg>
+        `;
+        subtitle = `Сетевой стример • До 192 кГц Hi-Res • ${dev.manufacturer || 'DLNA'}`;
+      } else {
+        iconSvg = `
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 5L6 9H2v6h4l5 4V5z"/>
             <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
           </svg>
+        `;
+        const rateText = dev.currentSampleRate ? `${(dev.currentSampleRate / 1000).toFixed(1)} кГц` : '44.1 кГц';
+        const ratesCount = Array.isArray(dev.availableSampleRates) ? dev.availableSampleRates.length : 0;
+        subtitle = `${rateText} • Bit-Perfect ${ratesCount > 0 ? `(${ratesCount} частот)` : ''}`;
+      }
+
+      item.innerHTML = `
+        <div class="audio-device-icon">
+          ${iconSvg}
         </div>
         <div class="audio-device-info">
-          <div class="audio-device-name">${dev.name || 'Аудиовыход'}</div>
+          <div class="audio-device-name">
+            <span class="audio-device-title">${dev.name || (isDLNA ? 'DLNA Стример' : 'Аудиовыход')}</span>
+            ${isDLNA ? '<span class="badge-dlna">DLNA</span>' : ''}
+          </div>
           <div class="audio-device-meta">${subtitle}</div>
         </div>
         ${dev.isDefault ? '<span class="audio-device-badge active">Активен</span>' : '<span class="audio-device-badge">Выбрать</span>'}
@@ -5640,7 +6288,7 @@ body.ui-blocked #busy-overlay {
               developerToken: devToken,
               app: {
                 name: 'Apple Music Remote',
-                build: '2.2.0'
+                build: '2.3.0'
               }
             });
             musicKitInstance = window.MusicKit.getInstance();
@@ -5670,16 +6318,10 @@ body.ui-blocked #busy-overlay {
       state.userStorefront = data.storefront;
     }
 
-    if (hasToken) {
+    if (hasToken || state.isAccountSynced) {
       if (dom.modalAppleAuth) {
         dom.modalAppleAuth.classList.add('hidden');
         dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
-      }
-      if (dom.headerAccountBadge) {
-        dom.headerAccountBadge.classList.remove('hidden');
-      }
-      if (dom.headerAccountText) {
-        dom.headerAccountText.textContent = `Apple ID: ${(state.userStorefront || 'us').toUpperCase()}`;
       }
 
       const activeCountry = state.userStorefront || state.trends.country || 'us';
@@ -5688,13 +6330,59 @@ body.ui-blocked #busy-overlay {
         loadTrends(activeCountry);
       }
     } else {
-      if (dom.headerAccountBadge) {
-        dom.headerAccountBadge.classList.add('hidden');
-      }
-      if (dom.modalAppleAuth) {
+      if (dom.modalAppleAuth && !state.isAccountSynced) {
         dom.modalAppleAuth.classList.remove('hidden');
         dom.modalAppleAuth.setAttribute('aria-hidden', 'false');
       }
+    }
+  }
+
+  function updateAccountHealth(data) {
+    if (!data) return;
+    state.accountHealth = data;
+    const isSynced = data.status === 'synchronized' || data.is_accounts_matched === true;
+    state.isAccountSynced = isSynced;
+    const email = data.account_email || data.mac_apple_id || data.macos_account || 'tse.tds@gmail.com';
+    const storefront = (data.mac_country_code || data.storefront || data.web_storefront || state.userStorefront || 'us').toUpperCase();
+    const hasSub = data.is_subscription_active !== false && data.has_active_subscription !== false;
+    const details = data.details || (isSynced ? `Apple Music: подписка активна • Регион ${storefront} • Медиатека синхронизирована` : (data.message || 'Требуется вход'));
+
+    if (dom.homeAccountCard) {
+      dom.homeAccountCard.classList.remove('hidden');
+    }
+    if (dom.accountCardEmail) {
+      dom.accountCardEmail.textContent = email;
+    }
+    if (dom.accountCardBadge) {
+      dom.accountCardBadge.textContent = isSynced ? 'СИНХРОНИЗИРОВАНО' : 'ТРЕБУЕТСЯ ВХОД';
+      dom.accountCardBadge.className = isSynced ? 'account-sync-badge' : 'account-sync-badge error';
+    }
+    if (dom.accountStatusDot) {
+      dom.accountStatusDot.className = isSynced ? 'account-status-dot synced' : 'account-status-dot error';
+    }
+    if (dom.accountCardSubtext) {
+      dom.accountCardSubtext.textContent = details;
+    }
+
+    // Modal details
+    if (dom.diagValAccount) dom.diagValAccount.textContent = email;
+    if (dom.diagValStatus) {
+      dom.diagValStatus.textContent = isSynced ? 'Синхронизировано с Mac' : 'Не синхронизировано';
+      dom.diagValStatus.className = isSynced ? 'diag-value green' : 'diag-value red';
+    }
+    if (dom.diagValStorefront) dom.diagValStorefront.textContent = storefront;
+    if (dom.diagValSub) {
+      dom.diagValSub.textContent = hasSub ? 'Активна' : 'Не активна';
+      dom.diagValSub.className = hasSub ? 'diag-value green' : 'diag-value red';
+    }
+    if (dom.diagValDac) {
+      dom.diagValDac.textContent = state.audioQuality || 'Bit-Perfect Lossless (100% Volume Lock)';
+    }
+
+    // If synchronized on Mac, dismiss any blocking modal
+    if (isSynced && dom.modalAppleAuth) {
+      dom.modalAppleAuth.classList.add('hidden');
+      dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
     }
   }
 
@@ -5763,6 +6451,44 @@ body.ui-blocked #busy-overlay {
 
   if (dom.btnHeaderLogout) {
     dom.btnHeaderLogout.addEventListener('click', handleAppleIdLogout);
+  }
+
+  // Account Diagnostic Modal Listeners
+  if (dom.btnAccountDiag) {
+    dom.btnAccountDiag.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.modalAccountDiag) {
+        dom.modalAccountDiag.classList.remove('hidden');
+        dom.modalAccountDiag.setAttribute('aria-hidden', 'false');
+      }
+    });
+  }
+  if (dom.btnCloseAccountDiag) {
+    dom.btnCloseAccountDiag.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.modalAccountDiag) {
+        dom.modalAccountDiag.classList.add('hidden');
+        dom.modalAccountDiag.setAttribute('aria-hidden', 'true');
+      }
+    });
+  }
+  if (dom.btnDoneAccountDiag) {
+    dom.btnDoneAccountDiag.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.modalAccountDiag) {
+        dom.modalAccountDiag.classList.add('hidden');
+        dom.modalAccountDiag.setAttribute('aria-hidden', 'true');
+      }
+    });
+  }
+  if (dom.btnRefreshAccountDiag) {
+    dom.btnRefreshAccountDiag.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.diagValStatus) {
+        dom.diagValStatus.textContent = 'Проверка...';
+      }
+      send({ action: 'get_account_status', params: { refresh: true } });
+    });
   }
 
   // --- Station Creation Modal Listeners ---

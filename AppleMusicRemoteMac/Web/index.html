@@ -21,7 +21,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=230">
+  <link rel="stylesheet" href="/style.css?v=233">
   <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
 </head>
 <body>
@@ -36,6 +36,23 @@
       <p class="overlay-desc" id="connection-status-text">Попытка автоматического переподключения к Apple Music...</p>
       <button id="btn-reconnect" class="btn-primary" type="button">Переподключиться</button>
     </div>
+  </div>
+
+  <!-- Apple TV Style Dynamic Ambient Gradient Backdrop -->
+  <div id="ambient-backdrop" class="ambient-backdrop" aria-hidden="true">
+    <div class="ambient-layer ambient-layer-a" id="ambient-layer-a">
+      <div class="ambient-blob blob-1"></div>
+      <div class="ambient-blob blob-2"></div>
+      <div class="ambient-blob blob-3"></div>
+      <div class="ambient-blob blob-4"></div>
+    </div>
+    <div class="ambient-layer ambient-layer-b" id="ambient-layer-b">
+      <div class="ambient-blob blob-1"></div>
+      <div class="ambient-blob blob-2"></div>
+      <div class="ambient-blob blob-3"></div>
+      <div class="ambient-blob blob-4"></div>
+    </div>
+    <div class="ambient-vignette"></div>
   </div>
 
   <!-- Main Application Wrapper -->
@@ -176,17 +193,11 @@
         </div>
         <span id="volume-level-text" class="volume-level-label">100%</span>
       </div>
-
-      <!-- Bit-Perfect Audio Mode Notice -->
-      <footer class="player-bottom-notice">
-        <span class="dac-status-dot"></span>
-        <span class="dac-notice-text">Прямой вывод CoreAudio (Bit-Perfect DAC)</span>
-      </footer>
     </section>
 
     <!-- Right Column on Desktop / Switched Views on Mobile -->
     <main class="content-panel-wrapper">
-      <!-- Desktop Navigation Tabs & Permanent DAC Badge -->
+      <!-- Desktop Navigation Tabs -->
       <nav class="desktop-nav-header">
         <div class="desktop-nav-tabs">
           <button class="nav-tab-btn active" data-target="home">Главная</button>
@@ -194,13 +205,6 @@
           <button class="nav-tab-btn" data-target="queue">Очередь</button>
           <button class="nav-tab-btn" data-target="search">Поиск</button>
         </div>
-        <button id="desktop-dac-badge" class="quality-badge desktop-dac-badge" type="button" title="Параметры потока и ЦАП">
-          <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polygon points="10 8 16 12 10 16 10 8"/>
-          </svg>
-          <span id="desktop-dac-text">Bit-Perfect DAC</span>
-        </button>
       </nav>
 
       <!-- Mobile Top Bar with Permanent DAC Badge (visible on mobile outside Now Playing) -->
@@ -697,12 +701,12 @@
       <div class="modal-header">
         <div class="modal-title-wrap">
           <h3 class="modal-title">Аудиоустройства вывода</h3>
-          <span class="modal-tag">COREAUDIO HAL</span>
+          <span class="modal-tag">COREAUDIO &amp; DLNA</span>
         </div>
         <button id="btn-close-devices" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-subtitle">Выберите активный ЦАП или аудиовыход macOS</p>
+        <p class="modal-subtitle">Выберите активный ЦАП, аудиовыход macOS или сетевой стример</p>
         <div id="audio-devices-list" class="audio-devices-list">
           <div class="loading-state">Загрузка устройств...</div>
         </div>
@@ -795,6 +799,6 @@
     </div>
   </div>
 
-  <script src="/app.js?v=230"></script>
+  <script src="/app.js?v=232"></script>
 </body>
 </html>

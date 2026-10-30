@@ -25,10 +25,15 @@ public final class SettingsWindow: NSWindowController {
     private var lockVolume100Checkbox: NSButton!
     private var streamQualityLabel: NSTextField!
 
-    // UI Elements - UPnP
+    // UI Elements - UPnP & DLNA
+    private var enableLocalDMRCheckbox: NSButton!
     private var upnpFriendlyNameField: NSTextField!
+    private var saveNameButton: NSButton!
     private var upnpUrlField: NSTextField!
+    private var copyUpnpButton: NSButton!
     private var upnpStatusLabel: NSTextField!
+    private var discoverDLNACheckbox: NSButton!
+    private var dlnaStatusLabel: NSTextField!
 
     // UI Elements - WebSocket / iOS
     private var wsUrlField: NSTextField!
@@ -154,11 +159,33 @@ public final class SettingsWindow: NSWindowController {
         streamQualityLabel.textColor = .secondaryLabelColor
         container.addArrangedSubview(streamQualityLabel)
 
+        // DLNA Renderers Discovery Checkbox
+        discoverDLNACheckbox = NSButton(
+            checkboxWithTitle: "Обнаруживать DLNA-рендереры (Bluesound, WiiM и др.)",
+            target: self,
+            action: #selector(discoverDLNAToggled(_:))
+        )
+        discoverDLNACheckbox.font = NSFont.systemFont(ofSize: 12)
+        container.addArrangedSubview(discoverDLNACheckbox)
+
+        dlnaStatusLabel = NSTextField(labelWithString: "Статус DLNA: Отключено")
+        dlnaStatusLabel.font = NSFont.systemFont(ofSize: 11)
+        dlnaStatusLabel.textColor = .secondaryLabelColor
+        container.addArrangedSubview(dlnaStatusLabel)
+
         container.addArrangedSubview(makeDivider())
 
         // --- 2. UPnP / DLNA MediaRenderer Section ---
         let upnpSectionHeader = makeSectionHeader("📻 UPnP / DLNA плеер (Home Assistant)")
         container.addArrangedSubview(upnpSectionHeader)
+
+        enableLocalDMRCheckbox = NSButton(
+            checkboxWithTitle: "Включить локальный DMR плеер для Home Assistant",
+            target: self,
+            action: #selector(localDMRToggled(_:))
+        )
+        enableLocalDMRCheckbox.font = NSFont.systemFont(ofSize: 12)
+        container.addArrangedSubview(enableLocalDMRCheckbox)
 
         upnpStatusLabel = NSTextField(labelWithString: "Порт: 8090 • SSDP Discovery: Активен")
         upnpStatusLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
@@ -172,7 +199,7 @@ public final class SettingsWindow: NSWindowController {
         upnpFriendlyNameField = NSTextField()
         upnpFriendlyNameField.placeholderString = "Apple Music Remote (Mac)"
         upnpFriendlyNameField.widthAnchor.constraint(equalToConstant: 200).isActive = true
-        let saveNameButton = NSButton(title: "Сохранить", target: self, action: #selector(saveFriendlyNameClicked))
+        saveNameButton = NSButton(title: "Сохранить", target: self, action: #selector(saveFriendlyNameClicked))
         saveNameButton.bezelStyle = .rounded
         nameRow.addArrangedSubview(nameLabel)
         nameRow.addArrangedSubview(upnpFriendlyNameField)
@@ -188,7 +215,7 @@ public final class SettingsWindow: NSWindowController {
         upnpUrlField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         upnpUrlField.widthAnchor.constraint(equalToConstant: 290).isActive = true
 
-        let copyUpnpButton = NSButton(title: "Копировать", target: self, action: #selector(copyUpnpUrlClicked))
+        copyUpnpButton = NSButton(title: "Копировать", target: self, action: #selector(copyUpnpUrlClicked))
         copyUpnpButton.bezelStyle = .rounded
         upnpRow.addArrangedSubview(upnpUrlField)
         upnpRow.addArrangedSubview(copyUpnpButton)
@@ -281,29 +308,77 @@ public final class SettingsWindow: NSWindowController {
         // 1. Audio Devices
         devices = CoreAudioDeviceManager.shared.getOutputDevices()
         devicePopUp.removeAllItems()
+
+        let hasActiveDLNA = DLNADiscoveryManager.shared.hasActiveRenderer
+        let activeDLNA = DLNADiscoveryManager.shared.getActiveRenderer()
+
         for dev in devices {
-            devicePopUp.addItem(withTitle: "\(dev.name)\(dev.isDefault ? " (По умолчанию)" : "")")
-            devicePopUp.lastItem?.tag = Int(dev.id)
+            let isDef = !hasActiveDLNA && dev.isDefault
+            devicePopUp.addItem(withTitle: "\(dev.name)\(isDef ? " (По умолчанию)" : "")")
+            if let item = devicePopUp.lastItem {
+                item.tag = Int(dev.id)
+                item.representedObject = "coreaudio:\(dev.id)"
+            }
         }
 
-        if let defaultDev = devices.first(where: { $0.isDefault }) {
-            devicePopUp.selectItem(withTag: Int(defaultDev.id))
+        let dlnaDevices = DLNADiscoveryManager.shared.isEnabled ? DLNADiscoveryManager.shared.getDiscoveredRenderers() : []
+        if !dlnaDevices.isEmpty {
+            devicePopUp.menu?.addItem(NSMenuItem.separator())
+            for dlna in dlnaDevices {
+                let isSelected = dlna.isSelected
+                let title = "🌐 \(dlna.friendlyName) (DLNA)\(isSelected ? " (Активен)" : "")"
+                devicePopUp.addItem(withTitle: title)
+                if let item = devicePopUp.lastItem {
+                    item.tag = dlna.numericId
+                    item.representedObject = "dlna:\(dlna.id)"
+                }
+            }
+        }
+
+        if let active = activeDLNA {
+            if let item = devicePopUp.itemArray.first(where: { ($0.representedObject as? String) == "dlna:\(active.id)" }) {
+                devicePopUp.select(item)
+            }
+            sampleRatePopUp.removeAllItems()
+            sampleRatePopUp.addItem(withTitle: "192 кГц (DLNA Stream)")
+            sampleRatePopUp.isEnabled = false
+            bitPerfectCheckbox.isEnabled = false
+            streamQualityLabel.stringValue = "Текущий вывод: DLNA Сетевой стриминг (WAV 192кГц/24-бит)"
+        } else if let defaultDev = devices.first(where: { $0.isDefault }) {
+            if let item = devicePopUp.itemArray.first(where: { ($0.representedObject as? String) == "coreaudio:\(defaultDev.id)" }) {
+                devicePopUp.select(item)
+            }
             populateSampleRates(for: defaultDev)
+            bitPerfectCheckbox.isEnabled = true
+            sampleRatePopUp.isEnabled = !BitPerfectLogMonitor.shared.isEnabled
+            streamQualityLabel.stringValue = "Текущий поток: \(BitPerfectLogMonitor.shared.currentQualityDescription)"
         }
 
         // Bit-Perfect switch
         bitPerfectCheckbox.state = BitPerfectLogMonitor.shared.isEnabled ? .on : .off
-        sampleRatePopUp.isEnabled = !BitPerfectLogMonitor.shared.isEnabled
         lockVolume100Checkbox.state = PlaybackStateStore.shared.isVolumeLockedTo100 ? .on : .off
-        streamQualityLabel.stringValue = "Текущий поток: \(BitPerfectLogMonitor.shared.currentQualityDescription)"
+        discoverDLNACheckbox.state = DLNADiscoveryManager.shared.isEnabled ? .on : .off
+        updateDLNAStatusLabel()
 
-        // 2. UPnP
+        // 2. UPnP & DLNA
+        let isDMREnabled = UPnPMediaRendererServer.shared.isEnabled
+        enableLocalDMRCheckbox.state = isDMREnabled ? .on : .off
         upnpFriendlyNameField.stringValue = SSDPService.shared.friendlyName
+        upnpFriendlyNameField.isEnabled = isDMREnabled
+        saveNameButton.isEnabled = isDMREnabled
+        copyUpnpButton.isEnabled = isDMREnabled
+
         let upnpPort = UPnPMediaRendererServer.shared.port
         let lanIPs = WebSocketServer.shared.getLANIPAddresses()
         let primaryIP = lanIPs.first ?? "127.0.0.1"
         upnpUrlField.stringValue = "http://\(primaryIP):\(upnpPort)/description.xml"
-        upnpStatusLabel.stringValue = "Порт: \(upnpPort) • SSDP Discovery: Активен (UDN: \(SSDPService.shared.deviceUDN))"
+        if isDMREnabled {
+            upnpStatusLabel.stringValue = "Порт: \(upnpPort) • SSDP Discovery: Активен (UDN: \(SSDPService.shared.deviceUDN))"
+            upnpStatusLabel.textColor = .systemGreen
+        } else {
+            upnpStatusLabel.stringValue = "Статус: Отключен в настройках"
+            upnpStatusLabel.textColor = .secondaryLabelColor
+        }
 
         // 3. Web UI & WebSocket Server
         let wsPort = WebSocketServer.shared.port
@@ -370,6 +445,13 @@ public final class SettingsWindow: NSWindowController {
                 self?.refreshState()
             }
         }
+
+        DLNADiscoveryManager.shared.onDevicesChanged = { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in
+                self?.updateDLNAStatusLabel()
+                self?.refreshState()
+            }
+        }
     }
 
     // MARK: - Actions
@@ -393,15 +475,49 @@ public final class SettingsWindow: NSWindowController {
     }
 
     @objc private func deviceSelectionChanged(_ sender: NSPopUpButton) {
-        let devID = AudioDeviceID(sender.selectedTag())
-        _ = CoreAudioDeviceManager.shared.setDefaultOutputDevice(id: devID)
-        if let selectedDev = devices.first(where: { $0.id == devID }) {
-            populateSampleRates(for: selectedDev)
+        guard let selectedItem = sender.selectedItem,
+              let repObj = selectedItem.representedObject as? String else {
+            return
         }
+
+        if repObj.hasPrefix("dlna:") {
+            if let renderer = DLNADiscoveryManager.shared.selectRenderer(uid: repObj) {
+                NSLog("[SettingsWindow] Selected DLNA renderer: \(renderer.friendlyName)")
+                AudioProcessTapService.shared.startCapture()
+
+                let (streamURL, imageURL, fullTitle, metadata) = DLNADiscoveryManager.shared.resolveStreamAndImageURLs()
+                let status = MusicBridge.shared.getPlayerStatus()
+
+                DLNADiscoveryManager.shared.setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { success, _ in
+                    if success, status.playerState == "playing", !renderer.isBluOS {
+                        DLNADiscoveryManager.shared.play()
+                    }
+                }
+
+                WebSocketServer.shared.broadcastAudioDevices()
+                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+            }
+        } else if repObj.hasPrefix("coreaudio:") {
+            let idStr = repObj.replacingOccurrences(of: "coreaudio:", with: "")
+            if let parsedId = UInt32(idStr) {
+                let devID = AudioDeviceID(parsedId)
+                if DLNADiscoveryManager.shared.hasActiveRenderer {
+                    DLNADiscoveryManager.shared.stopPlayback()
+                    DLNADiscoveryManager.shared.deselectRenderer()
+                    AudioProcessTapService.shared.stopCapture()
+                }
+                _ = CoreAudioDeviceManager.shared.setDefaultOutputDevice(id: devID)
+                WebSocketServer.shared.broadcastAudioDevices()
+                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+            }
+        }
+
+        refreshState()
         MenuManager.shared.updateMenuState()
     }
 
     @objc private func sampleRateSelectionChanged(_ sender: NSPopUpButton) {
+        guard !DLNADiscoveryManager.shared.hasActiveRenderer else { return }
         let rate = Double(sender.selectedTag())
         let devID = AudioDeviceID(devicePopUp.selectedTag())
         _ = CoreAudioDeviceManager.shared.setSampleRate(rate, for: devID)
@@ -424,6 +540,12 @@ public final class SettingsWindow: NSWindowController {
         WebSocketServer.shared.broadcastStatus(includeQueue: false)
     }
 
+    @objc private func localDMRToggled(_ sender: NSButton) {
+        let isEnabled = (sender.state == .on)
+        UPnPMediaRendererServer.shared.setEnabled(isEnabled)
+        refreshState()
+    }
+
     @objc private func saveFriendlyNameClicked() {
         let text = upnpFriendlyNameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = text.isEmpty ? "Apple Music Remote (Mac)" : text
@@ -435,6 +557,34 @@ public final class SettingsWindow: NSWindowController {
     @objc private func copyUpnpUrlClicked() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(upnpUrlField.stringValue, forType: .string)
+    }
+
+    @objc private func discoverDLNAToggled(_ sender: NSButton) {
+        let isEnabled = (sender.state == .on)
+        DLNADiscoveryManager.shared.setEnabled(isEnabled)
+        if !isEnabled && DLNADiscoveryManager.shared.hasActiveRenderer {
+            DLNADiscoveryManager.shared.stop()
+            DLNADiscoveryManager.shared.deselectRenderer()
+            if PlaybackStateStore.shared.isDLNAMuted {
+                let restoreVol = PlaybackStateStore.shared.preDLNAVolume > 0 ? PlaybackStateStore.shared.preDLNAVolume : 100
+                _ = MusicBridge.shared.setVolume(restoreVol)
+                PlaybackStateStore.shared.isDLNAMuted = false
+            }
+        }
+        updateDLNAStatusLabel()
+        refreshState()
+        WebSocketServer.shared.broadcastAudioDevices()
+    }
+
+    private func updateDLNAStatusLabel() {
+        if DLNADiscoveryManager.shared.isEnabled {
+            let count = DLNADiscoveryManager.shared.getDiscoveredCount()
+            dlnaStatusLabel.stringValue = "Статус DLNA: Поиск активен (найдено рендереров: \(count))"
+            dlnaStatusLabel.textColor = .systemGreen
+        } else {
+            dlnaStatusLabel.stringValue = "Статус DLNA: Отключено"
+            dlnaStatusLabel.textColor = .secondaryLabelColor
+        }
     }
 
     @objc private func showQRClicked() {

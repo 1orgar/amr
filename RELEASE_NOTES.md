@@ -1,51 +1,55 @@
-# Apple Music Remote 2.2.0 — "Chopin"
+# Apple Music Remote 2.3.0 — "Bach"
 
-Major release **v2.2.0 ("Chopin")** introduces an interactive audiophile Signal Path modal, real-time DAC device selection directly from the Web remote, automated Apple ID storefront detection with first-run authentication, catalog search deduplication, a comprehensive transport control overhaul (flawless play/pause responsiveness, zero-delay toggle, and keyboard controls), and expands automated test coverage to 146 unit and integration tests.
+Релиз **v2.3.0 ("Bach")** приносит ключевые аудиофильские и сетевые возможности: прямую потоковую трансляцию Bit-Perfect на проигрыватели **BluOS (Bluesound)** через нативный CoreAudio Process Tap без прерывания системного звука, устранение смены разрядности посреди трека за счёт пре-инспекции формата, капитальное исправление синхронизации очереди каталожного поиска (полная ликвидация нежелательных переходов на радио похожих исполнителей), тумблер локального UPnP/DLNA MediaRenderer, сторожевой таймер стабильности `MusicAppLifecycleManager`, дисковый кэш обложек и расширение тестового покрытия до **181 теста**.
 
 ---
 
-### ✨ What's New & What Changed:
+### ✨ Что нового и что изменилось:
 
-#### 1. 🎛️ Audiophile Signal Path & DAC Switcher (Тракт сигнала)
-* **Interactive Signal Path Modal**:
-  - Visualized audio chain inspection displaying every node in the pipeline:
-    1. **Source**: Audio stream format, bit depth, and native sample rate (e.g., *ALAC Lossless 24-bit / 192.0 kHz*).
-    2. **AMR Engine**: Active volume lock (`0.0 dB FS`), zero-DSP processing, and mixer bypass status.
-    3. **Hardware Output**: Currently connected external DAC / macOS CoreAudio output device and active hardware sampling rate.
-* **In-App DAC Selector**:
-  - Switch active CoreAudio output devices and DACs directly from the Web interface without opening macOS System Settings.
-* **Persistent Status Pill**:
-  - Real-time DAC and stream format indicator in Now Playing view and desktop navigation header.
+#### 1. 📡 Bit-Perfect стриминг на BluOS (Bluesound) & CoreAudio Process Tap
+* **Нативный перехват аудиопотока (`AudioProcessTapService`)**:
+  - Реализован прямой перехват звука Music.app на базе нативного CoreAudio Process Tap API macOS Sonoma/Sequoia (`AudioHardwareCreateProcessTap`).
+  - Звук снимается непосредственно с процесса плеера в исходном качестве без промежуточных драйверов (BlackHole/Soundflower), без переключения системного устройства вывода и без приглушения колонок Mac.
+* **Трансляция Lossless / Hi-Res Lossless на Bluesound NODE**:
+  - Потоковая отдача в сеть в формате PCM/WAV с динамическим согласованием частоты (44.1, 48, 88.2, 96, 176.4, 192 кГц) и глубины (16 / 24-бит).
+  - Поддержка протоколов ICY / HTTP Stream с мгновенной передачей метаданных треков.
+* **Сквозная синхронизация транспорта**:
+  - Управление воспроизведением (Play, Pause, Seek, Volume) между физическим пультом/приложением BluOS и AMR происходит синхронно и без задержек.
 
-#### 2. 🆔 Seamless Apple ID Auto-Detection & Storefront Sync
-* **Automatic Storefront Resolution**:
-  - Automatically queries the active Apple ID storefront from macOS Apple Music settings (`MusicKitManager.getUserStorefront()`).
-  - Removed manual country picker from home navigation in favor of auto-synced regional storefronts (`us`, `ru`, etc.).
-* **First-Run Auth Modal**:
-  - Clean, dedicated authentication modal presented when an Apple Music User Token is needed, guiding the user to sign in securely via MusicKit JS before interacting with catalog features.
-  - Compact Apple ID account badge in the header displaying signed-in status with one-click sign out.
+#### 2. 🎚️ Pre-inspection формата и Format Lock (устранение дрейфа битности)
+* **Предварительный анализ формата перед стартом**:
+  - В `PlayerStatusEngine` внедрено пре-определение точной частоты (`sampleRate`) и битности (`bitDepth`) до запуска воспроизведения трека.
+  - Исключена ошибка формирования 16-битного WAV-заголовка при переходе на 24-битные треки.
+* **Format Lock в `BitPerfectLogMonitor`**:
+  - Блокировка параметров аудиопотока на время проигрывания трека, исключающая скачки битности через несколько секунд после старта.
+* **Унификация порога Hi-Res**:
+  - Порог Hi-Res переведён на `>= 48000 Hz` во всех модулях сервера и веб-интерфейса.
 
-#### 3. 🔍 Search Deduplication
-* **Catalog Result Sanitization**:
-  - Eliminated duplicate track entries in search results caused by overlapping standard, deluxe, and remastered album editions.
-  - Clean, streamlined track listings (e.g. Guano Apes search reduced from 50 redundant items to 39 unique tracks).
+#### 3. 🔍 Стабилизация очереди каталожного поиска (Ликвидация фоллбека на радио)
+* **Исправление сброса очереди в Apple Music Autoplay**:
+  - Устранена ошибка итерации AppleScript при очистке плейлистов: единовременное удаление `delete (every user playlist whose name is "Очередь AMR")`.
+  - Устранён рассинхрон между Cloud API и MusicKit: поиск и выбор плейлиста теперь использует цикл с максимальным количеством треков (`repeat with p in (get every user playlist...) if c > maxTracks then ...`).
+  - Окно ожидания синхронизации увеличено до 25 итераций с моментальным выходом при подтверждении готовности треков.
+  - В методах `playCloud` и `playCloudSync` прямой URL трека/альбома всегда имеет приоритет над радио-схемой `ra.<id>`.
+* **Автоочистка временных облачных плейлистов**:
+  - `MusicKitManager.deleteTemporaryCloudPlaylist` автоматически удаляет временные плейлисты AMR, не засоряя медиатеку пользователя.
 
-#### 4. ⏯️ Transport Control & Pause Button Overhaul
-* **Pause / Play Reliability**:
-  - Fixed an unhandled frontend TypeError where obsolete DOM element references aborted `togglePlayPause()` before the WebSocket command was dispatched.
-  - Removed `.btn-loading` from transport play/pause buttons, ensuring instant, non-blocking click response and keeping SVG icons visible.
-  - Eliminated backend race condition in `PlaybackTransportController.pause()` where rapid state checks could mistakenly trigger `playpause` and resume playback.
-  - Added strict `isUserPaused` intent preservation in `PlayerStatusEngine` to prevent transient AppleScript queries from prematurely flipping state back to `playing`.
-  - Immediate optimistic status broadcasts for `pause`, `play`, `stop`, and `play_pause`.
-* **Desktop Spacebar Control**:
-  - Global Spacebar shortcut toggles Play/Pause when focus is not on input elements.
-* **Smart Navigation Tweaks**:
-  - Rapid double-press on Previous Track (< 1.5s) immediately skips to the previous song in queue instead of rewinding to 0:00.
-  - Single-step Next skip in custom queues preventing double-skipping.
+#### 4. 📻 Тумблер локального UPnP / DLNA MediaRenderer в Настройках
+* В окно `SettingsWindow` и строку меню добавлен переключатель работы локального UPnP MediaRenderer.
+* Позволяет полностью отключить встроенный UPnP-сервер AMR при наличии сетевых плееров (BluOS, WiiM) или внешнего управления через Home Assistant, исключая появление фантомных устройств в сети.
 
-#### 5. 🧪 Test Suite Expansion (146 Tests + E2E)
-* **146 Automated Swift Tests** (`AppleMusicRemoteMacTests`, 100% pass rate):
-  - Added `PlaybackTransportControllerTests` covering `pause()`, `play()`, `stop()`, and `playPause()` toggles.
-  - Validated state store resetting across test cases.
-* **End-to-End Automated Testing**:
-  - Added `test_10_play_pause_transport_control` in `test_amr_e2e.py` verifying bidirectional play/pause cycling, WebSocket status events, and native macOS `Music.app` state via AppleScript.
+#### 5. 🛡️ Сторожевой сервис `MusicAppLifecycleManager`
+* Фоновый мониторинг состояния процесса `Music.app` и отзывчивости скриптового моста AppleScript.
+* Автоматическое мягкое восстановление при подвисании плеера без потери активной очереди воспроизведения.
+
+#### 6. 🖼️ Высокопроизводительный дисковый кэш обложек (`ArtworkDiskCache`)
+* Двухуровневое кэширование обложек альбомов (Memory LRU + Persistent Disk Cache с хэшированием SHA-256).
+* Мгновенная отдача обложек в Web UI и на мобильные устройства.
+
+#### 7. 🧪 Расширение набора тестов до 181 теста (100% Pass)
+* Тестовый набор проекта расширен до **181 теста**:
+  - `AudioProcessTapServiceTests` — проверка создания тапа, буферизации PCM и смены форматов.
+  - `DLNADiscoveryTests` — тестирование обнаружения рендереров и разбора UPnP/SSDP дескрипторов.
+  - `ArtworkDiskCacheTests` — валидация LRU-стратегии и дисковой персистентности.
+  - `MusicAppLifecycleManagerTests` — стресс-тесты восстановления плеера при сбоях IPC.
+  - `PlaybackRouterTests` — регрессионные тесты приоритета URL над радиостанциями.

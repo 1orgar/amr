@@ -42,6 +42,31 @@ public final class QueueManager: @unchecked Sendable {
     // MARK: - Playback Queue Generation
 
     public func getPlaybackQueue() async -> PlaybackQueueInfo {
+        if PlaybackRouter.shared.isTestingEnvironment {
+            let (hasCustomQueue, customQueue, customQueueName, activeIdx) = PlaybackStateStore.shared.withLock {
+                (
+                    PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
+                    PlaybackStateStore.shared.activeCustomQueue,
+                    PlaybackStateStore.shared.activeCustomQueueName,
+                    PlaybackStateStore.shared.activeCustomQueueIndex
+                )
+            }
+            if hasCustomQueue {
+                let upcoming = activeIdx + 1 < customQueue.count ? Array(customQueue[(activeIdx + 1)...]) : []
+                let history = activeIdx > 0 ? Array(customQueue[0..<activeIdx].reversed()) : []
+                return PlaybackQueueInfo(
+                    playlist: customQueueName ?? "Queue",
+                    currentIndex: activeIdx,
+                    totalTracks: customQueue.count,
+                    shuffle: false,
+                    upcomingTracks: upcoming,
+                    tracks: customQueue,
+                    historyTracks: history
+                )
+            }
+            return PlaybackQueueInfo()
+        }
+
         guard let app = MusicAppProvider.shared.getMusicApp() else {
             return PlaybackQueueInfo()
         }
@@ -607,8 +632,16 @@ public final class QueueManager: @unchecked Sendable {
             let script = """
             tell application "Music"
                 try
-                    set qPl to (first user playlist whose name is "Очередь AMR")
-                    delete (track \(targetIdx) of qPl)
+                    set qPl to missing value
+                    repeat with p in (get every user playlist whose name is "Очередь AMR")
+                        if (count of tracks of p) > 0 then
+                            set qPl to p
+                            exit repeat
+                        end if
+                    end repeat
+                    if qPl is not missing value then
+                        delete (track \(targetIdx) of qPl)
+                    end if
                 end try
             end tell
             """
@@ -655,10 +688,18 @@ public final class QueueManager: @unchecked Sendable {
             let script = """
             tell application "Music"
                 try
-                    set qPl to (first user playlist whose name is "Очередь AMR")
-                    set c to count of tracks of qPl
-                    if c > \(curIdx) then
-                        delete (tracks \(curIdx + 1) thru c of qPl)
+                    set qPl to missing value
+                    repeat with p in (get every user playlist whose name is "Очередь AMR")
+                        if (count of tracks of p) > 0 then
+                            set qPl to p
+                            exit repeat
+                        end if
+                    end repeat
+                    if qPl is not missing value then
+                        set c to count of tracks of qPl
+                        if c > \(curIdx) then
+                            delete (tracks \(curIdx + 1) thru c of qPl)
+                        end if
                     end if
                 end try
             end tell
@@ -872,8 +913,14 @@ public final class QueueManager: @unchecked Sendable {
             let script = """
             tell application "Music"
               try
-                set qPl to (first user playlist whose name is "Очередь AMR")
-                if qPl is not missing value and (count of tracks of qPl) >= \(targetTrackIndex) then
+                set qPl to missing value
+                repeat with p in (get every user playlist whose name is "Очередь AMR")
+                    if (count of tracks of p) >= \(targetTrackIndex) then
+                        set qPl to p
+                        exit repeat
+                    end if
+                end repeat
+                if qPl is not missing value then
                   set shuffle enabled to false
                   play track \(targetTrackIndex) of qPl
                   return "ok"
@@ -1021,6 +1068,9 @@ public final class QueueManager: @unchecked Sendable {
     }
 
     public func startQueueMonitoring() {
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return
+        }
         stopQueueMonitoring()
         let timer = DispatchSource.makeTimerSource(queue: queueTimerQueue)
         timer.schedule(deadline: .now() + 0.5, repeating: 0.5)

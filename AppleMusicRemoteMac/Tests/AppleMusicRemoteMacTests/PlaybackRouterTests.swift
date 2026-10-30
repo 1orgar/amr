@@ -384,5 +384,37 @@ final class PlaybackRouterTests: XCTestCase {
         let activeIdx = store.withLock { store.activeCustomQueueIndex }
         XCTAssertEqual(activeIdx, 0, "When paused, track notifications must not advance or change index")
     }
+
+    func testPlayCloudSyncPrioritizesDirectUrlOverRadioStation() {
+        let router = PlaybackRouter.shared
+        var openedUrls: [URL] = []
+        router.urlOpener = { url in
+            openedUrls.append(url)
+            return true
+        }
+        defer { router.urlOpener = nil }
+
+        let directUrl = "https://music.apple.com/us/album/nookie/1440743775?i=1440743781"
+        let ok = router.playCloudSync(url: directUrl, id: "1440743781", name: "Nookie", artist: "Limp Bizkit")
+        XCTAssertTrue(ok)
+        XCTAssertEqual(openedUrls.count, 1)
+        XCTAssertTrue(openedUrls[0].absoluteString.hasPrefix("music://music.apple.com/us/album/nookie/1440743775?i=1440743781"))
+        XCTAssertFalse(openedUrls[0].absoluteString.contains("ra."), "Must NOT use radio station scheme when direct track URL is available")
+    }
+
+    func testPlayCloudSyncFallsBackToStationWhenNoUrl() {
+        let router = PlaybackRouter.shared
+        var openedUrls: [URL] = []
+        router.urlOpener = { url in
+            openedUrls.append(url)
+            return true
+        }
+        defer { router.urlOpener = nil }
+
+        let ok = router.playCloudSync(url: nil, id: "1440743781", name: "Nookie", artist: "Limp Bizkit")
+        XCTAssertTrue(ok)
+        XCTAssertEqual(openedUrls.count, 1)
+        XCTAssertEqual(openedUrls[0].absoluteString, "music://music.apple.com/station/item/ra.1440743781")
+    }
 }
 

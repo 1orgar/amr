@@ -130,4 +130,41 @@ final class BitPerfectLogMonitorFullTests: XCTestCase {
         let monitor = BitPerfectLogMonitor.shared
         XCTAssertTrue(monitor.isEnabled)
     }
+
+    func testResetTrackStateWithPreInspectedFormat() {
+        let monitor = BitPerfectLogMonitor.shared
+        let exp = expectation(description: "Queue sync")
+        monitor.resetTrackState(expectedSampleRate: 48000.0, expectedBitDepth: 24)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(monitor.currentDetectedSampleRate, 48000.0)
+            XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+            XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+
+    func testThreshold48kHzIs24BitByDefault() {
+        let monitor = BitPerfectLogMonitor.shared
+        let exp = expectation(description: "Queue sync 48kHz default")
+        monitor.resetTrackState(expectedSampleRate: 48000.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(monitor.currentDetectedSampleRate, 48000.0)
+            XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+
+    func testTrackFormatCaching() {
+        let monitor = BitPerfectLogMonitor.shared
+        monitor.cacheTrackFormat(artist: "Mrs. GREEN APPLE", title: "Inferno", sampleRate: 48000.0, bitDepth: 24)
+        let cached = monitor.getCachedFormat(artist: "mrs. green apple", title: "inferno")
+        XCTAssertNotNil(cached)
+        XCTAssertEqual(cached?.sampleRate, 48000.0)
+        XCTAssertEqual(cached?.bitDepth, 24)
+
+        // Non-cached track
+        XCTAssertNil(monitor.getCachedFormat(artist: "Unknown", title: "Nonexistent"))
+    }
 }

@@ -155,6 +155,11 @@
     miniBtnNext: document.getElementById('mini-btn-next'),
     miniProgressFill: document.getElementById('mini-progress-fill'),
 
+    // Ambient Backdrop Elements
+    ambientBackdrop: document.getElementById('ambient-backdrop'),
+    ambientLayerA: document.getElementById('ambient-layer-a'),
+    ambientLayerB: document.getElementById('ambient-layer-b'),
+
     // Now Playing Main Player
     artworkContainer: document.querySelector('.artwork-container'),
     artworkWrapper: document.querySelector('.artwork-wrapper'),
@@ -652,6 +657,154 @@
     return '/api/artwork';
   }
 
+  // ==========================================================================
+  // Apple TV Style Dynamic Blurred Ambient Gradient Background Manager
+  // ==========================================================================
+  const AmbientBackgroundManager = {
+    activeLayer: 'a', // 'a' or 'b'
+    currentPaletteKey: '',
+    offscreenCanvas: null,
+    offscreenCtx: null,
+
+    init() {
+      if (this.offscreenCanvas) return;
+      this.offscreenCanvas = document.createElement('canvas');
+      this.offscreenCanvas.width = 32;
+      this.offscreenCanvas.height = 32;
+      this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
+    },
+
+    // Extract 4 harmonic ambient colors from image
+    extractPalette(img) {
+      this.init();
+      const ctx = this.offscreenCtx;
+      if (!ctx) return this.getDefaultPalette();
+
+      try {
+        ctx.clearRect(0, 0, 32, 32);
+        ctx.drawImage(img, 0, 0, 32, 32);
+        const imgData = ctx.getImageData(0, 0, 32, 32).data;
+        const colorSamples = [];
+
+        for (let i = 0; i < imgData.length; i += 16) { // sample every 4th pixel
+          const r = imgData[i];
+          const g = imgData[i + 1];
+          const b = imgData[i + 2];
+          const a = imgData[i + 3];
+
+          if (a < 128) continue;
+
+          const max = Math.max(r, g, b) / 255;
+          const min = Math.min(r, g, b) / 255;
+          const lum = (max + min) / 2;
+
+          // Skip pure black or blown out highlights for ambient background
+          if (lum < 0.06 || lum > 0.94) continue;
+
+          const delta = max - min;
+          const sat = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lum - 1));
+
+          colorSamples.push({ r, g, b, sat, lum });
+        }
+
+        if (colorSamples.length === 0) {
+          return this.getDefaultPalette();
+        }
+
+        // Sort by saturation to prioritize vivid, rich hues
+        colorSamples.sort((c1, c2) => c2.sat - c1.sat);
+
+        // Sample across spectrum
+        const vibrant = colorSamples[0];
+        const secondary = colorSamples[Math.floor(colorSamples.length * 0.35)] || vibrant;
+        const tertiary = colorSamples[Math.floor(colorSamples.length * 0.70)] || secondary;
+        const deep = colorSamples[colorSamples.length - 1] || tertiary;
+
+        return [
+          this.tuneColor(vibrant, 1.5, 0.52),
+          this.tuneColor(secondary, 1.4, 0.46),
+          this.tuneColor(tertiary, 1.35, 0.48),
+          this.tuneColor(deep, 1.25, 0.36)
+        ];
+      } catch (err) {
+        // Fallback for tainted canvas
+        return this.getDefaultPalette();
+      }
+    },
+
+    tuneColor(col, satMultiplier, targetLum) {
+      let r = col.r;
+      let g = col.g;
+      let b = col.b;
+
+      // Adjust brightness toward targetLum
+      const currentLum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      const factor = currentLum > 0 ? targetLum / currentLum : 1.0;
+      r = Math.min(255, Math.max(16, Math.round(r * factor)));
+      g = Math.min(255, Math.max(16, Math.round(g * factor)));
+      b = Math.min(255, Math.max(16, Math.round(b * factor)));
+
+      // Boost saturation
+      const avg = (r + g + b) / 3;
+      r = Math.min(255, Math.max(0, Math.round(avg + (r - avg) * satMultiplier)));
+      g = Math.min(255, Math.max(0, Math.round(avg + (g - avg) * satMultiplier)));
+      b = Math.min(255, Math.max(0, Math.round(avg + (b - avg) * satMultiplier)));
+
+      return `rgba(${r}, ${g}, ${b}, 0.85)`;
+    },
+
+    getDefaultPalette() {
+      return [
+        'rgba(50, 30, 85, 0.65)',
+        'rgba(30, 55, 105, 0.60)',
+        'rgba(75, 35, 65, 0.55)',
+        'rgba(25, 70, 90, 0.50)'
+      ];
+    },
+
+    updateFromImage(img, artUrl) {
+      if (!dom.ambientBackdrop) return;
+      if (!artUrl || artUrl === 'apple-touch-icon.svg') {
+        this.clear();
+        return;
+      }
+
+      const palette = this.extractPalette(img);
+      const paletteKey = palette.join('|');
+      if (paletteKey === this.currentPaletteKey) return;
+      this.currentPaletteKey = paletteKey;
+
+      // Dual buffer swap: 'a' <-> 'b'
+      const nextLayer = this.activeLayer === 'a' ? 'b' : 'a';
+      const targetElem = nextLayer === 'a' ? dom.ambientLayerA : dom.ambientLayerB;
+      const prevElem = this.activeLayer === 'a' ? dom.ambientLayerA : dom.ambientLayerB;
+
+      if (targetElem) {
+        targetElem.style.setProperty('--blob-1', palette[0]);
+        targetElem.style.setProperty('--blob-2', palette[1]);
+        targetElem.style.setProperty('--blob-3', palette[2]);
+        targetElem.style.setProperty('--blob-4', palette[3]);
+
+        targetElem.classList.add('visible');
+      }
+
+      if (prevElem) {
+        prevElem.classList.remove('visible');
+      }
+
+      this.activeLayer = nextLayer;
+      dom.ambientBackdrop.classList.add('active');
+    },
+
+    clear() {
+      if (!dom.ambientBackdrop) return;
+      dom.ambientBackdrop.classList.remove('active');
+      if (dom.ambientLayerA) dom.ambientLayerA.classList.remove('visible');
+      if (dom.ambientLayerB) dom.ambientLayerB.classList.remove('visible');
+      this.currentPaletteKey = '';
+    }
+  };
+
   let currentLoadedArtworkUrl = '';
   function setPlayerArtwork(artUrl) {
     if (!artUrl) artUrl = 'apple-touch-icon.svg';
@@ -668,6 +821,7 @@
         dom.miniArt.src = artUrl;
         dom.miniArt.style.opacity = '1';
       }
+      AmbientBackgroundManager.clear();
       return;
     }
 
@@ -679,6 +833,7 @@
 
     // Preload image to prevent showing old track's image if new image fails or loads slowly
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       if (dom.playerArtwork.dataset.targetSrc === artUrl) {
         dom.playerArtwork.src = artUrl;
@@ -688,6 +843,7 @@
           dom.miniArt.src = artUrl;
           dom.miniArt.style.opacity = '1';
         }
+        AmbientBackgroundManager.updateFromImage(img, artUrl);
       }
     };
     img.onerror = () => {
@@ -699,6 +855,7 @@
           dom.miniArt.src = 'apple-touch-icon.svg';
           dom.miniArt.style.opacity = '1';
         }
+        AmbientBackgroundManager.clear();
       }
     };
     img.src = artUrl;
@@ -1404,11 +1561,49 @@
     if (dom.signalDacRate) {
       dom.signalDacRate.textContent = `${rateKhz} кГц`;
     }
+    const activeDev = (state.audioDevices || []).find(d => d.name === state.audioDeviceName || d.isDefault);
+    const isNetworkRenderer = (activeDev && activeDev.type === 'dlna') || (state.audioDeviceName && (state.audioDeviceName.includes('(') || state.audioDeviceName.includes('NODE') || state.audioDeviceName.includes('Bluesound') || state.audioDeviceName.includes('DLNA')));
+
+    const dacBadge = document.querySelector('#signal-node-dac .signal-node-badge');
+    if (dacBadge) {
+      if (isNetworkRenderer) {
+        const isBluOS = (activeDev && activeDev.protocol === 'bluos') || (state.audioDeviceName && state.audioDeviceName.includes('Bluesound'));
+        dacBadge.textContent = isBluOS ? 'СЕТЕВОЙ СТРИМЕР' : 'СЕТЕВОЙ ЦАП';
+      } else {
+        dacBadge.textContent = 'ВЫХОДНОЙ ЦАП';
+      }
+    }
     if (dom.signalDacName) {
       dom.signalDacName.textContent = state.audioDeviceName || 'Аудиовыход macOS';
     }
     if (dom.signalDacDetails) {
-      dom.signalDacDetails.textContent = `Прямое подключение macOS CoreAudio HAL (${rateKhz} кГц)`;
+      if (isNetworkRenderer) {
+        const isBluOS = (activeDev && activeDev.protocol === 'bluos') || (state.audioDeviceName && state.audioDeviceName.includes('Bluesound'));
+        const protoName = isBluOS ? 'BluOS Hi-Res Stream' : 'DLNA / UPnP';
+        let bitDepth = '16';
+        if (up.includes('24-BIT') || up.includes('24-БИТ') || up.includes('HI-RES') || (state.audioDeviceSampleRate && state.audioDeviceSampleRate >= 48000)) {
+          bitDepth = '24';
+        }
+        dom.signalDacDetails.textContent = `Сетевой Hi-Res стриминг (${protoName}) • ${bitDepth}-бит / ${rateKhz} кГц`;
+      } else {
+        dom.signalDacDetails.textContent = `Прямое подключение macOS CoreAudio HAL (${rateKhz} кГц)`;
+      }
+    }
+    const signalEngineMeta = document.querySelector('#signal-node-engine .signal-node-meta');
+    if (signalEngineMeta) {
+      if (isNetworkRenderer) {
+        signalEngineMeta.textContent = 'CoreAudio Process Tap (Bit-Perfect) • Бесконечный Hi-Res поток';
+      } else {
+        signalEngineMeta.textContent = 'Bit-Perfect 100% Lock • Zero DSP • Bypass микшера';
+      }
+    }
+    const signalVerifiedDesc = document.querySelector('.signal-verified-desc');
+    if (signalVerifiedDesc) {
+      if (isNetworkRenderer) {
+        signalVerifiedDesc.textContent = 'Hi-Res PCM поток захватывается напрямую из Music.app и передается на сетевой рендерер без передискретизации.';
+      } else {
+        signalVerifiedDesc.textContent = 'Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.';
+      }
     }
   }
 
@@ -1483,23 +1678,46 @@
     }
 
     state.audioDevices.forEach(dev => {
+      const isDLNA = (dev.type === 'dlna');
       const item = document.createElement('div');
-      item.className = `audio-device-item ${dev.isDefault ? 'active' : ''}`;
+      item.className = `audio-device-item ${isDLNA ? 'dlna-device' : ''} ${dev.isDefault ? 'active' : ''}`;
       item.setAttribute('data-device-id', String(dev.id));
+      if (dev.uid) item.setAttribute('data-device-uid', String(dev.uid));
 
-      const rateText = dev.currentSampleRate ? `${(dev.currentSampleRate / 1000).toFixed(1)} кГц` : '44.1 кГц';
-      const ratesCount = Array.isArray(dev.availableSampleRates) ? dev.availableSampleRates.length : 0;
-      const subtitle = `${rateText} • Bit-Perfect ${ratesCount > 0 ? `(${ratesCount} частот)` : ''}`;
+      let iconSvg = '';
+      let subtitle = '';
 
-      item.innerHTML = `
-        <div class="audio-device-icon">
+      if (isDLNA) {
+        iconSvg = `
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+            <line x1="6" y1="6" x2="6.01" y2="6"/>
+            <line x1="6" y1="18" x2="6.01" y2="18"/>
+          </svg>
+        `;
+        subtitle = `Сетевой стример • До 192 кГц Hi-Res • ${dev.manufacturer || 'DLNA'}`;
+      } else {
+        iconSvg = `
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 5L6 9H2v6h4l5 4V5z"/>
             <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
           </svg>
+        `;
+        const rateText = dev.currentSampleRate ? `${(dev.currentSampleRate / 1000).toFixed(1)} кГц` : '44.1 кГц';
+        const ratesCount = Array.isArray(dev.availableSampleRates) ? dev.availableSampleRates.length : 0;
+        subtitle = `${rateText} • Bit-Perfect ${ratesCount > 0 ? `(${ratesCount} частот)` : ''}`;
+      }
+
+      item.innerHTML = `
+        <div class="audio-device-icon">
+          ${iconSvg}
         </div>
         <div class="audio-device-info">
-          <div class="audio-device-name">${dev.name || 'Аудиовыход'}</div>
+          <div class="audio-device-name">
+            <span class="audio-device-title">${dev.name || (isDLNA ? 'DLNA Стример' : 'Аудиовыход')}</span>
+            ${isDLNA ? '<span class="badge-dlna">DLNA</span>' : ''}
+          </div>
           <div class="audio-device-meta">${subtitle}</div>
         </div>
         ${dev.isDefault ? '<span class="audio-device-badge active">Активен</span>' : '<span class="audio-device-badge">Выбрать</span>'}

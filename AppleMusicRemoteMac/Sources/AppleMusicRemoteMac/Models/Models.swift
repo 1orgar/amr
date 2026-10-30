@@ -101,6 +101,10 @@ public struct PlayerStatus: Codable, Sendable {
         self.audioDeviceSampleRate = try container.decodeIfPresent(Double.self, forKey: .audioDeviceSampleRate)
         self.isBitPerfect = try container.decodeIfPresent(Bool.self, forKey: .isBitPerfect)
     }
+
+    public var isPlaying: Bool {
+        return playerState == "playing"
+    }
 }
 
 // MARK: - Track Info
@@ -124,6 +128,8 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
     public var previewUrl: String?
     public var index: Int?
     public var isCurrent: Bool?
+    public var sampleRate: Int?
+    public var bitDepth: Int?
 
     public var formattedDuration: String {
         guard duration > 0 else { return "0:00" }
@@ -152,6 +158,8 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
         case previewUrl = "preview_url"
         case index
         case isCurrent = "is_current"
+        case sampleRate = "sample_rate"
+        case bitDepth = "bit_depth"
     }
 
     public init(
@@ -172,7 +180,9 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
         url: String? = nil,
         previewUrl: String? = nil,
         index: Int? = nil,
-        isCurrent: Bool? = nil
+        isCurrent: Bool? = nil,
+        sampleRate: Int? = nil,
+        bitDepth: Int? = nil
     ) {
         self.id = id
         self.numericId = numericId
@@ -192,6 +202,8 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
         self.previewUrl = previewUrl
         self.index = index
         self.isCurrent = isCurrent
+        self.sampleRate = sampleRate
+        self.bitDepth = bitDepth
     }
 }
 

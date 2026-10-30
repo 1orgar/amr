@@ -22,7 +22,7 @@ public final class AppleScriptExecutor: @unchecked Sendable {
         if PlaybackRouter.shared.isTestingEnvironment {
             return nil
         }
-        if !MusicAppProvider.shared.isMusicAppRunning && source.contains("tell application \"Music\"") {
+        if (!MusicAppProvider.shared.isMusicAppRunning || !MusicAppLifecycleManager.shared.isHealthy) && source.contains("tell application \"Music\"") {
             return nil
         }
 
@@ -50,7 +50,11 @@ public final class AppleScriptExecutor: @unchecked Sendable {
         let descriptor = script?.executeAndReturnError(&error)
         if let err = error {
             let msg = err[NSAppleScript.errorMessage] as? String ?? "Unknown error"
-            NSLog("[AppleScriptExecutor] Error: \(msg)")
+            let errNum = err[NSAppleScript.errorNumber] as? Int ?? 0
+            NSLog("[AppleScriptExecutor] Error (\(errNum)): \(msg)")
+            if errNum == -1712 || msg.contains("timed out") || msg.contains("AppleEvent timed out") {
+                MusicAppLifecycleManager.shared.reportIPCTimeout()
+            }
             return nil
         }
         return descriptor

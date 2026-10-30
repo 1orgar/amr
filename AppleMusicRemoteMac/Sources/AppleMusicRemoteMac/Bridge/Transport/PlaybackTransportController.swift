@@ -219,7 +219,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
     }
 
     public func setVolume(_ volume: Int) -> Bool {
-        if PlaybackStateStore.shared.isVolumeLockedTo100 && volume != 100 && !AudioDuckingController.shared.isDucked {
+        if PlaybackStateStore.shared.isVolumeLockedTo100 && volume != 100 && !AudioDuckingController.shared.isDucked && !PlaybackStateStore.shared.isDLNAMuted {
             NSLog("[PlaybackTransportController] 🔒 Volume is locked to 100%% (Bit-Perfect). Rejecting volume change to %d%%", volume)
             return false
         }
@@ -241,9 +241,12 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
     @discardableResult
     public func checkAndEnforceVolumeLock() -> Bool {
-        guard PlaybackStateStore.shared.isVolumeLockedTo100 else { return false }
+        guard PlaybackStateStore.shared.isVolumeLockedTo100 && !PlaybackStateStore.shared.isDLNAMuted else { return false }
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.simulatedVolume = 100
+        }
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
         }
         guard MusicAppProvider.shared.isMusicAppRunning else {
             return true

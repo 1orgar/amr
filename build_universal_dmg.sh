@@ -33,36 +33,11 @@ DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 export DEVELOPER_DIR
 SDK_PATH="$(xcrun --show-sdk-path)"
 
-SWIFT_SOURCES=(
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/System/LaunchAtLoginManager.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Models/Models.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/CoreAudio/CoreAudioDeviceManager.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/CoreAudio/BitPerfectLogMonitor.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/UPnP/SSDPService.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/UPnP/UPnPMediaRendererServer.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Protocols/MusicScriptingBridge.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Execution/AppleScriptExecutor.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Audio/AudioQualityDetector.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Audio/AudioDuckingController.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Artwork/ArtworkService.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/State/PlaybackStateStore.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Transport/PlaybackTransportController.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Status/PlayerStatusEngine.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Queue/QueueManager.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Routing/PlaybackRouter.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/Library/LibraryService.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Bridge/MusicBridge.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Cloud/MusicKitManager.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Cloud/CloudCatalogService.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Server/BonjourAdvertiser.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Server/WebSocketServer.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/Server/WebUIContent.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/UI/QRCodeWindow.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/UI/SettingsWindow.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/UI/MenuManager.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/AppDelegate.swift"
-    "$MAC_DIR/Sources/AppleMusicRemoteMac/App.swift"
-)
+SWIFT_SOURCES=()
+while IFS= read -r -d '' file; do
+    SWIFT_SOURCES+=("$file")
+done < <(find "$MAC_DIR/Sources/AppleMusicRemoteMac" -name "*.swift" -print0)
+
 
 FRAMEWORKS=(
     -framework Cocoa
@@ -133,9 +108,9 @@ cat << 'PLIST' > "$CONTENTS_DIR/Info.plist"
     <key>CFBundleIdentifier</key>
     <string>org.ksholokhov.amr.mac</string>
     <key>CFBundleVersion</key>
-    <string>2.2.0</string>
+    <string>2.3.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.2.0</string>
+    <string>2.3.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -156,7 +131,9 @@ cat << 'PLIST' > "$CONTENTS_DIR/Info.plist"
     <string>Apple Music Remote uses the local network for Web UI, UPnP/DLNA, and mobile remote control.</string>
     <key>NSBonjourServices</key>
     <array>
+        <string>_applemusicremote._tcp</string>
         <string>_amr._tcp</string>
+        <string>_musc._tcp</string>
     </array>
 </dict>
 </plist>

@@ -55,6 +55,7 @@ public final class MusicKitManager: @unchecked Sendable {
 
     private var artistStationCache: [String: ArtistStationInfo] = [:]
     private var trackStationCache: [String: TrackStationInfo] = [:]
+    private var lastTemporaryCloudPlaylistId: String? = nil
 
     private let session: URLSession
 
@@ -157,6 +158,17 @@ public final class MusicKitManager: @unchecked Sendable {
             NSLog("[MusicKitManager] Cannot create iCloud playlist: missing developer or user token")
             return nil
         }
+
+        // Clean up previous temporary iCloud playlist in the background to avoid accumulating orphans
+        lock.lock()
+        let oldPlId = lastTemporaryCloudPlaylistId
+        lock.unlock()
+        if let oldId = oldPlId {
+            Task.detached(priority: .utility) { [weak self] in
+                _ = await self?.deleteTemporaryCloudPlaylist(playlistId: oldId)
+            }
+        }
+
         guard let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists") else { return nil }
 
         var req = URLRequest(url: url)
@@ -185,6 +197,9 @@ public final class MusicKitManager: @unchecked Sendable {
                    let first = arr.first,
                    let plId = first["id"] as? String {
                     createdPlaylistId = plId
+                    lock.lock()
+                    lastTemporaryCloudPlaylistId = plId
+                    lock.unlock()
                     NSLog("[MusicKitManager] ✅ Created temporary iCloud playlist: '%@'", plId)
                 }
             } else {
@@ -241,10 +256,13 @@ public final class MusicKitManager: @unchecked Sendable {
         req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
 
         do {
-            let (_, resp) = try await session.data(for: req)
+            let (data, resp) = try await session.data(for: req)
             if let http = resp as? HTTPURLResponse, (http.statusCode == 200 || http.statusCode == 204) {
                 NSLog("[MusicKitManager] 🗑 Deleted temporary iCloud playlist: '%@'", playlistId)
                 return true
+            } else if let http = resp as? HTTPURLResponse {
+                let errStr = String(data: data, encoding: .utf8) ?? ""
+                NSLog("[MusicKitManager] ⚠️ Delete iCloud playlist status %d for '%@': %@", http.statusCode, playlistId, errStr)
             }
         } catch {
             NSLog("[MusicKitManager] Error deleting iCloud playlist: %@", error.localizedDescription)

@@ -17,14 +17,22 @@
 ### 🎧 Bit-Perfect Audiophile Audio Output (CoreAudio)
 * **Automatic DAC Sample Rate Synchronization**: Instant hardware switching between 44.1, 48, 88.2, 96, 176.4, and 192 kHz to match the source track's native rate in Music.app bit-for-bit.
 * **100% Volume Lock Mode**: Keeps macOS / Music.app software volume pegged at 100% to eliminate digital volume dithering and word-length degradation.
+* **Format Pre-Inspection & Format Lock**: Pre-inspects stream format parameters (`sampleRate` and `bitDepth`) before track starts, locking the stream format to prevent mid-track bitrate switching or audio glitches on external streamers.
 * **Audiophile Signal Path Inspection (Тракт сигнала)**: Interactive Roon-style modal detailing every stage of the audio chain: Source stream (codec, bit depth, sample rate), AMR Bit-Perfect Engine (`0.0 dB FS`, zero DSP), and active Hardware Output DAC.
 * **In-App DAC Switcher**: Quickly switch between connected external DACs and CoreAudio output devices directly from the Web remote.
 * **Optional Web Volume Control**: When volume lock is turned off via menu bar settings, the Web UI automatically displays a smooth volume slider (with an instant Mute button) for setups lacking a hardware volume pot.
 * **Real-Time DAC Badge**: Continuous stream format and hardware DAC rate indicators across all views (Now Playing header, desktop split view, and mobile devices).
 
+### 📡 BluOS & Network Streaming (Lossless Stream Relay)
+* **Direct Audio Process Tap (`AudioProcessTapService`)**: Directly taps Music.app's audio stream via native CoreAudio Process Tap API (`AudioHardwareCreateProcessTap`) on macOS Sonoma/Sequoia without virtual audio cables, without modifying system sound output, and without muting Mac speakers.
+* **Bit-Perfect BluOS Streaming**: Streams pure LPCM / WAV up to 192 kHz / 24-bit Hi-Res Lossless directly to Bluesound (NODE, POWERNODE) and BluOS-compatible streamers.
+* **Bidirectional Transport Sync**: Seamless real-time state synchronization (Play, Pause, Seek, Volume) between BluOS hardware, official BluOS app, and Apple Music Remote.
+
 ### 📱 Premium Web Remote (PWA)
 * **OLED Monochrome Aesthetic**: Pure black `#000000`, hardware-accelerated transitions, visual focus strictly on album artwork with zero clutter.
 * **Zero-Latency Transport Controls**: Non-blocking Play/Pause toggle with optimistic UI response, rapid double-click Previous skip, and desktop Spacebar hotkey.
+* **Robust Search Queue & Autoplay Isolation**: Full queue synchronization preventing Apple Music from falling back to Autoplay radio ("Similar Artists") during search queue playback; automatic background cleanup of temporary cloud playlists.
+* **High-Speed Artwork Disk Cache (`ArtworkDiskCache`)**: Two-tier memory and persistent disk LRU caching for instant cover art delivery.
 * **Automated Apple ID & Storefront Detection**: Detects your active regional storefront directly from macOS settings, eliminating manual country selectors.
 * **Clean Catalog Search with Deduplication**: Smart filtering of duplicate releases and album versions for clean, fast search results.
 * **Intuitive Touch Gestures**: Swipe artwork left/right to skip tracks; swipe down to collapse Now Playing into a floating mini-player.
@@ -37,11 +45,13 @@
 ### 📻 UPnP / DLNA MediaRenderer (Home Assistant Integration)
 * Full support for **UPnP A/V MediaRenderer (AVTransport / RenderingControl)** standards.
 * Auto-discovery across local networks using **SSDP Discovery**.
+* **Toggleable Local MediaRenderer**: Configurable option in Settings and Menu Bar to enable or disable the local AMR UPnP renderer when dedicated network streamers (BluOS) or Home Assistant are active.
 * Seamless integration with **Home Assistant**, smart speakers, and DLNA controllers: Play, Pause, Stop, Seek, and Volume control.
 * Built-in **Audio Ducking** for voice assistants (TTS announcements softly attenuate music and automatically restore level).
 
 ### 🍏 100% Native macOS Menu Bar App
 * Built in Swift using native frameworks (`CoreAudio`, `Network.framework`, `ScriptingBridge`, `ServiceManagement`).
+* **MusicAppLifecycleManager**: Proactive watchdog monitoring Music.app and IPC responsiveness, recovering state automatically from app hangs.
 * Standalone **Universal 2** binary (`arm64` Apple Silicon + `x86_64` Intel).
 * Menu bar companion: Music.app status, audio device and sample rate picker, settings window, and instant QR code display for pairing mobile devices.
 * Optional **Launch at Login** support.
@@ -93,7 +103,7 @@ cd amr
 
 ### Running Tests
 
-#### Swift Unit Tests (132 tests):
+#### Swift Unit Tests (181 tests):
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path AppleMusicRemoteMac
 ```

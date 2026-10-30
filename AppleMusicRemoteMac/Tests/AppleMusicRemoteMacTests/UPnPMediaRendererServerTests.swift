@@ -106,4 +106,25 @@ final class UPnPMediaRendererServerTests: XCTestCase {
         XCTAssertTrue(escaped.contains("&amp;amp;name="))
         XCTAssertFalse(escaped.contains("&name="))
     }
+
+    func testLocalDMRToggleAndPersistence() {
+        let server = UPnPMediaRendererServer.shared
+        UserDefaults.standard.removeObject(forKey: UPnPMediaRendererServer.defaultsKey)
+
+        // Default should be true
+        XCTAssertTrue(server.isEnabled)
+
+        // Toggle to false
+        server.setEnabled(false)
+        XCTAssertFalse(server.isEnabled)
+        XCTAssertFalse(UserDefaults.standard.bool(forKey: UPnPMediaRendererServer.defaultsKey))
+
+        // startIfEnabled should return false when disabled
+        XCTAssertFalse(server.startIfEnabled(port: 8090))
+
+        // Toggle back to true
+        server.setEnabled(true)
+        XCTAssertTrue(server.isEnabled)
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: UPnPMediaRendererServer.defaultsKey))
+    }
 }

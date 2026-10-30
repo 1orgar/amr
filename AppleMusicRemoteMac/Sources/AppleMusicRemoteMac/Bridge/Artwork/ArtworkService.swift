@@ -95,9 +95,11 @@ public final class ArtworkService: @unchecked Sendable {
         defer { lock.unlock() }
         if let id = id {
             artworkCache.removeObject(forKey: "track_\(id)" as NSString)
+            ArtworkDiskCache.shared.remove(key: "track_\(id)")
             negativeArtworkIds.remove(id)
         } else {
             artworkCache.removeAllObjects()
+            ArtworkDiskCache.shared.clear()
             negativeArtworkIds.removeAll()
             cachedCurArtworkKey = ""
             cachedCurArtworkUri = ""
@@ -120,6 +122,12 @@ public final class ArtworkService: @unchecked Sendable {
             return cached
         }
 
+        // Fast path 0: Check persistent disk LRU cache
+        if let diskData = ArtworkDiskCache.shared.get(key: "track_\(id)") {
+            artworkCache.setObject(diskData as NSData, forKey: cacheKey)
+            return diskData
+        }
+
         // Fast path 1: Check if requested id matches currently playing track (must be local file track)
         if let app = MusicAppProvider.shared.getMusicApp(), let curTrack = app.currentTrack {
             if let curId = curTrack.value(forKey: "databaseID") as? Int, curId == id {
@@ -128,6 +136,7 @@ public final class ArtworkService: @unchecked Sendable {
                     negativeArtworkIds.remove(id)
                     lock.unlock()
                     artworkCache.setObject(d as NSData, forKey: cacheKey)
+                    ArtworkDiskCache.shared.set(key: "track_\(id)", data: d)
                     return d
                 }
             }
@@ -158,9 +167,11 @@ public final class ArtworkService: @unchecked Sendable {
             let d = desc.data
             if let img = NSImage(data: d), let jpeg = jpegData(from: img, maxDimension: 600) {
                 artworkCache.setObject(jpeg as NSData, forKey: cacheKey)
+                ArtworkDiskCache.shared.set(key: "track_\(id)", data: jpeg)
                 return jpeg
             }
             artworkCache.setObject(d as NSData, forKey: cacheKey)
+            ArtworkDiskCache.shared.set(key: "track_\(id)", data: d)
             return d
         }
 
@@ -208,6 +219,12 @@ public final class ArtworkService: @unchecked Sendable {
             return cached
         }
 
+        // Fast path 0: Check persistent disk LRU cache
+        if let diskData = ArtworkDiskCache.shared.get(key: "playlist_\(name)") {
+            artworkCache.setObject(diskData as NSData, forKey: cacheKey)
+            return diskData
+        }
+
         let escapedPlName = name.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let script = """
         tell application "Music"
@@ -250,9 +267,11 @@ public final class ArtworkService: @unchecked Sendable {
         if !d.isEmpty, let img = NSImage(data: d) {
             if let jpeg = jpegData(from: img, maxDimension: 300) {
                 artworkCache.setObject(jpeg as NSData, forKey: cacheKey)
+                ArtworkDiskCache.shared.set(key: "playlist_\(name)", data: jpeg)
                 return jpeg
             }
             artworkCache.setObject(d as NSData, forKey: cacheKey)
+            ArtworkDiskCache.shared.set(key: "playlist_\(name)", data: d)
             return d
         }
         return nil
