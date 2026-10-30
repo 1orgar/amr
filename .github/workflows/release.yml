@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     name: Run Unit Tests (Blocking Gate)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 15
 
     steps:
@@ -43,7 +43,7 @@ jobs:
   build-and-release:
     name: Build Universal DMG & Publish Release
     needs: test
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 25
     permissions:
       contents: write

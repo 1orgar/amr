@@ -13,7 +13,7 @@ concurrency:
 jobs:
   test:
     name: Unit Tests & Build Verification
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 15
 
     steps:
