@@ -108,9 +108,9 @@ cat << 'PLIST' > "$CONTENTS_DIR/Info.plist"
     <key>CFBundleIdentifier</key>
     <string>org.ksholokhov.amr.mac</string>
     <key>CFBundleVersion</key>
-    <string>2.3.0</string>
+    <string>2.4.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.3.0</string>
+    <string>2.4.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>

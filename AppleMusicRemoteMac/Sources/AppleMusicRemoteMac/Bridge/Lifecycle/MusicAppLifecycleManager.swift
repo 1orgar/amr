@@ -251,9 +251,8 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
             consecutiveFailures = 0
             if currentState != .running && currentState != .recovering {
                 transitionToStateLocked(.running, reason: "Watchdog probe succeeded")
-            } else {
-                stateLock.unlock()
             }
+            stateLock.unlock()
         } else {
             consecutiveFailures += 1
             NSLog("[MusicAppLifecycleManager] ⚠️ Watchdog probe failed (%d/%d)", consecutiveFailures, failureThreshold)

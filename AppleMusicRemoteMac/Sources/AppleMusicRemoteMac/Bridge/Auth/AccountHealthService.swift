@@ -325,6 +325,7 @@ public final class AccountHealthService: @unchecked Sendable {
                        let dataArr = json["data"] as? [[String: Any]],
                        let first = dataArr.first,
                        let sfId = first["id"] as? String {
+                        MusicKitManager.shared.updateStorefrontMetadata(from: first)
                         return (true, false, sfId)
                     }
                     return (true, false, nil)
@@ -342,13 +343,15 @@ public final class AccountHealthService: @unchecked Sendable {
 
     private func verifyLibraryFingerprint(userToken: String) async -> Bool {
         guard let devToken = MusicKitManager.shared.getDeveloperToken() else { return true }
-        guard let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists?limit=8") else { return true }
+        let lang = MusicKitManager.shared.getPreferredLanguageTag()
+        guard let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists?limit=8&l=\(lang)") else { return true }
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.timeoutInterval = 6.0
         req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
         req.setValue(userToken, forHTTPHeaderField: "Music-User-Token")
+        req.setValue(lang, forHTTPHeaderField: "Accept-Language")
 
         var cloudNames = Set<String>()
         do {

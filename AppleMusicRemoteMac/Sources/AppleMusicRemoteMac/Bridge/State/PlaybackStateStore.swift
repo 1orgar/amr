@@ -15,6 +15,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
 
     // Custom Queue State
     public var activeCustomQueue: [TrackInfo] = []
+    public var originalCustomQueue: [TrackInfo] = []
     public var activeCustomQueueIndex: Int = 0
     public var activeCustomQueueName: String?
     public var isCustomQueuePlayback: Bool = false
@@ -28,12 +29,26 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public var activeShuffledQueue: [TrackInfo] = []
     public var activeShuffledPlaylistName: String?
     public var isShuffleQueueActive: Bool = false
+    public var repeatMode: String = "off"
+
+    // Search Query State for Auto-Paging
+    public var activeSearchQuery: String?
+    public var activeSearchCountry: String?
+    public var activeSearchOffset: Int = 0
+    public var isFetchingNextSearchPage: Bool = false
 
     // Cloud / Auto-Advance Tracking
     public var lastWasPlayingCloud: Bool = false
     public var lastCloudPlayTime: Date?
     public var currentTrackPlaybackConfirmed: Bool = false
     public var hasTriggeredAdvanceForCurrentTrack: Bool = false
+    public var lastKnownPosition: Double = 0.0
+
+    // Temporary Cloud Tracks Staged in Library Playlist 1
+    public var stagedTemporaryTrackDbIds: Set<Int> = {
+        let saved = UserDefaults.standard.array(forKey: "AMRStagedTemporaryTrackDbIds") as? [Int] ?? []
+        return Set(saved)
+    }()
 
     // Cached History & Upcoming
     public var latestHistoryTracks: [TrackInfo] = []
@@ -48,14 +63,17 @@ public final class PlaybackStateStore: @unchecked Sendable {
 
     // Track Skip & Stream Transition Debounce
     public var lastSkipTime: Date = .distantPast
+    public var isStagingCloudTrack: Bool = false
+    public var playbackGeneration: UInt64 = 0
     public var isTransitioningTrack: Bool {
-        Date().timeIntervalSince(lastSkipTime) < 2.5
+        isStagingCloudTrack || Date().timeIntervalSince(lastSkipTime) < 2.5
     }
 
     // Status & Queue Caches
     public var lastPlayerStatusCache: (timestamp: Date, status: PlayerStatus)?
     public var playbackQueueCache: (timestamp: Date, info: PlaybackQueueInfo)?
     public var trackMetadataCache: [Int: (name: String, artist: String, album: String)] = [:]
+    public var needsStaticMetadataRefresh: Bool = true
 
     // Volume State (simulated when Music.app is not active or in test runners)
     public var simulatedVolume: Int = 50
@@ -103,7 +121,14 @@ public final class PlaybackStateStore: @unchecked Sendable {
             }
         } else {
             lastPlayerStatusCache = nil
+            needsStaticMetadataRefresh = true
         }
+        lock.unlock()
+    }
+
+    public func markStaticMetadataNeedsRefresh() {
+        lock.lock()
+        needsStaticMetadataRefresh = true
         lock.unlock()
     }
 
@@ -111,6 +136,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
         lock.lock()
         playbackQueueCache = nil
         lastPlayerStatusCache = nil
+        needsStaticMetadataRefresh = true
         lock.unlock()
     }
 
@@ -136,12 +162,19 @@ public final class PlaybackStateStore: @unchecked Sendable {
         playbackQueueCache = nil
         isCustomQueuePlayback = false
         activeCustomQueue.removeAll()
+        originalCustomQueue.removeAll()
         activeCustomQueueName = nil
         currentTrackPlaybackConfirmed = false
         hasTriggeredAdvanceForCurrentTrack = false
         lastWasPlayingCloud = false
         lastCloudPlayTime = nil
+        lastKnownPosition = 0.0
         lastSkipTime = .distantPast
+        activeSearchQuery = nil
+        activeSearchCountry = nil
+        activeSearchOffset = 0
+        isFetchingNextSearchPage = false
+        needsStaticMetadataRefresh = true
     }
 
     public func resetCustomQueue() {
@@ -150,6 +183,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
         isUserPaused = false
         isCustomQueuePlayback = false
         activeCustomQueue.removeAll()
+        originalCustomQueue.removeAll()
         activeCustomQueueIndex = 0
         activeCustomQueueName = nil
         isRadioPlayback = false
@@ -160,7 +194,68 @@ public final class PlaybackStateStore: @unchecked Sendable {
         hasTriggeredAdvanceForCurrentTrack = false
         lastWasPlayingCloud = false
         lastCloudPlayTime = nil
+        lastKnownPosition = 0.0
         lastSkipTime = .distantPast
+        isShuffleQueueActive = false
+        repeatMode = "off"
+        activeShuffledQueue.removeAll()
+        activeSearchQuery = nil
+        activeSearchCountry = nil
+        activeSearchOffset = 0
+        isFetchingNextSearchPage = false
+        needsStaticMetadataRefresh = true
+    }
+
+    public func registerStagedTemporaryTrack(dbId: Int) {
+        guard dbId > 0 else { return }
+        lock.lock()
+        stagedTemporaryTrackDbIds.insert(dbId)
+        let snapshot = Array(stagedTemporaryTrackDbIds)
+        lock.unlock()
+        UserDefaults.standard.set(snapshot, forKey: "AMRStagedTemporaryTrackDbIds")
+    }
+
+    public func unregisterStagedTemporaryTrack(dbId: Int) {
+        guard dbId > 0 else { return }
+        lock.lock()
+        stagedTemporaryTrackDbIds.remove(dbId)
+        let snapshot = Array(stagedTemporaryTrackDbIds)
+        lock.unlock()
+        UserDefaults.standard.set(snapshot, forKey: "AMRStagedTemporaryTrackDbIds")
+    }
+
+    public func cleanupStagedTemporaryTracks(keepingActiveQueue: Bool = false) {
+        let toDelete: [Int] = withLock {
+            var keep = Set<Int>()
+            if keepingActiveQueue {
+                for t in activeCustomQueue {
+                    if let nid = t.numericId, nid > 0 {
+                        keep.insert(nid)
+                    }
+                }
+            }
+            let targets = stagedTemporaryTrackDbIds.subtracting(keep)
+            stagedTemporaryTrackDbIds.subtract(targets)
+            let snapshot = Array(stagedTemporaryTrackDbIds)
+            UserDefaults.standard.set(snapshot, forKey: "AMRStagedTemporaryTrackDbIds")
+            return Array(targets)
+        }
+        guard !toDelete.isEmpty, !PlaybackRouter.shared.isTestingEnvironment else { return }
+        let idList = toDelete.map { "\($0)" }.joined(separator: ", ")
+        DispatchQueue.global(qos: .utility).async {
+            _ = AppleScriptExecutor.shared.execute("""
+            tell application "Music"
+                try
+                    repeat with tid in {\(idList)}
+                        try
+                            delete (every track of library playlist 1 whose database ID is (contents of tid))
+                        end try
+                    end repeat
+                end try
+            end tell
+            """)
+            LibraryService.shared.invalidateLibrarySongsCache()
+        }
     }
 
     public func setSeekTarget(position: Double) {

@@ -14,17 +14,50 @@ public final class LibraryService: @unchecked Sendable {
     public static let shared = LibraryService()
 
     private let lock = NSLock()
+    private let playlistsFetchLock = NSLock()
+    private let librarySongsFetchLock = NSLock()
+    private var playlistFetchLocks: [String: NSLock] = [:]
     private var playlistsCache: (timestamp: Date, playlists: [PlaylistInfo])?
     private var playlistTracksCache: [String: (timestamp: Date, tracks: [TrackInfo])] = [:]
     private var librarySongsCache: (timestamp: Date, tracks: [TrackInfo])?
+    private var subscriptionSongsCache: (timestamp: Date, tracks: [TrackInfo])?
+    private var librarySongsByNormalizedTitle: [String: [TrackInfo]] = [:]
     private var cachedHomeFeed: [String: Any]?
     private var homeFeedTimestamp: Date?
+
+    private static let removableTitleTags = [
+        " (remastered)", " [remastered]", " (remaster)", " [remaster]",
+        " (2011 remaster)", " (2013 remaster)", " (deluxe edition)",
+        " (deluxe)", " [deluxe]", " (single version)", " (album version)",
+        " - single", " - ep"
+    ]
+
+    public static func normalizeMatchingTitle(_ t: String) -> String {
+        var s = t.lowercased()
+        for tag in removableTitleTags {
+            if s.contains(tag) {
+                s = s.replacingOccurrences(of: tag, with: "")
+            }
+        }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private init() {}
 
     // MARK: - Playlists
 
     public func getPlaylists(forceRefresh: Bool = false) -> [PlaylistInfo] {
+        lock.lock()
+        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 30.0 {
+            let list = cached.playlists
+            lock.unlock()
+            return list
+        }
+        lock.unlock()
+
+        playlistsFetchLock.lock()
+        defer { playlistsFetchLock.unlock() }
+
         lock.lock()
         if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 30.0 {
             let list = cached.playlists
@@ -162,6 +195,26 @@ public final class LibraryService: @unchecked Sendable {
             lock.unlock()
             return cached
         }
+        let plLock: NSLock
+        if let existing = playlistFetchLocks[name] {
+            plLock = existing
+        } else {
+            let newLock = NSLock()
+            playlistFetchLocks[name] = newLock
+            plLock = newLock
+        }
+        lock.unlock()
+
+        plLock.lock()
+        defer { plLock.unlock() }
+
+        lock.lock()
+        if let entry = playlistTracksCache[name], Date().timeIntervalSince(entry.timestamp) < 20.0 {
+            let cached = entry.tracks
+            lock.unlock()
+            return cached
+        }
+        let staleFallback = playlistTracksCache[name]?.tracks
         lock.unlock()
 
         MusicAppProvider.shared.ensureMusicAppRunning()
@@ -200,7 +253,8 @@ public final class LibraryService: @unchecked Sendable {
         """
 
         var result = [TrackInfo]()
-        if let desc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc), desc.numberOfItems >= 6 {
+        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc)
+        if let desc = rawDesc, desc.numberOfItems >= 6 {
             let idsDesc = desc.atIndex(1)
             let namesDesc = desc.atIndex(2)
             let artistsDesc = desc.atIndex(3)
@@ -258,10 +312,17 @@ public final class LibraryService: @unchecked Sendable {
             }
         }
 
+        if rawDesc == nil, let fallback = staleFallback, !fallback.isEmpty {
+            NSLog("[LibraryService] getPlaylistTracks('%@') returning %d stale cached tracks after AppleScript contention", name, fallback.count)
+            return fallback
+        }
+
         NSLog("[LibraryService] getPlaylistTracks('%@') returning %d tracks", name, result.count)
-        lock.lock()
-        playlistTracksCache[name] = (timestamp: Date(), tracks: result)
-        lock.unlock()
+        if rawDesc != nil || !result.isEmpty {
+            lock.lock()
+            playlistTracksCache[name] = (timestamp: Date(), tracks: result)
+            lock.unlock()
+        }
 
         return result
     }
@@ -294,7 +355,8 @@ public final class LibraryService: @unchecked Sendable {
         """
 
         var result = [TrackInfo]()
-        if let desc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc), desc.numberOfItems >= 6 {
+        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc)
+        if let desc = rawDesc, desc.numberOfItems >= 6 {
             let idsDesc = desc.atIndex(1)
             let namesDesc = desc.atIndex(2)
             let artistsDesc = desc.atIndex(3)
@@ -341,6 +403,12 @@ public final class LibraryService: @unchecked Sendable {
         return result
     }
 
+    public func invalidatePlaylistsCache() {
+        lock.lock()
+        playlistsCache = nil
+        lock.unlock()
+    }
+
     public func invalidatePlaylistCache(name: String) {
         lock.lock()
         playlistTracksCache.removeValue(forKey: name)
@@ -364,6 +432,18 @@ public final class LibraryService: @unchecked Sendable {
         }
         lock.unlock()
 
+        librarySongsFetchLock.lock()
+        defer { librarySongsFetchLock.unlock() }
+
+        lock.lock()
+        if let entry = librarySongsCache, Date().timeIntervalSince(entry.timestamp) < 30.0 {
+            let cached = entry.tracks
+            lock.unlock()
+            return cached
+        }
+        let staleFallback = librarySongsCache?.tracks
+        lock.unlock()
+
         let scriptSrc = """
         tell application "Music"
             try
@@ -381,7 +461,8 @@ public final class LibraryService: @unchecked Sendable {
         """
 
         var result = [TrackInfo]()
-        if let desc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc), desc.numberOfItems >= 6 {
+        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc)
+        if let desc = rawDesc, desc.numberOfItems >= 6 {
             let idsDesc = desc.atIndex(1)
             let namesDesc = desc.atIndex(2)
             let artistsDesc = desc.atIndex(3)
@@ -425,20 +506,318 @@ public final class LibraryService: @unchecked Sendable {
                 }
             }
 
+            var normMap = [String: [TrackInfo]](minimumCapacity: result.count + 256)
+            for song in result {
+                let norm = Self.normalizeMatchingTitle(song.name)
+                if !norm.isEmpty {
+                    normMap[norm, default: []].append(song)
+                }
+            }
+
+            let subSongs = getSubscriptionPlaylistSongs()
+            for song in subSongs {
+                let norm = Self.normalizeMatchingTitle(song.name)
+                if !norm.isEmpty {
+                    normMap[norm, default: []].append(song)
+                }
+            }
+
             lock.lock()
             librarySongsCache = (Date(), result)
+            librarySongsByNormalizedTitle = normMap
             lock.unlock()
 
             return result
         }
 
+        if let fallback = staleFallback, !fallback.isEmpty {
+            return fallback
+        }
         return []
+    }
+
+    private func getSubscriptionPlaylistSongs() -> [TrackInfo] {
+        lock.lock()
+        if let entry = subscriptionSongsCache, Date().timeIntervalSince(entry.timestamp) < 300.0 {
+            let cached = entry.tracks
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let scriptSrc = """
+        tell application "Music"
+            try
+                with timeout of 4 seconds
+                    set allIds to {}
+                    set allNames to {}
+                    set allArtists to {}
+                    set allAlbums to {}
+                    set allDurs to {}
+                    repeat with sp in (get every subscription playlist)
+                        try
+                            set allIds to allIds & (database ID of tracks of sp)
+                            set allNames to allNames & (name of tracks of sp)
+                            set allArtists to allArtists & (artist of tracks of sp)
+                            set allAlbums to allAlbums & (album of tracks of sp)
+                            set allDurs to allDurs & (duration of tracks of sp)
+                        end try
+                    end repeat
+                    return {allIds, allNames, allArtists, allAlbums, allDurs}
+                end timeout
+            on error
+                return {}
+            end try
+        end tell
+        """
+
+        var subResult = [TrackInfo]()
+        if let desc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc), desc.numberOfItems >= 5 {
+            let idsDesc = desc.atIndex(1)
+            let namesDesc = desc.atIndex(2)
+            let artistsDesc = desc.atIndex(3)
+            let albumsDesc = desc.atIndex(4)
+            let dursDesc = desc.atIndex(5)
+            let count = namesDesc?.numberOfItems ?? 0
+            if count > 0 {
+                subResult.reserveCapacity(count)
+                for i in 1...count {
+                    let dbId = Int(idsDesc?.atIndex(i)?.int32Value ?? 0)
+                    let tName = namesDesc?.atIndex(i)?.stringValue ?? ""
+                    let tArtist = artistsDesc?.atIndex(i)?.stringValue ?? ""
+                    let tAlbum = albumsDesc?.atIndex(i)?.stringValue ?? ""
+                    let dur = dursDesc?.atIndex(i)?.doubleValue ?? 0
+                    if dbId > 0 && !tName.isEmpty {
+                        subResult.append(TrackInfo(
+                            id: "\(dbId)",
+                            numericId: dbId,
+                            name: tName,
+                            artist: tArtist,
+                            album: tAlbum,
+                            duration: dur,
+                            hasArtwork: true,
+                            artworkUrl: "",
+                            favorited: false,
+                            isLocal: true,
+                            index: i
+                        ))
+                    }
+                }
+            }
+        }
+        lock.lock()
+        subscriptionSongsCache = (Date(), subResult)
+        lock.unlock()
+        return subResult
+    }
+
+    public func invalidateLibrarySongsCache() {
+        lock.lock()
+        librarySongsCache = nil
+        subscriptionSongsCache = nil
+        lock.unlock()
+    }
+
+    public func registerStagedTrackInCache(dbId: Int, name: String, artist: String, album: String = "", duration: Double = 0) {
+        guard dbId > 0, !name.isEmpty else { return }
+        let encN = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let encA = artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let encAl = album.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
+        let info = TrackInfo(
+            id: "\(dbId)",
+            numericId: dbId,
+            name: name,
+            artist: artist,
+            album: album,
+            duration: duration,
+            hasArtwork: true,
+            artworkUrl: artUrl,
+            favorited: false,
+            isLocal: true,
+            index: 1
+        )
+        let norm = Self.normalizeMatchingTitle(name)
+        lock.lock()
+        if var cached = librarySongsCache {
+            if !cached.tracks.contains(where: { $0.numericId == dbId }) {
+                cached.tracks.append(info)
+                librarySongsCache = (cached.timestamp, cached.tracks)
+            }
+        }
+        if !norm.isEmpty {
+            var list = librarySongsByNormalizedTitle[norm] ?? []
+            if !list.contains(where: { $0.numericId == dbId }) {
+                list.append(info)
+                librarySongsByNormalizedTitle[norm] = list
+            }
+        }
+        lock.unlock()
+    }
+
+    public func resolveLocalLibraryMatches(_ tracks: [TrackInfo], updateNames: Bool = false) -> [TrackInfo] {
+        guard !tracks.isEmpty else { return tracks }
+        _ = getLibrarySongs()
+        lock.lock()
+        let normMap = librarySongsByNormalizedTitle
+        lock.unlock()
+        guard !normMap.isEmpty else { return tracks }
+
+        var resolved = tracks
+        for i in 0..<resolved.count {
+            let hasCatalogUrl = (resolved[i].url?.isEmpty == false)
+            let isCatalogNumericId = (resolved[i].numericId ?? 0) >= 10_000_000 || (Int(resolved[i].id) ?? 0) >= 10_000_000
+            if resolved[i].numericId == nil || resolved[i].isLocal != true || hasCatalogUrl || isCatalogNumericId {
+                let n = Self.normalizeMatchingTitle(resolved[i].name)
+                guard !n.isEmpty else { continue }
+                let a = resolved[i].artist.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+
+                var matchedTrack: TrackInfo? = nil
+                if let candidates = normMap[n] {
+                    matchedTrack = candidates.first(where: {
+                        let la = $0.artist.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                        if updateNames {
+                            return !a.isEmpty && !la.isEmpty && (la == a || la.contains(a) || a.contains(la))
+                        } else {
+                            return a.isEmpty || la.isEmpty || la.contains(a) || a.contains(la)
+                        }
+                    })
+                }
+                if matchedTrack == nil && updateNames && n.count >= 4 {
+                    for (sn, candidates) in normMap where sn.count >= 4 && (sn.hasPrefix(n) || n.hasPrefix(sn)) {
+                        if let m = candidates.first(where: {
+                            let sa = $0.artist.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+                            return !a.isEmpty && !sa.isEmpty && (sa == a || sa.contains(a) || a.contains(sa))
+                        }) {
+                            matchedTrack = m
+                            break
+                        }
+                    }
+                }
+                if let match = matchedTrack {
+                    resolved[i].numericId = match.numericId
+                    resolved[i].isLocal = true
+                    if resolved[i].duration <= 0 && match.duration > 0 {
+                        resolved[i].duration = match.duration
+                    }
+                    if updateNames {
+                        resolved[i].name = match.name
+                        resolved[i].artist = match.artist
+                    }
+                } else if hasCatalogUrl || isCatalogNumericId {
+                    resolved[i].isLocal = false
+                }
+            }
+        }
+        return resolved
     }
 
     public func getCachedLibrarySongs() -> [TrackInfo] {
         lock.lock()
         defer { lock.unlock() }
         return librarySongsCache?.tracks ?? []
+    }
+
+    // MARK: - Top Played Tracks (Most Played in Library)
+
+    public func getTopPlayedTracks(limit: Int = 25) -> [TrackInfo] {
+        let scriptSrc = """
+        tell application "Music"
+            try
+                with timeout of 4 seconds
+                    set p to playlist "Музыка"
+                    if not (exists p) then
+                        set p to playlist 1
+                    end if
+                    return {database ID of tracks of p, name of tracks of p, artist of tracks of p, album of tracks of p, duration of tracks of p, played count of tracks of p}
+                end timeout
+            on error
+                return {}
+            end try
+        end tell
+        """
+
+        guard let desc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc), desc.numberOfItems >= 6 else {
+            return Array(getLibrarySongs().prefix(limit))
+        }
+
+        let idsDesc = desc.atIndex(1)
+        let namesDesc = desc.atIndex(2)
+        let artistsDesc = desc.atIndex(3)
+        let albumsDesc = desc.atIndex(4)
+        let dursDesc = desc.atIndex(5)
+        let countsDesc = desc.atIndex(6)
+
+        let total = namesDesc?.numberOfItems ?? 0
+        guard total > 0 else { return [] }
+
+        struct Candidate {
+            let dbId: Int
+            let name: String
+            let artist: String
+            let album: String
+            let duration: Double
+            let playedCount: Int
+        }
+
+        var candidates = [Candidate]()
+        candidates.reserveCapacity(total)
+
+        for i in 1...total {
+            let dbId = Int(idsDesc?.atIndex(i)?.int32Value ?? 0)
+            let tName = namesDesc?.atIndex(i)?.stringValue ?? ""
+            let tArtist = artistsDesc?.atIndex(i)?.stringValue ?? ""
+            let tAlbum = albumsDesc?.atIndex(i)?.stringValue ?? ""
+            let dur = dursDesc?.atIndex(i)?.doubleValue ?? 0
+            let pCount = Int(countsDesc?.atIndex(i)?.int32Value ?? 0)
+
+            if isValidTrack(name: tName, artist: tArtist, duration: dur) {
+                candidates.append(Candidate(
+                    dbId: dbId,
+                    name: tName,
+                    artist: tArtist,
+                    album: tAlbum,
+                    duration: dur,
+                    playedCount: pCount
+                ))
+            }
+        }
+
+        candidates.sort { $0.playedCount > $1.playedCount }
+
+        var result = [TrackInfo]()
+        var seen = Set<String>()
+
+        for c in candidates {
+            if result.count >= limit { break }
+            let key = "\(c.name.lowercased())|\(c.artist.lowercased())"
+            if seen.contains(key) { continue }
+            seen.insert(key)
+
+            if c.dbId > 0 {
+                PlaybackStateStore.shared.setTrackMetadata(id: c.dbId, name: c.name, artist: c.artist, album: c.album)
+            }
+            let encN = c.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let encA = c.artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let encAl = c.album.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let artUrl = (c.dbId > 0) ? "/api/artwork/track?id=\(c.dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)" : ""
+
+            result.append(TrackInfo(
+                id: "\(c.dbId)",
+                numericId: c.dbId,
+                name: c.name,
+                artist: c.artist,
+                album: c.album,
+                duration: c.duration,
+                hasArtwork: !artUrl.isEmpty,
+                artworkUrl: artUrl,
+                favorited: false,
+                isLocal: true,
+                index: result.count + 1
+            ))
+        }
+
+        return result
     }
 
     // MARK: - Artists & Albums

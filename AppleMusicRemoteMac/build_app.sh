@@ -21,6 +21,24 @@ mkdir -p "$MODULE_CACHE"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 SDK_PATH="$(xcrun --show-sdk-path)"
 
+echo "🔄 Syncing Web/* assets with embedded WebUIContent+*.swift..."
+python3 - "$DIR" << 'PYEOF'
+import os, sys
+base = sys.argv[1]
+for name, sw, prop in [("app.js", "WebUIContent+JS.swift", "appJS"), ("style.css", "WebUIContent+CSS.swift", "styleCSS"), ("index.html", "WebUIContent+HTML.swift", "indexHTML")]:
+    web_path = os.path.join(base, "Web", name)
+    sw_path = os.path.join(base, "Sources", "AppleMusicRemoteMac", "Server", sw)
+    if os.path.isfile(web_path) and os.path.isfile(sw_path):
+        with open(web_path, "r", encoding="utf-8") as f:
+            web_s = f.read().rstrip("\n")
+        out = f"//\n//  {sw}\n//  AppleMusicRemoteMac\n//\n\nimport Foundation\n\nextension WebUIContent {{\n    public static let {prop}: String = #\"\"\"\n{web_s}\n\"\"\"#\n}}\n"
+        with open(sw_path, "r", encoding="utf-8") as f:
+            cur_s = f.read()
+        if cur_s != out:
+            with open(sw_path, "w", encoding="utf-8") as f:
+                f.write(out)
+PYEOF
+
 echo "⚡ Compiling Swift sources with swiftc..."
 SWIFT_SOURCES=()
 while IFS= read -r -d '' file; do
@@ -76,9 +94,9 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
     <key>CFBundleIdentifier</key>
     <string>org.ksholokhov.amr.mac</string>
     <key>CFBundleVersion</key>
-    <string>2.3.0</string>
+    <string>2.4.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.3.0</string>
+    <string>2.4.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>

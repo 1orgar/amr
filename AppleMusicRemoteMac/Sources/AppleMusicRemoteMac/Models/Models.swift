@@ -25,6 +25,7 @@ public struct PlayerStatus: Codable, Sendable {
     public var track: TrackInfo?
     public var audioDeviceName: String?
     public var audioDeviceSampleRate: Double?
+    public var audioDeviceBitDepth: Int?
     public var isBitPerfect: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -43,6 +44,7 @@ public struct PlayerStatus: Codable, Sendable {
         case track
         case audioDeviceName = "audio_device_name"
         case audioDeviceSampleRate = "audio_device_sample_rate"
+        case audioDeviceBitDepth = "audio_device_bit_depth"
         case isBitPerfect = "is_bit_perfect"
     }
 
@@ -62,6 +64,7 @@ public struct PlayerStatus: Codable, Sendable {
         track: TrackInfo? = nil,
         audioDeviceName: String? = nil,
         audioDeviceSampleRate: Double? = nil,
+        audioDeviceBitDepth: Int? = nil,
         isBitPerfect: Bool? = nil
     ) {
         self.playerState = playerState
@@ -79,6 +82,7 @@ public struct PlayerStatus: Codable, Sendable {
         self.track = track
         self.audioDeviceName = audioDeviceName
         self.audioDeviceSampleRate = audioDeviceSampleRate
+        self.audioDeviceBitDepth = audioDeviceBitDepth
         self.isBitPerfect = isBitPerfect
     }
 
@@ -99,6 +103,7 @@ public struct PlayerStatus: Codable, Sendable {
         self.track = try container.decodeIfPresent(TrackInfo.self, forKey: .track)
         self.audioDeviceName = try container.decodeIfPresent(String.self, forKey: .audioDeviceName)
         self.audioDeviceSampleRate = try container.decodeIfPresent(Double.self, forKey: .audioDeviceSampleRate)
+        self.audioDeviceBitDepth = try container.decodeIfPresent(Int.self, forKey: .audioDeviceBitDepth)
         self.isBitPerfect = try container.decodeIfPresent(Bool.self, forKey: .isBitPerfect)
     }
 
@@ -214,19 +219,40 @@ public struct PlaylistInfo: Codable, Sendable {
     public var trackCount: Int
     public var artworkUrl: String?
     public var isPlaylist: Bool
+    public var id: String?
+    public var url: String?
+    public var curatorName: String?
+    public var description: String?
 
     enum CodingKeys: String, CodingKey {
         case name
         case trackCount = "track_count"
         case artworkUrl = "artwork_url"
         case isPlaylist = "is_playlist"
+        case id
+        case url
+        case curatorName = "curator_name"
+        case description
     }
 
-    public init(name: String, trackCount: Int, artworkUrl: String? = nil, isPlaylist: Bool = true) {
+    public init(
+        name: String,
+        trackCount: Int,
+        artworkUrl: String? = nil,
+        isPlaylist: Bool = true,
+        id: String? = nil,
+        url: String? = nil,
+        curatorName: String? = nil,
+        description: String? = nil
+    ) {
         self.name = name
         self.trackCount = trackCount
         self.artworkUrl = artworkUrl
         self.isPlaylist = isPlaylist
+        self.id = id
+        self.url = url
+        self.curatorName = curatorName
+        self.description = description
     }
 }
 
@@ -304,6 +330,8 @@ public struct StationInfo: Codable, Sendable {
     public var url: String
     public var isLive: Bool
     public var color: String
+    public var isPersonal: Bool?
+    public var provider: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -313,9 +341,21 @@ public struct StationInfo: Codable, Sendable {
         case url
         case isLive = "is_live"
         case color
+        case isPersonal = "is_personal"
+        case provider
     }
 
-    public init(id: String, name: String, subtitle: String, artwork: String, url: String, isLive: Bool, color: String) {
+    public init(
+        id: String,
+        name: String,
+        subtitle: String,
+        artwork: String,
+        url: String,
+        isLive: Bool,
+        color: String,
+        isPersonal: Bool? = nil,
+        provider: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.subtitle = subtitle
@@ -323,6 +363,8 @@ public struct StationInfo: Codable, Sendable {
         self.url = url
         self.isLive = isLive
         self.color = color
+        self.isPersonal = isPersonal
+        self.provider = provider
     }
 }
 
@@ -513,3 +555,55 @@ public struct SearchResponse: Codable, Sendable {
         self.artists = artists
     }
 }
+
+// MARK: - Personal Recommendations & Mixes
+
+public struct RecommendationResource: Codable, Sendable {
+    public var id: String
+    public var type: String // "stations", "playlists", "albums"
+    public var name: String
+    public var subtitle: String?
+    public var artworkUrl: String?
+    public var url: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case name
+        case subtitle
+        case artworkUrl = "artwork_url"
+        case url
+    }
+
+    public init(id: String, type: String, name: String, subtitle: String? = nil, artworkUrl: String? = nil, url: String? = nil) {
+        self.id = id
+        self.type = type
+        self.name = name
+        self.subtitle = subtitle
+        self.artworkUrl = artworkUrl
+        self.url = url
+    }
+}
+
+public struct PersonalRecommendationGroup: Codable, Sendable {
+    public var id: String
+    public var title: String
+    public var contents: [RecommendationResource]
+
+    public init(id: String, title: String, contents: [RecommendationResource] = []) {
+        self.id = id
+        self.title = title
+        self.contents = contents
+    }
+}
+
+public struct PersonalMixesResponse: Codable, Sendable {
+    public var mixes: [PlaylistInfo]
+    public var stations: [StationInfo]
+
+    public init(mixes: [PlaylistInfo] = [], stations: [StationInfo] = []) {
+        self.mixes = mixes
+        self.stations = stations
+    }
+}
+

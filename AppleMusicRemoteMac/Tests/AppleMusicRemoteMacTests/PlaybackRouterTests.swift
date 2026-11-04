@@ -402,7 +402,7 @@ final class PlaybackRouterTests: XCTestCase {
         XCTAssertFalse(openedUrls[0].absoluteString.contains("ra."), "Must NOT use radio station scheme when direct track URL is available")
     }
 
-    func testPlayCloudSyncFallsBackToStationWhenNoUrl() {
+    func testPlayCloudSyncDoesNotFallBackToStationWhenNoUrl() {
         let router = PlaybackRouter.shared
         var openedUrls: [URL] = []
         router.urlOpener = { url in
@@ -411,10 +411,105 @@ final class PlaybackRouterTests: XCTestCase {
         }
         defer { router.urlOpener = nil }
 
-        let ok = router.playCloudSync(url: nil, id: "1440743781", name: "Nookie", artist: "Limp Bizkit")
+        _ = router.playCloudSync(url: nil, id: "1440743781", name: "Nookie", artist: "Limp Bizkit")
+        // Must NEVER open radio station scheme ra.<id>
+        for opened in openedUrls {
+            XCTAssertFalse(opened.absoluteString.contains("ra."), "Must NOT use radio station scheme when url is missing")
+        }
+    }
+
+    func testPlayHeroCardPlaylistNeverOpensRadioStation() async {
+        let router = PlaybackRouter.shared
+        var openedUrls: [URL] = []
+        router.urlOpener = { url in
+            openedUrls.append(url)
+            return true
+        }
+        defer { router.urlOpener = nil }
+
+        _ = await router.playHeroCard(
+            index: 2,
+            name: "Your Essentials",
+            artist: "Apple Music",
+            cardId: "pl.pm-20e9f373919da080c2f90eaf2e62e914",
+            url: "https://music.apple.com/ru/playlist/your-essentials/pl.pm-20e9f373919da080c2f90eaf2e62e914",
+            type: "playlist"
+        )
+
+        for opened in openedUrls {
+            XCTAssertFalse(opened.absoluteString.contains("/station/"), "Hero playlist card must never open station URL")
+            XCTAssertFalse(opened.absoluteString.contains("ra."), "Hero playlist card must never open radio station ra.*")
+        }
+    }
+
+    func testPlaySearchResultsMaintainsStrictOrderAndUpcoming() async {
+        let router = PlaybackRouter.shared
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Song 1", artist: "Artist A", isLocal: true)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Song 2", artist: "Artist B", isLocal: true)
+        let track3 = TrackInfo(id: "3", numericId: 103, name: "Song 3", artist: "Artist C", isLocal: true)
+        let track4 = TrackInfo(id: "4", numericId: 104, name: "Song 4", artist: "Artist D", isLocal: true)
+
+        let ok = await router.playSearchResults(tracks: [track1, track2, track3, track4], startIndex: 1, shuffle: false)
         XCTAssertTrue(ok)
-        XCTAssertEqual(openedUrls.count, 1)
-        XCTAssertEqual(openedUrls[0].absoluteString, "music://music.apple.com/station/item/ra.1440743781")
+
+        let store = PlaybackStateStore.shared
+        store.withLock {
+            XCTAssertEqual(store.activeCustomQueueIndex, 1)
+            XCTAssertEqual(store.activeCustomQueue.count, 4)
+            XCTAssertEqual(store.latestHistoryTracks.count, 1)
+            XCTAssertEqual(store.latestHistoryTracks[0].name, "Song 1")
+            XCTAssertEqual(store.latestUpcomingTracks.count, 2)
+            XCTAssertEqual(store.latestUpcomingTracks[0].name, "Song 3")
+            XCTAssertEqual(store.latestUpcomingTracks[1].name, "Song 4")
+        }
+    }
+
+    func testPlaySearchResultsYourEssentialsStartsStrictlyAtFirstTrack() async {
+        let router = PlaybackRouter.shared
+        let track1 = TrackInfo(id: "1632737678", name: "Hitoshibai", artist: "Mai Fuchigami", isLocal: false)
+        let track2 = TrackInfo(id: "1489020922", name: "Minor Piece", artist: "ZAQ", isLocal: false)
+        let track3 = TrackInfo(id: "1554890123", name: "Beyond Selves", artist: "Void_Chords", isLocal: false)
+        let track4 = TrackInfo(id: "1602345678", name: "INORI", artist: "Masatoshi Ono", isLocal: false)
+        let track5 = TrackInfo(id: "1440783617", name: "Sonne", artist: "Rammstein", isLocal: false)
+
+        let tracks = [track1, track2, track3, track4, track5]
+        let ok = await router.playSearchResults(tracks: tracks, startIndex: 0, shuffle: false, queueName: "Your Essentials")
+        XCTAssertTrue(ok)
+
+        let store = PlaybackStateStore.shared
+        store.withLock {
+            // First track must be strictly Track 0 (Hitoshibai), never substituted by Sonne!
+            XCTAssertEqual(store.activeCustomQueueIndex, 0)
+            XCTAssertEqual(store.activeCustomQueue.count, 5)
+            XCTAssertEqual(store.activeCustomQueue[0].name, "Hitoshibai")
+            XCTAssertEqual(store.activeCustomQueue[0].artist, "Mai Fuchigami")
+            XCTAssertEqual(store.latestHistoryTracks.count, 0)
+            XCTAssertEqual(store.latestUpcomingTracks.count, 4)
+            XCTAssertEqual(store.latestUpcomingTracks[0].name, "Minor Piece")
+            XCTAssertEqual(store.latestUpcomingTracks[1].name, "Beyond Selves")
+            XCTAssertEqual(store.latestUpcomingTracks[2].name, "INORI")
+            XCTAssertEqual(store.latestUpcomingTracks[3].name, "Sonne")
+            XCTAssertEqual(store.activeCustomQueueName, "Your Essentials")
+        }
+    }
+
+    func testAddPlaylistToLibraryEmptyIdReturnsFalse() async {
+        let ok = await MusicKitManager.shared.addPlaylistToLibrary(playlistId: "")
+        XCTAssertFalse(ok)
+    }
+
+    func testPlayHeroCardResolvesEssentialsCard() async {
+        let router = PlaybackRouter.shared
+        // In testing environment, playHeroCard for playlist should succeed cleanly without crashing or hanging
+        let ok = await router.playHeroCard(
+            index: 2,
+            name: "Your Essentials",
+            artist: "Apple Music",
+            cardId: "pl.pm-20e9f373919da080c2f90eaf2e62e914",
+            url: "https://music.apple.com/us/playlist/your-essentials/pl.pm-20e9f373919da080c2f90eaf2e62e914",
+            type: "playlist"
+        )
+        XCTAssertTrue(ok)
     }
 }
 

@@ -19,6 +19,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
     public func play() -> Bool {
         PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused = false }
         PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "playing")
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
+        }
         MusicAppProvider.shared.ensureMusicAppRunning()
         if let app = MusicAppProvider.shared.getMusicApp() {
             if app.playerState == .stopped {
@@ -28,9 +31,6 @@ public final class PlaybackTransportController: @unchecked Sendable {
             }
             return true
         }
-        if PlaybackRouter.shared.isTestingEnvironment {
-            return true
-        }
         let (ok, _) = AppleScriptExecutor.shared.run("tell application \"Music\" to play")
         return ok
     }
@@ -38,11 +38,11 @@ public final class PlaybackTransportController: @unchecked Sendable {
     public func pause() -> Bool {
         PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused = true }
         PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "paused")
-        if let app = MusicAppProvider.shared.getMusicApp() {
-            app.pause()
-        }
         if PlaybackRouter.shared.isTestingEnvironment {
             return true
+        }
+        if let app = MusicAppProvider.shared.getMusicApp() {
+            app.pause()
         }
         _ = AppleScriptExecutor.shared.run("tell application \"Music\" to pause")
         return true
@@ -52,12 +52,12 @@ public final class PlaybackTransportController: @unchecked Sendable {
         PlaybackStateStore.shared.clearSeekTarget()
         PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused = true }
         PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "stopped")
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return true
+        }
         if let app = MusicAppProvider.shared.getMusicApp() {
             app.pause()
             app.playerPosition = 0
-            return true
-        }
-        if PlaybackRouter.shared.isTestingEnvironment {
             return true
         }
         let (ok, _) = AppleScriptExecutor.shared.run("""
@@ -92,7 +92,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
     public func nextTrack() -> Bool {
         transportLock.lock()
         let now = Date()
-        if now.timeIntervalSince(lastNextTrackTime) < 0.8 {
+        if now.timeIntervalSince(lastNextTrackTime) < 0.25 {
             transportLock.unlock()
             return true
         }
@@ -107,15 +107,22 @@ public final class PlaybackTransportController: @unchecked Sendable {
             PlaybackStateStore.shared.invalidateQueueCache()
         }
 
-        let isCustom = PlaybackStateStore.shared.withLock {
-            PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty
+        let (isCustom, count, curIdx, repMode) = PlaybackStateStore.shared.withLock {
+            (
+                PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
+                PlaybackStateStore.shared.activeCustomQueue.count,
+                PlaybackStateStore.shared.activeCustomQueueIndex,
+                PlaybackStateStore.shared.repeatMode
+            )
         }
 
         if isCustom {
-            PlaybackStateStore.shared.withLock {
-                let nextIdx = PlaybackStateStore.shared.activeCustomQueueIndex + 1
-                if nextIdx < PlaybackStateStore.shared.activeCustomQueue.count {
-                    _ = QueueManager.shared.playQueueIndexUnlocked(nextIdx)
+            let nextIdx = curIdx + 1
+            if nextIdx < count {
+                _ = QueueManager.shared.playQueueIndexUnlocked(nextIdx)
+            } else if repMode == "all" && count > 0 {
+                PlaybackStateStore.shared.withLock {
+                    QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "manual-next")
                 }
             }
             return true
@@ -179,10 +186,14 @@ public final class PlaybackTransportController: @unchecked Sendable {
                 return seek(to: 0.0)
             }
             if activeIdx > 0 {
-                return PlaybackStateStore.shared.withLock {
-                    QueueManager.shared.playQueueIndexUnlocked(activeIdx - 1)
-                }
+                return QueueManager.shared.playQueueIndexUnlocked(activeIdx - 1)
             } else {
+                let (repMode, count) = PlaybackStateStore.shared.withLock {
+                    (PlaybackStateStore.shared.repeatMode, PlaybackStateStore.shared.activeCustomQueue.count)
+                }
+                if repMode == "all" && count > 1 {
+                    return QueueManager.shared.playQueueIndexUnlocked(count - 1)
+                }
                 // At the start of custom queue: rewind to 0:00 of track 0, NEVER fall through to app.previousTrack()!
                 return seek(to: 0.0)
             }
@@ -276,30 +287,100 @@ public final class PlaybackTransportController: @unchecked Sendable {
         PlaybackStateStore.shared.invalidateQueueCache()
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isShuffleQueueActive = enabled
+            if PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty {
+                let currentQueue = PlaybackStateStore.shared.activeCustomQueue
+                let curIdx = PlaybackStateStore.shared.activeCustomQueueIndex
+                if enabled {
+                    if PlaybackStateStore.shared.originalCustomQueue.isEmpty {
+                        PlaybackStateStore.shared.originalCustomQueue = currentQueue
+                    }
+                    if curIdx >= 0 && curIdx < currentQueue.count && currentQueue.count > 1 {
+                        if curIdx + 1 < currentQueue.count {
+                            let head = Array(currentQueue[0...curIdx])
+                            var tail = Array(currentQueue[(curIdx + 1)...])
+                            tail.shuffle()
+                            var combined = head + tail
+                            for i in 0..<combined.count { combined[i].index = i + 1 }
+                            PlaybackStateStore.shared.activeCustomQueue = combined
+                            PlaybackStateStore.shared.latestUpcomingTracks = Array(combined[(curIdx + 1)...])
+                        } else {
+                            // At the last track: keep current track at index 0 and shuffle all previous tracks as upcoming
+                            let curTrack = currentQueue[curIdx]
+                            var others = Array(currentQueue[0..<curIdx])
+                            others.shuffle()
+                            var combined = [curTrack] + others
+                            for i in 0..<combined.count { combined[i].index = i + 1 }
+                            PlaybackStateStore.shared.activeCustomQueue = combined
+                            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+                            PlaybackStateStore.shared.latestUpcomingTracks = Array(combined[1...])
+                            PlaybackStateStore.shared.latestHistoryTracks = []
+                        }
+                    }
+                } else if !PlaybackStateStore.shared.originalCustomQueue.isEmpty {
+                    let orig = PlaybackStateStore.shared.originalCustomQueue
+                    let curTrack = (curIdx >= 0 && curIdx < currentQueue.count) ? currentQueue[curIdx] : nil
+                    var restoredIdx = 0
+                    if let ct = curTrack {
+                        if let matchIdx = orig.firstIndex(where: { $0.id == ct.id && !ct.id.isEmpty }) ??
+                                          orig.firstIndex(where: { $0.name == ct.name && $0.artist == ct.artist }) {
+                            restoredIdx = matchIdx
+                        }
+                    }
+                    var restored = orig
+                    for i in 0..<restored.count { restored[i].index = i + 1 }
+                    PlaybackStateStore.shared.activeCustomQueue = restored
+                    PlaybackStateStore.shared.activeCustomQueueIndex = restoredIdx
+                    if restoredIdx + 1 < restored.count {
+                        PlaybackStateStore.shared.latestUpcomingTracks = Array(restored[(restoredIdx + 1)...])
+                    } else {
+                        PlaybackStateStore.shared.latestUpcomingTracks = []
+                    }
+                    if restoredIdx > 0 {
+                        PlaybackStateStore.shared.latestHistoryTracks = Array(restored[0..<restoredIdx].reversed())
+                    } else {
+                        PlaybackStateStore.shared.latestHistoryTracks = []
+                    }
+                }
+            }
         }
         if PlaybackRouter.shared.isTestingEnvironment {
             return true
         }
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
 
-        app.shuffleEnabled = enabled
-        let script = "tell application \"Music\" to set shuffle enabled to \(enabled ? "true" : "false")"
-        _ = AppleScriptExecutor.shared.execute(script)
+        let isCustomQueue = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty
+        }
+        if !isCustomQueue {
+            app.shuffleEnabled = enabled
+            let script = enabled ? "tell application \"Music\"\nset shuffle mode to songs\nset shuffle enabled to true\nend tell" : "tell application \"Music\" to set shuffle enabled to false"
+            _ = AppleScriptExecutor.shared.execute(script)
+        }
         PlaybackStateStore.shared.invalidateStatusCache()
         WebSocketServer.shared.broadcastStatus(includeQueue: true)
         return true
     }
 
     public func setRepeat(mode: String) -> Bool {
+        let cleanMode = mode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let validMode = ["off", "one", "all"].contains(cleanMode) ? cleanMode : "off"
+        let isCustomQueue = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.repeatMode = validMode
+            return PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty
+        }
         PlaybackStateStore.shared.invalidateStatusCache()
         if PlaybackRouter.shared.isTestingEnvironment {
             return true
         }
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
+        let musicAppMode = (isCustomQueue && validMode == "all") ? "off" : validMode
         var rMode: MusicERpt = .off
-        if mode == "all" { rMode = .all }
-        else if mode == "one" { rMode = .one }
+        if musicAppMode == "all" { rMode = .all }
+        else if musicAppMode == "one" { rMode = .one }
         app.songRepeat = rMode
+        let script = "tell application \"Music\" to set song repeat to \(musicAppMode)"
+        _ = AppleScriptExecutor.shared.execute(script)
+        WebSocketServer.shared.broadcastStatus(includeQueue: false)
         return true
     }
 

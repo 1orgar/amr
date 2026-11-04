@@ -69,14 +69,15 @@ final class CloudSearchPaginationTests: XCTestCase {
     }
 
     func testCuratedStationsBothCountries() {
+        MusicKitManager.shared.invalidatePersonalCache()
         let service = CloudCatalogService.shared
 
         let ruStations = service.getCuratedStations(country: "ru")
         XCTAssertGreaterThanOrEqual(ruStations.count, 6)
-        XCTAssertTrue(ruStations.contains(where: { $0.name.contains("Моя станция") || $0.name.contains("Станция открытий") }))
+        XCTAssertTrue(ruStations.contains(where: { $0.name.contains("Моя станция") || $0.name.contains("Станция открытий") || $0.isPersonal == true }))
 
         let usStations = service.getCuratedStations(country: "us")
         XCTAssertGreaterThanOrEqual(usStations.count, 6)
-        XCTAssertTrue(usStations.contains(where: { $0.name.contains("My Station") || $0.name.contains("Discovery Station") }))
+        XCTAssertTrue(usStations.contains(where: { $0.name.contains("My Station") || $0.name.contains("Discovery Station") || $0.isPersonal == true }))
     }
 }

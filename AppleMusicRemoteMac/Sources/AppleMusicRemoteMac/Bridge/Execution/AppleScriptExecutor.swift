@@ -12,6 +12,7 @@ public final class AppleScriptExecutor: @unchecked Sendable {
     public static let shared = AppleScriptExecutor()
 
     private let lock = NSLock()
+    private var compiledScripts: [String: NSAppleScript] = [:]
 
     private init() {}
 
@@ -46,7 +47,23 @@ public final class AppleScriptExecutor: @unchecked Sendable {
         }
 
         var error: NSDictionary?
-        let script = NSAppleScript(source: timedSource)
+        let script: NSAppleScript?
+        if timedSource.count <= 4096 {
+            if let cached = compiledScripts[timedSource] {
+                script = cached
+            } else {
+                let created = NSAppleScript(source: timedSource)
+                if let c = created {
+                    if compiledScripts.count >= 64 {
+                        compiledScripts.removeAll(keepingCapacity: true)
+                    }
+                    compiledScripts[timedSource] = c
+                }
+                script = created
+            }
+        } else {
+            script = NSAppleScript(source: timedSource)
+        }
         let descriptor = script?.executeAndReturnError(&error)
         if let err = error {
             let msg = err[NSAppleScript.errorMessage] as? String ?? "Unknown error"

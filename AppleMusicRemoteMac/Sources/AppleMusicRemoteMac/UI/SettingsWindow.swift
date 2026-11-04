@@ -3,52 +3,93 @@
 //  AppleMusicRemoteMac
 //
 //  Pure Swift & AppKit Native Settings Window for Apple Music Remote
-//  Configures Audio Output Devices, Bit-Perfect Auto-Switching, UPnP/DLNA, and WebSocket Server
+//  Styled in macOS Sonoma / Sequoia System Settings aesthetic with grouped cards,
+//  SF Symbols squircle badges, and native NSSwitch toggles.
 //
 
 import AppKit
 import CoreAudio
+
+private final class FlippedContentView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+private final class SettingsCardView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 11
+        layer?.masksToBounds = true
+        updateColors()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColors()
+    }
+
+    private func updateColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            layer?.borderWidth = 1.0
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        }
+    }
+}
 
 @MainActor
 public final class SettingsWindow: NSWindowController {
     public static let shared = SettingsWindow()
 
     // UI Elements - System & Autonomy
-    private var launchAtLoginCheckbox: NSButton!
+    private var launchAtLoginSwitch: NSSwitch!
     private var musicAppStatusLabel: NSTextField!
     private var launchMusicButton: NSButton!
 
     // UI Elements - Audio
     private var devicePopUp: NSPopUpButton!
     private var sampleRatePopUp: NSPopUpButton!
-    private var bitPerfectCheckbox: NSButton!
-    private var lockVolume100Checkbox: NSButton!
+    private var bitPerfectSwitch: NSSwitch!
+    private var lockVolume100Switch: NSSwitch!
     private var streamQualityLabel: NSTextField!
-
-    // UI Elements - UPnP & DLNA
-    private var enableLocalDMRCheckbox: NSButton!
-    private var upnpFriendlyNameField: NSTextField!
-    private var saveNameButton: NSButton!
-    private var upnpUrlField: NSTextField!
-    private var copyUpnpButton: NSButton!
-    private var upnpStatusLabel: NSTextField!
-    private var discoverDLNACheckbox: NSButton!
+    private var discoverDLNASwitch: NSSwitch!
     private var dlnaStatusLabel: NSTextField!
+
+    // UI Elements - WLED DDP Ambilight
+    private var enableWLEDSwitch: NSSwitch!
+    private var wledIPField: NSTextField!
+    private var wledLedCountField: NSTextField!
+    private var saveWLEDIPButton: NSButton!
+    private var wledModePopUp: NSPopUpButton!
+    private var wledStatusLabel: NSTextField!
 
     // UI Elements - WebSocket / iOS
     private var wsUrlField: NSTextField!
     private var clientsLabel: NSTextField!
 
+    // UI Elements - UPnP & DLNA
+    private var enableLocalDMRSwitch: NSSwitch!
+    private var upnpFriendlyNameField: NSTextField!
+    private var saveNameButton: NSButton!
+    private var upnpUrlField: NSTextField!
+    private var copyUpnpButton: NSButton!
+    private var upnpStatusLabel: NSTextField!
+
     private var devices: [AudioOutputDevice] = []
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 600),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 760),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Настройки Apple Music Remote"
+        window.titlebarSeparatorStyle = .line
         window.isReleasedWhenClosed = false
         window.center()
 
@@ -61,237 +102,499 @@ public final class SettingsWindow: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    // MARK: - UI Construction
+    // MARK: - Apple-Friendly macOS System Settings UI Construction
 
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
-        contentView.wantsLayer = true
 
-        let scrollView = NSScrollView(frame: contentView.bounds)
+        let visualEffect = NSVisualEffectView(frame: contentView.bounds)
+        visualEffect.autoresizingMask = [.width, .height]
+        visualEffect.blendingMode = .withinWindow
+        visualEffect.material = .windowBackground
+        visualEffect.state = .active
+        contentView.addSubview(visualEffect)
+
+        let scrollView = NSScrollView(frame: visualEffect.bounds)
         scrollView.autoresizingMask = [.width, .height]
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
 
-        let container = NSStackView()
-        container.orientation = .vertical
-        container.alignment = .leading
-        container.spacing = 18
-        container.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 24, right: 24)
-        container.translatesAutoresizingMaskIntoConstraints = false
+        let flippedDoc = FlippedContentView(frame: NSRect(x: 0, y: 0, width: 560, height: 900))
+        flippedDoc.translatesAutoresizingMaskIntoConstraints = false
 
-        // --- 0. System & Autonomy Section ---
-        let systemSectionHeader = makeSectionHeader("⚙️ Автономность и система")
-        container.addArrangedSubview(systemSectionHeader)
+        let mainStack = NSStackView()
+        mainStack.orientation = .vertical
+        mainStack.alignment = .leading
+        mainStack.spacing = 18
+        mainStack.edgeInsets = NSEdgeInsets(top: 18, left: 20, bottom: 24, right: 20)
+        mainStack.translatesAutoresizingMaskIntoConstraints = false
 
-        launchAtLoginCheckbox = NSButton(
-            checkboxWithTitle: "Запускать Apple Music Remote при входе в систему",
-            target: self,
-            action: #selector(launchAtLoginToggled(_:))
-        )
-        launchAtLoginCheckbox.font = NSFont.systemFont(ofSize: 12)
-        container.addArrangedSubview(launchAtLoginCheckbox)
+        // --- Hero Banner Card ---
+        let heroCard = buildHeroHeaderCard()
+        mainStack.addArrangedSubview(heroCard)
+        heroCard.widthAnchor.constraint(equalTo: mainStack.widthAnchor, constant: -40).isActive = true
 
-        let musicRow = NSStackView()
-        musicRow.orientation = .horizontal
-        musicRow.spacing = 10
-        musicAppStatusLabel = NSTextField(labelWithString: "Статус Music.app: Запущен")
-        musicAppStatusLabel.font = NSFont.systemFont(ofSize: 12)
-        launchMusicButton = NSButton(title: "Запустить Music.app", target: self, action: #selector(launchMusicAppClicked))
-        launchMusicButton.bezelStyle = .rounded
-        musicRow.addArrangedSubview(musicAppStatusLabel)
-        musicRow.addArrangedSubview(launchMusicButton)
-        container.addArrangedSubview(musicRow)
-
-        container.addArrangedSubview(makeDivider())
-
-        // --- 1. Audio Output Section ---
-        let audioSectionHeader = makeSectionHeader("🎧 Вывод звука и Bit-Perfect")
-        container.addArrangedSubview(audioSectionHeader)
-
-        // Device Row
-        let devRow = NSStackView()
-        devRow.orientation = .horizontal
-        devRow.spacing = 10
-        let devLabel = NSTextField(labelWithString: "Аудиоустройство:")
-        devLabel.widthAnchor.constraint(equalToConstant: 130).isActive = true
-        devicePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
-        devicePopUp.target = self
-        devicePopUp.action = #selector(deviceSelectionChanged(_:))
-        devRow.addArrangedSubview(devLabel)
-        devRow.addArrangedSubview(devicePopUp)
-        container.addArrangedSubview(devRow)
-
-        // Sample Rate Row
-        let rateRow = NSStackView()
-        rateRow.orientation = .horizontal
-        rateRow.spacing = 10
-        let rateLabel = NSTextField(labelWithString: "Частота ЦАП:")
-        rateLabel.widthAnchor.constraint(equalToConstant: 130).isActive = true
-        sampleRatePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
-        sampleRatePopUp.target = self
-        sampleRatePopUp.action = #selector(sampleRateSelectionChanged(_:))
-        rateRow.addArrangedSubview(rateLabel)
-        rateRow.addArrangedSubview(sampleRatePopUp)
-        container.addArrangedSubview(rateRow)
-
-        // Bit-Perfect Checkbox
-        bitPerfectCheckbox = NSButton(
-            checkboxWithTitle: "Авто-Bit-Perfect (подстраивать частоту ЦАП под поток Music.app)",
-            target: self,
-            action: #selector(bitPerfectToggled(_:))
-        )
-        bitPerfectCheckbox.font = NSFont.systemFont(ofSize: 12)
-        container.addArrangedSubview(bitPerfectCheckbox)
-
-        // Lock Volume 100% Checkbox
-        lockVolume100Checkbox = NSButton(
-            checkboxWithTitle: "Устанавливать громкость 100% (Bit-Perfect)",
-            target: self,
-            action: #selector(lockVolume100Toggled(_:))
-        )
-        lockVolume100Checkbox.font = NSFont.systemFont(ofSize: 12)
-        container.addArrangedSubview(lockVolume100Checkbox)
-
-        // Stream Quality Label
-        streamQualityLabel = NSTextField(labelWithString: "Текущий поток: 44.1 кГц (Lossless)")
-        streamQualityLabel.font = NSFont.systemFont(ofSize: 11)
-        streamQualityLabel.textColor = .secondaryLabelColor
-        container.addArrangedSubview(streamQualityLabel)
-
-        // DLNA Renderers Discovery Checkbox
-        discoverDLNACheckbox = NSButton(
-            checkboxWithTitle: "Обнаруживать DLNA-рендереры (Bluesound, WiiM и др.)",
-            target: self,
-            action: #selector(discoverDLNAToggled(_:))
-        )
-        discoverDLNACheckbox.font = NSFont.systemFont(ofSize: 12)
-        container.addArrangedSubview(discoverDLNACheckbox)
-
-        dlnaStatusLabel = NSTextField(labelWithString: "Статус DLNA: Отключено")
-        dlnaStatusLabel.font = NSFont.systemFont(ofSize: 11)
-        dlnaStatusLabel.textColor = .secondaryLabelColor
-        container.addArrangedSubview(dlnaStatusLabel)
-
-        container.addArrangedSubview(makeDivider())
-
-        // --- 2. UPnP / DLNA MediaRenderer Section ---
-        let upnpSectionHeader = makeSectionHeader("📻 UPnP / DLNA плеер (Home Assistant)")
-        container.addArrangedSubview(upnpSectionHeader)
-
-        enableLocalDMRCheckbox = NSButton(
-            checkboxWithTitle: "Включить локальный DMR плеер для Home Assistant",
-            target: self,
-            action: #selector(localDMRToggled(_:))
-        )
-        enableLocalDMRCheckbox.font = NSFont.systemFont(ofSize: 12)
-        container.addArrangedSubview(enableLocalDMRCheckbox)
-
-        upnpStatusLabel = NSTextField(labelWithString: "Порт: 8090 • SSDP Discovery: Активен")
-        upnpStatusLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        container.addArrangedSubview(upnpStatusLabel)
-
-        let nameRow = NSStackView()
-        nameRow.orientation = .horizontal
-        nameRow.spacing = 10
-        let nameLabel = NSTextField(labelWithString: "Сетевое имя:")
-        nameLabel.widthAnchor.constraint(equalToConstant: 130).isActive = true
-        upnpFriendlyNameField = NSTextField()
-        upnpFriendlyNameField.placeholderString = "Apple Music Remote (Mac)"
-        upnpFriendlyNameField.widthAnchor.constraint(equalToConstant: 200).isActive = true
-        saveNameButton = NSButton(title: "Сохранить", target: self, action: #selector(saveFriendlyNameClicked))
-        saveNameButton.bezelStyle = .rounded
-        nameRow.addArrangedSubview(nameLabel)
-        nameRow.addArrangedSubview(upnpFriendlyNameField)
-        nameRow.addArrangedSubview(saveNameButton)
-        container.addArrangedSubview(nameRow)
-
-        let upnpRow = NSStackView()
-        upnpRow.orientation = .horizontal
-        upnpRow.spacing = 8
-        upnpUrlField = NSTextField(string: "http://127.0.0.1:8090/description.xml")
-        upnpUrlField.isEditable = false
-        upnpUrlField.isSelectable = true
-        upnpUrlField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        upnpUrlField.widthAnchor.constraint(equalToConstant: 290).isActive = true
-
-        copyUpnpButton = NSButton(title: "Копировать", target: self, action: #selector(copyUpnpUrlClicked))
-        copyUpnpButton.bezelStyle = .rounded
-        upnpRow.addArrangedSubview(upnpUrlField)
-        upnpRow.addArrangedSubview(copyUpnpButton)
-        container.addArrangedSubview(upnpRow)
-
-        let upnpHint = NSTextField(labelWithString: "В Home Assistant добавьте 'DLNA Digital Media Renderer' с этим URL для полного управления.")
-        upnpHint.font = NSFont.systemFont(ofSize: 11)
-        upnpHint.textColor = .tertiaryLabelColor
-        container.addArrangedSubview(upnpHint)
-
-        container.addArrangedSubview(makeDivider())
-
-        // --- 3. iOS Remote / WebSocket Server Section ---
-        let wsSectionHeader = makeSectionHeader("📱 Сервер для iOS (Apple Music Remote)")
-        container.addArrangedSubview(wsSectionHeader)
-
-        clientsLabel = NSTextField(labelWithString: "Клиентов подключено: 0")
-        clientsLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        container.addArrangedSubview(clientsLabel)
-
-        let wsRow = NSStackView()
-        wsRow.orientation = .horizontal
-        wsRow.spacing = 8
-        wsUrlField = NSTextField(string: "ws://127.0.0.1:8080")
-        wsUrlField.isEditable = false
-        wsUrlField.isSelectable = true
-        wsUrlField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        wsUrlField.widthAnchor.constraint(equalToConstant: 290).isActive = true
-
+        // --- 1. Main / General & Remote Control Section ---
+        wsUrlField = makeReadonlyMonospaceField("http://127.0.0.1:8080", width: 205)
         let qrButton = NSButton(title: "QR-код", target: self, action: #selector(showQRClicked))
         qrButton.bezelStyle = .rounded
-        wsRow.addArrangedSubview(wsUrlField)
-        wsRow.addArrangedSubview(qrButton)
-        container.addArrangedSubview(wsRow)
-
-        let srvActionsRow = NSStackView()
-        srvActionsRow.orientation = .horizontal
-        srvActionsRow.spacing = 10
-
-        let restartButton = NSButton(title: "🔄 Перезапустить сервер", target: self, action: #selector(restartServerClicked))
+        let restartButton = NSButton(title: "Перезапустить", target: self, action: #selector(restartServerClicked))
         restartButton.bezelStyle = .rounded
-        srvActionsRow.addArrangedSubview(restartButton)
-        container.addArrangedSubview(srvActionsRow)
 
-        // ClipView setup
-        let clipView = NSClipView(frame: contentView.bounds)
-        clipView.documentView = container
-        scrollView.contentView = clipView
+        let wsControls = NSStackView(views: [wsUrlField, qrButton, restartButton])
+        wsControls.orientation = .horizontal
+        wsControls.alignment = .centerY
+        wsControls.spacing = 6
 
-        contentView.addSubview(scrollView)
+        launchAtLoginSwitch = makeSwitch(action: #selector(launchAtLoginToggled(_:)))
+        clientsLabel = makeStatusCaption("Клиентов подключено: 0")
+
+        let mainGroup = makeSectionGroup(
+            symbol: "gearshape.fill",
+            badgeColor: .systemIndigo,
+            title: "Основные параметры и Пульт управления (iOS / PWA / StandBy TV)",
+            rows: [
+                makeControlRow(title: "Адрес сервера", subtitle: "Откройте в Safari на iPhone, iPad, Mac или Smart TV", control: wsControls),
+                makeToggleRow(title: "Запускать при входе в macOS", subtitle: "Автоматический старт фонового сервера в строке меню", toggle: launchAtLoginSwitch),
+                makeFooterRow(view: clientsLabel)
+            ]
+        )
+        mainStack.addArrangedSubview(mainGroup)
+        mainGroup.widthAnchor.constraint(equalTo: mainStack.widthAnchor, constant: -40).isActive = true
+
+        // --- 2. Audio & Bit-Perfect Section ---
+        devicePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
+        devicePopUp.controlSize = .regular
+        devicePopUp.target = self
+        devicePopUp.action = #selector(deviceSelectionChanged(_:))
+        devicePopUp.widthAnchor.constraint(equalToConstant: 250).isActive = true
+
+        sampleRatePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
+        sampleRatePopUp.controlSize = .regular
+        sampleRatePopUp.target = self
+        sampleRatePopUp.action = #selector(sampleRateSelectionChanged(_:))
+        sampleRatePopUp.widthAnchor.constraint(equalToConstant: 180).isActive = true
+
+        bitPerfectSwitch = makeSwitch(action: #selector(bitPerfectToggled(_:)))
+        lockVolume100Switch = makeSwitch(action: #selector(lockVolume100Toggled(_:)))
+        discoverDLNASwitch = makeSwitch(action: #selector(discoverDLNAToggled(_:)))
+
+        streamQualityLabel = makeStatusCaption("Текущий поток: 44.1 кГц (Lossless)")
+        dlnaStatusLabel = makeStatusCaption("Статус DLNA: Отключено")
+
+        let audioFooter = NSStackView(views: [streamQualityLabel, dlnaStatusLabel])
+        audioFooter.orientation = .vertical
+        audioFooter.alignment = .leading
+        audioFooter.spacing = 3
+
+        let audioGroup = makeSectionGroup(
+            symbol: "waveform",
+            badgeColor: .systemPink,
+            title: "Вывод звука и Bit-Perfect ЦАП",
+            rows: [
+                makeControlRow(title: "Устройство вывода", subtitle: "Локальный ЦАП CoreAudio или сетевой DLNA-стример", control: devicePopUp),
+                makeControlRow(title: "Частота дискретизации", subtitle: "Аппаратная частота выбранного аудиовыхода", control: sampleRatePopUp),
+                makeToggleRow(title: "Авто-Bit-Perfect", subtitle: "Автоматически переключать частоту ЦАП под поток Music.app", toggle: bitPerfectSwitch),
+                makeToggleRow(title: "Фиксация громкости 100%", subtitle: "Побитовая передача без цифровой аттенюации микшера", toggle: lockVolume100Switch),
+                makeToggleRow(title: "Обнаружение сетевых стримеров", subtitle: "Искать внешние рендереры DLNA / BluOS (Bluesound, WiiM)", toggle: discoverDLNASwitch),
+                makeFooterRow(view: audioFooter)
+            ]
+        )
+        mainStack.addArrangedSubview(audioGroup)
+        audioGroup.widthAnchor.constraint(equalTo: mainStack.widthAnchor, constant: -40).isActive = true
+
+        // --- 2. WLED DDP Ambilight Section ---
+        enableWLEDSwitch = makeSwitch(action: #selector(wledEnabledToggled(_:)))
+
+        wledIPField = NSTextField()
+        wledIPField.placeholderString = "192.168.1.100"
+        wledIPField.bezelStyle = .roundedBezel
+        wledIPField.controlSize = .regular
+        wledIPField.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        wledIPField.widthAnchor.constraint(equalToConstant: 132).isActive = true
+        wledIPField.target = self
+        wledIPField.action = #selector(saveWLEDIPClicked)
+
+        let ledCountCaption = NSTextField(labelWithString: "LED:")
+        ledCountCaption.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        ledCountCaption.textColor = .secondaryLabelColor
+
+        wledLedCountField = NSTextField()
+        wledLedCountField.placeholderString = "120"
+        wledLedCountField.bezelStyle = .roundedBezel
+        wledLedCountField.controlSize = .regular
+        wledLedCountField.alignment = .center
+        wledLedCountField.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        wledLedCountField.widthAnchor.constraint(equalToConstant: 52).isActive = true
+        wledLedCountField.target = self
+        wledLedCountField.action = #selector(saveWLEDIPClicked)
+
+        saveWLEDIPButton = NSButton(title: "Применить", target: self, action: #selector(saveWLEDIPClicked))
+        saveWLEDIPButton.bezelStyle = .rounded
+        saveWLEDIPButton.controlSize = .regular
+
+        let wledAddressControls = NSStackView(views: [wledIPField, ledCountCaption, wledLedCountField, saveWLEDIPButton])
+        wledAddressControls.orientation = .horizontal
+        wledAddressControls.alignment = .centerY
+        wledAddressControls.spacing = 6
+
+        wledModePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
+        wledModePopUp.controlSize = .regular
+        wledModePopUp.target = self
+        wledModePopUp.action = #selector(wledModeSelectionChanged(_:))
+        wledModePopUp.widthAnchor.constraint(equalToConstant: 265).isActive = true
+        let modes: [(title: String, value: String)] = [
+            ("Без подсветки", "off"),
+            ("Синусоида ритма (стоячая волна под музыку)", "breathing"),
+            ("Спектральный эквалайзер (Бас · Вокал · Верх)", "spectrum"),
+            ("Симметричный пульс (раскрытие от центра)", "vu_center"),
+            ("Живой Ambilight (16 зон + пульс музыки)", "ambilight"),
+            ("Гармонический резонанс (цвет и ритм мелодии)", "harmonic"),
+            ("Статичная палитра обложки", "static")
+        ]
+        for m in modes {
+            wledModePopUp.addItem(withTitle: m.title)
+            wledModePopUp.lastItem?.representedObject = m.value
+        }
+
+        wledStatusLabel = makeStatusCaption("Статус WLED: Отключено")
+
+        let wledGroup = makeSectionGroup(
+            symbol: "sparkles",
+            badgeColor: .systemOrange,
+            title: "Подсветка WLED DDP Ambilight",
+            rows: [
+                makeToggleRow(title: "Включить WLED DDP подсветку", subtitle: "Реалтайм 50 FPS спектр обложки по UDP (порт 4048)", toggle: enableWLEDSwitch),
+                makeControlRow(title: "Контроллер WLED", subtitle: "IP-адрес и число светодиодов (авто по /json/info)", control: wledAddressControls),
+                makeControlRow(title: "Режим свечения", subtitle: "Алгоритм пространственной заливки адресной ленты", control: wledModePopUp),
+                makeFooterRow(view: wledStatusLabel)
+            ]
+        )
+        mainStack.addArrangedSubview(wledGroup)
+        wledGroup.widthAnchor.constraint(equalTo: mainStack.widthAnchor, constant: -40).isActive = true
+
+        // --- 4. UPnP / DLNA MediaRenderer (Home Assistant) Section ---
+        enableLocalDMRSwitch = makeSwitch(action: #selector(localDMRToggled(_:)))
+
+        upnpFriendlyNameField = NSTextField()
+        upnpFriendlyNameField.placeholderString = "Apple Music Remote (Mac)"
+        upnpFriendlyNameField.bezelStyle = .roundedBezel
+        upnpFriendlyNameField.font = NSFont.systemFont(ofSize: 12)
+        upnpFriendlyNameField.widthAnchor.constraint(equalToConstant: 195).isActive = true
+
+        saveNameButton = NSButton(title: "Сохранить", target: self, action: #selector(saveFriendlyNameClicked))
+        saveNameButton.bezelStyle = .rounded
+
+        let nameControls = NSStackView(views: [upnpFriendlyNameField, saveNameButton])
+        nameControls.orientation = .horizontal
+        nameControls.alignment = .centerY
+        nameControls.spacing = 6
+
+        upnpUrlField = makeReadonlyMonospaceField("http://127.0.0.1:8090/description.xml", width: 235)
+        copyUpnpButton = NSButton(title: "Копировать", target: self, action: #selector(copyUpnpUrlClicked))
+        copyUpnpButton.bezelStyle = .rounded
+
+        let upnpUrlControls = NSStackView(views: [upnpUrlField, copyUpnpButton])
+        upnpUrlControls.orientation = .horizontal
+        upnpUrlControls.alignment = .centerY
+        upnpUrlControls.spacing = 6
+
+        upnpStatusLabel = makeStatusCaption("Статус: Отключен в настройках")
+
+        let upnpGroup = makeSectionGroup(
+            symbol: "hifispeaker.2.fill",
+            badgeColor: .systemBlue,
+            title: "Интеграция с Home Assistant (UPnP / DLNA DMR)",
+            rows: [
+                makeToggleRow(title: "Локальный DLNA DMR-плеер", subtitle: "Управление воспроизведением из Home Assistant (порт 8090)", toggle: enableLocalDMRSwitch),
+                makeControlRow(title: "Имя в сети", subtitle: "Отображаемое имя при автообнаружении SSDP", control: nameControls),
+                makeControlRow(title: "URL описания XML", subtitle: "Для ручного добавления DLNA Digital Media Renderer", control: upnpUrlControls),
+                makeFooterRow(view: upnpStatusLabel)
+            ]
+        )
+        mainStack.addArrangedSubview(upnpGroup)
+        upnpGroup.widthAnchor.constraint(equalTo: mainStack.widthAnchor, constant: -40).isActive = true
+
+        flippedDoc.addSubview(mainStack)
+        scrollView.documentView = flippedDoc
+        visualEffect.addSubview(scrollView)
 
         NSLayoutConstraint.activate([
-            container.leadingAnchor.constraint(equalTo: clipView.leadingAnchor),
-            container.trailingAnchor.constraint(equalTo: clipView.trailingAnchor),
-            container.topAnchor.constraint(equalTo: clipView.topAnchor)
+            mainStack.topAnchor.constraint(equalTo: flippedDoc.topAnchor),
+            mainStack.leadingAnchor.constraint(equalTo: flippedDoc.leadingAnchor),
+            mainStack.trailingAnchor.constraint(equalTo: flippedDoc.trailingAnchor),
+            mainStack.bottomAnchor.constraint(equalTo: flippedDoc.bottomAnchor),
+            flippedDoc.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)
         ])
     }
 
-    private func makeSectionHeader(_ title: String) -> NSTextField {
-        let label = NSTextField(labelWithString: title)
-        label.font = NSFont.systemFont(ofSize: 13, weight: .bold)
+    // MARK: - Apple-Style Reusable UI Builders
+
+    private func buildHeroHeaderCard() -> NSView {
+        let card = SettingsCardView()
+        card.translatesAutoresizingMaskIntoConstraints = false
+
+        let hStack = NSStackView()
+        hStack.orientation = .horizontal
+        hStack.alignment = .centerY
+        hStack.spacing = 14
+        hStack.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
+        hStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // App Squircle Badge
+        let badge = NSView()
+        badge.wantsLayer = true
+        badge.layer?.cornerRadius = 11
+        badge.layer?.backgroundColor = NSColor.systemPink.cgColor
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            badge.widthAnchor.constraint(equalToConstant: 44),
+            badge.heightAnchor.constraint(equalToConstant: 44)
+        ])
+
+        if let img = NSImage(systemSymbolName: "music.note.house.fill", accessibilityDescription: nil) {
+            let config = NSImage.SymbolConfiguration(pointSize: 21, weight: .semibold)
+            let iv = NSImageView(image: img.withSymbolConfiguration(config) ?? img)
+            iv.contentTintColor = .white
+            iv.translatesAutoresizingMaskIntoConstraints = false
+            badge.addSubview(iv)
+            NSLayoutConstraint.activate([
+                iv.centerXAnchor.constraint(equalTo: badge.centerXAnchor),
+                iv.centerYAnchor.constraint(equalTo: badge.centerYAnchor)
+            ])
+        }
+
+        let titleLabel = NSTextField(labelWithString: "Apple Music Remote")
+        titleLabel.font = NSFont.systemFont(ofSize: 15, weight: .bold)
+        titleLabel.textColor = .labelColor
+
+        let subLabel = NSTextField(labelWithString: "Bit-Perfect CoreAudio • UPnP/DLNA • WLED Ambilight")
+        subLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+        subLabel.textColor = .secondaryLabelColor
+
+        musicAppStatusLabel = NSTextField(labelWithString: "🟢 Music.app активен")
+        musicAppStatusLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .medium)
+        musicAppStatusLabel.textColor = .secondaryLabelColor
+
+        let textStack = NSStackView(views: [titleLabel, subLabel, musicAppStatusLabel])
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 2
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        launchMusicButton = NSButton(title: "Запустить Music.app", target: self, action: #selector(launchMusicAppClicked))
+        launchMusicButton.bezelStyle = .rounded
+        launchMusicButton.controlSize = .small
+
+        hStack.addArrangedSubview(badge)
+        hStack.addArrangedSubview(textStack)
+        hStack.addArrangedSubview(spacer)
+        hStack.addArrangedSubview(launchMusicButton)
+
+        card.addSubview(hStack)
+        NSLayoutConstraint.activate([
+            hStack.topAnchor.constraint(equalTo: card.topAnchor),
+            hStack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            hStack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            hStack.bottomAnchor.constraint(equalTo: card.bottomAnchor)
+        ])
+        return card
+    }
+
+    private func makeSectionGroup(symbol: String, badgeColor: NSColor, title: String, rows: [NSView]) -> NSView {
+        let groupStack = NSStackView()
+        groupStack.orientation = .vertical
+        groupStack.alignment = .leading
+        groupStack.spacing = 8
+        groupStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Header with SF Symbol squircle
+        let headerRow = NSStackView()
+        headerRow.orientation = .horizontal
+        headerRow.alignment = .centerY
+        headerRow.spacing = 8
+        headerRow.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
+
+        let iconBox = NSView()
+        iconBox.wantsLayer = true
+        iconBox.layer?.cornerRadius = 6
+        iconBox.layer?.backgroundColor = badgeColor.cgColor
+        iconBox.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            iconBox.widthAnchor.constraint(equalToConstant: 22),
+            iconBox.heightAnchor.constraint(equalToConstant: 22)
+        ])
+
+        if let symImg = NSImage(systemSymbolName: symbol, accessibilityDescription: title) {
+            let cfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+            let iv = NSImageView(image: symImg.withSymbolConfiguration(cfg) ?? symImg)
+            iv.contentTintColor = .white
+            iv.translatesAutoresizingMaskIntoConstraints = false
+            iconBox.addSubview(iv)
+            NSLayoutConstraint.activate([
+                iv.centerXAnchor.constraint(equalTo: iconBox.centerXAnchor),
+                iv.centerYAnchor.constraint(equalTo: iconBox.centerYAnchor)
+            ])
+        }
+
+        let headerTitle = NSTextField(labelWithString: title)
+        headerTitle.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        headerTitle.textColor = .labelColor
+
+        headerRow.addArrangedSubview(iconBox)
+        headerRow.addArrangedSubview(headerTitle)
+        groupStack.addArrangedSubview(headerRow)
+
+        // Grouped Inset Card
+        let card = SettingsCardView()
+        card.translatesAutoresizingMaskIntoConstraints = false
+
+        let cardStack = NSStackView()
+        cardStack.orientation = .vertical
+        cardStack.alignment = .leading
+        cardStack.spacing = 0
+        cardStack.translatesAutoresizingMaskIntoConstraints = false
+
+        for (idx, row) in rows.enumerated() {
+            cardStack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: cardStack.widthAnchor).isActive = true
+            if idx < rows.count - 1 {
+                let sepWrap = NSView()
+                sepWrap.translatesAutoresizingMaskIntoConstraints = false
+                let sep = NSBox()
+                sep.boxType = .separator
+                sep.translatesAutoresizingMaskIntoConstraints = false
+                sepWrap.addSubview(sep)
+                NSLayoutConstraint.activate([
+                    sepWrap.heightAnchor.constraint(equalToConstant: 1),
+                    sep.leadingAnchor.constraint(equalTo: sepWrap.leadingAnchor, constant: 14),
+                    sep.trailingAnchor.constraint(equalTo: sepWrap.trailingAnchor, constant: -14),
+                    sep.centerYAnchor.constraint(equalTo: sepWrap.centerYAnchor)
+                ])
+                cardStack.addArrangedSubview(sepWrap)
+                sepWrap.widthAnchor.constraint(equalTo: cardStack.widthAnchor).isActive = true
+            }
+        }
+
+        card.addSubview(cardStack)
+        NSLayoutConstraint.activate([
+            cardStack.topAnchor.constraint(equalTo: card.topAnchor),
+            cardStack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            cardStack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            cardStack.bottomAnchor.constraint(equalTo: card.bottomAnchor)
+        ])
+
+        groupStack.addArrangedSubview(card)
+        card.widthAnchor.constraint(equalTo: groupStack.widthAnchor).isActive = true
+        return groupStack
+    }
+
+    private func makeToggleRow(title: String, subtitle: String, toggle: NSSwitch) -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 12
+        row.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let titleField = NSTextField(labelWithString: title)
+        titleField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        titleField.textColor = .labelColor
+
+        let subField = NSTextField(labelWithString: subtitle)
+        subField.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        subField.textColor = .secondaryLabelColor
+        subField.lineBreakMode = .byWordWrapping
+
+        let textStack = NSStackView(views: [titleField, subField])
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 2
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        row.addArrangedSubview(textStack)
+        row.addArrangedSubview(spacer)
+        row.addArrangedSubview(toggle)
+        return row
+    }
+
+    private func makeControlRow(title: String, subtitle: String, control: NSView) -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 12
+        row.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let titleField = NSTextField(labelWithString: title)
+        titleField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        titleField.textColor = .labelColor
+
+        let subField = NSTextField(labelWithString: subtitle)
+        subField.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        subField.textColor = .secondaryLabelColor
+
+        let textStack = NSStackView(views: [titleField, subField])
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 2
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        row.addArrangedSubview(textStack)
+        row.addArrangedSubview(spacer)
+        row.addArrangedSubview(control)
+        return row
+    }
+
+    private func makeFooterRow(view: NSView) -> NSView {
+        let row = NSStackView(views: [view])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 9, right: 14)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        return row
+    }
+
+    private func makeSwitch(action: Selector) -> NSSwitch {
+        let sw = NSSwitch()
+        sw.controlSize = .regular
+        sw.target = self
+        sw.action = action
+        return sw
+    }
+
+    private func makeStatusCaption(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = NSFont.systemFont(ofSize: 11.5, weight: .medium)
+        label.textColor = .secondaryLabelColor
         return label
     }
 
-    private func makeDivider() -> NSBox {
-        let box = NSBox()
-        box.boxType = .separator
-        box.translatesAutoresizingMaskIntoConstraints = false
-        box.widthAnchor.constraint(equalToConstant: 430).isActive = true
-        return box
+    private func makeReadonlyMonospaceField(_ value: String, width: CGFloat) -> NSTextField {
+        let field = NSTextField(string: value)
+        field.isEditable = false
+        field.isSelectable = true
+        field.bezelStyle = .roundedBezel
+        field.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        field.widthAnchor.constraint(equalToConstant: width).isActive = true
+        return field
     }
 
     // MARK: - State Updates
 
     public func show() {
         refreshState()
+        if let docView = (window?.contentView?.subviews.first?.subviews.first as? NSScrollView)?.documentView {
+            docView.scroll(.zero)
+        }
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -300,9 +603,9 @@ public final class SettingsWindow: NSWindowController {
     public func refreshState() {
         // 0. System & Autonomy
         LaunchAtLoginManager.shared.refreshStatus()
-        launchAtLoginCheckbox.state = LaunchAtLoginManager.shared.isEnabled ? .on : .off
+        launchAtLoginSwitch.state = LaunchAtLoginManager.shared.isEnabled ? .on : .off
         let isMusicRunning = MusicAppProvider.shared.isMusicAppRunning
-        musicAppStatusLabel.stringValue = isMusicRunning ? "Статус Music.app: 🟢 Запущен" : "Статус Music.app: ⚪ Не запущен"
+        musicAppStatusLabel.stringValue = isMusicRunning ? "🟢 Music.app запущен и готов к работе" : "⚪ Music.app не запущен"
         launchMusicButton.isHidden = isMusicRunning
 
         // 1. Audio Devices
@@ -342,27 +645,26 @@ public final class SettingsWindow: NSWindowController {
             sampleRatePopUp.removeAllItems()
             sampleRatePopUp.addItem(withTitle: "192 кГц (DLNA Stream)")
             sampleRatePopUp.isEnabled = false
-            bitPerfectCheckbox.isEnabled = false
-            streamQualityLabel.stringValue = "Текущий вывод: DLNA Сетевой стриминг (WAV 192кГц/24-бит)"
+            bitPerfectSwitch.isEnabled = false
+            streamQualityLabel.stringValue = "Текущий вывод: DLNA Сетевой стриминг (WAV 192 кГц / 24-бит)"
         } else if let defaultDev = devices.first(where: { $0.isDefault }) {
             if let item = devicePopUp.itemArray.first(where: { ($0.representedObject as? String) == "coreaudio:\(defaultDev.id)" }) {
                 devicePopUp.select(item)
             }
             populateSampleRates(for: defaultDev)
-            bitPerfectCheckbox.isEnabled = true
+            bitPerfectSwitch.isEnabled = true
             sampleRatePopUp.isEnabled = !BitPerfectLogMonitor.shared.isEnabled
             streamQualityLabel.stringValue = "Текущий поток: \(BitPerfectLogMonitor.shared.currentQualityDescription)"
         }
 
-        // Bit-Perfect switch
-        bitPerfectCheckbox.state = BitPerfectLogMonitor.shared.isEnabled ? .on : .off
-        lockVolume100Checkbox.state = PlaybackStateStore.shared.isVolumeLockedTo100 ? .on : .off
-        discoverDLNACheckbox.state = DLNADiscoveryManager.shared.isEnabled ? .on : .off
+        bitPerfectSwitch.state = BitPerfectLogMonitor.shared.isEnabled ? .on : .off
+        lockVolume100Switch.state = PlaybackStateStore.shared.isVolumeLockedTo100 ? .on : .off
+        discoverDLNASwitch.state = DLNADiscoveryManager.shared.isEnabled ? .on : .off
         updateDLNAStatusLabel()
 
         // 2. UPnP & DLNA
         let isDMREnabled = UPnPMediaRendererServer.shared.isEnabled
-        enableLocalDMRCheckbox.state = isDMREnabled ? .on : .off
+        enableLocalDMRSwitch.state = isDMREnabled ? .on : .off
         upnpFriendlyNameField.stringValue = SSDPService.shared.friendlyName
         upnpFriendlyNameField.isEnabled = isDMREnabled
         saveNameButton.isEnabled = isDMREnabled
@@ -373,10 +675,10 @@ public final class SettingsWindow: NSWindowController {
         let primaryIP = lanIPs.first ?? "127.0.0.1"
         upnpUrlField.stringValue = "http://\(primaryIP):\(upnpPort)/description.xml"
         if isDMREnabled {
-            upnpStatusLabel.stringValue = "Порт: \(upnpPort) • SSDP Discovery: Активен (UDN: \(SSDPService.shared.deviceUDN))"
+            upnpStatusLabel.stringValue = "🟢 Порт \(upnpPort) • SSDP Discovery активен (UDN: \(SSDPService.shared.deviceUDN))"
             upnpStatusLabel.textColor = .systemGreen
         } else {
-            upnpStatusLabel.stringValue = "Статус: Отключен в настройках"
+            upnpStatusLabel.stringValue = "Статус: Локальный DMR отключен"
             upnpStatusLabel.textColor = .secondaryLabelColor
         }
 
@@ -384,7 +686,36 @@ public final class SettingsWindow: NSWindowController {
         let wsPort = WebSocketServer.shared.port
         wsUrlField.stringValue = "http://\(primaryIP):\(wsPort)"
         let clientCount = WebSocketServer.shared.clientCount
-        clientsLabel.stringValue = "Клиентов подключено: \(clientCount) \(clientCount == 1 ? "клиент" : "клиентов")"
+        clientsLabel.stringValue = "🟢 Активных подключений по WebSocket: \(clientCount)"
+
+        // 4. WLED DDP Ambilight
+        let wled = WLEDDDPController.shared
+        enableWLEDSwitch.state = wled.isEnabled ? .on : .off
+        wledIPField.stringValue = wled.ipAddress
+        wledLedCountField.stringValue = "\(wled.ledCount)"
+        wledIPField.isEnabled = wled.isEnabled
+        wledLedCountField.isEnabled = wled.isEnabled
+        saveWLEDIPButton.isEnabled = wled.isEnabled
+        wledModePopUp.isEnabled = wled.isEnabled
+        if let item = wledModePopUp.itemArray.first(where: { ($0.representedObject as? String) == wled.mode }) {
+            wledModePopUp.select(item)
+        }
+        if wled.isEnabled && !wled.ipAddress.isEmpty && wled.mode != "off" {
+            wledStatusLabel.stringValue = "🟢 Активен: UDP \(wled.ipAddress):4048 • \(wled.ledCount) LED • 16 зон (Gamma 2.4)"
+            wledStatusLabel.textColor = .systemGreen
+        } else if wled.isEnabled && wled.ipAddress.isEmpty {
+            wledStatusLabel.stringValue = "🟠 Укажите IP-адрес контроллера WLED и нажмите «Применить»"
+            wledStatusLabel.textColor = .systemOrange
+        } else if wled.isEnabled && wled.mode == "off" {
+            wledStatusLabel.stringValue = "⚪ Подсветка выключена (режим «Без подсветки» • Heartbeat OFF активен)"
+            wledStatusLabel.textColor = .secondaryLabelColor
+        } else if !wled.ipAddress.isEmpty {
+            wledStatusLabel.stringValue = "Статус WLED: Отключено (Heartbeat OFF удерживает ленту \(wled.ipAddress) выключенной)"
+            wledStatusLabel.textColor = .secondaryLabelColor
+        } else {
+            wledStatusLabel.stringValue = "Статус WLED: Отключено (кнопки WLED скрыты в веб-интерфейсе)"
+            wledStatusLabel.textColor = .secondaryLabelColor
+        }
     }
 
     private func populateSampleRates(for dev: AudioOutputDevice) {
@@ -405,7 +736,7 @@ public final class SettingsWindow: NSWindowController {
             let title: String
             if khz == 352.8 {
                 title = "352.8 кГц (DXD)"
-            } else if (khz.truncatingRemainder(dividingBy: 1) == 0) {
+            } else if khz.truncatingRemainder(dividingBy: 1) == 0 {
                 title = String(format: "%.0f кГц", khz)
             } else {
                 title = String(format: "%.1f кГц", khz)
@@ -452,11 +783,17 @@ public final class SettingsWindow: NSWindowController {
                 self?.refreshState()
             }
         }
+
+        WLEDDDPController.shared.onSettingsChanged = { [weak self] in
+            DispatchQueue.main.async { [weak self] in
+                self?.refreshState()
+            }
+        }
     }
 
     // MARK: - Actions
 
-    @objc private func launchAtLoginToggled(_ sender: NSButton) {
+    @objc private func launchAtLoginToggled(_ sender: NSSwitch) {
         let enable = (sender.state == .on)
         let success = LaunchAtLoginManager.shared.setEnabled(enable)
         if !success {
@@ -483,15 +820,21 @@ public final class SettingsWindow: NSWindowController {
         if repObj.hasPrefix("dlna:") {
             if let renderer = DLNADiscoveryManager.shared.selectRenderer(uid: repObj) {
                 NSLog("[SettingsWindow] Selected DLNA renderer: \(renderer.friendlyName)")
-                AudioProcessTapService.shared.startCapture()
-
-                let (streamURL, imageURL, fullTitle, metadata) = DLNADiscoveryManager.shared.resolveStreamAndImageURLs()
                 let status = MusicBridge.shared.getPlayerStatus()
+                if status.isPlaying {
+                    AudioProcessTapService.shared.startCapture()
 
-                DLNADiscoveryManager.shared.setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { success, _ in
-                    if success, status.playerState == "playing", !renderer.isBluOS {
-                        DLNADiscoveryManager.shared.play()
+                    let (streamURL, imageURL, fullTitle, metadata) = DLNADiscoveryManager.shared.resolveStreamAndImageURLs()
+                    DLNADiscoveryManager.shared.setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { success, _ in
+                        if success, !renderer.isBluOS {
+                            DLNADiscoveryManager.shared.play()
+                        }
                     }
+                } else {
+                    let isLossy = status.audioQuality.contains("AAC") || status.audioQuality.contains("MP3")
+                    let targetRate = isLossy ? 44100 : (status.track?.sampleRate ?? 44100)
+                    let targetDepth = isLossy ? 16 : (status.track?.bitDepth ?? (targetRate >= 48000 ? 24 : 16))
+                    AudioProcessTapService.shared.setFormat(sampleRate: targetRate, bitDepth: targetDepth)
                 }
 
                 WebSocketServer.shared.broadcastAudioDevices()
@@ -524,14 +867,14 @@ public final class SettingsWindow: NSWindowController {
         MenuManager.shared.updateMenuState()
     }
 
-    @objc private func bitPerfectToggled(_ sender: NSButton) {
+    @objc private func bitPerfectToggled(_ sender: NSSwitch) {
         let isEnabled = (sender.state == .on)
         BitPerfectLogMonitor.shared.isEnabled = isEnabled
         sampleRatePopUp.isEnabled = !isEnabled
         MenuManager.shared.updateMenuState()
     }
 
-    @objc private func lockVolume100Toggled(_ sender: NSButton) {
+    @objc private func lockVolume100Toggled(_ sender: NSSwitch) {
         let enabled = (sender.state == .on)
         PlaybackStateStore.shared.isVolumeLockedTo100 = enabled
         if enabled {
@@ -540,7 +883,7 @@ public final class SettingsWindow: NSWindowController {
         WebSocketServer.shared.broadcastStatus(includeQueue: false)
     }
 
-    @objc private func localDMRToggled(_ sender: NSButton) {
+    @objc private func localDMRToggled(_ sender: NSSwitch) {
         let isEnabled = (sender.state == .on)
         UPnPMediaRendererServer.shared.setEnabled(isEnabled)
         refreshState()
@@ -559,7 +902,7 @@ public final class SettingsWindow: NSWindowController {
         NSPasteboard.general.setString(upnpUrlField.stringValue, forType: .string)
     }
 
-    @objc private func discoverDLNAToggled(_ sender: NSButton) {
+    @objc private func discoverDLNAToggled(_ sender: NSSwitch) {
         let isEnabled = (sender.state == .on)
         DLNADiscoveryManager.shared.setEnabled(isEnabled)
         if !isEnabled && DLNADiscoveryManager.shared.hasActiveRenderer {
@@ -579,10 +922,10 @@ public final class SettingsWindow: NSWindowController {
     private func updateDLNAStatusLabel() {
         if DLNADiscoveryManager.shared.isEnabled {
             let count = DLNADiscoveryManager.shared.getDiscoveredCount()
-            dlnaStatusLabel.stringValue = "Статус DLNA: Поиск активен (найдено рендереров: \(count))"
+            dlnaStatusLabel.stringValue = "🟢 Поиск DLNA / BluOS активен (найдено устройств: \(count))"
             dlnaStatusLabel.textColor = .systemGreen
         } else {
-            dlnaStatusLabel.stringValue = "Статус DLNA: Отключено"
+            dlnaStatusLabel.stringValue = "Статус DLNA: Поиск внешних рендереров отключен"
             dlnaStatusLabel.textColor = .secondaryLabelColor
         }
     }
@@ -601,5 +944,29 @@ public final class SettingsWindow: NSWindowController {
         _ = WebSocketServer.shared.start(port: port)
         refreshState()
         MenuManager.shared.updateMenuState()
+    }
+
+    @objc private func wledEnabledToggled(_ sender: NSSwitch) {
+        let enabled = (sender.state == .on)
+        let ip = wledIPField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsedLeds = Int(wledLedCountField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        let updated = WLEDDDPController.shared.updateSettings(enabled: enabled, ip: ip, ledCount: parsedLeds)
+        refreshState()
+        WebSocketServer.shared.broadcastEvent(name: "wled_settings", data: updated)
+    }
+
+    @objc private func saveWLEDIPClicked() {
+        let ip = wledIPField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsedLeds = Int(wledLedCountField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        let updated = WLEDDDPController.shared.updateSettings(ip: ip, ledCount: parsedLeds)
+        refreshState()
+        WebSocketServer.shared.broadcastEvent(name: "wled_settings", data: updated)
+    }
+
+    @objc private func wledModeSelectionChanged(_ sender: NSPopUpButton) {
+        guard let mode = sender.selectedItem?.representedObject as? String else { return }
+        let updated = WLEDDDPController.shared.updateSettings(mode: mode)
+        refreshState()
+        WebSocketServer.shared.broadcastEvent(name: "wled_settings", data: updated)
     }
 }

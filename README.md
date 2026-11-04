@@ -17,21 +17,27 @@
 ### 🎧 Bit-Perfect Audiophile Audio Output (CoreAudio)
 * **Automatic DAC Sample Rate Synchronization**: Instant hardware switching between 44.1, 48, 88.2, 96, 176.4, and 192 kHz to match the source track's native rate in Music.app bit-for-bit.
 * **100% Volume Lock Mode**: Keeps macOS / Music.app software volume pegged at 100% to eliminate digital volume dithering and word-length degradation.
-* **Format Pre-Inspection & Format Lock**: Pre-inspects stream format parameters (`sampleRate` and `bitDepth`) before track starts, locking the stream format to prevent mid-track bitrate switching or audio glitches on external streamers.
-* **Audiophile Signal Path Inspection (Тракт сигнала)**: Interactive Roon-style modal detailing every stage of the audio chain: Source stream (codec, bit depth, sample rate), AMR Bit-Perfect Engine (`0.0 dB FS`, zero DSP), and active Hardware Output DAC.
-* **In-App DAC Switcher**: Quickly switch between connected external DACs and CoreAudio output devices directly from the Web remote.
+* **Format Pre-Inspection, Strict Format Lock & AAC vs ALAC Detection**: Pre-inspects stream format parameters (`sampleRate` and `bitDepth`), strictly locks mid-playback DAC format, and distinguishes compressed AAC (`16-bit / 44.1 kHz`, Lossy indicator) from ALAC Lossless / Hi-Res (`24-bit / up to 192 kHz`).
+* **Audiophile Signal Path Inspection (Тракт сигнала)**: Interactive Roon-style modal detailing every stage of the audio chain: Source stream (codec, bit depth, sample rate), AMR Bit-Perfect Engine (`0.0 dB FS`, zero DSP), and active Hardware Output DAC or BluOS streamer.
+* **In-App DAC Switcher**: Quickly switch between connected external DACs, CoreAudio output devices, and BluOS renderers directly from the Web remote without auto-starting playback when paused.
 * **Optional Web Volume Control**: When volume lock is turned off via menu bar settings, the Web UI automatically displays a smooth volume slider (with an instant Mute button) for setups lacking a hardware volume pot.
 * **Real-Time DAC Badge**: Continuous stream format and hardware DAC rate indicators across all views (Now Playing header, desktop split view, and mobile devices).
 
+### 📺 StandBy / TV Mode & 🌈 WLED DDP Ambilight
+* **Fullscreen Living Room TV Mode**: Large album artwork, Apple Music **Motion Covers** (looping HLS video artwork), distance-readable typography, dynamic Ambilight background gradients, and per-session browser mode persistence.
+* **Fullscreen TV Library Overlay**: Dedicated **Library** button in TV Mode opens a fullscreen vertically scrollable grid with large 1:1 square tiles for Personal Stations (*My Station*, *Discovery Station*, *Feel Good*, *Heavy Rotation*) and all local library playlists.
+* **Hardware WLED Ambilight via DDP (UDP Port 4048)**: Ultra-low-latency (`< 2 ms`, 40 FPS) 16-zone bilinear album cover palette streaming with `γ = 2.4` gamma correction and 5 real-time audio-reactive modes driven directly by `AudioProcessTapService` (*Rhythm Sine Wave*, *3-Band Spectral EQ*, *Symmetric Center VU Pulse*, *Harmonic Resonance*, and *Static Cover Palette*), plus smooth 2.5s pause fade-out and background Heartbeat OFF.
+
 ### 📡 BluOS & Network Streaming (Lossless Stream Relay)
 * **Direct Audio Process Tap (`AudioProcessTapService`)**: Directly taps Music.app's audio stream via native CoreAudio Process Tap API (`AudioHardwareCreateProcessTap`) on macOS Sonoma/Sequoia without virtual audio cables, without modifying system sound output, and without muting Mac speakers.
-* **Bit-Perfect BluOS Streaming**: Streams pure LPCM / WAV up to 192 kHz / 24-bit Hi-Res Lossless directly to Bluesound (NODE, POWERNODE) and BluOS-compatible streamers.
+* **Bit-Perfect BluOS Streaming**: Streams pure LPCM / WAV up to 192 kHz / 24-bit Hi-Res Lossless (and true 16-bit / 44.1 kHz for AAC) directly to Bluesound (NODE, POWERNODE) and BluOS-compatible streamers.
 * **Bidirectional Transport Sync**: Seamless real-time state synchronization (Play, Pause, Seek, Volume) between BluOS hardware, official BluOS app, and Apple Music Remote.
 
-### 📱 Premium Web Remote (PWA)
+### 📱 Premium Web Remote (PWA) & Apple Music Personalization
+* **Personal Recommendations, Stations & Mixes**: Full integration with Apple Music `GET /v1/me/recommendations`, personal stations, and weekly mixes paired with GPU-accelerated **60fps generative SVG/CSS plaques** (*My Station*, *Discovery Station*, *Feel Good*, *Heavy Rotation*, *New Music Mix*, *Chill Mix*, *Get Up! Mix*, *Friends Mix*, and *Artist Stations*).
 * **OLED Monochrome Aesthetic**: Pure black `#000000`, hardware-accelerated transitions, visual focus strictly on album artwork with zero clutter.
-* **Zero-Latency Transport Controls**: Non-blocking Play/Pause toggle with optimistic UI response, rapid double-click Previous skip, and desktop Spacebar hotkey.
-* **Robust Search Queue & Autoplay Isolation**: Full queue synchronization preventing Apple Music from falling back to Autoplay radio ("Similar Artists") during search queue playback; automatic background cleanup of temporary cloud playlists.
+* **Zero-Latency Transport Controls & Zero-Stall Poller**: Non-blocking Play/Pause toggle with optimistic UI response, two-tier lightweight IPC polling (~15 ms), rapid double-click Previous skip, and desktop Spacebar hotkey.
+* **Robust Cloud Album & Search Queue**: Complete multi-track queuing for cloud albums and playlists across all regional storefronts without stopping after track 1 or falling back to Autoplay radio; automatic background cleanup of temporary cloud playlists.
 * **High-Speed Artwork Disk Cache (`ArtworkDiskCache`)**: Two-tier memory and persistent disk LRU caching for instant cover art delivery.
 * **Automated Apple ID & Storefront Detection**: Detects your active regional storefront directly from macOS settings, eliminating manual country selectors.
 * **Clean Catalog Search with Deduplication**: Smart filtering of duplicate releases and album versions for clean, fast search results.
@@ -103,7 +109,7 @@ cd amr
 
 ### Running Tests
 
-#### Swift Unit Tests (181 tests):
+#### Swift Unit Tests (214 tests):
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path AppleMusicRemoteMac
 ```

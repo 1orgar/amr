@@ -444,4 +444,285 @@ final class QueueManagerTests: XCTestCase {
             XCTAssertFalse(PlaybackStateStore.shared.isTransitioningTrack, "At 2.6s, track transition debounce must be expired")
         }
     }
+
+    func testTrackMatchingWithLocalizedTitlesAndSameArtist() {
+        let expected = TrackInfo(id: "1838420151", numericId: 1838420151, name: "Hitoshibai", artist: "Mai Fuchigami")
+        // Japanese Kanji localization in Music.app vs English/Romaji from catalog
+        let matches = QueueManager.shared.isTrackMatching(expected: expected, candidateName: "人芝居", candidateArtist: "Mai Fuchigami")
+        XCTAssertTrue(matches, "Track matching must recognize localized title when artist is identical")
+
+        // Cyrillic localization vs Latin title with matching artist
+        let expectedCyr = TrackInfo(id: "2", numericId: 2, name: "Swan Lake", artist: "Tchaikovsky")
+        let matchesCyr = QueueManager.shared.isTrackMatching(expected: expectedCyr, candidateName: "Лебединое озеро", candidateArtist: "Tchaikovsky")
+        XCTAssertTrue(matchesCyr, "Track matching must recognize Cyrillic localization when artist matches")
+    }
+
+    func testPollerNeverStopsAMRPlaylistPlayback() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Hitoshibai", artist: "Mai Fuchigami", isLocal: false, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Minor Piece", artist: "ZAQ", isLocal: false, index: 2)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-10.0)
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
+        }
+
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "Unmatched Japanese Song",
+            "Artist": "Some Artist"
+        ])
+
+        PlaybackStateStore.shared.withLock {
+            // Must be confirmed without stopping or skipping to track 1
+            XCTAssertTrue(PlaybackStateStore.shared.currentTrackPlaybackConfirmed)
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+        }
+    }
+
+    func testPollerNeverStopsNativeNamedPlaylistPlayback() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Sonne", artist: "Rammstein", isLocal: true, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Ich will", artist: "Rammstein", isLocal: true, index: 2)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Любимые песни"
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-10.0)
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
+        }
+
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "Unmatched Song",
+            "Artist": "Foreign Artist"
+        ])
+
+        PlaybackStateStore.shared.withLock {
+            XCTAssertTrue(PlaybackStateStore.shared.currentTrackPlaybackConfirmed)
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+        }
+    }
+
+    func testAdvanceCustomQueueRepeatOne() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Track 1", artist: "Artist 1", isLocal: true, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Track 2", artist: "Artist 2", isLocal: true, index: 2)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.repeatMode = "one"
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-repeat-one")
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+            XCTAssertFalse(PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack)
+        }
+    }
+
+    func testAdvanceCustomQueueSequential() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Track 1", artist: "Artist 1", isLocal: true, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Track 2", artist: "Artist 2", isLocal: true, index: 2)
+        let track3 = TrackInfo(id: "3", numericId: 103, name: "Track 3", artist: "Artist 3", isLocal: true, index: 3)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2, track3]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.repeatMode = "off"
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-seq-1")
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-seq-2")
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2)
+        }
+    }
+
+    func testAdvanceCustomQueueRepeatAllNoShuffle() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Track 1", artist: "Artist 1", isLocal: true, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Track 2", artist: "Artist 2", isLocal: true, index: 2)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 1
+            PlaybackStateStore.shared.repeatMode = "all"
+            PlaybackStateStore.shared.isShuffleQueueActive = false
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-repeat-all")
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+        }
+    }
+
+    func testAdvanceCustomQueueRepeatAllWithShuffle() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Track 1", artist: "Artist 1", isLocal: true, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Track 2", artist: "Artist 2", isLocal: true, index: 2)
+        let track3 = TrackInfo(id: "3", numericId: 103, name: "Track 3", artist: "Artist 3", isLocal: true, index: 3)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2, track3]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 2 // last track is track3 (id "3")
+            PlaybackStateStore.shared.repeatMode = "all"
+            PlaybackStateStore.shared.isShuffleQueueActive = true
+
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-infinite-shuffle")
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueue.count, 3)
+            // The first track of the new cycle must not be track3 (immediate duplicate avoidance)
+            XCTAssertNotEqual(PlaybackStateStore.shared.activeCustomQueue.first?.id, "3")
+        }
+    }
+
+    func testAdvanceCustomQueueRepeatOffSingleTrackStopsCleanly() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Single Track", artist: "Single Artist", isLocal: true, index: 1)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.repeatMode = "off"
+
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-single-stop")
+            XCTAssertFalse(PlaybackStateStore.shared.isCustomQueuePlayback)
+            XCTAssertTrue(PlaybackStateStore.shared.activeCustomQueue.isEmpty)
+            XCTAssertTrue(PlaybackStateStore.shared.isUserPaused)
+        }
+    }
+
+    func testAdvanceCustomQueueRepeatOffMultiTrackClearsAndTransitions() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "Track 1", artist: "Artist 1", isLocal: true, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Track 2", artist: "Artist 2", isLocal: true, index: 2)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 1 // at the end
+            PlaybackStateStore.shared.repeatMode = "off"
+
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-multi-end")
+            XCTAssertFalse(PlaybackStateStore.shared.isCustomQueuePlayback)
+            XCTAssertTrue(PlaybackStateStore.shared.activeCustomQueue.isEmpty)
+        }
+    }
+
+    func testManualNextTrackInShuffledCustomQueueAdvancesWithoutDuplicates() {
+        let tracks = [
+            TrackInfo(id: "1", numericId: 101, name: "Track 1", artist: "Artist 1", isLocal: true, index: 1),
+            TrackInfo(id: "2", numericId: 102, name: "Track 2", artist: "Artist 2", isLocal: true, index: 2),
+            TrackInfo(id: "3", numericId: 103, name: "Track 3", artist: "Artist 3", isLocal: true, index: 3)
+        ]
+
+        _ = PlaybackRouter.shared.playCustomTracks(tracks, startIndex: 0, shuffle: true, queueName: "Shuffled Queue")
+        var visitedIds: [String] = []
+        visitedIds.append(PlaybackStateStore.shared.activeCustomQueue[PlaybackStateStore.shared.activeCustomQueueIndex].id)
+
+        // Wait > 0.25s debounce between manual nextTrack calls
+        Thread.sleep(forTimeInterval: 0.26)
+        _ = PlaybackTransportController.shared.nextTrack()
+        visitedIds.append(PlaybackStateStore.shared.activeCustomQueue[PlaybackStateStore.shared.activeCustomQueueIndex].id)
+
+        Thread.sleep(forTimeInterval: 0.26)
+        _ = PlaybackTransportController.shared.nextTrack()
+        visitedIds.append(PlaybackStateStore.shared.activeCustomQueue[PlaybackStateStore.shared.activeCustomQueueIndex].id)
+
+        // All 3 tracks must be visited exactly once without duplicates!
+        XCTAssertEqual(Set(visitedIds).count, 3)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2)
+
+        // With repeat = "all", pressing nextTrack at the end loops back to index 0 with a fresh permutation
+        _ = PlaybackTransportController.shared.setRepeat(mode: "all")
+        Thread.sleep(forTimeInterval: 0.26)
+        _ = PlaybackTransportController.shared.nextTrack()
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+    }
+
+    func testSetShuffleMidQueueShufflesAndRestoresOriginalOrder() {
+        let tracks = [
+            TrackInfo(id: "10", numericId: 10, name: "Alpha", artist: "Band", isLocal: true, index: 1),
+            TrackInfo(id: "20", numericId: 20, name: "Beta", artist: "Band", isLocal: true, index: 2),
+            TrackInfo(id: "30", numericId: 30, name: "Gamma", artist: "Band", isLocal: true, index: 3),
+            TrackInfo(id: "40", numericId: 40, name: "Delta", artist: "Band", isLocal: true, index: 4)
+        ]
+
+        _ = PlaybackRouter.shared.playCustomTracks(tracks, startIndex: 1, shuffle: false, queueName: "Order Test")
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueue[1].id, "20")
+
+        // Enable shuffle mid-queue: current track at index 1 ("20") stays at index 1, tail is permuted
+        _ = PlaybackTransportController.shared.setShuffle(true)
+        XCTAssertTrue(PlaybackStateStore.shared.isShuffleQueueActive)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueue[1].id, "20")
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueue.count, 4)
+
+        // Disable shuffle: original order [10, 20, 30, 40] is restored and index stays on "20" (index 1)
+        _ = PlaybackTransportController.shared.setShuffle(false)
+        XCTAssertFalse(PlaybackStateStore.shared.isShuffleQueueActive)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueue.map(\.id), ["10", "20", "30", "40"])
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+    }
+
+    func testSetRepeatSanitizesInvalidMode() {
+        _ = PlaybackTransportController.shared.setRepeat(mode: "all\"; do shell script \"whoami")
+        XCTAssertEqual(PlaybackStateStore.shared.repeatMode, "off")
+
+        _ = PlaybackTransportController.shared.setRepeat(mode: "ONE")
+        XCTAssertEqual(PlaybackStateStore.shared.repeatMode, "one")
+    }
+
+    func testWebSocketOriginValidation() {
+        XCTAssertTrue(WebSocketServer.shared.isAllowedWebSocketOrigin("http://localhost:8080"))
+        XCTAssertTrue(WebSocketServer.shared.isAllowedWebSocketOrigin("http://127.0.0.1:8080"))
+        XCTAssertTrue(WebSocketServer.shared.isAllowedWebSocketOrigin("http://192.168.1.50:8080"))
+        XCTAssertTrue(WebSocketServer.shared.isAllowedWebSocketOrigin("http://mac-mini.local:8080"))
+        XCTAssertFalse(WebSocketServer.shared.isAllowedWebSocketOrigin("https://evil.example.com"))
+    }
+
+    func testStationHeaderNotificationDoesNotKillCloudStream() {
+        let track1 = TrackInfo(id: "1381263374", numericId: 3967, name: "Open Your Eyes", artist: "Guano Apes", isLocal: true)
+        let track2 = TrackInfo(id: "286006732", numericId: nil, name: "Lords of the Boards", artist: "Guano Apes", isLocal: false)
+        let track3 = TrackInfo(id: "280436240", numericId: nil, name: "Big In Japan", artist: "Guano Apes", isLocal: false)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2, track3]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 1
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-5.0)
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+        }
+
+        // Transient station header emitted by Music.app must NOT be treated as a foreign track
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "Станция: Lords of the Boards",
+            "Artist": ""
+        ])
+
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+        XCTAssertFalse(PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack)
+    }
+
+    func testStoppedNotificationAdvancesWhenLastKnownPositionNearEnd() {
+        let track1 = TrackInfo(id: "1", numericId: 3413, name: "青のすみか", artist: "Tatsuya Kitani", duration: 196.0, isLocal: true)
+        let track2 = TrackInfo(id: "2", numericId: 3909, name: "マロウブルー", artist: "IDOLiSH7", duration: 245.0, isLocal: true)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-8.0) // User seeked 8s ago
+            PlaybackStateStore.shared.lastKnownPosition = 194.5 // Near end of 196s track
+        }
+
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "stopped"
+        ])
+
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+    }
 }

@@ -29,6 +29,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
     public var bytesPerFrame: Int { channels * (bitDepth / 8) }
 
     public private(set) var isCapturing: Bool = false
+    public var isRealTapActive: Bool { aggregateDeviceID != 0 && tapObjectID != 0 }
     
     // Subscriber callbacks: (UUID, (Data) -> Void)
     private var subscribers: [UUID: (Data) -> Void] = [:]
@@ -41,6 +42,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
     }
     private var lastAudioReceivedTime: Date = Date.distantPast
     private var silenceTimer: DispatchSourceTimer?
+    private var silenceTickCount: Int = 0
     private let silenceLock = NSLock()
 
     private init() {}
@@ -56,7 +58,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
             guard let self = self else { return }
             self.subscribers[id] = onAudioChunk
             NSLog("[AudioProcessTapService] 🎧 Added stream subscriber \(id). Total active: \(self.subscribers.count)")
-            if !self.isCapturing {
+            if !self.isRealTapActive {
                 self.startCaptureInternal()
             }
         }
@@ -143,7 +145,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
     }
 
     private func startCaptureInternal() {
-        guard !isCapturing else { return }
+        guard !isRealTapActive else { return }
 
         guard #available(macOS 14.2, *) else {
             NSLog("[AudioProcessTapService] ⚠️ CoreAudio Process Tap requires macOS 14.2+. Running silence generator fallback.")
@@ -206,7 +208,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
         NSLog("[AudioProcessTapService] 🎯 Found CoreAudio process object ID: \(objID) for Music.app")
         let tapDesc = CATapDescription(stereoMixdownOfProcesses: [objID])
         tapDesc.name = "AMR Live Tap"
-        tapDesc.muteBehavior = .muted
+        tapDesc.muteBehavior = DLNADiscoveryManager.shared.hasActiveRenderer ? .muted : .unmuted
 
         var newTapID: AudioObjectID = 0
         let tapStatus = AudioHardwareCreateProcessTap(tapDesc, &newTapID)
@@ -313,8 +315,9 @@ public final class AudioProcessTapService: @unchecked Sendable {
     }
 
     private func stopCaptureInternal() {
-        guard isCapturing else { return }
+        guard isCapturing || isRealTapActive else { return }
         stopSilenceGenerator()
+        silenceTickCount = 0
 
         if let procID = ioProcID, aggregateDeviceID != 0 {
             AudioDeviceStop(aggregateDeviceID, procID)
@@ -461,6 +464,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
 
     private func startSilenceGenerator() {
         stopSilenceGenerator()
+        silenceTickCount = 0
         let timer = DispatchSource.makeTimerSource(queue: queue)
         // Fire every 50ms
         timer.schedule(deadline: .now() + 0.05, repeating: 0.05)
@@ -470,6 +474,13 @@ public final class AudioProcessTapService: @unchecked Sendable {
             self.silenceLock.lock()
             let timeSinceLastAudio = now.timeIntervalSince(self.lastAudioReceivedTime)
             self.silenceLock.unlock()
+
+            self.silenceTickCount += 1
+            // Every 20 ticks (~1 second), if real tap is not yet active and we have subscribers,
+            // retry attaching the real Process Tap to Music.app
+            if self.silenceTickCount % 20 == 0 && !self.isRealTapActive && !self.subscribers.isEmpty {
+                self.startCaptureInternal()
+            }
 
             // If no real CoreAudio frames received for > 200ms (paused or stopped),
             // inject 50ms of silence frames so connected streamers don't buffer-underrun.

@@ -42,28 +42,51 @@ public final class CloudCatalogService: @unchecked Sendable {
 
     // MARK: - Curated Stations Catalog
 
+    public func getCuratedStationsAsync(country: String = "ru") async -> [StationInfo] {
+        if MusicKitManager.shared.hasUserToken {
+            _ = await MusicKitManager.shared.fetchPersonalStations()
+        }
+        return getCuratedStations(country: country)
+    }
+
     public func getCuratedStations(country: String = "ru") -> [StationInfo] {
         let c = country.lowercased()
-        let isRu = ["ru", "kz", "by", "ua"].contains(c)
+        let isRu = ["ru", "kz", "by", "ua"].contains(c) || MusicKitManager.shared.getPreferredLanguageTag().lowercased().hasPrefix("ru")
+
+        let cached = MusicKitManager.shared.getCachedPersonalData()
+        let personalStation = cached?.personalStation
+        let discoveryStation = cached?.discoveryStation
+
+        let personalName = personalStation?.name ?? (isRu ? "Моя станция" : "My Station")
+        let personalUrl = personalStation?.url ?? "https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
+        let personalArt = (personalStation?.artwork.isEmpty == false) ? personalStation!.artwork : MusicKitManager.defaultPersonalStationArtwork
+        let personalId = personalStation?.id ?? "ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
+
+        let discoveryName = discoveryStation?.name ?? (isRu ? "Станция открытий" : "Discovery Station")
+        let discoveryUrl = discoveryStation?.url ?? "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
+        let discoveryArt = (discoveryStation?.artwork.isEmpty == false) ? discoveryStation!.artwork : "/assets/stations/CoverDiscovery.png"
+        let discoveryId = discoveryStation?.id ?? "station_discovery"
 
         return [
             StationInfo(
-                id: "station_personal",
-                name: isRu ? "Моя станция (Кирилл Шолохов)" : "My Station (Kirill Sholokhov)",
+                id: personalId,
+                name: personalName,
                 subtitle: isRu ? "Любимые треки и персональные рекомендации" : "Favorite tracks & personal recommendations",
-                artwork: "/assets/stations/CoverPersonal.png",
-                url: "https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f",
+                artwork: personalArt,
+                url: personalUrl,
                 isLive: false,
-                color: "linear-gradient(135deg, #fa233b, #fb5c74)"
+                color: "linear-gradient(135deg, #fa233b, #fb5c74)",
+                isPersonal: true
             ),
             StationInfo(
-                id: "station_discovery",
-                name: isRu ? "Станция открытий" : "Discovery Station",
+                id: discoveryId,
+                name: discoveryName,
                 subtitle: isRu ? "Новая музыка на основе ваших вкусов" : "New music based on what you love",
-                artwork: "/assets/stations/CoverDiscovery.png",
-                url: "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm",
+                artwork: discoveryArt,
+                url: discoveryUrl,
                 isLive: false,
-                color: "linear-gradient(135deg, #7928ca, #ff0080)"
+                color: "linear-gradient(135deg, #7928ca, #ff0080)",
+                isPersonal: true
             ),
             StationInfo(
                 id: "station_am1",
@@ -173,7 +196,13 @@ public final class CloudCatalogService: @unchecked Sendable {
             ]
         }
 
-        let c = country.isEmpty ? "ru" : country.lowercased()
+        let c: String
+        if !PlaybackRouter.shared.isTestingEnvironment && MusicKitManager.shared.hasUserToken {
+            let userSf = MusicKitManager.shared.getUserStorefront().lowercased()
+            c = userSf.isEmpty ? (country.isEmpty ? "ru" : country.lowercased()) : userSf
+        } else {
+            c = country.isEmpty ? "ru" : country.lowercased()
+        }
         let effectiveLimit = max(1, min(limit, 100))
         let effectiveOffset = max(0, offset)
 
@@ -222,12 +251,43 @@ public final class CloudCatalogService: @unchecked Sendable {
             }
         }
 
+        var localPlaylistDicts = [[String: Any]]()
+        if effectiveOffset == 0 {
+            let lowerQ = query.lowercased()
+            let qTokens = lowerQ.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+            let localPlaylists = LibraryService.shared.getPlaylists()
+            for pl in localPlaylists {
+                let pName = pl.name.lowercased()
+                let matchesDirect = pName.contains(lowerQ)
+                let matchesTokens = !qTokens.isEmpty && qTokens.allSatisfy({ pName.contains($0) })
+                if matchesDirect || matchesTokens {
+                    let enc = pl.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    let art = pl.artworkUrl ?? "/api/artwork/playlist?name=\(enc)"
+                    localPlaylistDicts.append([
+                        "type": "playlist",
+                        "id": pl.id ?? pl.name,
+                        "name": pl.name,
+                        "curator": "Медиатека",
+                        "curator_name": "Медиатека",
+                        "subtitle": "\(pl.trackCount) треков",
+                        "track_count": pl.trackCount,
+                        "artwork": art,
+                        "artwork_url": art,
+                        "url": pl.url ?? "",
+                        "is_playlist": true,
+                        "is_local": true
+                    ])
+                }
+            }
+        }
+
         if source == "library" {
             let dedupedLocal = Self.deduplicateSongs(localSongDicts)
             return [
                 "artists": AnyCodable([]),
                 "songs": AnyCodable(dedupedLocal),
                 "albums": AnyCodable([]),
+                "playlists": AnyCodable(localPlaylistDicts),
                 "offset": AnyCodable(effectiveOffset),
                 "limit": AnyCodable(effectiveLimit),
                 "has_more": AnyCodable(false)
@@ -258,7 +318,8 @@ public final class CloudCatalogService: @unchecked Sendable {
         }
 
         // 1. Try official Apple Music API with MusicKit developer token
-        if let appleMusicResults = await MusicKitManager.shared.searchAppleMusic(query: query, storefront: c, limit: effectiveLimit, offset: effectiveOffset) {
+        let catalogLimit = min(effectiveLimit, 25)
+        if let appleMusicResults = await MusicKitManager.shared.searchAppleMusic(query: query, storefront: c, limit: catalogLimit, offset: effectiveOffset) {
             var res = [String: AnyCodable]()
             let rawCloudSongs = (appleMusicResults["songs"] as? [[String: Any]]) ?? []
             let dedupedCloudSongs = Self.deduplicateSongs(rawCloudSongs)
@@ -287,6 +348,13 @@ public final class CloudCatalogService: @unchecked Sendable {
             } else {
                 res["artists"] = AnyCodable([])
             }
+            let cloudPlaylists = (appleMusicResults["playlists"] as? [[String: Any]]) ?? []
+            let localNames = Set(localPlaylistDicts.compactMap { ($0["name"] as? String)?.lowercased() })
+            let uniqueCloudPlaylists = cloudPlaylists.filter {
+                guard let cn = ($0["name"] as? String)?.lowercased() else { return true }
+                return !localNames.contains(cn)
+            }
+            res["playlists"] = AnyCodable(localPlaylistDicts + uniqueCloudPlaylists)
             res["offset"] = AnyCodable(effectiveOffset)
             res["limit"] = AnyCodable(effectiveLimit)
             res["has_more"] = AnyCodable(rawCloudSongs.count >= effectiveLimit)
@@ -319,6 +387,7 @@ public final class CloudCatalogService: @unchecked Sendable {
             "artists": AnyCodable(artists),
             "songs": AnyCodable(mergedFallbackSongs),
             "albums": AnyCodable(albums),
+            "playlists": AnyCodable(localPlaylistDicts),
             "offset": AnyCodable(effectiveOffset),
             "limit": AnyCodable(effectiveLimit),
             "has_more": AnyCodable(rawSongs.count >= effectiveLimit)
@@ -363,8 +432,8 @@ public final class CloudCatalogService: @unchecked Sendable {
     }
 
     private func fetchArtists(query: String, country: String, limit: Int = 8, offset: Int = 0) async -> [[String: Any]] {
-        let offsetParam = offset > 0 ? "&offset=\(offset)" : ""
-        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=musicArtist&country=\(country)&limit=\(limit)\(offsetParam)"
+        let totalToFetch = max(1, min(200, offset + limit))
+        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=musicArtist&country=\(country)&limit=\(totalToFetch)"
         guard let url = URL(string: urlStr) else { return [] }
 
         var req = URLRequest(url: url)
@@ -390,12 +459,16 @@ public final class CloudCatalogService: @unchecked Sendable {
                 "url": url
             ])
         }
-        return list
+        if offset < list.count {
+            let end = min(offset + limit, list.count)
+            return Array(list[offset..<end])
+        }
+        return []
     }
 
     private func fetchSongs(query: String, country: String, limit: Int = 50, offset: Int = 0) async -> [[String: Any]] {
-        let offsetParam = offset > 0 ? "&offset=\(offset)" : ""
-        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=song&country=\(country)&limit=\(limit)\(offsetParam)"
+        let totalToFetch = max(1, min(200, offset + limit))
+        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=song&country=\(country)&limit=\(totalToFetch)"
         guard let url = URL(string: urlStr) else { return [] }
 
         var req = URLRequest(url: url)
@@ -432,12 +505,16 @@ public final class CloudCatalogService: @unchecked Sendable {
                 "preview_url": preview
             ])
         }
-        return list
+        if offset < list.count {
+            let end = min(offset + limit, list.count)
+            return Array(list[offset..<end])
+        }
+        return []
     }
 
     private func fetchAlbums(query: String, country: String, limit: Int = 12, offset: Int = 0) async -> [[String: Any]] {
-        let offsetParam = offset > 0 ? "&offset=\(offset)" : ""
-        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=album&country=\(country)&limit=\(limit)\(offsetParam)"
+        let totalToFetch = max(1, min(200, offset + limit))
+        let urlStr = "https://itunes.apple.com/search?term=\(query)&entity=album&country=\(country)&limit=\(totalToFetch)"
         guard let url = URL(string: urlStr) else { return [] }
 
         var req = URLRequest(url: url)
@@ -472,7 +549,11 @@ public final class CloudCatalogService: @unchecked Sendable {
                 "url": url
             ])
         }
-        return list
+        if offset < list.count {
+            let end = min(offset + limit, list.count)
+            return Array(list[offset..<end])
+        }
+        return []
     }
 
     // MARK: - Explore Feed
@@ -490,7 +571,22 @@ public final class CloudCatalogService: @unchecked Sendable {
             return cached
         }
 
-        let stations = getCuratedStations(country: c)
+        let isRu = ["ru", "kz", "by", "ua"].contains(c) || MusicKitManager.shared.getPreferredLanguageTag().lowercased().hasPrefix("ru")
+
+        var personalMixes: [PlaylistInfo] = []
+        var personalRecs: [PersonalRecommendationGroup] = []
+        var dynamicPersonalStation: StationInfo? = nil
+        var dynamicDiscoveryStation: StationInfo? = nil
+
+        if MusicKitManager.shared.hasUserToken {
+            let (pStation, dStation) = await MusicKitManager.shared.fetchPersonalStations()
+            dynamicPersonalStation = pStation
+            dynamicDiscoveryStation = dStation
+            personalMixes = await MusicKitManager.shared.fetchPersonalMixes()
+            personalRecs = await MusicKitManager.shared.fetchPersonalRecommendations(limit: 30)
+        }
+
+        var stations = getCuratedStations(country: c)
 
         let genres: [[String: String]] = [
             ["name": "🔥 Поп-музыка", "query": "Pop Hits", "color": "linear-gradient(135deg, #fa2d48, #ff6b8b)"],
@@ -562,84 +658,370 @@ public final class CloudCatalogService: @unchecked Sendable {
         }
         let hotTracks = topSongs.count > 10 ? Array(topSongs.prefix(10)) : topSongs
 
-        // Variant 3: Hybrid Hero Cards
+        // Section 1: Hero Cards (Подборка лучших)
         var heroCards: [[String: Any]] = []
 
-        // Card 1: "Моя станция" (Personal Station)
-        heroCards.append([
-            "index": 1,
-            "title": "Моя станция",
-            "name": "Моя станция",
-            "subtitle": "Персональная радиостанция",
-            "sub": "Персональная радиостанция",
-            "tag": "Специально для вас",
-            "id": "ra.u-96b95a031a2fb0aa1abb70ff757aa95f",
-            "type": "station",
-            "url": "https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f",
-            "artwork": "/assets/stations/CoverPersonal.png"
-        ])
-
-        // Card 2: "Станция открытий" (Discovery Station)
-        heroCards.append([
-            "index": 2,
-            "title": "Станция открытий",
-            "name": "Станция открытий",
-            "subtitle": "Новые треки под ваш вкус",
-            "sub": "Новые треки под ваш вкус",
-            "tag": "Радиостанция",
-            "id": "ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm",
-            "type": "station",
-            "url": "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm",
-            "artwork": "/assets/stations/CoverDiscovery.png"
-        ])
-
-        // Cards 3-4: User's library playlists (MusicBridge.shared.getPlaylists())
-        var libraryPlaylists = MusicBridge.shared.getPlaylists()
-        if libraryPlaylists.isEmpty {
-            libraryPlaylists = [
-                PlaylistInfo(name: "Любимые песни", trackCount: 296, artworkUrl: "/api/artwork/playlist?name=%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B5%20%D0%BF%D0%B5%D1%81%D0%BD%D0%B8", isPlaylist: true),
-                PlaylistInfo(name: "Ностальгия по ню-металу", trackCount: 98, artworkUrl: "/api/artwork/playlist?name=%D0%9D%D0%BE%D1%81%D1%82%D0%B0%D0%BB%D1%8C%D0%B3%D0%B8%D1%8F%20%D0%BF%D0%BE%20%D0%BD%D1%8E-%D0%BC%D0%B5%D1%82%D0%B0%D0%BB%D1%83", isPlaylist: true)
-            ]
-        }
-        for pl in libraryPlaylists.prefix(2) {
-            let enc = pl.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            let art = pl.artworkUrl ?? "/api/artwork/playlist?name=\(enc)"
-            let countStr = "\(pl.trackCount) треков"
+        if MusicKitManager.shared.hasUserToken {
+            // 1. Моя станция из клауда (Personal Station)
+            let pRawName = dynamicPersonalStation?.name ?? ""
+            var ownerName = pRawName
+                .replacingOccurrences(of: "’s Station", with: "")
+                .replacingOccurrences(of: "'s Station", with: "")
+                .replacingOccurrences(of: " Station", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if ownerName.isEmpty || ownerName == "My" || ownerName == "Personal" || ownerName == "Моя станция" || ownerName == "You" {
+                if let cur = personalMixes.compactMap({ $0.curatorName }).first(where: { $0.contains("Apple Music for ") }) {
+                    ownerName = cur.replacingOccurrences(of: "Apple Music for ", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+            if ownerName.isEmpty || ownerName == "My" || ownerName == "Personal" || ownerName == "Моя станция" {
+                ownerName = "You"
+            }
+            let pTitle = isRu ? "Моя станция" : "My Station"
+            let pSub = "Apple Music for \(ownerName)"
+            let pUrl = dynamicPersonalStation?.url ?? "https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
+            let pId = dynamicPersonalStation?.id ?? "ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
+            let pArt = (dynamicPersonalStation?.artwork.isEmpty == false) ? dynamicPersonalStation!.artwork : MusicKitManager.defaultPersonalStationArtwork
             heroCards.append([
-                "index": heroCards.count + 1,
-                "title": pl.name,
-                "name": pl.name,
-                "subtitle": countStr,
-                "sub": countStr,
-                "tag": "Плейлист медиатеки",
-                "id": pl.name,
+                "index": 1,
+                "title": pTitle,
+                "name": pTitle,
+                "subtitle": pSub,
+                "sub": pSub,
+                "tag": isRu ? "Радиостанция" : "Radio Station",
+                "id": pId,
+                "type": "station",
+                "url": pUrl,
+                "artwork": pArt
+            ])
+
+            // 2. Станция открытий из клауда (Discovery Station)
+            let dTitle = isRu ? "Станция открытий" : "Discovery Station"
+            let dSub = isRu ? "Новые треки под ваш вкус" : "New music based on what you love"
+            let dUrl = dynamicDiscoveryStation?.url ?? "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
+            let dId = dynamicDiscoveryStation?.id ?? "ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
+            let dArt = (dynamicDiscoveryStation?.artwork.isEmpty == false) ? dynamicDiscoveryStation!.artwork : "/assets/stations/CoverDiscovery.png"
+            heroCards.append([
+                "index": 2,
+                "title": dTitle,
+                "name": dTitle,
+                "subtitle": dSub,
+                "sub": dSub,
+                "tag": isRu ? "Радиостанция" : "Radio Station",
+                "id": dId,
+                "type": "station",
+                "url": dUrl,
+                "artwork": dArt
+            ])
+
+            // 3. В моем вкусе из клауда (Favorites / Essentials Mix)
+            let favMix = personalMixes.first(where: { m in
+                let n = m.name.lowercased()
+                return n.contains("в моем вкусе") || n.contains("в моём вкусе") || n.contains("favorites") || n.contains("essentials") || n.contains("избранн")
+            })
+            let favTitle = favMix?.name ?? (isRu ? "В моём вкусе" : "Favorites Mix")
+            let favId = favMix?.id ?? "favorites_mix"
+            let favUrl = favMix?.url ?? (!favId.isEmpty ? "https://music.apple.com/playlist/\(favId)" : "")
+            let favArt = (favMix?.artworkUrl?.isEmpty == false) ? favMix!.artworkUrl! : "/assets/stations/CoverElectronic.png"
+            heroCards.append([
+                "index": 3,
+                "title": favTitle,
+                "name": favTitle,
+                "subtitle": favMix?.description ?? (isRu ? "Микс на основе ваших вкусов" : "Your all-time favorites"),
+                "sub": favMix?.description ?? (isRu ? "Микс на основе ваших вкусов" : "Your all-time favorites"),
+                "tag": isRu ? "Микс" : "Personal Mix",
+                "id": favId,
                 "type": "playlist",
-                "url": "",
-                "artwork": art,
-                "track_count": pl.trackCount
+                "url": favUrl,
+                "artwork": favArt
             ])
+
+            // 4. Сейчас на повторе из клауда (Heavy Rotation Mix)
+            let hrMix = personalMixes.first(where: { m in
+                let n = m.name.lowercased()
+                return n.contains("повторе") || n.contains("heavy rotation") || n.contains("rotation")
+            })
+            let hrTitle = hrMix?.name ?? (isRu ? "Сейчас на повторе" : "Heavy Rotation Mix")
+            let hrId = hrMix?.id ?? "pl.pm-20e9f373919da080ba0f21cc6adb1672"
+            let hrUrl = hrMix?.url ?? (!hrId.isEmpty ? "https://music.apple.com/playlist/heavy-rotation-mix/\(hrId)" : "")
+            let hrArt = (hrMix?.artworkUrl?.isEmpty == false) ? hrMix!.artworkUrl! : "/assets/stations/CoverHeavyRotation.svg"
+            heroCards.append([
+                "index": 4,
+                "title": hrTitle,
+                "name": hrTitle,
+                "subtitle": hrMix?.description ?? (isRu ? "Музыка, которую вы часто слушаете" : "Music you listen to most right now"),
+                "sub": hrMix?.description ?? (isRu ? "Музыка, которую вы часто слушаете" : "Music you listen to most right now"),
+                "tag": isRu ? "Микс" : "Personal Mix",
+                "id": hrId,
+                "type": "playlist",
+                "url": hrUrl,
+                "artwork": hrArt
+            ])
+
+            // 5. Сезонные подборки из клауда (Replay / seasonal mixes)
+            var seasonMix = personalMixes.first(where: { m in
+                let n = m.name.lowercased()
+                return n.contains("replay") || n.contains("итоги") || n.contains("сезон")
+            })
+            if seasonMix == nil {
+                for grp in personalRecs {
+                    if let res = grp.contents.first(where: { r in
+                        let n = r.name.lowercased()
+                        let t = grp.title.lowercased()
+                        return (r.type == "playlists") && (n.contains("replay") || n.contains("итоги") || t.contains("replay") || t.contains("итоги") || t.contains("seasonal") || t.contains("сезон"))
+                    }) {
+                        seasonMix = PlaylistInfo(
+                            name: res.name,
+                            trackCount: 50,
+                            artworkUrl: res.artworkUrl,
+                            isPlaylist: true,
+                            id: res.id,
+                            url: res.url,
+                            curatorName: res.subtitle ?? "Apple Music",
+                            description: res.subtitle
+                        )
+                        break
+                    }
+                }
+            }
+            let seasonTitle = seasonMix?.name ?? (isRu ? "Итоги года Replay" : "Replay")
+            let seasonId = seasonMix?.id ?? "replay_playlist"
+            let seasonUrl = seasonMix?.url ?? (!seasonId.isEmpty ? "https://music.apple.com/playlist/\(seasonId)" : "")
+            let seasonArt = (seasonMix?.artworkUrl?.isEmpty == false) ? seasonMix!.artworkUrl! : "/assets/stations/CoverRock.png"
+            heroCards.append([
+                "index": 5,
+                "title": seasonTitle,
+                "name": seasonTitle,
+                "subtitle": seasonMix?.description ?? (isRu ? "Ваши главные треки года" : "Your top tracks"),
+                "sub": seasonMix?.description ?? (isRu ? "Ваши главные треки года" : "Your top tracks"),
+                "tag": isRu ? "Сезонная подборка" : "Seasonal",
+                "id": seasonId,
+                "type": "playlist",
+                "url": seasonUrl,
+                "artwork": seasonArt,
+                "artwork_url": seasonArt
+            ])
+
+            // 6. Подборка к событиям: строго 1 карточка на ближайшее событие (как в Apple Music)
+            let month = Calendar.current.component(.month, from: Date())
+            let eventId: String
+            let eventTitle: String
+            let eventSub: String
+            let eventArt: String
+            let eventUrl: String
+            let eventColor: String
+
+            if month == 10 {
+                // Октябрь: Halloween
+                eventId = "pl.14572caaa2c0493994f3b7beff6b1b10"
+                eventTitle = "Halloween Essentials"
+                eventSub = isRu ? "Хэллоуин в Apple Music" : "Halloween Party & Hits"
+                eventArt = "https://is1-ssl.mzstatic.com/image/thumb/Features/v4/14/57/2c/14572caa-a2c0-4939-94f3-b7beff6b1b10/mza_10818274191630138981.png/600x600bb.jpg"
+                eventUrl = "https://music.apple.com/us/playlist/halloween-essentials/\(eventId)"
+                eventColor = "linear-gradient(135deg, #e65c00, #f9d423)"
+            } else {
+                // Ноябрь, Декабрь, Январь и по умолчанию: Новый год
+                eventId = "pl.aa7d95d6eb4f45d3879bd7ca1ea515ff"
+                eventTitle = isRu ? "Новый год: Вечеринка" : "New Year’s Eve: Dinner Party"
+                eventSub = isRu ? "Праздничные хиты и танцы" : "Countdown & party starters"
+                eventArt = "https://is1-ssl.mzstatic.com/image/thumb/Features114/v4/c2/0e/f3/c20ef30c-5720-8dfc-3227-e9962300c63e/U0MtTVMtV1ctTmV3X1llYXJzX0V2ZV9EaW5uZXJfUGFydHktQURBTV9JRD0xMDY3NDcwNjYxLnBuZw.png/600x600cc.jpg"
+                eventUrl = "https://music.apple.com/us/playlist/new-years-eve-dinner-party/\(eventId)"
+                eventColor = "linear-gradient(135deg, #1b0a2a, #3c1361, #75225b)"
+            }
+
+            heroCards.append([
+                "index": 6,
+                "title": eventTitle,
+                "name": eventTitle,
+                "subtitle": eventSub,
+                "sub": eventSub,
+                "tag": isRu ? "Событие" : "Event",
+                "id": eventId,
+                "type": "playlist",
+                "url": eventUrl,
+                "artwork": eventArt,
+                "artwork_url": eventArt,
+                "color": eventColor
+            ])
+
+            // 7. Радиостанции по артистам из моих рекомов (Cloud Artist Stations from 'Stations for You')
+            var seenStationIds = Set<String>()
+            for s in stations { seenStationIds.insert(s.id) }
+            if let pId = dynamicPersonalStation?.id { seenStationIds.insert(pId) }
+            if let dId = dynamicDiscoveryStation?.id { seenStationIds.insert(dId) }
+            seenStationIds.insert("ra.u-96b95a031a2fb0aa1abb70ff757aa95f")
+            seenStationIds.insert("ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm")
+
+            var artistStations: [StationInfo] = []
+            var firstArtistRawName: String? = nil
+            for grp in personalRecs {
+                let grpTitle = grp.title.lowercased()
+                // Strictly ignore "Recently Played" group to eliminate individual song stations
+                if grpTitle.contains("recently") || grpTitle.contains("недавно") {
+                    continue
+                }
+
+                for res in grp.contents where res.type == "stations" {
+                    if seenStationIds.contains(res.id) { continue }
+                    if res.id.hasPrefix("ra.u-") || res.id.hasPrefix("ra.q-") { continue }
+                    let lower = res.name.lowercased()
+                    if lower.contains("discovery") || lower.contains("открыти") || lower.contains("my station") || lower.contains("моя станция") {
+                        continue
+                    }
+
+                    // Must be an artist station: require "similar" or "подобные" or being in a station-dedicated group
+                    let isArtistStation = lower.contains("similar") || lower.contains("подобные") || grpTitle.contains("stations") || grpTitle.contains("станции")
+                    // If it's just "<Song> Station" without similar artists, skip it
+                    let isSongStation = !lower.contains("similar") && !lower.contains("подобные") && !grpTitle.contains("stations")
+                    if !isArtistStation || isSongStation {
+                        continue
+                    }
+
+                    seenStationIds.insert(res.id)
+                    if firstArtistRawName == nil {
+                        firstArtistRawName = res.name
+                    }
+
+                    let cleanName = res.name
+                        .replacingOccurrences(of: " & Similar Artists Station", with: "")
+                        .replacingOccurrences(of: " Station", with: "")
+                        .replacingOccurrences(of: " и другие подобные артисты", with: "")
+                        .replacingOccurrences(of: " Станция", with: "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let sTitle = isRu ? "\(cleanName) и другие подобные артисты" : "\(cleanName) & Similar Artists"
+                    let sSub = res.subtitle ?? (isRu ? "Радиостанция по артисту" : "Artist Station")
+                    let sUrl = res.url ?? "https://music.apple.com/station/\(res.id)"
+                    let sArt = (res.artworkUrl?.isEmpty == false) ? res.artworkUrl! : "/assets/stations/CoverDiscovery.png"
+
+                    artistStations.append(StationInfo(
+                        id: res.id,
+                        name: sTitle,
+                        subtitle: sSub,
+                        artwork: sArt,
+                        url: sUrl,
+                        isLive: false,
+                        color: "linear-gradient(135deg, #1c1c1e, #3a3a3c)"
+                    ))
+                }
+            }
+
+            // In top picks (heroCards), add at most ONE artist station card (just like Apple Music Top Picks)
+            if let firstArtist = artistStations.first {
+                heroCards.append([
+                    "index": 7,
+                    "title": firstArtist.name,
+                    "name": firstArtistRawName ?? firstArtist.name,
+                    "subtitle": firstArtist.subtitle,
+                    "sub": firstArtist.subtitle,
+                    "tag": isRu ? "Радиостанция по артисту" : "Artist Station",
+                    "id": firstArtist.id,
+                    "type": "station",
+                    "url": firstArtist.url,
+                    "artwork": firstArtist.artwork
+                ])
+            }
+
+            // Append all artist stations to stations collection
+            stations.append(contentsOf: artistStations)
+        } else {
+            // Fallback for users without Apple Music User Token (curated v2.3 cards)
+            let pName = isRu ? "Моя станция" : "My Station"
+            let pUrl = "https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
+            let pArt = MusicKitManager.defaultPersonalStationArtwork
+            heroCards.append([
+                "index": 1,
+                "title": pName,
+                "name": pName,
+                "subtitle": isRu ? "Персональная радиостанция" : "Personal Radio",
+                "sub": isRu ? "Персональная радиостанция" : "Personal Radio",
+                "tag": isRu ? "Специально для вас" : "Made for You",
+                "id": "ra.u-96b95a031a2fb0aa1abb70ff757aa95f",
+                "type": "station",
+                "url": pUrl,
+                "artwork": pArt
+            ])
+
+            let dName = isRu ? "Станция открытий" : "Discovery Station"
+            let dUrl = "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
+            let dArt = "/assets/stations/CoverDiscovery.png"
+            heroCards.append([
+                "index": 2,
+                "title": dName,
+                "name": dName,
+                "subtitle": isRu ? "Новые треки под ваш вкус" : "New music based on what you love",
+                "sub": isRu ? "Новые треки под ваш вкус" : "New music based on what you love",
+                "tag": isRu ? "Радиостанция" : "Radio Station",
+                "id": "ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm",
+                "type": "station",
+                "url": dUrl,
+                "artwork": dArt
+            ])
+
+            var libraryPlaylists = MusicBridge.shared.getPlaylists()
+            if libraryPlaylists.isEmpty {
+                libraryPlaylists = [
+                    PlaylistInfo(name: "Любимые песни", trackCount: 296, artworkUrl: "/api/artwork/playlist?name=%D0%9B%D1%8E%D0%B1%D0%B8%D0%BC%D1%8B%D0%B5%20%D0%BF%D0%B5%D1%81%D0%BD%D0%B8", isPlaylist: true),
+                    PlaylistInfo(name: "Ностальгия по ню-металу", trackCount: 98, artworkUrl: "/api/artwork/playlist?name=%D0%9D%D0%BE%D1%81%D1%82%D0%B0%D0%BB%D1%8C%D0%B3%D0%B8%D1%8F%20%D0%BF%D0%BE%20%D0%BD%D1%8E-%D0%BC%D0%B5%D1%82%D0%B0%D0%BB%D1%83", isPlaylist: true)
+                ]
+            }
+            for pl in libraryPlaylists.prefix(2) {
+                let enc = pl.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                let art = pl.artworkUrl ?? "/api/artwork/playlist?name=\(enc)"
+                let countStr = "\(pl.trackCount) треков"
+                heroCards.append([
+                    "index": heroCards.count + 1,
+                    "title": pl.name,
+                    "name": pl.name,
+                    "subtitle": countStr,
+                    "sub": countStr,
+                    "tag": "Плейлист медиатеки",
+                    "id": pl.name,
+                    "type": "playlist",
+                    "url": "",
+                    "artwork": art,
+                    "track_count": pl.trackCount
+                ])
+            }
+
+            let neededAlbumCards = max(0, 7 - heroCards.count)
+            for album in topAlbums.prefix(neededAlbumCards) {
+                let aName = album["name"] as? String ?? ""
+                let aArtist = album["artist"] as? String ?? ""
+                let aId = album["id"] as? String ?? ""
+                let aArt = album["artwork"] as? String ?? ""
+                let aUrl = album["url"] as? String ?? (!aId.isEmpty ? "https://music.apple.com/album/\(aId)" : "")
+                heroCards.append([
+                    "index": heroCards.count + 1,
+                    "title": aName,
+                    "name": aName,
+                    "subtitle": aArtist,
+                    "sub": aArtist,
+                    "tag": "Топ-альбом",
+                    "id": aId,
+                    "type": "album",
+                    "url": aUrl,
+                    "artwork": aArt
+                ])
+            }
         }
 
-        // Cards 5-7: Top Storefront Albums from topAlbums RSS / MusicKit
-        let neededAlbumCards = max(0, 7 - heroCards.count)
-        for album in topAlbums.prefix(neededAlbumCards) {
-            let aName = album["name"] as? String ?? ""
-            let aArtist = album["artist"] as? String ?? ""
-            let aId = album["id"] as? String ?? ""
-            let aArt = album["artwork"] as? String ?? ""
-            let aUrl = album["url"] as? String ?? (!aId.isEmpty ? "https://music.apple.com/album/\(aId)" : "")
-            heroCards.append([
-                "index": heroCards.count + 1,
-                "title": aName,
-                "name": aName,
-                "subtitle": aArtist,
-                "sub": aArtist,
-                "tag": "Топ-альбом",
-                "id": aId,
-                "type": "album",
-                "url": aUrl,
-                "artwork": aArt
-            ])
+        var newReleases: [[String: Any]] = []
+        for grp in personalRecs {
+            let t = grp.title.lowercased()
+            if t.contains("new release") || t.contains("релиз") || t.contains("новинк") {
+                for res in grp.contents {
+                    newReleases.append([
+                        "id": res.id,
+                        "name": res.name,
+                        "artist": res.subtitle ?? "",
+                        "subtitle": res.subtitle ?? "",
+                        "artwork": res.artworkUrl ?? "",
+                        "artwork_url": res.artworkUrl ?? "",
+                        "url": res.url ?? "https://music.apple.com/album/\(res.id)",
+                        "type": "album"
+                    ])
+                }
+            }
         }
 
         var feed: [String: Any] = [
@@ -651,75 +1033,127 @@ public final class CloudCatalogService: @unchecked Sendable {
             "top_albums": topAlbums,
             "genres": genres
         ]
+        if !newReleases.isEmpty {
+            feed["new_releases"] = newReleases
+        }
 
         let recentTracks = MusicBridge.shared.getRecentlyPlayed(limit: 30)
-        let recentArtists = recentTracks.compactMap({ $0.artist.isEmpty ? nil : $0.artist }).reduce(into: [String: Int](), { $0[$1, default: 0] += 1 }).sorted(by: { $0.value > $1.value }).map { $0.key }
-        
-        var artistsToUse = Array(recentArtists.prefix(3))
-        if artistsToUse.isEmpty {
-            artistsToUse = Array(Set(topAlbums.compactMap { $0["artist"] as? String })).prefix(3).map { $0 }
-        }
-        
-        // Add "Сейчас на повторе" to heroCards
-        heroCards.insert([
-            "index": 0,
-            "title": "Сейчас на повторе",
-            "name": "Сейчас на повторе",
-            "subtitle": "Специально для вас",
-            "sub": "Специально для вас",
-            "tag": "Микс",
-            "type": "playlist",
-            "id": "heavy_rotation_mix",
-            "artwork": "/assets/stations/CoverHeavyRotation.svg"
-        ], at: 0)
-        
-        // Add Artist Stations to heroCards
-        var heroIndex = 10
-        for artist in artistsToUse {
-            let resolved = await MusicKitManager.shared.resolveArtistStation(artist: artist)
-            let stationUrl = resolved?.stationUrl ?? ""
-            let stationId = resolved.map { "ra.\($0.artistId)" } ?? "station_\(artist.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "")"
-            let canonicalArtist = resolved?.canonicalName ?? artist
-
-            var artistArt = resolved?.artworkUrl ?? ""
-            if artistArt.isEmpty {
-                artistArt = recentTracks.first(where: { $0.artist.localizedCaseInsensitiveContains(artist) && !$0.artworkUrl.isEmpty })?.artworkUrl ?? ""
-            }
-            if artistArt.isEmpty {
-                artistArt = topAlbums.first(where: { ($0["artist"] as? String ?? "").localizedCaseInsensitiveContains(artist) })?["artwork"] as? String ?? ""
-            }
-            if artistArt.isEmpty {
-                artistArt = "/assets/stations/CoverDiscovery.png"
-            }
-
-            heroCards.insert([
-                "index": heroIndex,
-                "title": "\(artist) и другие подобные артисты",
-                "name": canonicalArtist,
-                "subtitle": "При участии: \(artist)",
-                "sub": "При участии: \(artist)",
-                "tag": "Радиостанция",
-                "type": "station",
-                "id": stationId,
-                "url": stationUrl,
-                "artwork": artistArt
-            ], at: heroCards.count)
-            heroIndex += 1
-        }
-        
-        feed["hero_cards"] = heroCards
-
         if !recentTracks.isEmpty {
-            feed["recently_played"] = recentTracks.map { t in
-                [
+            feed["recently_played"] = recentTracks.map { t -> [String: Any] in
+                var dict: [String: Any] = [
                     "id": t.id,
-                    "numericId": t.numericId as Any,
                     "name": t.name,
                     "artist": t.artist,
                     "album": t.album,
                     "artwork": t.artworkUrl,
                     "duration": t.duration,
                     "url": t.url ?? ""
+                ]
+                if let num = t.numericId {
+                    dict["numericId"] = num
+                }
+                return dict
+            }
+        }
+
+        // Enrich personalMixes with Replay, seasonal & editorial Apple Music mixes so "Еженедельные миксы" is rich (14+ mixes)
+        var seenMixIds = Set(personalMixes.compactMap { $0.id })
+        let supplementalMixes: [PlaylistInfo] = [
+            PlaylistInfo(
+                name: isRu ? "Итоги года Replay" : "Replay",
+                trackCount: 100,
+                artworkUrl: "/assets/stations/CoverRock.png",
+                isPlaylist: true,
+                id: "replay_playlist",
+                url: "https://music.apple.com/playlist/replay/replay_playlist",
+                curatorName: "Apple Music Replay",
+                description: isRu ? "Ваши главные треки года" : "Your top tracks of the year"
+            ),
+            PlaylistInfo(
+                name: isRu ? "Главные новинки" : "New Music Daily",
+                trackCount: 50,
+                artworkUrl: "https://is1-ssl.mzstatic.com/image/thumb/Features112/v4/1b/c4/5a/1bc45ab2-799c-1f0d-196a-2bd8e4b628c1/f45875f7-c3b9-4e13-8f7a-498d4ef3a4ef.png/600x600bb.jpg",
+                isPlaylist: true,
+                id: "pl.2b0e6e332fdf4b7a91164da3162127b5",
+                url: "https://music.apple.com/us/playlist/new-music-daily/pl.2b0e6e332fdf4b7a91164da3162127b5",
+                curatorName: "Apple Music",
+                description: isRu ? "Самые горячие премьеры недели" : "Today's essential new tracks"
+            ),
+            PlaylistInfo(
+                name: isRu ? "Хиты сегодня" : "Today’s Hits",
+                trackCount: 50,
+                artworkUrl: "https://is1-ssl.mzstatic.com/image/thumb/Features112/v4/e4/2a/9c/e42a9c40-5b85-3842-d068-c3b07c92a431/99f18f2b-47dc-491b-a1ef-9c0c20b9c8e1.png/600x600bb.jpg",
+                isPlaylist: true,
+                id: "pl.f4d106fed2bd41149aaacabb233eb5eb",
+                url: "https://music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb",
+                curatorName: "Apple Music",
+                description: isRu ? "Главные мировые хиты этой недели" : "The biggest songs right now"
+            ),
+            PlaylistInfo(
+                name: isRu ? "Чистый релакс" : "Pure Chill",
+                trackCount: 60,
+                artworkUrl: "/assets/stations/CoverChill.svg",
+                isPlaylist: true,
+                id: "pl.c7be009ba325420394d51269b3c4a9fe",
+                url: "https://music.apple.com/us/playlist/pure-chill/pl.c7be009ba325420394d51269b3c4a9fe",
+                curatorName: "Apple Music Chill",
+                description: isRu ? "Атмосферные треки для отдыха и концентрации" : "Unwind with peaceful sounds"
+            ),
+            PlaylistInfo(
+                name: isRu ? "Энергия тренировки" : "Pure Workout",
+                trackCount: 50,
+                artworkUrl: "/assets/stations/CoverEnergy.svg",
+                isPlaylist: true,
+                id: "pl.79a5236f99f64f1f916c0b818c300f9b",
+                url: "https://music.apple.com/us/playlist/pure-workout/pl.79a5236f99f64f1f916c0b818c300f9b",
+                curatorName: "Apple Music Fitness",
+                description: isRu ? "Максимальный темп и драйв" : "High-energy workout anthems"
+            )
+        ]
+
+        for extra in supplementalMixes {
+            if let eid = extra.id, !seenMixIds.contains(eid) {
+                let hasReplayAlready = eid == "replay_playlist" && personalMixes.contains(where: {
+                    let n = $0.name.lowercased()
+                    return n.contains("replay") || n.contains("итоги")
+                })
+                if !hasReplayAlready {
+                    seenMixIds.insert(eid)
+                    personalMixes.append(extra)
+                }
+            }
+        }
+
+        if !personalMixes.isEmpty {
+            feed["personal_mixes"] = personalMixes.map { mix in
+                [
+                    "id": mix.id ?? "",
+                    "name": mix.name,
+                    "track_count": mix.trackCount,
+                    "artwork": mix.artworkUrl ?? "",
+                    "artwork_url": mix.artworkUrl ?? "",
+                    "url": mix.url ?? "",
+                    "curator_name": mix.curatorName ?? "Apple Music",
+                    "description": mix.description ?? ""
+                ]
+            }
+        }
+
+        if !personalRecs.isEmpty {
+            feed["personal_recommendations"] = personalRecs.map { grp in
+                [
+                    "id": grp.id,
+                    "title": grp.title,
+                    "contents": grp.contents.map { res in
+                        [
+                            "id": res.id,
+                            "type": res.type,
+                            "name": res.name,
+                            "subtitle": res.subtitle ?? "",
+                            "artwork": res.artworkUrl ?? "",
+                            "url": res.url ?? ""
+                        ]
+                    }
                 ]
             }
         }
@@ -729,6 +1163,13 @@ public final class CloudCatalogService: @unchecked Sendable {
         }
 
         return feed
+    }
+
+    public func invalidateExploreFeedCache() {
+        feedLock.withLock {
+            cachedFeed.removeAll()
+        }
+        NSLog("[CloudCatalogService] 🔄 Invalidated explore feed cache")
     }
 
     private func fetchTopSongsRSS(country: String) async -> [[String: Any]] {

@@ -1456,6 +1456,13 @@ input {
   background: var(--surface-hover);
 }
 
+.btn-secondary-action.added {
+  opacity: 0.65;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-secondary);
+  cursor: default;
+}
+
 /* ==========================================================================
    Search Specifics
    ========================================================================== */
@@ -3413,6 +3420,12 @@ body.ui-blocked #busy-overlay {
   border: 1px solid rgba(48, 209, 88, 0.25);
   border-radius: 12px;
   padding: 12px 14px;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.signal-verified-card.warning {
+  background: rgba(255, 159, 10, 0.08);
+  border-color: rgba(255, 159, 10, 0.3);
 }
 
 .signal-verified-icon {
@@ -3427,6 +3440,11 @@ body.ui-blocked #busy-overlay {
   flex-shrink: 0;
 }
 
+.signal-verified-card.warning .signal-verified-icon {
+  background: rgba(255, 159, 10, 0.18);
+  color: #ff9f0a;
+}
+
 .signal-verified-info {
   display: flex;
   flex-direction: column;
@@ -3438,6 +3456,10 @@ body.ui-blocked #busy-overlay {
   font-weight: 700;
   color: #30d158;
   letter-spacing: 0.2px;
+}
+
+.signal-verified-card.warning .signal-verified-title {
+  color: #ff9f0a;
 }
 
 .signal-verified-desc {
@@ -3722,4 +3744,1206 @@ body.ui-blocked #busy-overlay {
   font-size: 12px;
   color: #8e8e93;
 }
+
+/* ==========================================================================
+   Apple Music Cloud Tiles Grid & Station Ambient Animations
+   ========================================================================== */
+
+@keyframes stationGradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes stationPulseGlow {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(250, 45, 72, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 8px 30px rgba(121, 40, 202, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  }
+}
+
+@keyframes plaqueSpinCW {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes plaqueSpinCCW {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes plaqueBreathe {
+  0%, 100% { transform: scale(0.95); opacity: 0.82; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes plaqueHeartBeat {
+  0%, 100% { transform: scale(0.94); }
+  35% { transform: scale(1.08); }
+  65% { transform: scale(0.98); }
+  85% { transform: scale(1.05); }
+}
+
+@keyframes plaqueWavePulse {
+  0% { transform: scaleY(0.76); }
+  50% { transform: scaleY(1.16); }
+  100% { transform: scaleY(0.88); }
+}
+
+@keyframes plaqueFloatY {
+  0%, 100% { transform: translateY(-6px); }
+  50% { transform: translateY(6px); }
+}
+
+@keyframes plaqueDashFlow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -120; }
+}
+
+@keyframes plaqueOrbMove {
+  0%, 100% { transform: translate(-18px, -14px) scale(1); opacity: 0.55; }
+  50% { transform: translate(22px, 16px) scale(1.22); opacity: 0.85; }
+}
+
+.animated-plaque-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: 240% 240% !important;
+  animation: stationGradientShift 9s ease-in-out infinite alternate;
+  user-select: none;
+}
+
+.animated-plaque-orb {
+  position: absolute;
+  width: 68%;
+  height: 68%;
+  border-radius: 50%;
+  filter: blur(26px);
+  pointer-events: none;
+  animation: plaqueOrbMove 6.5s ease-in-out infinite alternate;
+}
+
+.animated-plaque-svg {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.plaque-origin-center {
+  transform-origin: 250px 235px;
+}
+
+.plaque-spin-slow {
+  transform-origin: 250px 235px;
+  animation: plaqueSpinCW 22s linear infinite;
+}
+
+.plaque-spin-med {
+  transform-origin: 250px 235px;
+  animation: plaqueSpinCW 13s linear infinite;
+}
+
+.plaque-spin-rev {
+  transform-origin: 250px 235px;
+  animation: plaqueSpinCCW 17s linear infinite;
+}
+
+.plaque-breathe {
+  transform-origin: 250px 235px;
+  animation: plaqueBreathe 3.2s ease-in-out infinite;
+}
+
+.plaque-heartbeat {
+  transform-origin: 250px 235px;
+  animation: plaqueHeartBeat 2.4s ease-in-out infinite;
+}
+
+.plaque-wave-anim {
+  transform-origin: 250px 235px;
+  animation: plaqueWavePulse 1.8s ease-in-out infinite alternate;
+}
+
+.plaque-float-y {
+  transform-origin: 250px 235px;
+  animation: plaqueFloatY 3.6s ease-in-out infinite;
+}
+
+.plaque-dash-flow {
+  animation: plaqueDashFlow 6s linear infinite;
+}
+
+/* Station Animated Fallback & Background */
+.station-card .media-card-art-fallback,
+.station-animated-bg {
+  background-size: 250% 250% !important;
+  animation: stationGradientShift 12s ease infinite alternate;
+}
+
+.station-card:hover .media-card-art-wrap,
+.collection-tile.is-station:hover .collection-tile-art-wrap {
+  animation: stationPulseGlow 3s ease-in-out infinite;
+}
+
+/* Collection Tiles Grid View (Screenshot 5 / Apple Music Cloud) */
+.collection-tiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 24px 20px;
+  padding: 16px 24px 60px 24px;
+}
+
+@media (max-width: 767px) {
+  .collection-tiles-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px 12px;
+    padding: 12px 14px 80px 14px;
+  }
+}
+
+.collection-tile {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--transition-fast);
+  position: relative;
+  min-width: 0;
+}
+
+.collection-tile:hover {
+  transform: translateY(-4px);
+}
+
+.collection-tile:active {
+  transform: scale(0.97);
+}
+
+.collection-tile-art-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #18181a;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.collection-tile-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.collection-tile:hover .collection-tile-art {
+  transform: scale(1.04);
+}
+
+.collection-tile-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+  color: #ffffff;
+  background-size: 250% 250%;
+  animation: stationGradientShift 12s ease infinite alternate;
+}
+
+.collection-tile-fallback svg {
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.collection-tile-fallback-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+/* music Emblem Badge on top right of tile artwork */
+.apple-music-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.apple-music-badge svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.collection-tile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.collection-tile-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.collection-tile-sub {
+  font-size: 12px;
+  color: #8e8e93;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+/* ==========================================================================
+   StandBy / TV Mode (Motion Covers) & WLED DDP Ambilight Settings
+   ========================================================================== */
+
+.top-header-right-actions,
+.desktop-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.top-bar-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f7;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.top-bar-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.top-bar-pill-btn:active {
+  transform: scale(0.96);
+}
+
+.top-bar-pill-btn.active {
+  background: rgba(250, 35, 59, 0.2);
+  border-color: rgba(250, 35, 59, 0.55);
+  color: #ffffff;
+}
+
+.top-bar-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.top-bar-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.top-bar-icon-btn.active {
+  background: rgba(250, 35, 59, 0.22);
+  border-color: rgba(250, 35, 59, 0.6);
+  color: #ff455b;
+}
+
+.wled-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #636366;
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.wled-status-dot.active {
+  background: #30d158;
+  box-shadow: 0 0 8px rgba(48, 209, 88, 0.85);
+}
+
+/* Top Bar Settings Popover */
+.top-settings-popover {
+  position: fixed;
+  top: 62px;
+  right: 24px;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  background: rgba(22, 22, 26, 0.96);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+  z-index: 10050;
+  padding: 16px 18px;
+  color: #ffffff;
+  animation: popoverFadeIn 0.18s ease-out;
+}
+
+.top-settings-popover.hidden {
+  display: none !important;
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.top-settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 14px;
+}
+
+.top-settings-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #ff375f;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.top-settings-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.top-settings-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #aeaeb2;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-settings-close:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.top-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.top-settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+}
+
+.top-settings-label-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.top-settings-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f5f5f7;
+}
+
+.top-settings-sublabel {
+  font-size: 11px;
+  color: #8e8e93;
+}
+
+.top-settings-checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: #fa233b;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.top-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.top-settings-input,
+.top-settings-select {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.top-settings-input:focus,
+.top-settings-select:focus {
+  border-color: #fa233b;
+}
+
+.top-settings-footer {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-standby-launch {
+  width: 100%;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fa233b, #ff5b72);
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+.btn-standby-launch:hover {
+  opacity: 0.92;
+}
+
+.btn-standby-launch:active {
+  transform: scale(0.98);
+}
+
+/* Player Motion Cover Video */
+.player-motion-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.55s ease;
+}
+
+.player-motion-video.visible {
+  opacity: 1;
+}
+
+/* Fullscreen StandBy / TV Mode Overlay */
+.standby-tv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  background: #040406;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(20px, 3.5vw, 48px) clamp(24px, 5vw, 72px);
+  overflow: hidden;
+  user-select: none;
+  animation: standbyFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.standby-tv-overlay.hidden {
+  display: none !important;
+}
+
+@keyframes standbyFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.standby-ambient-bg {
+  position: absolute;
+  inset: -15%;
+  z-index: 0;
+  background: radial-gradient(circle at 28% 50%, rgba(250, 35, 59, 0.32), rgba(20, 20, 35, 0.22) 48%, rgba(4, 4, 6, 0.96) 80%);
+  filter: blur(70px) saturate(1.4);
+  transition: background 1.2s ease;
+  animation: standbyAmbientDrift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes standbyAmbientDrift {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.08) translate3d(2%, -2%, 0);
+  }
+}
+
+.standby-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(circle at center, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.72) 100%);
+  pointer-events: none;
+}
+
+.standby-top-bar {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.standby-top-left,
+.standby-top-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.standby-clock {
+  font-size: clamp(22px, 2.6vw, 36px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.standby-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+}
+
+.standby-motion-badge {
+  color: #64d2ff;
+  border-color: rgba(100, 210, 255, 0.35);
+  background: rgba(100, 210, 255, 0.12);
+}
+
+.standby-wled-badge {
+  color: #30d158;
+  border-color: rgba(48, 209, 88, 0.35);
+  background: rgba(48, 209, 88, 0.12);
+}
+
+.standby-action-btn,
+.standby-close-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.standby-action-btn:hover,
+.standby-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.standby-library-pill-btn {
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.standby-library-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.standby-library-pill-btn:active {
+  transform: scale(0.96);
+}
+
+.standby-content {
+  position: relative;
+  z-index: 3;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(280px, 46vh) 1fr;
+  align-items: center;
+  gap: clamp(32px, 5vw, 84px);
+  max-width: 1520px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.standby-artwork-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.standby-art-frame {
+  position: relative;
+  width: min(46vh, 44vw);
+  height: min(46vh, 44vw);
+  max-width: 520px;
+  max-height: 520px;
+  min-width: 240px;
+  min-height: 240px;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  animation: standbyArtFloat 9s ease-in-out infinite alternate;
+}
+
+@keyframes standbyArtFloat {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  100% {
+    transform: translateY(-8px) scale(1.015);
+  }
+}
+
+.standby-artwork-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.standby-motion-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.standby-motion-video.visible {
+  opacity: 1;
+}
+
+.standby-meta-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: clamp(10px, 1.6vh, 20px);
+}
+
+.standby-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.standby-dac-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 214, 10, 0.14);
+  border: 1px solid rgba(255, 214, 10, 0.4);
+  color: #ffd60a;
+  font-size: clamp(11px, 1.1vw, 14px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.standby-title {
+  margin: 0;
+  font-size: clamp(28px, 4.2vw, 68px);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.standby-artist {
+  margin: 0;
+  font-size: clamp(20px, 2.6vw, 42px);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.standby-album {
+  margin: 0;
+  font-size: clamp(15px, 1.6vw, 24px);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.52);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.standby-progress-section {
+  margin-top: clamp(8px, 1.5vh, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 780px;
+}
+
+.standby-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.standby-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffffff, #ff375f);
+  transition: width 0.2s linear;
+}
+
+.standby-time-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: clamp(13px, 1.3vw, 18px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.standby-controls {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-top: clamp(6px, 1.2vh, 16px);
+}
+
+.standby-ctrl-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.standby-ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.standby-ctrl-play {
+  width: 74px;
+  height: 74px;
+  background: #ffffff;
+  color: #000000;
+}
+
+.standby-ctrl-play:hover {
+  background: #f2f2f7;
+}
+
+/* Fullscreen StandBy / TV Mode Library & Stations Grid Overlay */
+.standby-library-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  background: rgba(6, 6, 10, 0.88);
+  backdrop-filter: blur(44px) saturate(160%);
+  -webkit-backdrop-filter: blur(44px) saturate(160%);
+  display: flex;
+  flex-direction: column;
+  padding: clamp(22px, 3.5vw, 48px) clamp(28px, 5vw, 72px);
+  animation: standbyLibraryIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.standby-library-modal.hidden {
+  display: none !important;
+}
+
+@keyframes standbyLibraryIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.standby-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1640px;
+  width: 100%;
+  margin: 0 auto clamp(20px, 2.8vh, 32px) auto;
+  flex-shrink: 0;
+}
+
+.standby-library-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.standby-library-title {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.standby-library-subtitle {
+  font-size: clamp(13px, 1.3vw, 16px);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.standby-library-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 1640px;
+  margin: 0 auto;
+  padding: 6px 6px 40px 6px;
+  scroll-behavior: smooth;
+}
+
+.standby-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(180px, 18vw, 248px), 1fr));
+  gap: clamp(18px, 2.2vw, 28px);
+}
+
+.standby-square-tile {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #141418;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease, box-shadow 0.22s ease;
+  padding: 0;
+  text-align: left;
+  color: #ffffff;
+}
+
+.standby-square-tile:hover {
+  transform: translateY(-5px) scale(1.03);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.78);
+}
+
+.standby-square-tile:active {
+  transform: scale(0.97);
+}
+
+.standby-square-tile.active {
+  border-color: rgba(250, 35, 59, 0.9);
+  box-shadow: 0 18px 48px rgba(250, 35, 59, 0.35), 0 0 0 2.5px rgba(250, 35, 59, 0.65);
+}
+
+.standby-square-tile .animated-plaque-wrap {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.standby-tile-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s ease;
+}
+
+.standby-square-tile:hover .standby-tile-cover {
+  transform: scale(1.05);
+}
+
+.standby-tile-fallback {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(145deg, #23232b 0%, #121217 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.standby-tile-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.18) 45%, rgba(0, 0, 0, 0.88) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 16px 18px;
+  pointer-events: none;
+  gap: 3px;
+}
+
+.standby-tile-title {
+  font-size: clamp(14px, 1.3vw, 18px);
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.015em;
+  color: #ffffff;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+}
+
+.standby-tile-meta {
+  font-size: clamp(11.5px, 1vw, 13.5px);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.standby-tile-play-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  opacity: 0;
+  transform: scale(0.88);
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.standby-square-tile:hover .standby-tile-play-badge,
+.standby-square-tile.active .standby-tile-play-badge {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.standby-square-tile.active .standby-tile-play-badge {
+  background: #fa233b;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+@media (max-width: 900px) {
+  .standby-content {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 24px;
+  }
+  .standby-art-frame {
+    width: min(36vh, 72vw);
+    height: min(36vh, 72vw);
+  }
+  .standby-badges-row,
+  .standby-controls {
+    justify-content: center;
+  }
+  .standby-progress-section {
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+  .top-settings-popover {
+    top: 56px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+.top-bar-pill-btn.hidden,
+.top-bar-icon-btn.hidden,
+.standby-action-btn.hidden {
+  display: none !important;
+}
+
+/* Hide duplicate player-top-header buttons on PC / Tablet (they exist in desktop-nav-actions on the right) */
+@media (min-width: 768px) {
+  #player-btn-settings,
+  #player-btn-standby {
+    display: none !important;
+  }
+}
+
+/* Hide TV / StandBy button on Mobile */
+@media (max-width: 767px) {
+  #btn-standby-mode,
+  #mobile-btn-standby,
+  #player-btn-standby {
+    display: none !important;
+  }
+}
+
+/* Force Vertical Portrait Mode on Mobile Phones even when rotated horizontally */
+@media only screen and (max-height: 540px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
+  html {
+    transform: rotate(-90deg);
+    transform-origin: left top;
+    width: 100vh !important;
+    height: 100vw !important;
+    overflow: hidden !important;
+    position: fixed !important;
+    top: 100% !important;
+    left: 0 !important;
+  }
+  body,
+  .app-layout {
+    width: 100vh !important;
+    height: 100vw !important;
+    max-width: 100vh !important;
+    max-height: 100vw !important;
+  }
+}
+
+
 

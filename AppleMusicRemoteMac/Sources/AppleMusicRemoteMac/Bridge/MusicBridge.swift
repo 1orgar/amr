@@ -249,12 +249,20 @@ public final class MusicBridge: @unchecked Sendable {
         PlaybackRouter.shared.playCloudSync(url: url, id: id, name: name, artist: artist)
     }
 
+    public func openMusicUrl(_ urlString: String) -> Bool {
+        PlaybackRouter.shared.openMusicUrl(urlString)
+    }
+
     public func playCustomTracks(_ tracks: [TrackInfo], startIndex: Int, shuffle: Bool, queueName: String?) -> Bool {
         PlaybackRouter.shared.playCustomTracks(tracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName)
     }
 
-    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool) async -> Bool {
-        await PlaybackRouter.shared.playSearchResults(tracks: tracks, startIndex: startIndex, shuffle: shuffle)
+    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool, queueName: String? = nil, query: String? = nil) async -> Bool {
+        await PlaybackRouter.shared.playSearchResults(tracks: tracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName, query: query)
+    }
+
+    public func appendTracksToAMRQueue(tracks: [TrackInfo]) async -> Bool {
+        await PlaybackRouter.shared.appendTracksToAMRQueue(newTracks: tracks)
     }
 
     public func searchAndPlayDetailed(query: String) async -> PlaybackRouter.SearchAndPlayResult {
@@ -300,6 +308,10 @@ public final class MusicBridge: @unchecked Sendable {
         LibraryService.shared.getLibrarySongs()
     }
 
+    public func getTopPlayedTracks(limit: Int = 25) -> [TrackInfo] {
+        LibraryService.shared.getTopPlayedTracks(limit: limit)
+    }
+
     public func getLibraryArtists() -> [ArtistInfo] {
         LibraryService.shared.getLibraryArtists()
     }
@@ -314,6 +326,10 @@ public final class MusicBridge: @unchecked Sendable {
 
     public func addToLibrary(trackId: Int?, name: String?, artist: String?, url: String?) -> Bool {
         LibraryService.shared.addToLibrary(trackId: trackId, name: name, artist: artist, url: url)
+    }
+
+    public func addPlaylistToLibrary(playlistId: String) async -> Bool {
+        await MusicKitManager.shared.addPlaylistToLibrary(playlistId: playlistId)
     }
 
     // MARK: - Artwork Services

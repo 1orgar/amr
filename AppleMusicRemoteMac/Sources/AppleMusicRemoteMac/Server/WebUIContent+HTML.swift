@@ -1,0 +1,1018 @@
+//
+//  WebUIContent+HTML.swift
+//  AppleMusicRemoteMac
+//
+
+import Foundation
+
+extension WebUIContent {
+    public static let indexHTML: String = #"""
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AMR">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="Apple Music Remote Mac - Bit-Perfect High-Fidelity Controller">
+  <title>Apple Music Remote</title>
+
+  <link rel="icon" type="image/svg+xml" href="/apple-touch-icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="/apple-touch-icon-192.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/style.css?v=254">
+  <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
+</head>
+<body>
+  <!-- iOS Lock Screen & Background Media Keep-Alive -->
+  <audio id="bg-silent-audio" preload="auto" playsinline webkit-playsinline loop src="/assets/silence.m4a?v=2" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;"></audio>
+
+  <!-- Connection Lost Overlay -->
+  <div id="connection-overlay" class="overlay-modal hidden" aria-hidden="true">
+    <div class="overlay-card">
+      <div class="pulse-indicator"></div>
+      <h2 class="overlay-title">Нет связи с Mac</h2>
+      <p class="overlay-desc" id="connection-status-text">Попытка автоматического переподключения к Apple Music...</p>
+      <button id="btn-reconnect" class="btn-primary" type="button">Переподключиться</button>
+    </div>
+  </div>
+
+  <!-- Apple TV Style Dynamic Ambient Gradient Backdrop -->
+  <div id="ambient-backdrop" class="ambient-backdrop" aria-hidden="true">
+    <div class="ambient-layer ambient-layer-a" id="ambient-layer-a">
+      <div class="ambient-blob blob-1"></div>
+      <div class="ambient-blob blob-2"></div>
+      <div class="ambient-blob blob-3"></div>
+      <div class="ambient-blob blob-4"></div>
+    </div>
+    <div class="ambient-layer ambient-layer-b" id="ambient-layer-b">
+      <div class="ambient-blob blob-1"></div>
+      <div class="ambient-blob blob-2"></div>
+      <div class="ambient-blob blob-3"></div>
+      <div class="ambient-blob blob-4"></div>
+    </div>
+    <div class="ambient-vignette"></div>
+  </div>
+
+  <!-- Main Application Wrapper -->
+  <div id="app" class="app-layout">
+
+    <!-- Left Column on Desktop / Full View on Mobile -->
+    <section id="view-now-playing" class="view-panel player-panel active">
+      <header class="player-top-header">
+        <div class="brand-pill">
+          <span class="brand-dot"></span>
+          <span class="brand-title">AMR <span class="brand-ver" id="brand-ver">v2.4.0</span></span>
+        </div>
+        <div class="top-header-right-actions">
+          <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
+            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polygon points="10 8 16 12 10 16 10 8"/>
+            </svg>
+            <span id="audio-quality-text">LOSSLESS</span>
+          </button>
+          <button id="player-btn-settings" class="top-bar-icon-btn hidden" type="button" title="Режим подсветки WLED DDP" aria-label="Настройки WLED DDP">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Artwork Area -->
+      <div class="artwork-container">
+        <div class="artwork-wrapper">
+          <img id="player-artwork" class="player-art" src="apple-touch-icon.svg" alt="Обложка трека">
+          <video id="player-motion-video" class="player-motion-video hidden" autoplay loop muted playsinline></video>
+          <div id="player-art-placeholder" class="art-placeholder hidden">
+            <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Track Information -->
+      <div class="track-meta">
+        <div class="track-title-row">
+          <h1 id="player-title" class="track-title" title="Не играет">Не играет</h1>
+          <div class="track-actions-group">
+            <button id="btn-create-station" class="btn-icon btn-station" type="button" aria-label="Создать радио" title="Создать радиостанцию">
+              <svg class="svg-icon icon-station" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4.93 19.07a10 10 0 0 1 0-14.14"/>
+                <path d="M7.76 16.24a6 6 0 0 1 0-8.48"/>
+                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                <path d="M16.24 7.76a6 6 0 0 1 0 8.48"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </button>
+            <button id="btn-favorite" class="btn-icon btn-fav" type="button" aria-label="Избранное" title="В избранное">
+              <svg id="icon-fav" class="svg-icon icon-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p id="player-artist" class="track-artist">Apple Music</p>
+        <p id="player-album" class="track-album"></p>
+      </div>
+
+      <!-- Scrubber Timeline (Optimistic 60fps local scrubbing) -->
+      <div class="scrubber-section">
+        <div class="scrubber-bar-container" id="scrubber-container">
+          <div class="scrubber-track">
+            <div id="scrubber-fill" class="scrubber-fill" style="width: 0%;"></div>
+            <div id="scrubber-thumb" class="scrubber-thumb" style="left: 0%;"></div>
+          </div>
+          <input type="range" id="scrubber-input" min="0" max="100" value="0" step="0.1" aria-label="Позиция трека">
+        </div>
+        <div class="scrubber-timestamps">
+          <span id="time-elapsed" class="time-label">0:00</span>
+          <span id="time-remaining" class="time-label">-0:00</span>
+        </div>
+      </div>
+
+      <!-- Primary Transport Controls (NO volume slider per bit-perfect mode) -->
+      <div class="transport-controls">
+        <button id="btn-shuffle" class="btn-icon control-sub" type="button" aria-label="Случайно" title="Перемешать">
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 3 21 3 21 8"/>
+            <line x1="4" y1="20" x2="21" y2="3"/>
+            <polyline points="21 16 21 21 16 21"/>
+            <line x1="15" y1="15" x2="21" y2="21"/>
+            <line x1="4" y1="4" x2="9" y2="9"/>
+          </svg>
+        </button>
+
+        <button id="btn-prev" class="btn-icon control-skip" type="button" aria-label="Предыдущий" title="Предыдущий трек">
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="19 20 9 12 19 4 19 20"/>
+            <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <button id="btn-play-pause" class="btn-icon control-play-main" type="button" aria-label="Воспроизвести" title="Воспроизведение / Пауза">
+          <!-- Play SVG -->
+          <svg id="icon-play" class="svg-icon-play" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6 3 20 12 6 21 6 3"/>
+          </svg>
+          <!-- Pause SVG -->
+          <svg id="icon-pause" class="svg-icon-pause hidden" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="5" y="4" width="4.5" height="16" rx="1.5"/>
+            <rect x="14.5" y="4" width="4.5" height="16" rx="1.5"/>
+          </svg>
+        </button>
+
+        <button id="btn-next" class="btn-icon control-skip" type="button" aria-label="Следующий" title="Следующий трек">
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 4 15 12 5 20 5 4"/>
+            <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <button id="btn-repeat" class="btn-icon control-sub" type="button" aria-label="Повтор" title="Режим повтора">
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+          <span id="repeat-badge" class="repeat-one-indicator hidden">1</span>
+        </button>
+      </div>
+
+      <!-- Volume Section (Visible when Lock Volume 100% is OFF) -->
+      <div id="volume-section" class="volume-section hidden">
+        <button id="btn-volume-mute" class="btn-icon btn-volume-mute" type="button" aria-label="Отключить звук" title="Без звука">
+          <svg id="volume-icon" class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path id="vol-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            <path id="vol-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          </svg>
+        </button>
+        <div class="volume-slider-container">
+          <div class="volume-track">
+            <div id="volume-track-fill" class="volume-track-fill" style="width: 100%;"></div>
+            <div id="volume-thumb" class="volume-thumb" style="left: 100%;"></div>
+          </div>
+          <input type="range" id="volume-input" class="volume-input" min="0" max="100" value="100" step="1" aria-label="Громкость">
+        </div>
+        <span id="volume-level-text" class="volume-level-label">100%</span>
+      </div>
+    </section>
+
+    <!-- Right Column on Desktop / Switched Views on Mobile -->
+    <main class="content-panel-wrapper">
+      <!-- Desktop Navigation Tabs -->
+      <nav class="desktop-nav-header">
+        <div class="desktop-nav-tabs">
+          <button class="nav-tab-btn active" data-target="home">Главная</button>
+          <button class="nav-tab-btn" data-target="library">Медиатека</button>
+          <button class="nav-tab-btn" data-target="queue">Очередь</button>
+          <button class="nav-tab-btn" data-target="search">Поиск</button>
+        </div>
+        <div class="desktop-nav-actions">
+          <button id="btn-standby-mode" class="top-bar-pill-btn" type="button" title="Полноэкранный режим StandBy / TV с живыми обложками">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            <span>StandBy TV</span>
+          </button>
+          <button id="btn-top-settings" class="top-bar-pill-btn hidden" type="button" title="Настройки WLED DDP Ambilight">
+            <span id="wled-status-dot" class="wled-status-dot"></span>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>WLED DDP</span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- Mobile Top Bar with Permanent DAC Badge (visible on mobile outside Now Playing) -->
+      <header class="mobile-top-bar">
+        <div class="brand-pill">
+          <span class="brand-dot"></span>
+          <span class="brand-title">AMR <span class="brand-ver">v2.4.0</span></span>
+        </div>
+        <div class="top-header-right-actions">
+          <button id="mobile-dac-badge" class="quality-badge mobile-dac-badge" type="button" title="Параметры потока и ЦАП">
+            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polygon points="10 8 16 12 10 16 10 8"/>
+            </svg>
+            <span id="mobile-dac-text">LOSSLESS</span>
+          </button>
+          <button id="mobile-btn-settings" class="top-bar-icon-btn hidden" type="button" title="Режим подсветки WLED DDP" aria-label="Настройки WLED DDP">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Queue View -->
+      <section id="view-queue" class="view-panel content-view">
+        <header class="section-header">
+          <div>
+            <h2 class="section-title">Очередь воспроизведения</h2>
+            <p id="queue-subtitle" class="section-subtitle">0 треков</p>
+          </div>
+          <button id="btn-clear-queue" class="btn-ghost" type="button">Очистить далее</button>
+        </header>
+
+        <div class="scroll-pane">
+          <!-- Currently Playing Section -->
+          <div id="queue-current-group" class="queue-group">
+            <h3 class="group-title">СЕЙЧАС ИГРАЕТ</h3>
+            <div id="queue-current-track" class="track-list">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Upcoming Section -->
+          <div class="queue-group">
+            <h3 class="group-title">ДАЛЕЕ В ОЧЕРЕДИ</h3>
+            <div id="queue-upcoming-list" class="track-list">
+              <div class="empty-state">Нет предстоящих треков</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Library View -->
+      <section id="view-library" class="view-panel content-view">
+        <!-- Playlists List -->
+        <div id="playlists-browse-pane" class="library-pane">
+          <header class="section-header">
+            <div>
+              <h2 class="section-title">Медиатека</h2>
+              <p class="section-subtitle">Плейлисты и альбомы</p>
+            </div>
+            <button id="btn-refresh-library" class="btn-ghost" type="button" title="Обновить список">Обновить</button>
+          </header>
+
+          <div class="scroll-pane">
+            <div id="playlists-grid" class="playlists-grid">
+              <div class="loading-state">Загрузка плейлистов...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Playlist Detail Pane (Drill-down) -->
+        <div id="playlist-detail-pane" class="library-pane hidden">
+          <header class="detail-header">
+            <button id="btn-back-to-playlists" class="btn-back" type="button">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span>Плейлисты</span>
+            </button>
+          </header>
+
+          <div class="detail-hero">
+            <img id="detail-artwork" class="detail-art" src="apple-touch-icon.svg" alt="Обложка плейлиста" onerror="this.src='apple-touch-icon.svg'">
+            <div class="detail-info">
+              <span id="detail-badge" class="detail-badge">ПЛЕЙЛИСТ</span>
+              <h2 id="detail-title" class="detail-title">Название</h2>
+              <p id="detail-meta" class="detail-meta">0 треков</p>
+              <div class="detail-actions">
+                <button id="btn-play-playlist" class="btn-primary-action" type="button">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <polygon points="6 3 20 12 6 21 6 3"/>
+                  </svg>
+                  <span>Слушать</span>
+                </button>
+                <button id="btn-shuffle-playlist" class="btn-secondary-action" type="button">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 3 21 3 21 8"/>
+                    <line x1="4" y1="20" x2="21" y2="3"/>
+                    <polyline points="21 16 21 21 16 21"/>
+                    <line x1="15" y1="15" x2="21" y2="21"/>
+                    <line x1="4" y1="4" x2="9" y2="9"/>
+                  </svg>
+                  <span>Перемешать</span>
+                </button>
+                <button id="btn-add-playlist-library" class="btn-secondary-action" type="button" title="Добавить в медиатеку Apple Music">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  <span id="btn-add-playlist-library-text">В медиатеку</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="scroll-pane">
+            <div id="playlist-tracks-list" class="track-list">
+              <div class="loading-state">Загрузка треков...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Home (Главная) View -->
+      <section id="view-home" class="view-panel content-view active">
+        <header class="section-header home-header">
+          <div>
+            <h1 class="main-home-title">Главная</h1>
+          </div>
+        </header>
+
+        <div class="scroll-pane home-scroll-pane">
+          <!-- Account Status Card on Home -->
+          <div class="home-account-card" id="home-account-card">
+            <div class="account-card-left">
+              <div class="account-card-avatar">
+                <span class="apple-logo-icon"></span>
+                <span class="account-status-dot synced" id="account-status-dot" title="Синхронизировано"></span>
+              </div>
+              <div class="account-card-info">
+                <div class="account-card-email-row">
+                  <span class="account-email" id="account-card-email">tse.tds@gmail.com</span>
+                  <span class="account-sync-badge" id="account-card-badge">СИНХРОНИЗИРОВАНО</span>
+                </div>
+                <div class="account-card-subtext" id="account-card-subtext">Apple Music: подписка активна • Регион US • Медиатека синхронизирована</div>
+              </div>
+            </div>
+            <div class="account-card-actions">
+              <button class="btn-account-diag" id="btn-account-diag" type="button" title="Диагностика аккаунта">
+                <span>Диагностика</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- 1. Hero Carousel (Подборка лучших) -->
+          <div class="home-section" id="home-hero-section">
+            <h2 class="home-section-title">Подборка лучших</h2>
+            <div id="home-hero-carousel" class="home-hero-carousel">
+              <div class="loading-state">Загрузка...</div>
+            </div>
+          </div>
+
+          <!-- 2. Personal Weekly Mixes (Еженедельные миксы) -->
+          <div class="home-section hidden" id="home-mixes-section">
+            <div class="home-section-header-link" id="home-mixes-link">
+              <h2 class="home-section-title">Еженедельные миксы</h2>
+              <span class="home-chevron">›</span>
+            </div>
+            <div id="home-mixes-carousel" class="home-carousel-row">
+              <div class="loading-state">Загрузка миксов...</div>
+            </div>
+          </div>
+
+          <!-- 3. New Releases & Albums (Новинки и альбомы) -->
+          <div class="home-section" id="home-albums-section">
+            <div class="home-section-header-link" id="home-albums-link">
+              <h2 class="home-section-title">Новинки и альбомы</h2>
+              <span class="home-chevron">›</span>
+            </div>
+            <div id="home-albums-carousel" class="home-carousel-row">
+              <div class="loading-state">Загрузка альбомов...</div>
+            </div>
+          </div>
+
+          <!-- Dynamic Personal Recommendations Container -->
+          <div id="home-recommendations-container"></div>
+
+          <!-- Stations (Станции для вас ›) -->
+          <div class="home-section" id="home-stations-section">
+            <div class="home-section-header-link" id="home-stations-link">
+              <h2 class="home-section-title">Станции для вас</h2>
+              <span class="home-chevron">›</span>
+            </div>
+            <div id="home-stations-carousel" class="home-stations-grid">
+              <div class="loading-state">Загрузка станций...</div>
+            </div>
+          </div>
+
+          <!-- Recently Played (Вы недавно слушали ›) -->
+          <div class="home-section hidden" id="home-recent-section">
+            <div class="home-section-header-link" id="home-recent-link">
+              <h2 class="home-section-title">Вы недавно слушали</h2>
+              <span class="home-chevron">›</span>
+            </div>
+            <div id="home-recent-carousel" class="home-carousel-row">
+              <div class="loading-state">Загрузка...</div>
+            </div>
+          </div>
+
+          <!-- 5. Genres (Жанры и категории ›) -->
+          <div class="home-section" id="home-genres-section">
+            <div class="home-section-header-link">
+              <h2 class="home-section-title">Жанры и категории</h2>
+              <span class="home-chevron">›</span>
+            </div>
+            <div id="home-genres-grid" class="genres-grid">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recently Played Full View Pane -->
+      <section id="recent-detail-pane" class="view-panel content-view hidden">
+        <header class="section-header">
+          <button id="btn-back-from-recent" class="btn-back" type="button" aria-label="Назад к главной">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            <span>Главная</span>
+          </button>
+          <h1 class="header-title">Вы недавно слушали</h1>
+        </header>
+
+        <div class="detail-header-compact">
+          <div class="detail-info-full">
+            <span class="detail-badge">ИСТОРИЯ</span>
+            <h2 class="detail-title">Недавно прослушанные треки</h2>
+            <p id="recent-total-count" class="detail-meta">0 треков</p>
+            <div class="detail-actions">
+              <button id="btn-play-recent-all" class="btn-primary-action" type="button">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <polygon points="6 3 20 12 6 21 6 3"/>
+                </svg>
+                <span>Слушать</span>
+              </button>
+              <button id="btn-shuffle-recent-all" class="btn-secondary-action" type="button">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="16 3 21 3 21 8"/>
+                  <line x1="4" y1="20" x2="21" y2="3"/>
+                  <polyline points="21 16 21 21 16 21"/>
+                  <line x1="15" y1="15" x2="21" y2="21"/>
+                  <line x1="4" y1="4" x2="9" y2="9"/>
+                </svg>
+                <span>Перемешать</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="scroll-pane">
+          <div id="recent-tracks-full-list" class="track-list">
+            <div class="loading-state">Загрузка...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section Grid View (Tiles Grid Drill-down for Recent, Mixes, Albums, Stations) -->
+      <section id="section-grid-view" class="view-panel content-view hidden">
+        <header class="section-header">
+          <button id="btn-back-from-grid" class="btn-back" type="button" aria-label="Назад к главной">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            <span>Главная</span>
+          </button>
+          <h1 id="grid-view-title" class="header-title">Подборки</h1>
+        </header>
+
+        <div class="scroll-pane">
+          <div id="section-tiles-grid" class="collection-tiles-grid">
+            <div class="loading-state">Загрузка...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Search View -->
+      <section id="view-search" class="view-panel content-view">
+        <header class="section-header search-header-wrap">
+          <div class="search-input-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="search" id="search-input" placeholder="Поиск в Apple Music..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <button id="btn-clear-search" class="search-clear hidden" type="button" aria-label="Очистить">&times;</button>
+          </div>
+        </header>
+
+        <div class="search-filters">
+          <button class="filter-chip active" data-scope="all">Все</button>
+          <button class="filter-chip" data-scope="songs">Песни</button>
+          <button class="filter-chip" data-scope="albums">Альбомы</button>
+          <button class="filter-chip" data-scope="playlists">Плейлисты</button>
+          <button class="filter-chip" data-scope="artists">Артисты</button>
+        </div>
+
+        <div class="scroll-pane">
+          <div id="search-results" class="search-results-pane">
+            <div class="search-placeholder">
+              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#38383a" stroke-width="1.5">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <p>Ищите любимые треки, альбомы и исполнителей</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Mobile Mini-Player (Docked directly above bottom tabs) -->
+    <aside id="mini-player" class="mini-player hidden">
+      <div class="mini-player-content" id="mini-player-trigger" title="Развернуть проигрыватель">
+        <img id="mini-artwork" class="mini-art" src="apple-touch-icon.svg" alt="Обложка">
+        <div class="mini-info">
+          <span id="mini-title" class="mini-title">Не играет</span>
+          <span id="mini-artist" class="mini-artist">Apple Music</span>
+        </div>
+      </div>
+      <div class="mini-actions">
+        <button id="mini-btn-favorite" class="btn-icon mini-btn mini-btn-fav" type="button" aria-label="Избранное" title="В избранное">
+          <svg class="svg-icon icon-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </button>
+        <button id="mini-btn-play-pause" class="btn-icon mini-btn" type="button" aria-label="Воспроизведение">
+          <svg id="mini-icon-play" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <polygon points="6 3 20 12 6 21 6 3"/>
+          </svg>
+          <svg id="mini-icon-pause" class="hidden" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <rect x="5" y="4" width="4" height="16" rx="1"/>
+            <rect x="15" y="4" width="4" height="16" rx="1"/>
+          </svg>
+        </button>
+        <button id="mini-btn-next" class="btn-icon mini-btn" type="button" aria-label="Следующий">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <polygon points="5 4 15 12 5 20 5 4"/>
+            <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <!-- Mini Progress Line -->
+      <div class="mini-progress-track">
+        <div id="mini-progress-fill" class="mini-progress-fill" style="width: 0%;"></div>
+      </div>
+    </aside>
+
+    <!-- Mobile Bottom Tab Bar -->
+    <nav id="bottom-tab-bar" class="bottom-tab-bar">
+      <button class="tab-item active" data-view="view-now-playing">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <circle cx="12" cy="12" r="10"/>
+          <polygon points="10 8 16 12 10 16 10 8" fill="#000000"/>
+        </svg>
+        <span>Сейчас</span>
+      </button>
+
+      <button class="tab-item" data-view="view-home">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+        </svg>
+        <span>Главная</span>
+      </button>
+
+      <button class="tab-item" data-view="view-library">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          <line x1="9" y1="7" x2="15" y2="7"/>
+          <line x1="9" y1="11" x2="13" y2="11"/>
+        </svg>
+        <span>Медиатека</span>
+      </button>
+
+      <button class="tab-item" data-view="view-queue">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="8" y1="6" x2="21" y2="6"/>
+          <line x1="8" y1="12" x2="21" y2="12"/>
+          <line x1="8" y1="18" x2="21" y2="18"/>
+          <line x1="3" y1="6" x2="3.01" y2="6"/>
+          <line x1="3" y1="12" x2="3.01" y2="12"/>
+          <line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+        <span>Очередь</span>
+      </button>
+
+      <button class="tab-item" data-view="view-search">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <span>Поиск</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- Radio Station Picker Modal -->
+  <div id="station-picker-modal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card station-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Создать радиостанцию</h3>
+          <span class="modal-tag">APPLE MUSIC</span>
+        </div>
+        <button id="btn-close-station-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="modal-subtitle">Бесконечный радиопоток на основе ваших предпочтений</p>
+        <div class="station-options-list">
+          <button id="btn-station-by-track" class="station-option-btn" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">По текущему треку</span>
+              <span id="station-opt-track-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+
+          <button id="btn-station-by-artist" class="station-option-btn" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">По исполнителю</span>
+              <span id="station-opt-artist-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Signal Path Inspector Modal (Roon-like Audio Pipeline) -->
+  <div id="quality-modal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card signal-path-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Тракт сигнала</h3>
+          <span class="modal-tag">BIT-PERFECT DIRECT</span>
+        </div>
+        <button id="btn-close-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-body signal-path-body">
+        <div class="signal-path-chain">
+          <!-- Step 1: Audio Source -->
+          <div class="signal-node" id="signal-node-source">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">ИСТОЧНИК</span>
+                <span id="signal-source-badge" class="signal-node-format">ALAC Lossless</span>
+              </div>
+              <div id="signal-source-title" class="signal-node-name">Apple Music</div>
+              <div id="signal-source-details" class="signal-node-meta">24-bit / 192.0 kHz ALAC</div>
+            </div>
+          </div>
+
+          <div class="signal-connector">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Step 2: AMR Engine -->
+          <div class="signal-node" id="signal-node-engine">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">АУДИОДВИЖОК</span>
+                <span class="signal-node-format highlight-green">0.0 dB FS</span>
+              </div>
+              <div class="signal-node-name">AMR CoreAudio Engine</div>
+              <div class="signal-node-meta">Bit-Perfect 100% Lock • Zero DSP • Bypass микшера</div>
+            </div>
+          </div>
+
+          <div class="signal-connector">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Step 3: Hardware Output DAC -->
+          <div class="signal-node" id="signal-node-dac">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">ВЫХОДНОЙ ЦАП</span>
+                <span id="signal-dac-rate" class="signal-node-format">192.0 кГц</span>
+              </div>
+              <div id="signal-dac-name" class="signal-node-name">Аудиовыход</div>
+              <div id="signal-dac-details" class="signal-node-meta">Прямое подключение macOS CoreAudio</div>
+            </div>
+            <button id="btn-open-devices" class="btn-signal-action" type="button" title="Сменить устройство вывода">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              </svg>
+              <span>ЦАП</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Verified Bit-Perfect Card -->
+        <div class="signal-verified-card">
+          <div class="signal-verified-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+          </div>
+          <div class="signal-verified-info">
+            <div class="signal-verified-title">Bit-Perfect Verified</div>
+            <div class="signal-verified-desc">Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio Output Devices Modal -->
+  <div id="devices-modal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card devices-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Аудиоустройства вывода</h3>
+          <span class="modal-tag">COREAUDIO &amp; DLNA</span>
+        </div>
+        <button id="btn-close-devices" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Выберите активный ЦАП, аудиовыход macOS или сетевой стример</p>
+        <div id="audio-devices-list" class="audio-devices-list">
+          <div class="loading-state">Загрузка устройств...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mandatory Apple ID Auth Modal -->
+  <div id="modal-apple-auth" class="modal-backdrop auth-modal-backdrop hidden" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card auth-modal-card">
+      <div class="auth-modal-logo">
+        <svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor">
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 1.01-2.87-.94.04-2.08.63-2.75 1.41-.58.68-1.09 1.76-1.04 2.81 1.05.08 2.16-.57 2.78-1.35z"/>
+        </svg>
+      </div>
+      <h2 class="auth-modal-title">Подключите Apple ID</h2>
+      <p class="auth-modal-desc">
+        Для работы с каталогом, воспроизведения очередей в iCloud и персональных рекомендаций требуется авторизация в Apple Music.
+      </p>
+      <div class="auth-modal-features">
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Bit-Perfect звук в исходном качестве (ALAC / Hi-Res)</span>
+        </div>
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Синхронизация результатов поиска в iCloud-очереди</span>
+        </div>
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Персональная «Моя станция» и музыкальные открытия</span>
+        </div>
+      </div>
+      <div class="auth-modal-actions">
+        <button id="btn-auth-modal-login" class="btn-primary auth-btn-login" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 1.01-2.87-.94.04-2.08.63-2.75 1.41-.58.68-1.09 1.76-1.04 2.81 1.05.08 2.16-.57 2.78-1.35z"/>
+          </svg>
+          <span>Войти через Apple ID</span>
+        </button>
+      </div>
+      <div id="auth-modal-status" class="auth-modal-status hidden">
+        <div class="spinner-sm"></div>
+        <span>Инициализация MusicKit...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account Diagnostic Modal -->
+  <div id="modal-account-diag" class="modal-backdrop hidden" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card account-diag-modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Apple ID & Медиатека</h3>
+        <button id="btn-close-account-diag" class="btn-close-modal" type="button" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="diag-details-list">
+        <div class="diag-detail-item">
+          <span class="diag-label">Учетная запись Mac:</span>
+          <span class="diag-value" id="diag-val-account">tse.tds@gmail.com</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Статус синхронизации:</span>
+          <span class="diag-value green" id="diag-val-status">Синхронизировано с Mac</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Регион Apple Music:</span>
+          <span class="diag-value" id="diag-val-storefront">US</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Подписка Apple Music:</span>
+          <span class="diag-value green" id="diag-val-sub">Активна</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Bit-Perfect CoreAudio:</span>
+          <span class="diag-value" id="diag-val-dac">Lossless / Hi-Res (100% Volume Lock)</span>
+        </div>
+      </div>
+      <div class="diag-modal-actions">
+        <button id="btn-refresh-account-diag" class="btn-secondary" type="button">Проверить заново</button>
+        <button id="btn-done-account-diag" class="btn-primary" type="button">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen StandBy / TV Mode Overlay -->
+  <div id="standby-tv-overlay" class="standby-tv-overlay hidden" aria-hidden="true">
+    <div id="standby-ambient-bg" class="standby-ambient-bg"></div>
+    <div class="standby-vignette"></div>
+
+    <header class="standby-top-bar">
+      <div class="standby-top-left">
+        <span id="standby-clock" class="standby-clock">00:00</span>
+        <span id="standby-motion-badge" class="standby-pill-badge standby-motion-badge hidden">✦ ЖИВАЯ ОБЛОЖКА</span>
+        <span id="standby-wled-badge" class="standby-pill-badge standby-wled-badge hidden">💡 WLED DDP</span>
+      </div>
+      <div class="standby-top-right">
+        <button id="standby-btn-library" class="standby-library-pill-btn" type="button" title="Медиатека и станции">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+          <span>Медиатека</span>
+        </button>
+        <button id="standby-btn-wled-toggle" class="standby-action-btn hidden" type="button" title="Настройки WLED DDP">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+        <button id="btn-close-standby" class="standby-close-btn" type="button" title="Выйти из StandBy / TV Mode (Esc)" aria-label="Закрыть StandBy Mode">
+          ✕
+        </button>
+      </div>
+    </header>
+
+    <div class="standby-content">
+      <div class="standby-artwork-col">
+        <div id="standby-art-frame" class="standby-art-frame">
+          <img id="standby-artwork" class="standby-artwork-img" src="apple-touch-icon.svg" alt="Обложка">
+          <video id="standby-motion-video" class="standby-motion-video hidden" autoplay loop muted playsinline></video>
+        </div>
+      </div>
+
+      <div class="standby-meta-col">
+        <div class="standby-badges-row">
+          <span id="standby-dac-badge" class="standby-dac-badge">BIT-PERFECT · LOSSLESS</span>
+        </div>
+        <h1 id="standby-title" class="standby-title">Не играет</h1>
+        <p id="standby-artist" class="standby-artist">Apple Music</p>
+        <p id="standby-album" class="standby-album"></p>
+
+        <div class="standby-progress-section">
+          <div class="standby-progress-track" id="standby-progress-track">
+            <div id="standby-progress-fill" class="standby-progress-fill" style="width: 0%;"></div>
+          </div>
+          <div class="standby-time-row">
+            <span id="standby-time-elapsed">0:00</span>
+            <span id="standby-time-remaining">-0:00</span>
+          </div>
+        </div>
+
+        <div class="standby-controls">
+          <button id="standby-btn-prev" class="standby-ctrl-btn" type="button" aria-label="Предыдущий">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+              <polygon points="19 20 9 12 19 4 19 20"/>
+              <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button id="standby-btn-play-pause" class="standby-ctrl-btn standby-ctrl-play" type="button" aria-label="Воспроизведение / Пауза">
+            <svg id="standby-icon-play" viewBox="0 0 24 24" width="38" height="38" fill="currentColor">
+              <polygon points="6 3 20 12 6 21 6 3"/>
+            </svg>
+            <svg id="standby-icon-pause" class="hidden" viewBox="0 0 24 24" width="38" height="38" fill="currentColor">
+              <rect x="5" y="4" width="4.5" height="16" rx="1.5"/>
+              <rect x="14.5" y="4" width="4.5" height="16" rx="1.5"/>
+            </svg>
+          </button>
+          <button id="standby-btn-next" class="standby-ctrl-btn" type="button" aria-label="Следующий">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+              <polygon points="5 4 15 12 5 20 5 4"/>
+              <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fullscreen TV Library & Stations Grid Overlay -->
+    <div id="standby-library-modal" class="standby-library-modal hidden" aria-hidden="true" role="dialog" aria-label="Медиатека и станции">
+      <header class="standby-library-header">
+        <div class="standby-library-header-left">
+          <h2 class="standby-library-title">Медиатека</h2>
+          <span class="standby-library-subtitle">Станции, персональные миксы и плейлисты</span>
+        </div>
+        <button id="btn-close-standby-library" class="standby-close-btn" type="button" title="Закрыть медиатеку" aria-label="Закрыть медиатеку">
+          ✕
+        </button>
+      </header>
+      <div class="standby-library-scroll">
+        <div id="standby-library-grid" class="standby-library-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Bar / TV Mode Settings Popover (WLED DDP Mode Selector) -->
+  <div id="top-settings-popover" class="top-settings-popover hidden" role="dialog" aria-label="Режим работы WLED DDP">
+    <div class="top-settings-header">
+      <div class="top-settings-title-group">
+        <span class="top-settings-badge">UDP 4048 · DDP</span>
+        <h4 class="top-settings-title">WLED Подсветка</h4>
+      </div>
+      <button id="btn-close-top-settings" class="top-settings-close" type="button" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="top-settings-body">
+      <div class="top-settings-field">
+        <label class="top-settings-label" for="wled-mode-select">Режим работы</label>
+        <select id="wled-mode-select" class="top-settings-select">
+          <option value="off">Без подсветки</option>
+          <option value="breathing">Синусоида ритма (стоячая волна)</option>
+          <option value="spectrum">Спектральный эквалайзер (Бас · Вокал · Верх)</option>
+          <option value="vu_center">Симметричный пульс (раскрытие от центра)</option>
+          <option value="ambilight">Живой Ambilight (16 зон + пульс музыки)</option>
+          <option value="harmonic">Гармонический резонанс (цвет + мелодия)</option>
+          <option value="static">Статичная палитра обложки</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Busy / Action Loading Overlay -->
+  <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
+    <div class="busy-card">
+      <div class="busy-spinner"></div>
+      <span id="busy-message" class="busy-text">Загрузка...</span>
+    </div>
+  </div>
+
+  <script src="/app.js?v=254"></script></script>
+</body>
+</html>
+"""#
+}

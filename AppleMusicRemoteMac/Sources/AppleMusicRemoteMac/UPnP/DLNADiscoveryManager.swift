@@ -179,10 +179,15 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     public static let activeRendererDefaultsKey = "ActiveDLNARendererUID"
 
     private var bluOSPollingTask: Task<Void, Never>?
+    private var lastKnownBluOSState: String = ""
     private var lastLocalActionDate: Date = Date.distantPast
     private var lastTrackId: String = ""
     private var lastTrackTitle: String = ""
     private var lastTrackArtist: String = ""
+    private var lastSentStreamRate: Int = 0
+    private var lastSentStreamDepth: Int = 0
+    private var lastSentStreamTitle: String = ""
+    private var lastSentStreamDate: Date = Date.distantPast
 
     public func markLocalAction() {
         lock.lock()
@@ -296,8 +301,11 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     }
 
     public func stop() {
+        lock.lock()
+        discoveredRenderers.removeAll()
+        lock.unlock()
         queue.async { [weak self] in
-            self?.stopInternal()
+            self?.stopInternal(clearDevices: true)
         }
     }
 
@@ -306,7 +314,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     }
 
     private func startInternal() {
-        stopInternal()
+        stopInternal(clearDevices: false)
 
         NSLog("[DLNADiscovery] 🔍 Starting DLNA & BluOS MediaRenderer discovery...")
 
@@ -352,7 +360,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         }
     }
 
-    private func stopInternal() {
+    private func stopInternal(clearDevices: Bool = true) {
         scanTimer?.cancel()
         scanTimer = nil
 
@@ -375,9 +383,11 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
             self?.netServiceDelegate = nil
         }
 
-        lock.lock()
-        discoveredRenderers.removeAll()
-        lock.unlock()
+        if clearDevices && !isEnabled {
+            lock.lock()
+            discoveredRenderers.removeAll()
+            lock.unlock()
+        }
 
         stopBluOSStatusMonitoring()
 
@@ -792,10 +802,28 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
             completion?(false, "No active renderer")
             return
         }
-        if renderer.isBluOS, let base = renderer.bluOSBaseURL {
-            sendBluOSCommand(endpoint: "Play", base: base, completion: completion)
+        if !PlaybackRouter.shared.isTestingEnvironment {
+            AudioProcessTapService.shared.startCapture()
+        }
+        if renderer.isBluOS {
+            let (streamURL, imageURL, fullTitle, metadata) = resolveStreamAndImageURLs()
+            setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle, completion: completion)
         } else {
-            sendAVTransportAction(action: "Play", bodyContent: "<Speed>1</Speed>", completion: completion)
+            lock.lock()
+            let hasSentStream = lastSentStreamDate != Date.distantPast
+            lock.unlock()
+            if !hasSentStream {
+                let (streamURL, imageURL, fullTitle, metadata) = resolveStreamAndImageURLs()
+                setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { [weak self] success, msg in
+                    if success {
+                        self?.sendAVTransportAction(action: "Play", bodyContent: "<Speed>1</Speed>", completion: completion)
+                    } else {
+                        completion?(false, msg)
+                    }
+                }
+            } else {
+                sendAVTransportAction(action: "Play", bodyContent: "<Speed>1</Speed>", completion: completion)
+            }
         }
     }
 
@@ -848,6 +876,16 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         guard let renderer = getActiveRenderer() else {
             completion?(false, "No active renderer")
             return
+        }
+        if let uriComps = URLComponents(string: uri), let qItems = uriComps.queryItems {
+            let parsedRate = qItems.first(where: { $0.name == "rate" })?.value.flatMap { Int($0) }
+            let parsedBits = qItems.first(where: { $0.name == "bits" || $0.name == "depth" })?.value.flatMap { Int($0) }
+            lock.lock()
+            if let r = parsedRate { lastSentStreamRate = r }
+            if let b = parsedBits { lastSentStreamDepth = b }
+            if let t = title, !t.isEmpty { lastSentStreamTitle = t }
+            lastSentStreamDate = Date()
+            lock.unlock()
         }
         if renderer.isBluOS, let base = renderer.bluOSBaseURL {
             var comps = URLComponents(string: "\(base.absoluteString)/Play")
@@ -908,6 +946,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
 
     public func startBluOSStatusMonitoring(renderer: DiscoveredDLNARenderer) {
         stopBluOSStatusMonitoring()
+        lastKnownBluOSState = ""
         guard renderer.isBluOS, let baseURL = renderer.bluOSBaseURL else { return }
 
         bluOSPollingTask = Task { [weak self] in
@@ -946,10 +985,14 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     public func stopBluOSStatusMonitoring() {
         bluOSPollingTask?.cancel()
         bluOSPollingTask = nil
+        lastKnownBluOSState = ""
     }
 
     @MainActor
     private func handleBluOSStateUpdate(state: String) {
+        let prevState = lastKnownBluOSState
+        lastKnownBluOSState = state
+
         let elapsed = timeSinceLastLocalAction()
         if elapsed < 4.0 {
             NSLog("[DLNADiscovery] ⏳ Ignoring BluOS state '%@' (recent local action %.1fs ago)", state, elapsed)
@@ -964,8 +1007,10 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
                 _ = MusicBridge.shared.pause()
             }
         } else if state == "stream" || state == "play" {
-            if !musicStatus.isPlaying {
-                NSLog("[DLNADiscovery] ▶️ BluOS reported playing state. Resuming Apple Music.")
+            // Only resume Apple Music if BluOS explicitly transitioned from 'pause' -> 'stream'/'play'
+            // (never auto-start playback when switching devices while paused or on initial poll).
+            if !musicStatus.isPlaying && prevState == "pause" {
+                NSLog("[DLNADiscovery] ▶️ BluOS transitioned from pause to playing state. Resuming Apple Music.")
                 markLocalAction()
                 _ = MusicBridge.shared.play()
             }
@@ -984,15 +1029,25 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     public func resolveStreamAndImageURLs(sampleRate: Int? = nil, bitDepth: Int? = nil, isBluOS: Bool? = nil) -> (streamURL: String, imageURL: String, title: String, metadata: String) {
         let lanIP = WebSocketServer.shared.getLANIPAddresses().first ?? "127.0.0.1"
         let port = WebSocketServer.shared.port
-        let rate = sampleRate ?? (BitPerfectLogMonitor.shared.currentDetectedSampleRate.map { Int($0) } ?? AudioProcessTapService.shared.sampleRate)
-        let depth = bitDepth ?? (BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate >= 48000 ? 24 : 16))
+        let status = MusicBridge.shared.getPlayerStatus()
+        let isLossy = status.audioQuality.contains("AAC") || status.audioQuality.contains("MP3") || (!BitPerfectLogMonitor.shared.currentIsLossless && sampleRate == nil)
+        let rate = sampleRate ?? (isLossy ? 44100 : (status.track?.sampleRate ?? BitPerfectLogMonitor.shared.currentDetectedSampleRate.map { Int($0) } ?? AudioProcessTapService.shared.sampleRate))
+        let depth: Int
+        if let explicitDepth = bitDepth {
+            depth = explicitDepth
+        } else if sampleRate != nil {
+            depth = rate >= 48000 ? 24 : (isLossy ? 16 : (status.track?.bitDepth ?? BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? 16))
+        } else if isLossy {
+            depth = 16
+        } else {
+            depth = status.track?.bitDepth ?? BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate >= 48000 ? 24 : 16)
+        }
 
         AudioProcessTapService.shared.setFormat(sampleRate: rate, bitDepth: depth)
 
         let timestamp = Int(Date().timeIntervalSince1970)
         let streamURL = "http://\(lanIP):\(port)/stream/live.wav?rate=\(rate)&bits=\(depth)&t=\(timestamp)"
 
-        let status = MusicBridge.shared.getPlayerStatus()
         let trackName = status.track?.name ?? "Apple Music"
         let trackArtist = status.track?.artist ?? ""
         let fullTitle = trackArtist.isEmpty ? trackName : "\(trackArtist) - \(trackName)"
@@ -1024,15 +1079,25 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
 
     public func handleTrackChanged(status: PlayerStatus) {
         guard hasActiveRenderer else { return }
+        guard status.isPlaying else { return }
         guard let renderer = getActiveRenderer() else { return }
         guard let track = status.track else { return }
 
         let curId = track.id
         let curTitle = track.name
         let curArtist = track.artist
+        let expectedFullTitle = curArtist.isEmpty ? curTitle : "\(curArtist) - \(curTitle)"
+
+        let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: curArtist, title: curTitle)
+        let isLossy = status.audioQuality.contains("AAC") || status.audioQuality.contains("MP3") || (!BitPerfectLogMonitor.shared.currentIsLossless && cachedFmt == nil)
+        let detectedRate = BitPerfectLogMonitor.shared.currentDetectedSampleRate.map { Int($0) }
+        let detectedDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth
+        let targetRate = isLossy ? 44100 : (cachedFmt.map { Int($0.sampleRate) } ?? detectedRate ?? status.track?.sampleRate ?? AudioProcessTapService.shared.sampleRate)
+        let targetDepth = isLossy ? 16 : (cachedFmt?.bitDepth ?? detectedDepth ?? status.track?.bitDepth ?? (targetRate >= 48000 ? 24 : 16))
 
         lock.lock()
         let isSameTrack = (curId == lastTrackId && curTitle == lastTrackTitle && curArtist == lastTrackArtist)
+        let alreadySentSameStream = (lastSentStreamTitle == expectedFullTitle && lastSentStreamRate == targetRate && lastSentStreamDepth == targetDepth && Date().timeIntervalSince(lastSentStreamDate) < 3.5)
         if !isSameTrack {
             lastTrackId = curId
             lastTrackTitle = curTitle
@@ -1040,12 +1105,10 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         }
         lock.unlock()
 
-        guard !isSameTrack else { return }
+        guard !isSameTrack && !alreadySentSameStream else { return }
 
-        NSLog("[DLNADiscovery] 🎵 Track changed while streaming to \(renderer.friendlyName): '\(curArtist) - \(curTitle)'")
+        NSLog("[DLNADiscovery] 🎵 Track changed while streaming to \(renderer.friendlyName): '\(curArtist) - \(curTitle)' (\(targetRate) Hz / \(targetDepth)-bit)")
 
-        let targetRate = status.track?.sampleRate ?? BitPerfectLogMonitor.shared.currentDetectedSampleRate.map { Int($0) } ?? AudioProcessTapService.shared.sampleRate
-        let targetDepth = status.track?.bitDepth ?? BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (targetRate >= 48000 ? 24 : 16)
         let (streamURL, imageURL, fullTitle, metadata) = resolveStreamAndImageURLs(sampleRate: targetRate, bitDepth: targetDepth)
         setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { success, _ in
             if success, status.isPlaying, !renderer.isBluOS {
@@ -1059,24 +1122,46 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         guard let renderer = getActiveRenderer() else { return }
         let currentRate = AudioProcessTapService.shared.sampleRate
         let currentDepth = AudioProcessTapService.shared.bitDepth
+        lock.lock()
+        let sentRate = lastSentStreamRate
+        let sentDepth = lastSentStreamDepth
+        lock.unlock()
+
         guard sampleRate > 0, (bitDepth == 16 || bitDepth == 24),
-              (sampleRate != currentRate || bitDepth != currentDepth) else { return }
+              (sampleRate != currentRate || bitDepth != currentDepth || sampleRate != sentRate || bitDepth != sentDepth) else { return }
+
+        AudioProcessTapService.shared.setFormat(sampleRate: sampleRate, bitDepth: bitDepth)
+        PlaybackStateStore.shared.invalidateStatusCache()
+
+        let status = MusicBridge.shared.getPlayerStatus()
+        guard status.isPlaying else {
+            WebSocketServer.shared.broadcastStatus(includeQueue: false)
+            return
+        }
 
         markLocalAction()
         NSLog("[DLNADiscovery] 🎛️ Track format changed to \(sampleRate) Hz / \(bitDepth)-bit while streaming to \(renderer.friendlyName). Recreating stream...")
 
-        AudioProcessTapService.shared.setFormat(sampleRate: sampleRate, bitDepth: bitDepth)
         WebSocketServer.shared.closeLiveStreamConnections()
 
         let (streamURL, imageURL, fullTitle, metadata) = resolveStreamAndImageURLs(sampleRate: sampleRate, bitDepth: bitDepth)
 
+        if let curTrack = status.track {
+            lock.lock()
+            lastTrackId = curTrack.id
+            lastTrackTitle = curTrack.name
+            lastTrackArtist = curTrack.artist
+            lock.unlock()
+        }
+
         setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { success, _ in
             if success, !renderer.isBluOS {
-                let status = MusicBridge.shared.getPlayerStatus()
-                if status.isPlaying {
+                let latestStatus = MusicBridge.shared.getPlayerStatus()
+                if latestStatus.isPlaying {
                     self.play()
                 }
             }
+            WebSocketServer.shared.broadcastStatus(includeQueue: false)
         }
     }
 }

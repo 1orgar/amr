@@ -8,6 +8,18 @@ import XCTest
 
 final class BitPerfectLogMonitorFullTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        BitPerfectLogMonitor.shared.onFormatChanged = nil
+        BitPerfectLogMonitor.shared.resetTrackStateSyncForTesting()
+    }
+
+    override func tearDown() {
+        BitPerfectLogMonitor.shared.onFormatChanged = nil
+        BitPerfectLogMonitor.shared.resetTrackStateSyncForTesting()
+        super.tearDown()
+    }
+
     func testReportLocalTrackFormatStandardAndHiRes() {
         let monitor = BitPerfectLogMonitor.shared
 
@@ -166,5 +178,102 @@ final class BitPerfectLogMonitorFullTests: XCTestCase {
 
         // Non-cached track
         XCTAssertNil(monitor.getCachedFormat(artist: "Unknown", title: "Nonexistent"))
+    }
+
+    func testStrictMidPlaybackFormatLockAndGaplessPrebufferIsolation() {
+        let monitor = BitPerfectLogMonitor.shared
+
+        // 1. Start Track A ("guano apes:open your eyes") -> ALAC decoder locks at 44.1 kHz / 16-bit
+        monitor.resetTrackStateSyncForTesting(trackKey: "guano apes:open your eyes")
+        XCTAssertFalse(monitor.isFormatLockedForCurrentTrack)
+
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:251   Input format:  2 ch,  44100 Hz, alac (0x00000001) from 16-bit source, 4096 frames/packet")
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 44100.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 16)
+        XCTAssertEqual(monitor.formatSwitchCountForCurrentTrack, 1)
+
+        // 2. 10 seconds before Track A ends, Music.app pre-buffers Track B at 96.0 kHz / 24-bit!
+        // Strict Format Lock must NOT switch the DAC mid-track, and must buffer 96.0 kHz / 24-bit in pendingNextTrackFormat!
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:251   Input format:  2 ch,  96000 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 44100.0, "Mid-playback prebuffer log must NOT switch active track sample rate")
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 16, "Mid-playback prebuffer log must NOT switch active track bit depth")
+        XCTAssertEqual(monitor.formatSwitchCountForCurrentTrack, 1, "CoreAudio setFormat must be called strictly once for Track A")
+        XCTAssertEqual(monitor.pendingNextTrackFormat?.sampleRate, 96000.0)
+        XCTAssertEqual(monitor.pendingNextTrackFormat?.bitDepth, 24)
+
+        // 3. Track B physically starts -> resetTrackState consumes pendingNextTrackFormat and locks immediately to 96.0 kHz / 24-bit!
+        monitor.resetTrackStateSyncForTesting(trackKey: "pianoprinceofanime:sketch")
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 96000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+        XCTAssertNil(monitor.pendingNextTrackFormat)
+        XCTAssertEqual(monitor.formatSwitchCountForCurrentTrack, 1)
+    }
+
+    func testFalseResetTrackStateGuardOnSameTrackKey() {
+        let monitor = BitPerfectLogMonitor.shared
+
+        monitor.resetTrackStateSyncForTesting(trackKey: "guano apes:lords of the boards")
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:251   Input format:  2 ch,  48000 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 48000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+
+        // Intermediate playerInfo notification (pause/resume/artwork/favorite) arrives for the SAME track
+        monitor.resetTrackStateSyncForTesting(trackKey: "Guano Apes:Lords of the Boards")
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack, "Redundant resetTrackState for the same trackKey must NOT release format lock")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 48000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+    }
+
+    func testZeroBitAnd16BitFigPlaybackReportIgnoredWhenLockedOn24Bit() {
+        let monitor = BitPerfectLogMonitor.shared
+
+        monitor.resetTrackStateSyncForTesting(trackKey: "pianoprinceofanime:sketch")
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:251   Input format:  2 ch,  48000 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 48000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+
+        // FigStreamPlayer emits 0-bit and 16-bit reports mid-playback
+        monitor.processLogMessageForTesting("fpfs_ReportAudioPlaybackThroughFigLog: [AudioFormat qaac is decodable] [SampleRate 48000] [BitDepth 0]")
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24, "0-bit FigPlaybackReport must never overwrite 24-bit lock")
+        XCTAssertNil(monitor.pendingNextTrackFormat, "0-bit report while locked must not pollute pendingNextTrackFormat")
+
+        monitor.processLogMessageForTesting("fpfs_ReportAudioPlaybackThroughFigLog: [AudioFormat alac is decodable] [SampleRate 48000] [BitDepth 16]")
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24, "16-bit FigPlaybackReport must not downgrade 24-bit lock")
+    }
+
+    func testTwoTierZeroStallPollerLightweightPulseAndInvalidation() {
+        let engine = PlayerStatusEngine.shared
+        let meta = StaticTrackMetadata(
+            dbId: 20180,
+            name: "SKETCH (from \"My Hero Academia Season 6\")",
+            artist: "PianoPrinceOfAnime",
+            album: "SKETCH - Single",
+            duration: 200.0,
+            hasLoc: false,
+            kind: "Аудиофайл Apple Music AAC",
+            bitRate: 256,
+            sampleRate: 44100,
+            isFavorited: false,
+            currentPlaylistName: "Очередь AMR",
+            shuffle: false,
+            repeatMode: "off",
+            volume: 100
+        )
+        engine.seedStaticMetadataForTesting(meta)
+
+        // 1. Normal playback progression uses Tier 1 Lightweight Pulse
+        XCTAssertTrue(engine.shouldUseLightweightPulse(rawState: "playing", rawPosition: 15.0))
+        XCTAssertTrue(engine.shouldUseLightweightPulse(rawState: "paused", rawPosition: 15.5))
+
+        // 2. Transition to stopped state triggers Tier 2 Full Static Metadata refresh
+        XCTAssertFalse(engine.shouldUseLightweightPulse(rawState: "stopped", rawPosition: 0.0))
+
+        // 3. Explicit cache invalidation triggers Tier 2 Full Static Metadata refresh
+        engine.seedStaticMetadataForTesting(meta)
+        PlaybackStateStore.shared.invalidateStatusCache()
+        XCTAssertFalse(engine.shouldUseLightweightPulse(rawState: "playing", rawPosition: 20.0))
     }
 }
