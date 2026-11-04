@@ -11,7 +11,7 @@
     "fullscreen",
     "window-controls-overlay"
   ],
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#000000",
   "theme_color": "#000000",
   "categories": [

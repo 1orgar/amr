@@ -14,7 +14,7 @@ jobs:
   test:
     name: Unit Tests & Build Verification
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository

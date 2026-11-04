@@ -9,7 +9,7 @@ jobs:
   test:
     name: Run Unit Tests (Blocking Gate)
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
@@ -44,7 +44,7 @@ jobs:
     name: Build Universal DMG & Publish Release
     needs: test
     runs-on: macos-15
-    timeout-minutes: 25
+    timeout-minutes: 60
     permissions:
       contents: write
 

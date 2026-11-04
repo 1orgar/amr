@@ -44,7 +44,9 @@
 
 html {
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  min-height: 100%;
+  min-height: -webkit-fill-available;
   margin: 0;
   padding: 0;
   background-color: var(--bg-pure);
@@ -52,13 +54,10 @@ html {
 }
 
 body {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  min-height: 100%;
+  min-height: -webkit-fill-available;
   margin: 0;
   padding: 0;
   background-color: var(--bg-pure);
@@ -254,7 +253,8 @@ input {
   right: 0;
   bottom: 0;
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  min-height: 100%;
   display: flex;
   background: transparent;
   overflow: hidden;
@@ -382,7 +382,7 @@ input {
     display: flex !important;
     align-items: center;
     justify-content: space-between;
-    padding: calc(max(var(--safe-top), env(safe-area-inset-top, 0px), 44px) + 8px) calc(var(--safe-left) + 20px) 12px calc(var(--safe-right) + 20px);
+    padding: calc(var(--safe-top) + 8px) calc(var(--safe-left) + 16px) 10px calc(var(--safe-right) + 16px);
     background: var(--bg-pure);
     border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
@@ -415,7 +415,7 @@ input {
   .player-panel {
     display: none;
     width: 100%;
-    height: 100%;
+    height: 100vh;
     position: fixed;
     top: 0;
     left: 0;
@@ -423,10 +423,10 @@ input {
     bottom: 0;
     background: transparent;
     flex-direction: column;
-    padding-top: calc(max(var(--safe-top), env(safe-area-inset-top, 0px), 54px) + 16px);
+    padding-top: calc(var(--safe-top) + 10px);
     padding-left: calc(var(--safe-left) + 20px);
     padding-right: calc(var(--safe-right) + 20px);
-    padding-bottom: 70px;
+    padding-bottom: 62px;
     overflow-y: auto;
     z-index: 20;
     overscroll-behavior-y: contain;
@@ -459,11 +459,16 @@ input {
     height: 100%;
     flex-direction: column;
     overflow: hidden;
-    padding-top: calc(max(var(--safe-top), env(safe-area-inset-top, 0px), 54px) + 16px);
+    padding-top: 10px;
     padding-left: calc(var(--safe-left) + 16px);
     padding-right: calc(var(--safe-right) + 16px);
     padding-bottom: 0;
     animation: viewFadeIn 0.2s cubic-bezier(0.2, 0.9, 0.4, 1);
+  }
+
+  .section-header,
+  .home-header {
+    margin-bottom: 12px;
   }
 
   .content-view.active {
@@ -2552,8 +2557,8 @@ input {
   position: fixed;
   left: calc(var(--safe-left) + 12px);
   right: calc(var(--safe-right) + 12px);
-  bottom: 64px;
-  height: 60px;
+  bottom: 58px;
+  height: 58px;
   background: rgba(22, 22, 24, 0.94);
   backdrop-filter: blur(25px);
   -webkit-backdrop-filter: blur(25px);
@@ -2664,11 +2669,11 @@ input {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 56px;
-  padding-bottom: 4px;
+  height: 52px;
+  padding-bottom: 0;
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
-  background: #000000;
+  background: rgba(10, 10, 12, 0.96);
   backdrop-filter: blur(25px);
   -webkit-backdrop-filter: blur(25px);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -4924,24 +4929,117 @@ body.ui-blocked #busy-overlay {
   }
 }
 
-/* Force Vertical Portrait Mode on Mobile Phones even when rotated horizontally */
-@media only screen and (max-height: 540px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
-  html {
-    transform: rotate(-90deg);
-    transform-origin: left top;
-    width: 100vh !important;
-    height: 100vw !important;
-    overflow: hidden !important;
+/* Mobile Landscape Mode: TV-Style Horizontal Player (Left: Artwork, Right: Progress & Controls, No WLED/Library/Close) */
+@media only screen and (max-height: 540px) and (orientation: landscape) {
+  #standby-tv-overlay {
+    display: flex !important;
     position: fixed !important;
-    top: 100% !important;
-    left: 0 !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    padding: 14px calc(max(var(--safe-right), 24px)) 14px calc(max(var(--safe-left), 24px)) !important;
+    z-index: 9999 !important;
   }
-  body,
-  .app-layout {
-    width: 100vh !important;
-    height: 100vw !important;
-    max-width: 100vh !important;
-    max-height: 100vw !important;
+
+  #standby-tv-overlay .standby-top-bar,
+  #standby-tv-overlay .standby-top-right,
+  #standby-btn-library,
+  #standby-btn-wled-toggle,
+  #btn-close-standby,
+  #standby-wled-badge,
+  #standby-library-modal,
+  #top-settings-popover {
+    display: none !important;
+  }
+
+  #standby-tv-overlay .standby-content {
+    display: grid !important;
+    grid-template-columns: auto 1fr !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: clamp(20px, 4.5vw, 40px) !important;
+    max-width: 880px !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 auto !important;
+  }
+
+  #standby-tv-overlay .standby-art-frame {
+    width: min(78dvh, 38vw) !important;
+    height: min(78dvh, 38vw) !important;
+    min-width: 170px !important;
+    min-height: 170px !important;
+    max-width: 300px !important;
+    max-height: 300px !important;
+    border-radius: 18px !important;
+    animation: none !important;
+  }
+
+  #standby-tv-overlay .standby-meta-col {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    min-width: 0 !important;
+    gap: 6px !important;
+  }
+
+  #standby-tv-overlay .standby-dac-badge {
+    padding: 4px 10px !important;
+    font-size: 10px !important;
+  }
+
+  #standby-tv-overlay .standby-title {
+    font-size: clamp(19px, 3vw, 26px) !important;
+    line-height: 1.15 !important;
+    -webkit-line-clamp: 1 !important;
+  }
+
+  #standby-tv-overlay .standby-artist {
+    font-size: clamp(14px, 2vw, 18px) !important;
+  }
+
+  #standby-tv-overlay .standby-album {
+    font-size: clamp(12px, 1.6vw, 14px) !important;
+  }
+
+  #standby-tv-overlay .standby-progress-section {
+    margin-top: 8px !important;
+    gap: 6px !important;
+    max-width: 100% !important;
+  }
+
+  #standby-tv-overlay .standby-progress-track {
+    height: 7px !important;
+  }
+
+  #standby-tv-overlay .standby-time-row {
+    font-size: 12px !important;
+  }
+
+  #standby-tv-overlay .standby-controls {
+    margin-top: 6px !important;
+    gap: 18px !important;
+  }
+
+  #standby-tv-overlay .standby-ctrl-btn {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  #standby-tv-overlay .standby-ctrl-btn svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  #standby-tv-overlay .standby-ctrl-play {
+    width: 58px !important;
+    height: 58px !important;
+  }
+
+  #standby-tv-overlay .standby-ctrl-play svg {
+    width: 28px !important;
+    height: 28px !important;
   }
 }
 

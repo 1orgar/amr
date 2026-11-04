@@ -5191,9 +5191,7 @@ extension WebUIContent {
 
   // Handle responsive layout changes on resize
   function handleResize() {
-    if (isMobilePhoneViewport() && screen.orientation && typeof screen.orientation.lock === 'function') {
-      screen.orientation.lock('portrait').catch(() => {});
-    }
+    syncStandbyAndMotionCoverUI();
     const detailOpen = Boolean(dom.playlistDetailPane && !dom.playlistDetailPane.classList.contains('hidden'));
     if (isDesktopLayout()) {
       // On desktop, ensure right column displays active desktop tab
