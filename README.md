@@ -18,15 +18,25 @@
 * **Automatic DAC Sample Rate Synchronization**: Instant hardware switching between 44.1, 48, 88.2, 96, 176.4, and 192 kHz to match the source track's native rate in Music.app bit-for-bit.
 * **100% Volume Lock Mode**: Keeps macOS / Music.app software volume pegged at 100% to eliminate digital volume dithering and word-length degradation.
 * **Format Pre-Inspection, Strict Format Lock & AAC vs ALAC Detection**: Pre-inspects stream format parameters (`sampleRate` and `bitDepth`), strictly locks mid-playback DAC format, and distinguishes compressed AAC (`16-bit / 44.1 kHz`, Lossy indicator) from ALAC Lossless / Hi-Res (`24-bit / up to 192 kHz`).
-* **Audiophile Signal Path Inspection (Тракт сигнала)**: Interactive Roon-style modal detailing every stage of the audio chain: Source stream (codec, bit depth, sample rate), AMR Bit-Perfect Engine (`0.0 dB FS`, zero DSP), and active Hardware Output DAC or BluOS streamer.
+* **Real-Time FFT Spectral Hi-Res Verifier (`SpectralIntegrityAnalyzer`, `vDSP`)**: Performs 4096-point Hann-windowed FFT analysis and LSB bit-depth verification directly on the PCM stream to detect fake upsampled tracks (`TRUE HI-RES`, `FAKE HI-RES • 22K CUT`, `UPSAMPLED 48K`, `16-BIT PADDED`, `CD LOSSLESS`) right inside the Signal Path modal, with persistent two-tier validation caching for local (`persistentID`) and cloud (`catalogId`) tracks.
+* **DAC Muting Guard & Click-Free Switcher**: Optional three-stage micro-muting protection during hardware sample rate transitions (`Pre-Mute → Clock Lock → Unmute`) to eliminate relay clicks on external DACs.
+* **Audiophile Signal Path Inspection (Тракт сигнала)**: Interactive Roon-style modal detailing every stage of the audio chain: Source stream (codec, bit depth, sample rate), Spectral Integrity Verifier, AMR Bit-Perfect Engine (`0.0 dB FS`, zero DSP), and active Hardware Output DAC or BluOS streamer.
 * **In-App DAC Switcher**: Quickly switch between connected external DACs, CoreAudio output devices, and BluOS renderers directly from the Web remote without auto-starting playback when paused.
-* **Optional Web Volume Control**: When volume lock is turned off via menu bar settings, the Web UI automatically displays a smooth volume slider (with an instant Mute button) for setups lacking a hardware volume pot.
+* **Optional Web Volume Control, External Amplifier TCP Bridge (`ExternalAmpTCPController`) & Hardware Bit-Perfect Normalization (`AppleSoundCheckService`)**:
+  * When 100% volume lock is turned off, the Web UI provides a software volume slider.
+  * When **100% Bit-Perfect Volume Lock** is enabled, the dedicated **Amplifier** settings tab allows direct hardware volume & mute control over text-based TCP sockets (**Rotel `:9590`**, **Denon / Marantz `:23`**, **Hegel `:50001`**, **NAD `:30000`**, **Lyngdorf `:84`**) with live status polling, configurable maximum volume cap (`1–100%`), zero-jump & max-volume hardware guards, connection diagnostics, an `AMPLIFIER` node in the Signal Path modal, and TV Mode volume control (inline slider on the button row, vertical up/down swipe gesture, and a precision zoom magnifier loupe).
+  * **Hardware Bit-Perfect Track Normalization (`AppleSoundCheckService` + Non-Linear Low-Volume Smart Curve)**: Extracts official Apple `iTunNORM` metadata from local files and Apple Music catalog `.m4a` headers (or computes real-time perceptual `ITU-R BS.1770` K-weighted loudness via `SpectralIntegrityAnalyzer` for tracks without tags) and adjusts the external amplifier's hardware attenuator over TCP while keeping macOS CoreAudio output 100% Bit-Perfect (`0.0 dBFS`). Includes a toggleable **Smart Low-Volume Normalization (`< 40%`)** setting tailored for non-linear amplifier attenuators (Rotel, etc.) and human equal-loudness perception at quiet listening levels.
 * **Real-Time DAC Badge**: Continuous stream format and hardware DAC rate indicators across all views (Now Playing header, desktop split view, and mobile devices).
 
-### 📺 StandBy / TV Mode & 🌈 WLED DDP Ambilight
+### 📺 StandBy / TV Mode, 📊 32-Band RTA & 🌈 WLED DDP Ambilight
 * **Fullscreen Living Room TV Mode**: Large album artwork, Apple Music **Motion Covers** (looping HLS video artwork), distance-readable typography, dynamic Ambilight background gradients, and per-session browser mode persistence.
+* **32-Band Live RTA Spectrum Analyzer**: Toggleable `RTA` button in TV Mode renders a real-time 60fps 32-band logarithmic spectrum analyzer (`20 Hz – 96 kHz`) highlighting both audible frequencies and ultrasonic Hi-Res content (`> 22.05 kHz`).
 * **Fullscreen TV Library Overlay**: Dedicated **Library** button in TV Mode opens a fullscreen vertically scrollable grid with large 1:1 square tiles for Personal Stations (*My Station*, *Discovery Station*, *Feel Good*, *Heavy Rotation*) and all local library playlists.
 * **Hardware WLED Ambilight via DDP (UDP Port 4048)**: Ultra-low-latency (`< 2 ms`, 40 FPS) 16-zone bilinear album cover palette streaming with `γ = 2.4` gamma correction and 5 real-time audio-reactive modes driven directly by `AudioProcessTapService` (*Rhythm Sine Wave*, *3-Band Spectral EQ*, *Symmetric Center VU Pulse*, *Harmonic Resonance*, and *Static Cover Palette*), plus smooth 2.5s pause fade-out and background Heartbeat OFF.
+
+### 📖 Digital Album Booklets & Track-by-Track Liner Notes (`DigitalBookletService` + `PDFKit`)
+* **Multi-Page Interactive Booklet Reader**: Opens sequentially in place of the right pane on Desktop / Tablet Landscape and fullscreen on TV / Mobile Portrait.
+* **Comprehensive Album History & Credits**: Combines Apple Music editorial notes, automatic multilingual Wikipedia fallback (`RU / EN`), track-by-track guides, full studio session credits (musicians, instruments, producers, mixing/mastering engineers, composers), and native high-resolution rendering of local `.pdf` digital booklets via `PDFKit`.
 
 ### 📡 BluOS & Network Streaming (Lossless Stream Relay)
 * **Direct Audio Process Tap (`AudioProcessTapService`)**: Directly taps Music.app's audio stream via native CoreAudio Process Tap API (`AudioHardwareCreateProcessTap`) on macOS Sonoma/Sequoia without virtual audio cables, without modifying system sound output, and without muting Mac speakers.
@@ -45,8 +55,10 @@
 * **60fps Phase-Locked Scrubber**: Local optimistic timeline tracking for jitter-free, seamless timecode scrubbing.
 * **One-Click Radio Stations**: Instantly generate personal Apple Music stations based on the current track or artist directly from the player (📡).
 * **Favorites Synchronization**: Mark tracks as Favorite ("Favorite Songs") in Apple Music with instant visual and haptic confirmation.
-* **Charts, Trending & Library**: Full access to Apple Music editorial charts, user library playlists, recent releases, and instant cloud catalog search.
-* **Lock Screen & MediaSession**: Background audio playback integration on iOS and Android with lock screen artwork and transport controls.
+* **Charts, Trending, Playlists & Save Queue to Library**: Full access to Apple Music editorial charts, full playlist tracklists, one-click **"+ Add to Library"** synchronization for any catalog or personal playlist, and a **"+ Save as Playlist"** button in the Queue header to save any active queue or Infinite AI Wave as a new Apple Music playlist.
+* **PWA Client Device Authorization, QR Invite Sharing & Per-Device Lock Screen Controls (`ClientDeviceManager`)**: Generates a persistent client UID (`HTTP Cookie` + `localStorage` + `CacheStorage`) requiring one-click authorization in macOS Settings before Apple ID checks. Includes per-device `MediaSession` Lock Screen & Dynamic Island toggles (configurable per device in macOS Settings or via the Signal Path-style `AMR v2.5.0` badge modal showing the latest Git commit and a **"Share Access (QR)"** invite link `?invite=<token>` for instant camera pairing).
+* **Automatic Bilingual UI Localization (`RU / EN`)**: Automatically switches both the Web UI (PWA) and native macOS app (Menu Bar + Settings window) to English for non-Russian device locales while preserving Russian for `ru` locales.
+* **On-Device AI Functions on Apple Neural Engine (`NativeMusicCuratorService` + `ArtworkService` — `FoundationModels`, `NaturalLanguage` 512-D `NLEmbedding`, `Vision` Saliency)**: Controlled by a single unified **Native AI Functions (Apple Neural Engine)** switch in macOS Settings (automatically hidden and disabled on Intel `x86_64` Macs). Includes the semantic **AI Prompt Curator** (`✨ AI Curator` in Search & monochrome fullscreen **AI Tag Cloud** in StandBy / TV Mode), **Infinite AI Wave** (seamless background auto-appending of fresh tracks without repeats), **Semantic Cosine Flow Queue Ordering (`NLEmbedding` 512-D)**, **AI Mix from Current Track (`✨`)** in the `•••` menu and TV mode, **Pinned AI Prompts (`★ Favorite Vibes`)**, and **Neural Vision Saliency Artwork Palette (`VNGenerateAttentionBasedSaliencyImageRequest`)** for vivid TV Ambilight and 16-zone WLED strips.
 
 ### 📻 UPnP / DLNA MediaRenderer (Home Assistant Integration)
 * Full support for **UPnP A/V MediaRenderer (AVTransport / RenderingControl)** standards.
@@ -109,7 +121,7 @@ cd amr
 
 ### Running Tests
 
-#### Swift Unit Tests (214 tests):
+#### Swift Unit Tests (262 tests):
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path AppleMusicRemoteMac
 ```

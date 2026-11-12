@@ -10,6 +10,7 @@ import Foundation
 
 public struct StaticTrackMetadata: Sendable {
     public var dbId: Int
+    public var persistentId: String
     public var name: String
     public var artist: String
     public var album: String
@@ -27,6 +28,7 @@ public struct StaticTrackMetadata: Sendable {
 
     public init(
         dbId: Int,
+        persistentId: String = "",
         name: String,
         artist: String,
         album: String,
@@ -43,6 +45,7 @@ public struct StaticTrackMetadata: Sendable {
         fetchedAt: Date = Date()
     ) {
         self.dbId = dbId
+        self.persistentId = persistentId
         self.name = name
         self.artist = artist
         self.album = album
@@ -66,12 +69,45 @@ public final class PlayerStatusEngine: @unchecked Sendable {
     private let statusLock = NSLock()
     private var lastCanonicalTrackKey: String?
     private var cachedStaticMetadata: StaticTrackMetadata?
+    private var favoritedOverrides: [String: Bool] = [:]
     private var lastPulsePosition: Double = 0.0
     public private(set) var lastPollUsedLightweightPulse: Bool = false
 
     public var cachedCurrentPlaylistName: String? {
         PlaybackStateStore.shared.withLock {
             cachedStaticMetadata?.currentPlaylistName
+        }
+    }
+
+    public func currentFavoritedState() -> (isFavorited: Bool, name: String, artist: String) {
+        PlaybackStateStore.shared.withLock {
+            let name = cachedStaticMetadata?.name ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.name ?? ""
+            let artist = cachedStaticMetadata?.artist ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.artist ?? ""
+            let key = "\(artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()):\(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+            if !name.isEmpty, let override = favoritedOverrides[key] {
+                return (override, name, artist)
+            }
+            let cur = cachedStaticMetadata?.isFavorited ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.favorited ?? false
+            return (cur, name, artist)
+        }
+    }
+
+    public func updateFavoritedState(_ isFav: Bool, name: String? = nil, artist: String? = nil) {
+        PlaybackStateStore.shared.withLock {
+            let resolvedName = (name ?? cachedStaticMetadata?.name ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedArtist = (artist ?? cachedStaticMetadata?.artist ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.artist ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !resolvedName.isEmpty {
+                let key = "\(resolvedArtist.lowercased()):\(resolvedName.lowercased())"
+                favoritedOverrides[key] = isFav
+            }
+            if var meta = cachedStaticMetadata {
+                meta.isFavorited = isFav
+                cachedStaticMetadata = meta
+            }
+            if var cached = PlaybackStateStore.shared.lastPlayerStatusCache {
+                cached.status.track?.favorited = isFav
+                PlaybackStateStore.shared.lastPlayerStatusCache = cached
+            }
         }
     }
 
@@ -85,7 +121,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         }
     }
 
-    public func shouldUseLightweightPulse(rawState: String, rawPosition: Double) -> Bool {
+    public func shouldUseLightweightPulse(rawState: String, rawPosition: Double, rawDbId: Int? = nil, rawTrackName: String? = nil) -> Bool {
         return PlaybackStateStore.shared.withLock {
             guard !PlaybackStateStore.shared.needsStaticMetadataRefresh,
                   let meta = cachedStaticMetadata else {
@@ -96,6 +132,15 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             }
             let isStopped = (rawState.lowercased() == "stopped")
             if isStopped != meta.name.isEmpty {
+                return false
+            }
+            if !isStopped && meta.duration <= 0 && rawPosition > 0.5 {
+                return false
+            }
+            if let rDbId = rawDbId, rDbId != meta.dbId, (rDbId > 0 || meta.dbId > 0) {
+                return false
+            }
+            if let rName = rawTrackName, !rName.isEmpty || !isStopped, rName != meta.name {
                 return false
             }
             let hasSeekTarget = (PlaybackStateStore.shared.seekTargetPosition != nil && Date().timeIntervalSince(PlaybackStateStore.shared.seekTargetDate) < 4.0)
@@ -131,6 +176,34 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         var status = computePlayerStatus()
         status.isDucked = AudioDuckingController.shared.isDucked
         status.isVolumeLockedTo100 = PlaybackStateStore.shared.isVolumeLockedTo100
+
+        let ampCtrl = ExternalAmpTCPController.shared
+        let ampActive = ampCtrl.isActive
+        status.ampVolumeControlEnabled = ampActive
+        if ampActive {
+            status.ampBrandName = ampCtrl.profile.displayName
+            status.ampVolume = ampCtrl.currentVolume
+            status.ampMaxVolume = ampCtrl.maxVolumeCap
+            status.ampMuted = ampCtrl.isMuted
+            status.ampConnected = ampCtrl.isConnected
+            status.ampSoundCheckEnabled = ampCtrl.isSoundCheckEnabled
+            status.ampLowVolSmartNormEnabled = ampCtrl.isLowVolumeSmartNormEnabled
+            status.ampSoundCheckGainDb = ampCtrl.currentTrackGainDb
+            status.ampSoundCheckOffset = ampCtrl.currentTrackVolumeOffset
+            status.ampBaseVolume = ampCtrl.baseListeningVolume
+            status.volume = ampCtrl.currentVolume
+        } else {
+            status.ampBrandName = nil
+            status.ampVolume = nil
+            status.ampMaxVolume = nil
+            status.ampMuted = nil
+            status.ampConnected = nil
+            status.ampSoundCheckEnabled = nil
+            status.ampLowVolSmartNormEnabled = nil
+            status.ampSoundCheckGainDb = nil
+            status.ampSoundCheckOffset = nil
+            status.ampBaseVolume = nil
+        }
 
         if status.playerState != "stopped" {
             let tArtist = status.track?.artist ?? ""
@@ -194,6 +267,101 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         let devRate = status.audioDeviceSampleRate ?? 44100.0
         let ratesMatch = (activeSourceRate == nil) || (abs((activeSourceRate ?? devRate) - devRate) <= 500.0)
         status.isBitPerfect = BitPerfectLogMonitor.shared.isEnabled && isLosslessQuality && ratesMatch
+        status.isDacMutingGuardEnabled = CoreAudioDeviceManager.shared.isMutingGuardEnabled
+        status.dacMutingGuardMs = CoreAudioDeviceManager.shared.mutingGuardDurationMs
+
+        let tKey = "\(status.track?.artist ?? ""):\(status.track?.name ?? "")"
+        let isStagedTemp = status.track?.numericId.map { nid in
+            PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.stagedTemporaryTrackDbIds.contains(nid) }
+        } ?? false
+        let isLocalTrack = (status.track?.isLocal == true) && !isStagedTemp
+        let uniqueTrackId: String
+        if isLocalTrack {
+            if let pid = status.track?.persistentId, !pid.isEmpty {
+                uniqueTrackId = pid
+            } else if let nid = status.track?.numericId, nid > 0 {
+                uniqueTrackId = "\(nid)"
+            } else {
+                uniqueTrackId = (status.track?.id != "0") ? (status.track?.id ?? "") : ""
+            }
+        } else {
+            if let cid = status.track?.catalogId, AppleSoundCheckService.isValidCatalogId(cid) {
+                uniqueTrackId = cid
+            } else if let cachedCid = MusicKitManager.shared.getCachedTrackCatalogId(
+                name: status.track?.name ?? "",
+                artist: status.track?.artist ?? "",
+                album: status.track?.album ?? ""
+            ), AppleSoundCheckService.isValidCatalogId(cachedCid) {
+                status.track?.catalogId = cachedCid
+                uniqueTrackId = cachedCid
+            } else if let pid = status.track?.persistentId, !pid.isEmpty {
+                uniqueTrackId = pid
+            } else if let nid = status.track?.numericId, nid > 0 {
+                uniqueTrackId = "\(nid)"
+            } else {
+                uniqueTrackId = ""
+            }
+        }
+        let effectiveRate = Int(activeSourceRate ?? devRate)
+        let effectiveDepth = activeSourceDepth ?? (effectiveRate >= 48000 ? 24 : 16)
+        if !PlaybackRouter.shared.isTestingEnvironment {
+            SpectralIntegrityAnalyzer.shared.syncTrackContext(
+                trackKey: tKey,
+                trackId: uniqueTrackId,
+                isLocal: isLocalTrack,
+                sampleRate: effectiveRate,
+                claimedBitDepth: effectiveDepth,
+                isLossless: isLosslessQuality,
+                isPlaying: status.playerState == "playing"
+            )
+        }
+        status.spectralAnalysis = SpectralIntegrityAnalyzer.shared.getCurrentAnalysis()
+
+        if ampActive, ampCtrl.isSoundCheckEnabled, status.playerState != "stopped", let tr = status.track, !tr.name.isEmpty {
+            let validTrackCid = AppleSoundCheckService.isValidCatalogId(tr.catalogId)
+                ? tr.catalogId
+                : (AppleSoundCheckService.isValidCatalogId(uniqueTrackId) ? uniqueTrackId : nil)
+            AppleSoundCheckService.shared.syncCurrentTrack(
+                trackKey: tKey,
+                trackId: uniqueTrackId,
+                catalogId: validTrackCid,
+                name: tr.name,
+                artist: tr.artist,
+                album: tr.album,
+                isLocal: isLocalTrack
+            )
+            // Refresh amp status fields in case synchronous cache hit updated offset/volume
+            status.ampVolume = ampCtrl.currentVolume
+            status.volume = ampCtrl.currentVolume
+            status.ampSoundCheckGainDb = ampCtrl.currentTrackGainDb
+            status.ampSoundCheckOffset = ampCtrl.currentTrackVolumeOffset
+            status.ampBaseVolume = ampCtrl.baseListeningVolume
+
+            // Prefetch next 2 tracks in custom queue if SoundCheck is enabled
+            let (isCustom, customQueue, customIdx) = PlaybackStateStore.shared.withLock {
+                (PlaybackStateStore.shared.isCustomQueuePlayback,
+                 PlaybackStateStore.shared.activeCustomQueue,
+                 PlaybackStateStore.shared.activeCustomQueueIndex)
+            }
+            if isCustom && !customQueue.isEmpty {
+                for offsetIdx in 1...2 {
+                    let nextIdx = customIdx + offsetIdx
+                    if nextIdx < customQueue.count {
+                        let nextTr = customQueue[nextIdx]
+                        let nextCid = AppleSoundCheckService.isValidCatalogId(nextTr.catalogId)
+                            ? nextTr.catalogId
+                            : (AppleSoundCheckService.isValidCatalogId(nextTr.id) ? nextTr.id : nil)
+                        AppleSoundCheckService.shared.prefetchTrack(
+                            trackId: nextCid ?? nextTr.persistentId ?? nextTr.id,
+                            catalogId: nextCid,
+                            name: nextTr.name,
+                            artist: nextTr.artist,
+                            album: nextTr.album
+                        )
+                    }
+                }
+            }
+        }
 
         return status
     }
@@ -209,9 +377,16 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 var status = cached.status
                 if status.playerState == "playing" {
                     let optimisticPos = status.position + age
-                    status.position = status.duration > 0 ? min(optimisticPos, status.duration) : optimisticPos
+                    // Bypass cache right at track end so smooth-advance and natural finish checks get fresh Music.app state immediately
+                    if status.duration > 0 && optimisticPos >= status.duration - 0.5 && !isTransitioning {
+                        // Fall through to query fresh status
+                    } else {
+                        status.position = status.duration > 0 ? min(optimisticPos, status.duration) : optimisticPos
+                        return status
+                    }
+                } else {
+                    return status
                 }
-                return status
             }
         }
 
@@ -289,6 +464,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         var tArtist = ""
         var tAlbum = ""
         var dbId = 0
+        var persistentId = ""
         var shuf = false
         var repMode = "off"
         var hasLoc = false
@@ -299,7 +475,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         var isFavorited = false
         var usedLightweightPulse = false
 
-        // Tier 1: Zero-Stall Lightweight IPC Pulse (queries ONLY player state + player position in ~15ms)
+        // Tier 1: Zero-Stall Lightweight IPC Pulse (queries player state, position, and current track identity in ~15ms)
         if !needsFullRefresh, let staticMeta = cachedStaticMetadata, Date().timeIntervalSince(staticMeta.fetchedAt) < 30.0 {
             let pulseScript = """
             tell application "Music"
@@ -307,13 +483,26 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                     with timeout of 1.5 seconds
                         set pState to (player state as string)
                         if pState is "stopped" then
-                            return "stopped||0"
+                            return "stopped||0||0||"
                         end if
                         set pPos to 0
                         try
                             set pPos to player position
                         end try
-                        return pState & "||" & pPos
+                        set curDbId to 0
+                        set curName to ""
+                        try
+                            set ct to current track
+                            if ct is not missing value then
+                                try
+                                    set curDbId to (database ID of ct as integer)
+                                end try
+                                try
+                                    set curName to (name of ct as string)
+                                end try
+                            end if
+                        end try
+                        return pState & "||" & pPos & "||" & curDbId & "||" & curName
                     end timeout
                 on error
                     return "error"
@@ -326,7 +515,9 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 if pParts.count >= 2 {
                     let candidateState = pParts[0].lowercased()
                     let candidatePos = Double(pParts[1].replacingOccurrences(of: ",", with: ".")) ?? 0.0
-                    if shouldUseLightweightPulse(rawState: candidateState, rawPosition: candidatePos) {
+                    let candidateDbId: Int? = pParts.count >= 3 ? Int(pParts[2]) : nil
+                    let candidateName: String? = pParts.count >= 4 ? pParts[3] : nil
+                    if shouldUseLightweightPulse(rawState: candidateState, rawPosition: candidatePos, rawDbId: candidateDbId, rawTrackName: candidateName) {
                         rawState = candidateState
                         rawPos = candidatePos
                         vol = staticMeta.volume
@@ -335,6 +526,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                         tArtist = staticMeta.artist
                         tAlbum = staticMeta.album
                         dbId = staticMeta.dbId
+                        persistentId = staticMeta.persistentId
                         shuf = isCustom ? isShufActive : (staticMeta.shuffle || isShufActive)
                         repMode = isCustom ? storeRepMode : staticMeta.repeatMode
                         hasLoc = staticMeta.hasLoc
@@ -363,7 +555,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                             set pVol to sound volume
                         end try
                         if pState is "stopped" then
-                            return "stopped||0||" & pVol & "||0||||||||0||false||off||false||||||0||0||false"
+                            return "stopped||0||" & pVol & "||0||||||||0||false||off||false||||||0||0||false||"
                         end if
                         set pPos to 0
                         try
@@ -431,9 +623,13 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                             try
                                 set isFav to (favorited of ct as boolean)
                             end try
-                            return pState & "||" & pPos & "||" & pVol & "||" & dur & "||" & nm & "||" & art & "||" & alb & "||" & dbid & "||" & shuf & "||" & sRep & "||" & hasLoc & "||" & plName & "||" & knd & "||" & br & "||" & sr & "||" & isFav
+                            set pid to ""
+                            try
+                                set pid to (persistent ID of ct as string)
+                            end try
+                            return pState & "||" & pPos & "||" & pVol & "||" & dur & "||" & nm & "||" & art & "||" & alb & "||" & dbid & "||" & shuf & "||" & sRep & "||" & hasLoc & "||" & plName & "||" & knd & "||" & br & "||" & sr & "||" & isFav & "||" & pid
                         end if
-                        return pState & "||" & pPos & "||" & pVol & "||0||||||||0||" & shuf & "||" & sRep & "||false||" & plName & "||||0||0||false"
+                        return pState & "||" & pPos & "||" & pVol & "||0||||||||0||" & shuf & "||" & sRep & "||false||" & plName & "||||0||0||false||"
                     end timeout
                 on error
                     return "error"
@@ -441,10 +637,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             end tell
             """
 
-            var (ok, rawOut) = AppleScriptExecutor.shared.execute(script)
-            if !ok || rawOut == nil || rawOut?.isEmpty == true || rawOut == "error" {
-                (ok, rawOut) = AppleScriptExecutor.shared.execute(script)
-            }
+            let (ok, rawOut) = AppleScriptExecutor.shared.execute(script)
             guard ok, let out = rawOut, !out.isEmpty, out != "error" else {
                 if let cached = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache }) {
                     return cached.status
@@ -481,14 +674,18 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             bRate = parts.count > 13 ? (Int(parts[13]) ?? 0) : 0
             sRate = parts.count > 14 ? (Int(parts[14]) ?? 0) : 0
             isFavorited = parts.count > 15 ? (parts[15].lowercased() == "true") : false
+            persistentId = parts.count > 16 ? parts[16].trimmingCharacters(in: .whitespacesAndNewlines) : ""
 
-            if PlaybackStateStore.shared.isVolumeLockedTo100 && vol != 100 && !AudioDuckingController.shared.isDucked {
+            if CoreAudioDeviceManager.shared.isMutingGuardActive {
+                vol = PlaybackStateStore.shared.isVolumeLockedTo100 ? 100 : PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
+            } else if PlaybackStateStore.shared.isVolumeLockedTo100 && vol != 100 && !AudioDuckingController.shared.isDucked {
                 PlaybackTransportController.shared.checkAndEnforceVolumeLock()
                 vol = 100
             }
 
             let meta = StaticTrackMetadata(
                 dbId: dbId,
+                persistentId: persistentId,
                 name: tName,
                 artist: tArtist,
                 album: tAlbum,
@@ -527,6 +724,11 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         let canonicalKey = (!tName.isEmpty)
             ? "\(tArtist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()):\(tName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
             : ""
+        if !canonicalKey.isEmpty {
+            if let favOverride = PlaybackStateStore.shared.withLock({ self.favoritedOverrides[canonicalKey] }) {
+                isFavorited = favOverride
+            }
+        }
         if !canonicalKey.isEmpty && stateStr == "playing" {
             if lastCanonicalTrackKey != canonicalKey {
                 var preRate: Double? = nil
@@ -570,7 +772,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                     PlaybackStateStore.shared.activeStationName = nil
                 }
             }
-        } else if isStreamTrack && curPlNameRaw.isEmpty {
+        } else if isStreamTrack && curPlNameRaw.isEmpty && (knd.lowercased().contains("stream") || knd.lowercased().contains("поток") || tName.lowercased().hasPrefix("станция:") || tName.lowercased().hasPrefix("station:") || dur <= 0) {
             isRadioDetected = true
             PlaybackStateStore.shared.withLock {
                 PlaybackStateStore.shared.isRadioPlayback = true
@@ -651,6 +853,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 radQuality = "AAC (256 kbps)"
             }
 
+            let radCatalogId = MusicKitManager.shared.getCachedTrackCatalogId(name: radName, artist: radArtist, album: tAlbum)
             let track = TrackInfo(
                 id: "\(dbId)",
                 numericId: dbId,
@@ -663,7 +866,9 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 favorited: isFavorited,
                 isLocal: false,
                 sampleRate: radRate,
-                bitDepth: radDepth
+                bitDepth: radDepth,
+                catalogId: radCatalogId,
+                persistentId: persistentId.isEmpty ? nil : persistentId
             )
 
             let activeDLNA = DLNADiscoveryManager.shared.getActiveRenderer()
@@ -852,6 +1057,33 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 effectiveTrackRate = 44100
                 effectiveTrackDepth = 16
             }
+            var resolvedCatalogId: String? = nil
+            if isCustom && customIndex < customQueue.count {
+                let curQueueTrack = customQueue[customIndex]
+                if curQueueTrack.name.caseInsensitiveCompare(tName) == .orderedSame {
+                    let cid = curQueueTrack.catalogId ?? curQueueTrack.id
+                    if AppleSoundCheckService.isValidCatalogId(cid) {
+                        resolvedCatalogId = cid
+                        MusicKitManager.shared.cacheTrackCatalogId(cid, name: tName, artist: tArtist, album: tAlbum)
+                    }
+                }
+            }
+            if resolvedCatalogId == nil, let matchTrack = customQueue.first(where: {
+                $0.name.caseInsensitiveCompare(tName) == .orderedSame &&
+                $0.artist.caseInsensitiveCompare(tArtist) == .orderedSame
+            }) {
+                let cid = matchTrack.catalogId ?? matchTrack.id
+                if AppleSoundCheckService.isValidCatalogId(cid) {
+                    resolvedCatalogId = cid
+                    MusicKitManager.shared.cacheTrackCatalogId(cid, name: tName, artist: tArtist, album: tAlbum)
+                }
+            }
+            if resolvedCatalogId == nil,
+               let cachedCid = MusicKitManager.shared.getCachedTrackCatalogId(name: tName, artist: tArtist, album: tAlbum),
+               AppleSoundCheckService.isValidCatalogId(cachedCid) {
+                resolvedCatalogId = cachedCid
+            }
+
             trackObj = TrackInfo(
                 id: "\(dbId)",
                 numericId: dbId,
@@ -864,7 +1096,9 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 favorited: isFavorited,
                 isLocal: hasLoc,
                 sampleRate: effectiveTrackRate,
-                bitDepth: effectiveTrackDepth
+                bitDepth: effectiveTrackDepth,
+                catalogId: resolvedCatalogId,
+                persistentId: persistentId.isEmpty ? nil : persistentId
             )
         }
 

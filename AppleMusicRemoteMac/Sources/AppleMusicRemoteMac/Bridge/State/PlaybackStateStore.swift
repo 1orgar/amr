@@ -37,6 +37,10 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public var activeSearchOffset: Int = 0
     public var isFetchingNextSearchPage: Bool = false
 
+    // AI Curator Prompt State for Infinite Wave Auto-Paging
+    public var activeCuratorPrompt: String?
+    public var isFetchingNextCuratorPage: Bool = false
+
     // Cloud / Auto-Advance Tracking
     public var lastWasPlayingCloud: Bool = false
     public var lastCloudPlayTime: Date?
@@ -90,6 +94,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "LockVolume100")
+            ExternalAmpTCPController.shared.enforceVolumeLockConstraint(isVolumeLockedTo100: newValue)
         }
     }
 
@@ -174,6 +179,8 @@ public final class PlaybackStateStore: @unchecked Sendable {
         activeSearchCountry = nil
         activeSearchOffset = 0
         isFetchingNextSearchPage = false
+        activeCuratorPrompt = nil
+        isFetchingNextCuratorPage = false
         needsStaticMetadataRefresh = true
     }
 
@@ -203,6 +210,8 @@ public final class PlaybackStateStore: @unchecked Sendable {
         activeSearchCountry = nil
         activeSearchOffset = 0
         isFetchingNextSearchPage = false
+        activeCuratorPrompt = nil
+        isFetchingNextCuratorPage = false
         needsStaticMetadataRefresh = true
     }
 

@@ -545,7 +545,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         let didlForLastChange = escapeForLastChangeVal(didlRaw)
 
         let lastChange = """
-        &lt;Event xmlns="urn:schemas-upnp-org:metadata-1-0/AVT/"&gt;&lt;InstanceID val="0"&gt;&lt;TransportState val="\(stateStr)"/&gt;&lt;TransportStatus val="OK"/&gt;&lt;CurrentTrack val="1"/&gt;&lt;CurrentTrackDuration val="\(durTimeStr)"/&gt;&lt;CurrentTrackMetaData val="\(didlForLastChange)"/&gt;&lt;AVTransportURI val="\(artUriForLastChange)"/&gt;&lt;AVTransportURIMetaData val="\(didlForLastChange)"/&gt;&lt;CurrentTrackURI val="\(artUriForLastChange)"/&gt;&lt;RelativeTimePosition val="\(curTimeStr)"/&gt;&lt;AbsoluteTimePosition val="\(curTimeStr)"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;
+        &lt;Event xmlns="urn:schemas-upnp-org:metadata-1-0/AVT/"&gt;&lt;InstanceID val="0"&gt;&lt;TransportState val="\(stateStr)"/&gt;&lt;TransportStatus val="OK"/&gt;&lt;CurrentTransportActions val="Play,Pause,Stop,Seek,Next,Previous"/&gt;&lt;NumberOfTracks val="1"/&gt;&lt;CurrentTrack val="1"/&gt;&lt;CurrentTrackDuration val="\(durTimeStr)"/&gt;&lt;CurrentMediaDuration val="\(durTimeStr)"/&gt;&lt;CurrentTrackMetaData val="\(didlForLastChange)"/&gt;&lt;AVTransportURI val="\(artUriForLastChange)"/&gt;&lt;AVTransportURIMetaData val="\(didlForLastChange)"/&gt;&lt;CurrentTrackURI val="\(artUriForLastChange)"/&gt;&lt;RelativeTimePosition val="\(curTimeStr)"/&gt;&lt;AbsoluteTimePosition val="\(curTimeStr)"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;
         """
         let body = """
         <e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">
@@ -942,8 +942,17 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 optimisticPositionIsPlaying = true
             }
             _ = MusicBridge.shared.play()
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.play()
+            }
             sendSOAPResponse(connection, response: "<u:PlayResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
+                self?.notifySubscribers(force: true)
+                WebSocketServer.shared.broadcastStatus()
+            }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
                 self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus()
             }
@@ -955,8 +964,17 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 optimisticPositionIsPlaying = false
             }
             _ = MusicBridge.shared.pause()
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.pause()
+            }
             sendSOAPResponse(connection, response: "<u:PauseResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
+                self?.notifySubscribers(force: true)
+                WebSocketServer.shared.broadcastStatus()
+            }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
                 self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus()
             }
@@ -970,32 +988,59 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 optimisticPositionIsPlaying = false
             }
             _ = MusicBridge.shared.stop()
+            if DLNADiscoveryManager.shared.hasActiveRenderer {
+                DLNADiscoveryManager.shared.stopPlayback()
+            }
             sendSOAPResponse(connection, response: "<u:StopResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
+                self?.notifySubscribers(force: true)
+                WebSocketServer.shared.broadcastStatus()
+            }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
                 self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus()
             }
 
         case "Next":
             stateLock.withLock {
+                optimisticState = "PLAYING"
+                optimisticStateDate = Date()
                 optimisticPosition = 0
                 optimisticPositionDate = Date()
+                optimisticPositionIsPlaying = true
             }
             _ = MusicBridge.shared.nextTrack()
             sendSOAPResponse(connection, response: "<u:NextResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
+                self?.notifySubscribers(force: true)
+                WebSocketServer.shared.broadcastStatus(includeQueue: true)
+            }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.85) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
                 self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
             }
 
         case "Previous":
             stateLock.withLock {
+                optimisticState = "PLAYING"
+                optimisticStateDate = Date()
                 optimisticPosition = 0
                 optimisticPositionDate = Date()
+                optimisticPositionIsPlaying = true
             }
-            _ = MusicBridge.shared.previousTrack()
+            _ = MusicBridge.shared.previousTrack(forceTrackChange: true)
             sendSOAPResponse(connection, response: "<u:PreviousResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
+                self?.notifySubscribers(force: true)
+                WebSocketServer.shared.broadcastStatus(includeQueue: true)
+            }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.85) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
                 self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
             }
@@ -1074,7 +1119,10 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
         case "GetMute":
             let status = getStatus()
-            let isMuted = (status.volume == 0) ? "1" : "0"
+            let isMutedBool = ExternalAmpTCPController.shared.isActive
+                ? ExternalAmpTCPController.shared.isMuted
+                : (status.volume == 0)
+            let isMuted = isMutedBool ? "1" : "0"
             let response = """
             <u:GetMuteResponse xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1">
               <CurrentMute>\(isMuted)</CurrentMute>
@@ -1086,7 +1134,11 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             if let muteStr = extractTagValue(tag: "DesiredMute", from: bodyString) {
                 let mute = (muteStr == "1" || muteStr.lowercased() == "true")
                 DispatchQueue.main.async {
-                    _ = MusicBridge.shared.setVolume(mute ? 0 : 50)
+                    if ExternalAmpTCPController.shared.isActive {
+                        ExternalAmpTCPController.shared.setMuted(mute)
+                    } else {
+                        _ = MusicBridge.shared.setVolume(mute ? 0 : 50)
+                    }
                 }
             }
             sendSOAPResponse(connection, response: "<u:SetMuteResponse xmlns:u=\"urn:schemas-upnp-org:service:RenderingControl:1\"/>")

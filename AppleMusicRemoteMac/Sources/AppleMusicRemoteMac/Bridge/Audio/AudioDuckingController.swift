@@ -44,8 +44,12 @@ public final class AudioDuckingController: @unchecked Sendable {
         let factor = max(0.0, min(1.0, (100.0 - reductionPercent) / 100.0))
         let target = baseVolume > 0 ? max(1, Int((Double(baseVolume) * factor).rounded())) : 0
 
-        _ = MusicBridge.shared.setVolume(target)
         isDucked = true
+        if ExternalAmpTCPController.shared.isActive {
+            ExternalAmpTCPController.shared.setVolume(target, preserveBaseVolume: true)
+        } else {
+            _ = MusicBridge.shared.setVolume(target)
+        }
 
         // Reset any existing auto-unduck timer
         duckTimer?.cancel()
@@ -82,10 +86,23 @@ public final class AudioDuckingController: @unchecked Sendable {
             return (false, currentVol)
         }
 
-        _ = MusicBridge.shared.setVolume(orig)
         isDucked = false
         originalVolume = nil
 
+        if ExternalAmpTCPController.shared.isActive {
+            let amp = ExternalAmpTCPController.shared
+            let restored: Int
+            if amp.isSoundCheckEnabled {
+                let minAutoVol = amp.baseListeningVolume > 0 ? 1 : 0
+                restored = max(minAutoVol, min(amp.maxVolumeCap, amp.baseListeningVolume + amp.currentTrackVolumeOffset))
+            } else {
+                restored = orig
+            }
+            amp.setVolume(restored, preserveBaseVolume: true)
+            return (true, restored)
+        }
+
+        _ = MusicBridge.shared.setVolume(orig)
         return (true, orig)
     }
 

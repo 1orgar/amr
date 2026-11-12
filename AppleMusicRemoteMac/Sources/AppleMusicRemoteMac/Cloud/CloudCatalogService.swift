@@ -1333,7 +1333,7 @@ public final class CloudCatalogService: @unchecked Sendable {
                 let tUrl = it["trackViewUrl"] as? String ?? ""
                 let tArt = upgradeArtworkUrl(it["artworkUrl100"] as? String ?? aArt)
                 let durMs = (it["trackTimeMillis"] as? Double) ?? 0
-                let tNum = (it["trackNumber"] as? Int) ?? (tracks.count + 1)
+                let tNum = tracks.count + 1
                 let tid = "\(it["trackId"] ?? "")"
                 let preview = it["previewUrl"] as? String ?? ""
 

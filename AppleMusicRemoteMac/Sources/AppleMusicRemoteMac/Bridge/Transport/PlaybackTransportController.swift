@@ -17,22 +17,39 @@ public final class PlaybackTransportController: @unchecked Sendable {
     // MARK: - Core Playback Controls
 
     public func play() -> Bool {
-        PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused = false }
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isUserPaused = false
+            let knownPos = max(0.0, PlaybackStateStore.shared.lastKnownPosition)
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-knownPos)
+        }
         PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "playing")
         if PlaybackRouter.shared.isTestingEnvironment {
             return true
         }
         MusicAppProvider.shared.ensureMusicAppRunning()
         if let app = MusicAppProvider.shared.getMusicApp() {
-            if app.playerState == .stopped {
-                app.playOnce(false)
-            } else {
+            let state = app.playerState
+            if state == .paused {
                 app.playpause()
+            } else if state == .stopped {
+                let curTrackName = (app.currentTrack?.value(forKey: "name") as? String) ?? ""
+                if curTrackName.isEmpty {
+                    let (isCustom, hasQueue, activeIdx) = PlaybackStateStore.shared.withLock {
+                        (
+                            PlaybackStateStore.shared.isCustomQueuePlayback,
+                            !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
+                            PlaybackStateStore.shared.activeCustomQueueIndex
+                        )
+                    }
+                    if isCustom && hasQueue {
+                        return QueueManager.shared.playQueueIndexUnlocked(activeIdx)
+                    }
+                }
+                app.playOnce(false)
             }
-            return true
         }
-        let (ok, _) = AppleScriptExecutor.shared.run("tell application \"Music\" to play")
-        return ok
+        _ = AppleScriptExecutor.shared.run("tell application \"Music\" to play")
+        return true
     }
 
     public func pause() -> Bool {
@@ -101,6 +118,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
         BitPerfectLogMonitor.shared.resetTrackState()
         PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isUserPaused = false
             PlaybackStateStore.shared.lastSkipTime = now
             PlaybackStateStore.shared.clearSeekTarget()
             PlaybackStateStore.shared.invalidateStatusCache()
@@ -133,12 +151,6 @@ public final class PlaybackTransportController: @unchecked Sendable {
         }
 
         if let app = MusicAppProvider.shared.getMusicApp() {
-            // Auto-detect radio stream
-            if (app.currentPlaylist?.value(forKey: "name") as? String) == nil && (app.currentTrack?.value(forKey: "location") == nil) {
-                PlaybackStateStore.shared.withLock {
-                    PlaybackStateStore.shared.isRadioPlayback = true
-                }
-            }
             app.nextTrack()
             return true
         }
@@ -146,7 +158,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
         return ok
     }
 
-    public func previousTrack() -> Bool {
+    public func previousTrack(forceTrackChange: Bool = false) -> Bool {
         transportLock.lock()
         let now = Date()
         let timeSinceLastClick = now.timeIntervalSince(lastPrevTrackTime)
@@ -154,22 +166,17 @@ public final class PlaybackTransportController: @unchecked Sendable {
             transportLock.unlock()
             return true
         }
-        let isRapidRepeat = timeSinceLastClick < 1.5
+        let isRapidRepeat = timeSinceLastClick < 3.0
         lastPrevTrackTime = now
         transportLock.unlock()
 
         BitPerfectLogMonitor.shared.resetTrackState()
         PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isUserPaused = false
             PlaybackStateStore.shared.lastSkipTime = now
             PlaybackStateStore.shared.clearSeekTarget()
             PlaybackStateStore.shared.invalidateStatusCache()
             PlaybackStateStore.shared.invalidateQueueCache()
-        }
-
-        // Radio Playback: Apple Music Radio cannot go back to past songs. Rewind to 0:00 without exiting radio!
-        let isRadio = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isRadioPlayback }
-        if isRadio {
-            return seek(to: 0.0)
         }
 
         let (isCustom, activeIdx) = PlaybackStateStore.shared.withLock {
@@ -180,9 +187,10 @@ public final class PlaybackTransportController: @unchecked Sendable {
         }
 
         if isCustom {
-            let appPos = MusicAppProvider.shared.getMusicApp()?.playerPosition ?? 0.0
-            // Standard media player behavior: if track played > 3.0 seconds AND this is not a rapid double click, restart to 0:00
-            if appPos > 3.0 && !isRapidRepeat {
+            let rawPos = MusicAppProvider.shared.getMusicApp()?.playerPosition ?? 0.0
+            let appPos = PlayerStatusEngine.shared.computeOptimisticPosition(rawPosition: rawPos, isPlaying: true, duration: 0)
+            // Standard media player behavior: if track played > 3.0 seconds AND this is not a rapid double click (or explicit DMR track change), restart to 0:00
+            if !forceTrackChange && appPos > 3.0 && !isRapidRepeat {
                 return seek(to: 0.0)
             }
             if activeIdx > 0 {
@@ -199,21 +207,23 @@ public final class PlaybackTransportController: @unchecked Sendable {
             }
         }
 
+        // Radio Playback: Apple Music Radio cannot go back to past songs. Rewind to 0:00 without exiting radio!
+        let isRadio = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isRadioPlayback }
+        if isRadio {
+            return seek(to: 0.0)
+        }
+
         // Standard Library Playlists
         if PlaybackRouter.shared.isTestingEnvironment {
             return true
         }
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
-        if app.playerPosition > 3.0 && !isRapidRepeat {
-            app.playerPosition = 0.0
-            return true
-        }
-        if (app.currentPlaylist?.value(forKey: "name") as? String) == nil && (app.currentTrack?.value(forKey: "location") == nil) {
-            PlaybackStateStore.shared.withLock {
-                PlaybackStateStore.shared.isRadioPlayback = true
-            }
+        let rawPos = app.playerPosition
+        let effectivePos = PlayerStatusEngine.shared.computeOptimisticPosition(rawPosition: rawPos, isPlaying: true, duration: 0)
+        if !forceTrackChange && effectivePos > 3.0 && !isRapidRepeat {
             return seek(to: 0.0)
         }
+        app.playerPosition = 0.0
         app.previousTrack()
         return true
     }
@@ -230,9 +240,15 @@ public final class PlaybackTransportController: @unchecked Sendable {
     }
 
     public func setVolume(_ volume: Int) -> Bool {
-        if PlaybackStateStore.shared.isVolumeLockedTo100 && volume != 100 && !AudioDuckingController.shared.isDucked && !PlaybackStateStore.shared.isDLNAMuted {
-            NSLog("[PlaybackTransportController] 🔒 Volume is locked to 100%% (Bit-Perfect). Rejecting volume change to %d%%", volume)
-            return false
+        if PlaybackStateStore.shared.isVolumeLockedTo100 && !PlaybackStateStore.shared.isDLNAMuted {
+            if ExternalAmpTCPController.shared.isActive {
+                ExternalAmpTCPController.shared.setVolume(volume)
+                return true
+            }
+            if !AudioDuckingController.shared.isDucked && volume != 100 {
+                NSLog("[PlaybackTransportController] 🔒 Volume is locked to 100%% (Bit-Perfect). Rejecting volume change to %d%%", volume)
+                return false
+            }
         }
         let clamped = max(0, min(100, volume))
         PlaybackStateStore.shared.withLock {
@@ -252,7 +268,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
     @discardableResult
     public func checkAndEnforceVolumeLock() -> Bool {
-        guard PlaybackStateStore.shared.isVolumeLockedTo100 && !PlaybackStateStore.shared.isDLNAMuted else { return false }
+        guard PlaybackStateStore.shared.isVolumeLockedTo100
+              && !PlaybackStateStore.shared.isDLNAMuted
+              && !CoreAudioDeviceManager.shared.isMutingGuardActive else { return false }
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.simulatedVolume = 100
         }
@@ -385,28 +403,44 @@ public final class PlaybackTransportController: @unchecked Sendable {
     }
 
     public func toggleFavorite() -> Bool {
-        guard let app = MusicAppProvider.shared.getMusicApp(), let track = app.currentTrack else {
-            let (ok, _) = AppleScriptExecutor.shared.execute("tell application \"Music\" to set favorited of current track to not (favorited of current track)")
-            return ok
-        }
-        let currentFav = track.sbFavorited
-        track.sbFavorited = !currentFav
-        if track.sbFavorited == currentFav {
-            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to set favorited of current track to \(!currentFav)")
-        }
-        return true
+        let state = PlayerStatusEngine.shared.currentFavoritedState()
+        return setFavorite(!state.isFavorited)
     }
 
     public func setFavorite(_ fav: Bool) -> Bool {
-        guard let app = MusicAppProvider.shared.getMusicApp(), let track = app.currentTrack else {
-            let (ok, _) = AppleScriptExecutor.shared.execute("tell application \"Music\" to set favorited of current track to \(fav)")
+        let state = PlayerStatusEngine.shared.currentFavoritedState()
+        PlayerStatusEngine.shared.updateFavoritedState(fav, name: state.name, artist: state.artist)
+
+        if let app = MusicAppProvider.shared.getMusicApp(), let track = app.currentTrack {
+            let tName = track.sbName
+            let tArtist = track.sbArtist
+            if !tName.isEmpty {
+                PlayerStatusEngine.shared.updateFavoritedState(fav, name: tName, artist: tArtist)
+            }
+            track.sbFavorited = fav
+            if track.sbFavorited != fav {
+                let escN = tName.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+                let escA = tArtist.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+                let script = """
+                tell application "Music"
+                  try
+                    set favorited of current track to \(fav)
+                  end try
+                  try
+                    set foundTracks to (every track of library playlist 1 whose name is "\(escN)" and artist is "\(escA)")
+                    repeat with lt in foundTracks
+                      set favorited of lt to \(fav)
+                    end repeat
+                  end try
+                end tell
+                """
+                _ = AppleScriptExecutor.shared.execute(script)
+            }
+            return true
+        } else {
+            let (ok, _) = AppleScriptExecutor.shared.execute("tell application \"Music\" to try\nset favorited of current track to \(fav)\nend try")
             return ok
         }
-        track.sbFavorited = fav
-        if track.sbFavorited != fav {
-            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to set favorited of current track to \(fav)")
-        }
-        return true
     }
 
     public func addCurrentTrackToLibrary() -> Bool {

@@ -59,7 +59,7 @@ extension PlaybackRouter {
         return playCustomTracks(tracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName)
     }
 
-    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool, queueName: String? = nil, query: String? = nil) async -> Bool {
+    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool, queueName: String? = nil, query: String? = nil, curatorPrompt: String? = nil) async -> Bool {
         guard !tracks.isEmpty else { return false }
         let resolvedQueueName = (queueName?.isEmpty == false) ? queueName! : "Результаты поиска"
         var playList = tracks
@@ -92,24 +92,9 @@ extension PlaybackRouter {
             formattedQueue.append(t)
         }
 
-        // If the starting track is a cloud track and user token is available, verify if already in Music.app before locking
+        // If the starting track is a cloud track (not already in local library cache), stop current playback before transitioning
         if isTestingEnvironment || formattedQueue[curTargetIdx].isLocal != true {
             stopAndClearAMRQueue()
-        }
-        if !isTestingEnvironment && MusicKitManager.shared.hasUserToken {
-            let t0 = formattedQueue[curTargetIdx]
-            let prefDbId = (t0.isLocal == true) ? t0.numericId : nil
-            if let existingDbId = MusicKitManager.shared.findTrackDatabaseIdInMusicApp(
-                name: t0.name,
-                artist: t0.artist,
-                preferredDbId: prefDbId
-            ), existingDbId > 0 {
-                formattedQueue[curTargetIdx].numericId = existingDbId
-                formattedQueue[curTargetIdx].isLocal = true
-            } else {
-                stopAndClearAMRQueue()
-                formattedQueue[curTargetIdx].isLocal = false
-            }
         }
         let curTrack = formattedQueue[curTargetIdx]
         let hasToken = MusicKitManager.shared.hasUserToken
@@ -125,7 +110,10 @@ extension PlaybackRouter {
             PlaybackStateStore.shared.originalCustomQueue = unshuffledFormatted
             PlaybackStateStore.shared.activeCustomQueue = formattedQueue
             PlaybackStateStore.shared.activeCustomQueueIndex = curTargetIdx
-            PlaybackStateStore.shared.activeSearchQuery = query
+            let cleanCuratorPrompt = curatorPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+            PlaybackStateStore.shared.activeCuratorPrompt = (cleanCuratorPrompt?.isEmpty == false) ? cleanCuratorPrompt : nil
+            PlaybackStateStore.shared.isFetchingNextCuratorPage = false
+            PlaybackStateStore.shared.activeSearchQuery = (PlaybackStateStore.shared.activeCuratorPrompt != nil) ? nil : query
             PlaybackStateStore.shared.activeSearchCountry = MusicKitManager.shared.getUserStorefront()
             PlaybackStateStore.shared.activeSearchOffset = formattedQueue.count
             PlaybackStateStore.shared.isFetchingNextSearchPage = false
@@ -165,7 +153,13 @@ extension PlaybackRouter {
         PlaybackStateStore.shared.invalidateQueueCache()
         WebSocketServer.shared.broadcastStatus(includeQueue: true)
 
-        let started = QueueManager.shared.playQueueIndexUnlocked(curTargetIdx)
+        // Offload synchronous AppleScript / cloud track staging off Swift's 8-thread cooperative pool
+        let started: Bool = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let ok = QueueManager.shared.playQueueIndexUnlocked(curTargetIdx)
+                continuation.resume(returning: ok)
+            }
+        }
 
         try? await Task.sleep(nanoseconds: 200_000_000)
         PlaybackStateStore.shared.invalidateQueueCache()
@@ -254,6 +248,10 @@ extension PlaybackRouter {
                             for i in 0..<PlaybackStateStore.shared.activeCustomQueue.count {
                                 let qt = PlaybackStateStore.shared.activeCustomQueue[i]
                                 if qt.id == t.id || (qt.name == t.name && qt.artist == t.artist) {
+                                    if PlaybackStateStore.shared.activeCustomQueue[i].catalogId == nil,
+                                       AppleSoundCheckService.isValidCatalogId(qt.id) {
+                                        PlaybackStateStore.shared.activeCustomQueue[i].catalogId = qt.id
+                                    }
                                     PlaybackStateStore.shared.activeCustomQueue[i].numericId = dbId
                                     PlaybackStateStore.shared.activeCustomQueue[i].isLocal = true
                                 }
@@ -312,12 +310,44 @@ extension PlaybackRouter {
             PlaybackStateStore.shared.playbackQueueCache = nil
             PlaybackStateStore.shared.activeSearchOffset = updatedQueue.count
             PlaybackStateStore.shared.isFetchingNextSearchPage = false
+            PlaybackStateStore.shared.isFetchingNextCuratorPage = false
         }
 
         PlaybackStateStore.shared.invalidateQueueCache()
         WebSocketServer.shared.broadcastStatus(includeQueue: true)
         NSLog("[PlaybackRouter] ➕ Appended %d tracks to active AMR queue (total: %d)", newTracks.count, updatedQueue.count)
         return true
+    }
+
+    public func fetchAndAppendNextCuratorResults(prompt: String) async {
+        let (existingTracks, country, targetGen) = PlaybackStateStore.shared.withLock {
+            (
+                PlaybackStateStore.shared.activeCustomQueue,
+                PlaybackStateStore.shared.activeSearchCountry ?? MusicKitManager.shared.getUserStorefront(),
+                PlaybackStateStore.shared.playbackGeneration
+            )
+        }
+        NSLog("[PlaybackRouter] ♾️ Auto-curating next AI Wave for prompt '%@' (excluding %d existing tracks)", prompt, existingTracks.count)
+        let rawWave = await NativeMusicCuratorService.shared.curateNextWaveTracks(
+            prompt: prompt,
+            storefront: country,
+            excluding: existingTracks
+        )
+        let stillSameSession = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback && PlaybackStateStore.shared.activeCuratorPrompt == prompt
+        }
+        guard stillSameSession, !rawWave.isEmpty else {
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.isFetchingNextCuratorPage = false
+            }
+            return
+        }
+        let resolvedWave = LibraryService.shared.resolveLocalLibraryMatches(rawWave, updateNames: true)
+        _ = await appendTracksToAMRQueue(newTracks: resolvedWave)
+        let fromIdx = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.activeCustomQueueIndex + 1
+        }
+        prestageUpcomingCloudTracks(fromIndex: fromIdx, count: 4, expectedGeneration: targetGen)
     }
 
     public func fetchAndAppendNextSearchResults(query: String) async {

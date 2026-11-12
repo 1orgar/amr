@@ -21,7 +21,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=255">
+  <link rel="stylesheet" href="/style.css?v=278">
   <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
 </head>
 <body>
@@ -35,6 +35,34 @@
       <h2 class="overlay-title">Нет связи с Mac</h2>
       <p class="overlay-desc" id="connection-status-text">Попытка автоматического переподключения к Apple Music...</p>
       <button id="btn-reconnect" class="btn-primary" type="button">Переподключиться</button>
+    </div>
+  </div>
+
+  <!-- Device Authorization Waiting Overlay -->
+  <div id="device-auth-overlay" class="overlay-modal hidden" aria-hidden="true" role="dialog" aria-label="Ожидание авторизации устройства">
+    <div class="overlay-card device-auth-card">
+      <div class="device-auth-icon-ring">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="2" width="14" height="20" rx="3" ry="3"/>
+          <line x1="12" y1="18" x2="12.01" y2="18"/>
+        </svg>
+      </div>
+      <h2 class="overlay-title">Ожидание авторизации на Mac</h2>
+      <p class="overlay-desc">Откройте <strong>Настройки Apple Music Remote</strong> на Mac (вкладка «Основные») и нажмите <strong>«Авторизовать»</strong> напротив этого устройства.</p>
+
+      <div class="device-auth-meta-box">
+        <div class="device-auth-meta-row">
+          <span class="device-auth-meta-label">Код устройства</span>
+          <span class="device-auth-short-id" id="auth-device-short-id">----</span>
+        </div>
+        <div class="device-auth-meta-row">
+          <span class="device-auth-meta-label">Имя устройства</span>
+          <div class="device-auth-name-edit">
+            <input id="auth-device-name-input" class="device-auth-name-input" type="text" maxlength="40" placeholder="Имя устройства" aria-label="Имя устройства">
+          </div>
+        </div>
+        <div class="device-auth-uid-caption" id="auth-device-full-id">UID: —</div>
+      </div>
     </div>
   </div>
 
@@ -61,10 +89,10 @@
     <!-- Left Column on Desktop / Full View on Mobile -->
     <section id="view-now-playing" class="view-panel player-panel active">
       <header class="player-top-header">
-        <div class="brand-pill">
+        <button id="btn-brand-info" class="brand-pill brand-pill-btn" type="button" title="О версии и настройки устройства" aria-label="О версии и настройки устройства">
           <span class="brand-dot"></span>
-          <span class="brand-title">AMR <span class="brand-ver" id="brand-ver">v2.4.0</span></span>
-        </div>
+          <span class="brand-title">AMR <span class="brand-ver" id="brand-ver">v2.5.0</span></span>
+        </button>
         <div class="top-header-right-actions">
           <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
             <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -97,27 +125,28 @@
 
       <!-- Track Information -->
       <div class="track-meta">
-        <div class="track-title-row">
-          <h1 id="player-title" class="track-title" title="Не играет">Не играет</h1>
-          <div class="track-actions-group">
-            <button id="btn-create-station" class="btn-icon btn-station" type="button" aria-label="Создать радио" title="Создать радиостанцию">
-              <svg class="svg-icon icon-station" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4.93 19.07a10 10 0 0 1 0-14.14"/>
-                <path d="M7.76 16.24a6 6 0 0 1 0-8.48"/>
-                <circle cx="12" cy="12" r="2" fill="currentColor"/>
-                <path d="M16.24 7.76a6 6 0 0 1 0 8.48"/>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-              </svg>
-            </button>
-            <button id="btn-favorite" class="btn-icon btn-fav" type="button" aria-label="Избранное" title="В избранное">
-              <svg id="icon-fav" class="svg-icon icon-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-            </button>
+        <div class="track-meta-info">
+          <div class="title-marquee-viewport">
+            <h1 id="player-title" class="track-title" title="Не играет">Не играет</h1>
           </div>
+          <p id="player-artist" class="track-artist">Apple Music</p>
+          <p id="player-album" class="track-album"></p>
         </div>
-        <p id="player-artist" class="track-artist">Apple Music</p>
-        <p id="player-album" class="track-album"></p>
+        <div class="track-actions-group">
+          <button id="btn-favorite" class="btn-icon btn-fav" type="button" aria-label="Избранное" title="В избранное">
+            <svg id="icon-fav" class="svg-icon icon-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </button>
+          <button id="btn-create-station" class="btn-icon btn-more" type="button" aria-label="Ещё" title="Действия с треком">
+            <svg class="svg-icon icon-more" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="5" cy="12" r="2"/>
+              <circle cx="12" cy="12" r="2"/>
+              <circle cx="19" cy="12" r="2"/>
+            </svg>
+            <span id="more-booklet-dot" class="more-booklet-dot hidden" aria-hidden="true"></span>
+          </button>
+        </div>
       </div>
 
       <!-- Scrubber Timeline (Optimistic 60fps local scrubbing) -->
@@ -236,10 +265,10 @@
 
       <!-- Mobile Top Bar with Permanent DAC Badge (visible on mobile outside Now Playing) -->
       <header class="mobile-top-bar">
-        <div class="brand-pill">
+        <button id="mobile-btn-brand-info" class="brand-pill brand-pill-btn" type="button" title="О версии и настройки устройства" aria-label="О версии и настройки устройства">
           <span class="brand-dot"></span>
-          <span class="brand-title">AMR <span class="brand-ver">v2.4.0</span></span>
-        </div>
+          <span class="brand-title">AMR <span class="brand-ver">v2.5.0</span></span>
+        </button>
         <div class="top-header-right-actions">
           <button id="mobile-dac-badge" class="quality-badge mobile-dac-badge" type="button" title="Параметры потока и ЦАП">
             <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -264,7 +293,16 @@
             <h2 class="section-title">Очередь воспроизведения</h2>
             <p id="queue-subtitle" class="section-subtitle">0 треков</p>
           </div>
-          <button id="btn-clear-queue" class="btn-ghost" type="button">Очистить далее</button>
+          <div class="queue-header-actions">
+            <button id="btn-save-queue-playlist" class="btn-ghost btn-save-queue" type="button" title="Сохранить очередь в плейлист Apple Music">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              <span id="btn-save-queue-text">В плейлист</span>
+            </button>
+            <button id="btn-clear-queue" class="btn-ghost" type="button">Очистить далее</button>
+          </div>
         </header>
 
         <div class="scroll-pane">
@@ -345,6 +383,13 @@
                     <line x1="5" y1="12" x2="19" y2="12"/>
                   </svg>
                   <span id="btn-add-playlist-library-text">В медиатеку</span>
+                </button>
+                <button id="btn-detail-booklet" class="btn-secondary-action hidden" type="button" title="Открыть цифровой буклет альбома (PDF)">
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                  </svg>
+                  <span>Буклет PDF</span>
                 </button>
               </div>
             </div>
@@ -538,6 +583,7 @@
 
         <div class="search-filters">
           <button class="filter-chip active" data-scope="all">Все</button>
+          <button class="filter-chip filter-chip-ai" data-scope="ai">✨ AI Подбор</button>
           <button class="filter-chip" data-scope="songs">Песни</button>
           <button class="filter-chip" data-scope="albums">Альбомы</button>
           <button class="filter-chip" data-scope="playlists">Плейлисты</button>
@@ -547,11 +593,29 @@
         <div class="scroll-pane">
           <div id="search-results" class="search-results-pane">
             <div class="search-placeholder">
-              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#38383a" stroke-width="1.5">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <p>Ищите любимые треки, альбомы и исполнителей</p>
+              <div class="ai-curator-landing-card">
+                <div class="ai-curator-landing-top">
+                  <span class="ai-curator-engine-pill">✨ APPLE NEURAL ENGINE • ON-DEVICE AI</span>
+                  <button type="button" id="btn-refresh-ai-prompts" class="ai-refresh-prompts-btn" title="Сгенерировать другие варианты промптов">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="23 4 23 10 17 10"/>
+                      <polyline points="1 20 1 14 7 14"/>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                    <span>Другие варианты</span>
+                  </button>
+                </div>
+                <h3 class="ai-curator-landing-title">Умный семантический поиск и Промпт-Куратор</h3>
+                <p class="ai-curator-landing-desc">Опишите настроение, звуковую сцену, эпоху или инструменты свободным текстом — нативный движок macOS соберёт готовую аудиофильскую очередь из каталога Apple Music.</p>
+                <div class="ai-curator-prompts-grid">
+                  <button type="button" class="ai-prompt-chip" data-ai-prompt="Ночной нуар-джаз с тёплым саксофоном и контрабасом">🎷 Ночной нуар-джаз с саксофоном</button>
+                  <button type="button" class="ai-prompt-chip" data-ai-prompt="Аналоговый прог-рок 70-х с широкой голографической сценой">🎸 Аналоговый прог-рок 70-х</button>
+                  <button type="button" class="ai-prompt-chip" data-ai-prompt="Глубокий эмбиент и неоклассическое пианино для фокуса">🎹 Эмбиент и пианино для фокуса</button>
+                  <button type="button" class="ai-prompt-chip" data-ai-prompt="Аудиофильский эталонный женский вокал и живая акустика">🎙️ Эталонный вокал и акустика</button>
+                  <button type="button" class="ai-prompt-chip" data-ai-prompt="Кинематографичный синтвейв 80-х и глубокий аналоговый синт">🌃 Кинематографичный синтвейв 80-х</button>
+                  <button type="button" class="ai-prompt-chip" data-ai-prompt="Бристольский трип-хоп 90-х и глубокий даунтемпо с суббасом">🔊 Бристольский трип-хоп и даунтемпо</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -563,7 +627,9 @@
       <div class="mini-player-content" id="mini-player-trigger" title="Развернуть проигрыватель">
         <img id="mini-artwork" class="mini-art" src="apple-touch-icon.svg" alt="Обложка">
         <div class="mini-info">
-          <span id="mini-title" class="mini-title">Не играет</span>
+          <div class="title-marquee-viewport">
+            <span id="mini-title" class="mini-title">Не играет</span>
+          </div>
           <span id="mini-artist" class="mini-artist">Apple Music</span>
         </div>
       </div>
@@ -645,28 +711,72 @@
 
   </div>
 
-  <!-- Radio Station Picker Modal -->
+  <!-- Track Actions & Station Picker Modal (••• Menu) -->
   <div id="station-picker-modal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card station-modal-card">
       <div class="modal-header">
         <div class="modal-title-wrap">
-          <h3 class="modal-title">Создать радиостанцию</h3>
+          <h3 class="modal-title">Действия с треком</h3>
           <span class="modal-tag">APPLE MUSIC</span>
         </div>
         <button id="btn-close-station-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
       </div>
 
       <div class="modal-body">
-        <p class="modal-subtitle">Бесконечный радиопоток на основе ваших предпочтений</p>
         <div class="station-options-list">
-          <button id="btn-station-by-track" class="station-option-btn" type="button">
+          <button id="btn-go-to-album" class="station-option-btn" type="button">
             <div class="station-opt-icon">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M6 12c0-1.7.7-3.2 1.8-4.2"/>
+                <circle cx="12" cy="12" r="2.5"/>
+                <path d="M18 12c0 1.7-.7 3.2-1.8 4.2"/>
               </svg>
             </div>
             <div class="station-opt-details">
-              <span class="station-opt-primary">По текущему треку</span>
+              <span class="station-opt-primary">Перейти к альбому</span>
+              <span id="station-opt-album-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+
+          <button id="btn-open-booklet" class="station-option-btn station-option-booklet hidden" type="button">
+            <div class="station-opt-icon booklet-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Цифровой буклет (PDF)</span>
+              <span id="station-opt-booklet-sub" class="station-opt-secondary">Официальный буклет альбома Apple Music</span>
+            </div>
+          </button>
+
+          <button id="btn-ai-mix-by-track" class="station-option-btn station-option-ai" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+                <path d="M5 3v4M3 5h4M19 17v4M17 19h4"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">ИИ-подбор по вайбу трека</span>
+              <span id="station-opt-ai-vibe-sub" class="station-opt-secondary">Семантическая волна Apple Neural Engine</span>
+            </div>
+          </button>
+
+          <button id="btn-station-by-track" class="station-option-btn" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4.93 19.07a10 10 0 0 1 0-14.14"/>
+                <path d="M7.76 16.24a6 6 0 0 1 0-8.48"/>
+                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                <path d="M16.24 7.76a6 6 0 0 1 0 8.48"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Создать радио по треку</span>
               <span id="station-opt-track-name" class="station-opt-secondary">—</span>
             </div>
           </button>
@@ -678,7 +788,7 @@
               </svg>
             </div>
             <div class="station-opt-details">
-              <span class="station-opt-primary">По исполнителю</span>
+              <span class="station-opt-primary">Создать радио по исполнителю</span>
               <span id="station-opt-artist-name" class="station-opt-secondary">—</span>
             </div>
           </button>
@@ -699,6 +809,19 @@
       </div>
 
       <div class="modal-body signal-path-body">
+        <!-- Verified Bit-Perfect Card (Top Summary Banner) -->
+        <div class="signal-verified-card">
+          <div class="signal-verified-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+          </div>
+          <div class="signal-verified-info">
+            <div class="signal-verified-title">Bit-Perfect Verified</div>
+            <div class="signal-verified-desc">Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.</div>
+          </div>
+        </div>
+
         <div class="signal-path-chain">
           <!-- Step 1: Audio Source -->
           <div class="signal-node" id="signal-node-source">
@@ -753,18 +876,66 @@
               <span>ЦАП</span>
             </button>
           </div>
+
+          <div id="signal-connector-amp" class="signal-connector hidden">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Step 4: External Amplifier / Preamp (TCP Volume Control) -->
+          <div class="signal-node hidden" id="signal-node-amp">
+            <div id="signal-amp-dot" class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">УСИЛИТЕЛЬ</span>
+                <span id="signal-amp-volume-badge" class="signal-node-format">50%</span>
+              </div>
+              <div id="signal-amp-name" class="signal-node-name">Rotel</div>
+              <div id="signal-amp-details" class="signal-node-meta">Управление громкостью по TCP • Лимит до 80%</div>
+            </div>
+          </div>
         </div>
 
-        <!-- Verified Bit-Perfect Card -->
-        <div class="signal-verified-card">
-          <div class="signal-verified-icon">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
+        <!-- Spectral Integrity & Upsampling Detector (Accelerate vDSP FFT RTA) -->
+        <div id="signal-spectral-card" class="signal-spectral-card">
+          <div class="signal-spectral-header">
+            <div class="signal-spectral-top">
+              <span class="signal-node-badge">СПЕКТРАЛЬНЫЙ ВЕРИФИКАТОР • vDSP FFT</span>
+              <span id="spectral-verdict-badge" class="spectral-verdict-badge authentic">TRUE HI-RES</span>
+            </div>
+            <div id="spectral-verdict-title" class="signal-spectral-title">Verified True Hi-Res</div>
           </div>
-          <div class="signal-verified-info">
-            <div class="signal-verified-title">Bit-Perfect Verified</div>
-            <div class="signal-verified-desc">Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.</div>
+
+          <div class="spectral-rta-wrap">
+            <div id="spectral-rta-bars" class="spectral-rta-bars" aria-label="RTA спектр аудиосигнала"></div>
+            <div id="spectral-cutoff-marker" class="spectral-cutoff-marker">
+              <span id="spectral-cutoff-marker-label" class="spectral-cutoff-marker-label">22.05 кГц CD</span>
+            </div>
+          </div>
+          <div class="spectral-rta-axis">
+            <span>20 Гц</span>
+            <span>1 кГц</span>
+            <span>10 кГц</span>
+            <span id="spectral-axis-ref">22.05 кГц</span>
+            <span id="spectral-axis-nyquist">48.0 кГц</span>
+          </div>
+
+          <div class="spectral-metrics-grid">
+            <div class="spectral-metric-pill">
+              <span class="spectral-metric-label">Полоса ВЧ</span>
+              <span id="spectral-metric-cutoff" class="spectral-metric-val">44.2 кГц</span>
+            </div>
+            <div class="spectral-metric-pill">
+              <span class="spectral-metric-label">Ультразвук (&gt;22k)</span>
+              <span id="spectral-metric-ultra" class="spectral-metric-val">-48 dBFS</span>
+            </div>
+            <div class="spectral-metric-pill">
+              <span class="spectral-metric-label">Разрядность LSB</span>
+              <span id="spectral-metric-bits" class="spectral-metric-val">24-бит (Честный)</span>
+            </div>
+          </div>
+
+          <div id="spectral-verdict-desc" class="signal-spectral-desc">
+            Подлинный студийный Hi-Res мастер: зафиксирована живая ультразвуковая составляющая и активность всех 24 бит.
           </div>
         </div>
       </div>
@@ -871,6 +1042,9 @@
   <div id="standby-tv-overlay" class="standby-tv-overlay hidden" aria-hidden="true">
     <div id="standby-ambient-bg" class="standby-ambient-bg"></div>
     <div class="standby-vignette"></div>
+    <div id="standby-rta-backdrop" class="standby-rta-backdrop" aria-hidden="true">
+      <div id="standby-rta-bars" class="standby-rta-bars"></div>
+    </div>
 
     <header class="standby-top-bar">
       <div class="standby-top-left">
@@ -879,6 +1053,13 @@
         <span id="standby-wled-badge" class="standby-pill-badge standby-wled-badge hidden">💡 WLED DDP</span>
       </div>
       <div class="standby-top-right">
+        <button id="standby-btn-ai-curator" class="standby-library-pill-btn standby-ai-pill-btn" type="button" title="ИИ Подбор по атмосфере (Apple Neural Engine)">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+            <path d="M5 3v4M3 5h4"/>
+          </svg>
+          <span>ИИ Подбор</span>
+        </button>
         <button id="standby-btn-library" class="standby-library-pill-btn" type="button" title="Медиатека и станции">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1.5"/>
@@ -910,15 +1091,33 @@
 
       <div class="standby-meta-col">
         <div class="standby-badges-row">
-          <span id="standby-dac-badge" class="standby-dac-badge">BIT-PERFECT · LOSSLESS</span>
+          <button id="standby-dac-badge" class="standby-dac-badge" type="button" title="Инспектор аудиопотока и спектральный верификатор">
+            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polygon points="10 8 16 12 10 16 10 8"/>
+            </svg>
+            <span id="standby-dac-text">BIT-PERFECT · LOSSLESS</span>
+          </button>
+          <span id="standby-spectral-badge" class="standby-spectral-badge neutral" title="Статус спектрального верификатора vDSP FFT">FFT АНАЛИЗ...</span>
+          <button id="standby-booklet-btn" class="standby-booklet-btn hidden" type="button" title="Открыть цифровой буклет альбома Apple Music (PDF)">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+            <span>БУКЛЕТ PDF</span>
+          </button>
         </div>
-        <h1 id="standby-title" class="standby-title">Не играет</h1>
+        <div class="title-marquee-viewport standby-title-viewport">
+          <h1 id="standby-title" class="standby-title">Не играет</h1>
+        </div>
         <p id="standby-artist" class="standby-artist">Apple Music</p>
         <p id="standby-album" class="standby-album"></p>
 
         <div class="standby-progress-section">
           <div class="standby-progress-track" id="standby-progress-track">
-            <div id="standby-progress-fill" class="standby-progress-fill" style="width: 0%;"></div>
+            <div id="standby-progress-fill" class="standby-progress-fill"></div>
+            <div id="standby-progress-thumb" class="standby-progress-thumb"></div>
+            <input type="range" id="standby-progress-input" class="standby-progress-input" min="0" max="100" step="0.1" value="0" aria-label="Позиция трека">
           </div>
           <div class="standby-time-row">
             <span id="standby-time-elapsed">0:00</span>
@@ -948,6 +1147,40 @@
               <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
             </svg>
           </button>
+
+          <div id="standby-volume-section" class="standby-volume-section hidden" aria-label="Регулировка громкости">
+            <button id="standby-btn-volume-mute" class="standby-vol-mute-btn" type="button" aria-label="Без звука" title="Без звука (Mute)">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path id="standby-vol-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path id="standby-vol-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </button>
+            <div class="standby-vol-slider-wrap">
+              <div id="standby-vol-loupe" class="standby-vol-loupe" aria-hidden="true">
+                <span id="standby-vol-loupe-text">50%</span>
+              </div>
+              <div class="standby-vol-track">
+                <div id="standby-vol-fill" class="standby-vol-fill" style="width: 50%;"></div>
+              </div>
+              <div id="standby-vol-thumb" class="standby-vol-thumb" style="left: 50%;"></div>
+              <input id="standby-volume-input" class="standby-vol-input" type="range" min="0" max="100" value="50" aria-label="Громкость">
+            </div>
+          </div>
+
+          <div class="standby-right-actions">
+            <button id="standby-btn-favorite" class="standby-fav-btn" type="button" aria-label="В избранное" title="В избранное">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
+            <button id="standby-btn-ai-track-vibe" class="standby-fav-btn standby-ai-vibe-btn" type="button" aria-label="ИИ-подбор по треку" title="ИИ-подбор по вайбу текущего трека">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+                <path d="M5 3v4M3 5h4"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -965,6 +1198,143 @@
       </header>
       <div class="standby-library-scroll">
         <div id="standby-library-grid" class="standby-library-grid"></div>
+      </div>
+    </div>
+
+    <!-- Fullscreen TV AI Sonic Curator Tag Cloud Overlay -->
+    <div id="standby-ai-modal" class="standby-library-modal standby-ai-modal hidden" aria-hidden="true" role="dialog" aria-label="ИИ Подбор по атмосфере">
+      <header class="standby-library-header">
+        <div class="standby-library-header-left">
+          <div class="standby-ai-header-badge-row">
+            <span class="ai-curator-engine-pill">✨ APPLE NEURAL ENGINE • ON-DEVICE AI</span>
+          </div>
+          <h2 class="standby-library-title">ИИ Подбор</h2>
+          <span class="standby-library-subtitle">Нажмите на тег для мгновенного воспроизведения • Листайте вниз для бесконечной подгрузки</span>
+        </div>
+        <div class="standby-ai-header-actions">
+          <button id="btn-standby-ai-refresh" class="standby-library-pill-btn standby-ai-pill-btn" type="button" title="Сгенерировать другие варианты промптов">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            <span>Другие варианты</span>
+          </button>
+          <button id="btn-close-standby-ai" class="standby-close-btn" type="button" title="Закрыть ИИ Подбор" aria-label="Закрыть ИИ Подбор">
+            ✕
+          </button>
+        </div>
+      </header>
+      <div id="standby-ai-scroll" class="standby-library-scroll standby-ai-scroll">
+        <div id="standby-ai-tag-cloud" class="standby-ai-tag-cloud"></div>
+        <div id="standby-ai-sentinel" class="standby-ai-sentinel">
+          <button id="btn-standby-ai-load-more" class="standby-ai-load-more-btn" type="button">Подгрузить ещё варианты ↓</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top-Left AMR Version & Device Settings Modal (Signal Path Inspector Style) -->
+  <div id="amr-info-popover" class="modal-backdrop hidden" aria-hidden="true" role="dialog" aria-label="О версии и настройки устройства">
+    <div class="modal-card signal-path-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Система и Устройство</h3>
+          <span class="modal-tag">AMR v2.5.0</span>
+        </div>
+        <button id="btn-close-amr-info" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-body signal-path-body">
+        <!-- Verified AMR System Banner -->
+        <div class="signal-verified-card">
+          <div class="signal-verified-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+          </div>
+          <div class="signal-verified-info">
+            <div class="signal-verified-title">Apple Music Remote v2.5.0</div>
+            <div class="signal-verified-desc">Авторизованный клиент • Bit-Perfect CoreAudio • vDSP FFT</div>
+          </div>
+        </div>
+
+        <div class="signal-path-chain">
+          <!-- Node 1: Build & Latest Commit + Share Access QR -->
+          <div class="signal-node">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">СБОРКА</span>
+                <span id="amr-info-commit-badge" class="signal-node-format highlight-green">7278dab</span>
+              </div>
+              <div class="signal-node-name">Apple Music Remote Mac</div>
+              <div id="amr-info-commit-details" class="signal-node-meta">Последний коммит: 7278dab (2026-11-04) • Pure Swift Server</div>
+
+              <div class="amr-share-actions-row">
+                <button id="btn-share-access-qr" class="amr-share-access-btn" type="button">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+                    <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm0 2h2v2h-2v-2zm2 0h2v2h-2v-2zm-6-2h2v4h-2v-4z"/>
+                  </svg>
+                  <span id="amr-share-access-btn-label">Поделиться доступом</span>
+                </button>
+              </div>
+
+              <!-- Expandable QR Code Share Card -->
+              <div id="amr-share-qr-panel" class="amr-share-qr-panel hidden">
+                <div class="amr-share-qr-box">
+                  <img id="amr-share-qr-img" class="amr-share-qr-img" src="" alt="QR-код для быстрого подключения и авторизации" width="180" height="180">
+                </div>
+                <div id="amr-share-qr-hint" class="amr-share-qr-hint">Отсканируйте камерой смартфона или планшета — устройство подключится и авторизуется автоматически</div>
+                <div id="amr-share-url-text" class="amr-share-url-text">http://127.0.0.1:8080</div>
+                <div class="amr-share-qr-btn-group">
+                  <button id="btn-copy-share-link" class="amr-share-sub-btn" type="button">Скопировать ссылку</button>
+                  <button id="btn-native-share-link" class="amr-share-sub-btn hidden" type="button">Отправить...</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="signal-connector">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Node 2: Client Device Identity -->
+          <div class="signal-node">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">УСТРОЙСТВО</span>
+                <span id="amr-info-device-summary" class="signal-node-format">ID: ----</span>
+              </div>
+              <div class="amr-node-input-wrap">
+                <input id="amr-device-name-input" class="amr-device-name-input" type="text" maxlength="40" placeholder="Имя устройства" aria-label="Имя этого устройства">
+              </div>
+              <div id="amr-info-device-uid" class="signal-node-meta">Авторизовано на Mac • Защищённый UID (Cookie + Cache)</div>
+            </div>
+          </div>
+
+          <div class="signal-connector">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Node 3: Lock Screen & Dynamic Island (MediaSession) -->
+          <div class="signal-node">
+            <div id="amr-lock-node-dot" class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">ЭКРАН БЛОКИРОВКИ • MEDIASESSION</span>
+                <span id="amr-lock-state-badge" class="signal-node-format highlight-green">АКТИВНО</span>
+              </div>
+              <div class="signal-node-name">Экран блокировки и Dynamic Island</div>
+              <div class="signal-node-meta">Управление плеером на заблокированном экране, в Пункте управления и на Apple Watch</div>
+            </div>
+            <label class="ios-switch amr-node-switch" aria-label="Экран блокировки и Dynamic Island">
+              <input type="checkbox" id="amr-lock-screen-checkbox" checked>
+              <span class="ios-switch-slider"></span>
+            </label>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -994,6 +1364,23 @@
     </div>
   </div>
 
+  <!-- Apple Digital Booklet Viewer (Right Pane on Desktop/Tablet Landscape, Fullscreen on TV & Mobile Portrait) -->
+  <div id="booklet-viewer-modal" class="booklet-viewer-overlay hidden" aria-hidden="true" role="dialog" aria-label="Цифровой буклет альбома">
+    <button id="btn-close-booklet" class="booklet-close-btn" type="button" title="Закрыть буклет (Esc)" aria-label="Закрыть буклет">
+      <span>✕</span>
+      <span class="booklet-close-label">Закрыть</span>
+    </button>
+
+    <div id="booklet-viewport" class="booklet-viewport">
+      <div id="booklet-loading" class="booklet-loading hidden">
+        <div class="busy-spinner"></div>
+        <span>Загрузка буклета...</span>
+      </div>
+
+      <div id="booklet-pages-list" class="booklet-pages-list"></div>
+    </div>
+  </div>
+
   <!-- Busy / Action Loading Overlay -->
   <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
     <div class="busy-card">
@@ -1002,6 +1389,6 @@
     </div>
   </div>
 
-  <script src="/app.js?v=254"></script></script>
+  <script src="/app.js?v=278"></script>
 </body>
 </html>

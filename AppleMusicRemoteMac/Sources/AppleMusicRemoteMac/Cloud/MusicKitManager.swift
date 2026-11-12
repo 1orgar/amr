@@ -27,6 +27,7 @@ public final class MusicKitManager: @unchecked Sendable {
     var tokenExpiry: Date?
     var privateKey: P256.Signing.PrivateKey?
     var trackArtworkCache: [String: String] = [:]
+    var trackCatalogIdCache: [String: String] = [:]
     var userToken: String?
 
     public struct ArtistStationInfo: Sendable {

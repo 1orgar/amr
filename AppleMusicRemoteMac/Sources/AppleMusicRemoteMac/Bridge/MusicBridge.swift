@@ -112,8 +112,8 @@ public final class MusicBridge: @unchecked Sendable {
         PlaybackTransportController.shared.nextTrack()
     }
 
-    public func previousTrack() -> Bool {
-        PlaybackTransportController.shared.previousTrack()
+    public func previousTrack(forceTrackChange: Bool = false) -> Bool {
+        PlaybackTransportController.shared.previousTrack(forceTrackChange: forceTrackChange)
     }
 
     public func seek(to position: Double) -> Bool {
@@ -257,8 +257,8 @@ public final class MusicBridge: @unchecked Sendable {
         PlaybackRouter.shared.playCustomTracks(tracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName)
     }
 
-    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool, queueName: String? = nil, query: String? = nil) async -> Bool {
-        await PlaybackRouter.shared.playSearchResults(tracks: tracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName, query: query)
+    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool, queueName: String? = nil, query: String? = nil, curatorPrompt: String? = nil) async -> Bool {
+        await PlaybackRouter.shared.playSearchResults(tracks: tracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName, query: query, curatorPrompt: curatorPrompt)
     }
 
     public func appendTracksToAMRQueue(tracks: [TrackInfo]) async -> Bool {
@@ -328,8 +328,12 @@ public final class MusicBridge: @unchecked Sendable {
         LibraryService.shared.addToLibrary(trackId: trackId, name: name, artist: artist, url: url)
     }
 
-    public func addPlaylistToLibrary(playlistId: String) async -> Bool {
-        await MusicKitManager.shared.addPlaylistToLibrary(playlistId: playlistId)
+    public func addPlaylistToLibrary(playlistId: String, name: String = "", tracks: [TrackInfo] = []) async -> Bool {
+        await MusicKitManager.shared.addPlaylistToLibrary(playlistId: playlistId, name: name, tracks: tracks)
+    }
+
+    public func addAlbumToLibrary(albumId: String, name: String, artist: String, tracks: [TrackInfo] = []) async -> Bool {
+        await MusicKitManager.shared.addAlbumToLibrary(albumId: albumId, name: name, artist: artist, tracks: tracks)
     }
 
     // MARK: - Artwork Services

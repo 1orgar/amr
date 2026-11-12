@@ -7,6 +7,107 @@
 
 import Foundation
 
+// MARK: - Spectral Integrity & Upsampling Analysis
+
+public struct SpectralAnalysisInfo: Codable, Sendable, Equatable {
+    public var isEnabled: Bool
+    public var isCached: Bool
+    public var verdict: String
+    public var verdictTitle: String
+    public var verdictDescription: String
+    public var isAuthentic: Bool
+    public var sampleRate: Int
+    public var claimedBitDepth: Int
+    public var effectiveBitDepth: Int
+    public var isZeroPadded: Bool
+    public var cutoffFrequencyHz: Double
+    public var nyquistFrequencyHz: Double
+    public var ultrasonicEnergyDb: Double
+    public var highBandEnergyDb: Double
+    public var dynamicRangeCrestDb: Double
+    public var analyzedFramesCount: Int
+    public var rtaBands: [Double]
+
+    enum CodingKeys: String, CodingKey {
+        case isEnabled = "is_enabled"
+        case isCached = "is_cached"
+        case verdict
+        case verdictTitle = "verdict_title"
+        case verdictDescription = "verdict_description"
+        case isAuthentic = "is_authentic"
+        case sampleRate = "sample_rate"
+        case claimedBitDepth = "claimed_bit_depth"
+        case effectiveBitDepth = "effective_bit_depth"
+        case isZeroPadded = "is_zero_padded"
+        case cutoffFrequencyHz = "cutoff_frequency_hz"
+        case nyquistFrequencyHz = "nyquist_frequency_hz"
+        case ultrasonicEnergyDb = "ultrasonic_energy_db"
+        case highBandEnergyDb = "high_band_energy_db"
+        case dynamicRangeCrestDb = "dynamic_range_crest_db"
+        case analyzedFramesCount = "analyzed_frames_count"
+        case rtaBands = "rta_bands"
+    }
+
+    public init(
+        isEnabled: Bool = true,
+        isCached: Bool = false,
+        verdict: String = "analyzing",
+        verdictTitle: String = "Спектральный анализ...",
+        verdictDescription: String = "Накопление PCM-буферов из CoreAudio Process Tap для расчёта БПФ-спектра.",
+        isAuthentic: Bool = true,
+        sampleRate: Int = 44100,
+        claimedBitDepth: Int = 16,
+        effectiveBitDepth: Int = 16,
+        isZeroPadded: Bool = false,
+        cutoffFrequencyHz: Double = 22050,
+        nyquistFrequencyHz: Double = 22050,
+        ultrasonicEnergyDb: Double = -96.0,
+        highBandEnergyDb: Double = -45.0,
+        dynamicRangeCrestDb: Double = 12.0,
+        analyzedFramesCount: Int = 0,
+        rtaBands: [Double] = Array(repeating: 0.0, count: 32)
+    ) {
+        self.isEnabled = isEnabled
+        self.isCached = isCached
+        self.verdict = verdict
+        self.verdictTitle = verdictTitle
+        self.verdictDescription = verdictDescription
+        self.isAuthentic = isAuthentic
+        self.sampleRate = sampleRate
+        self.claimedBitDepth = claimedBitDepth
+        self.effectiveBitDepth = effectiveBitDepth
+        self.isZeroPadded = isZeroPadded
+        self.cutoffFrequencyHz = cutoffFrequencyHz
+        self.nyquistFrequencyHz = nyquistFrequencyHz
+        self.ultrasonicEnergyDb = ultrasonicEnergyDb
+        self.highBandEnergyDb = highBandEnergyDb
+        self.dynamicRangeCrestDb = dynamicRangeCrestDb
+        self.analyzedFramesCount = analyzedFramesCount
+        self.rtaBands = rtaBands
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        self.isCached = try container.decodeIfPresent(Bool.self, forKey: .isCached) ?? false
+        self.verdict = try container.decodeIfPresent(String.self, forKey: .verdict) ?? "analyzing"
+        self.verdictTitle = try container.decodeIfPresent(String.self, forKey: .verdictTitle) ?? "Спектральный анализ..."
+        self.verdictDescription = try container.decodeIfPresent(String.self, forKey: .verdictDescription) ?? ""
+        self.isAuthentic = try container.decodeIfPresent(Bool.self, forKey: .isAuthentic) ?? true
+        self.sampleRate = try container.decodeIfPresent(Int.self, forKey: .sampleRate) ?? 44100
+        self.claimedBitDepth = try container.decodeIfPresent(Int.self, forKey: .claimedBitDepth) ?? 16
+        self.effectiveBitDepth = try container.decodeIfPresent(Int.self, forKey: .effectiveBitDepth) ?? 16
+        self.isZeroPadded = try container.decodeIfPresent(Bool.self, forKey: .isZeroPadded) ?? false
+        self.cutoffFrequencyHz = try container.decodeIfPresent(Double.self, forKey: .cutoffFrequencyHz) ?? 22050
+        self.nyquistFrequencyHz = try container.decodeIfPresent(Double.self, forKey: .nyquistFrequencyHz) ?? 22050
+        self.ultrasonicEnergyDb = try container.decodeIfPresent(Double.self, forKey: .ultrasonicEnergyDb) ?? -96.0
+        self.highBandEnergyDb = try container.decodeIfPresent(Double.self, forKey: .highBandEnergyDb) ?? -45.0
+        self.dynamicRangeCrestDb = try container.decodeIfPresent(Double.self, forKey: .dynamicRangeCrestDb) ?? 12.0
+        self.analyzedFramesCount = try container.decodeIfPresent(Int.self, forKey: .analyzedFramesCount) ?? 0
+        self.rtaBands = try container.decodeIfPresent([Double].self, forKey: .rtaBands) ?? Array(repeating: 0.0, count: 32)
+    }
+}
+
 // MARK: - Player Status
 
 public struct PlayerStatus: Codable, Sendable {
@@ -27,6 +128,20 @@ public struct PlayerStatus: Codable, Sendable {
     public var audioDeviceSampleRate: Double?
     public var audioDeviceBitDepth: Int?
     public var isBitPerfect: Bool?
+    public var isDacMutingGuardEnabled: Bool?
+    public var dacMutingGuardMs: Int?
+    public var spectralAnalysis: SpectralAnalysisInfo?
+    public var ampVolumeControlEnabled: Bool?
+    public var ampBrandName: String?
+    public var ampVolume: Int?
+    public var ampMaxVolume: Int?
+    public var ampMuted: Bool?
+    public var ampConnected: Bool?
+    public var ampSoundCheckEnabled: Bool?
+    public var ampLowVolSmartNormEnabled: Bool?
+    public var ampSoundCheckGainDb: Double?
+    public var ampSoundCheckOffset: Int?
+    public var ampBaseVolume: Int?
 
     enum CodingKeys: String, CodingKey {
         case playerState = "player_state"
@@ -46,6 +161,20 @@ public struct PlayerStatus: Codable, Sendable {
         case audioDeviceSampleRate = "audio_device_sample_rate"
         case audioDeviceBitDepth = "audio_device_bit_depth"
         case isBitPerfect = "is_bit_perfect"
+        case isDacMutingGuardEnabled = "dac_muting_guard_enabled"
+        case dacMutingGuardMs = "dac_muting_guard_ms"
+        case spectralAnalysis = "spectral_analysis"
+        case ampVolumeControlEnabled = "amp_volume_control"
+        case ampBrandName = "amp_brand_name"
+        case ampVolume = "amp_volume"
+        case ampMaxVolume = "amp_max_volume"
+        case ampMuted = "amp_muted"
+        case ampConnected = "amp_connected"
+        case ampSoundCheckEnabled = "amp_soundcheck_enabled"
+        case ampLowVolSmartNormEnabled = "amp_low_vol_smart_norm_enabled"
+        case ampSoundCheckGainDb = "amp_soundcheck_gain_db"
+        case ampSoundCheckOffset = "amp_soundcheck_offset"
+        case ampBaseVolume = "amp_base_volume"
     }
 
     public init(
@@ -65,7 +194,21 @@ public struct PlayerStatus: Codable, Sendable {
         audioDeviceName: String? = nil,
         audioDeviceSampleRate: Double? = nil,
         audioDeviceBitDepth: Int? = nil,
-        isBitPerfect: Bool? = nil
+        isBitPerfect: Bool? = nil,
+        isDacMutingGuardEnabled: Bool? = nil,
+        dacMutingGuardMs: Int? = nil,
+        spectralAnalysis: SpectralAnalysisInfo? = nil,
+        ampVolumeControlEnabled: Bool? = nil,
+        ampBrandName: String? = nil,
+        ampVolume: Int? = nil,
+        ampMaxVolume: Int? = nil,
+        ampMuted: Bool? = nil,
+        ampConnected: Bool? = nil,
+        ampSoundCheckEnabled: Bool? = nil,
+        ampLowVolSmartNormEnabled: Bool? = nil,
+        ampSoundCheckGainDb: Double? = nil,
+        ampSoundCheckOffset: Int? = nil,
+        ampBaseVolume: Int? = nil
     ) {
         self.playerState = playerState
         self.position = position
@@ -84,6 +227,20 @@ public struct PlayerStatus: Codable, Sendable {
         self.audioDeviceSampleRate = audioDeviceSampleRate
         self.audioDeviceBitDepth = audioDeviceBitDepth
         self.isBitPerfect = isBitPerfect
+        self.isDacMutingGuardEnabled = isDacMutingGuardEnabled
+        self.dacMutingGuardMs = dacMutingGuardMs
+        self.spectralAnalysis = spectralAnalysis
+        self.ampVolumeControlEnabled = ampVolumeControlEnabled
+        self.ampBrandName = ampBrandName
+        self.ampVolume = ampVolume
+        self.ampMaxVolume = ampMaxVolume
+        self.ampMuted = ampMuted
+        self.ampConnected = ampConnected
+        self.ampSoundCheckEnabled = ampSoundCheckEnabled
+        self.ampLowVolSmartNormEnabled = ampLowVolSmartNormEnabled
+        self.ampSoundCheckGainDb = ampSoundCheckGainDb
+        self.ampSoundCheckOffset = ampSoundCheckOffset
+        self.ampBaseVolume = ampBaseVolume
     }
 
     public init(from decoder: Decoder) throws {
@@ -105,6 +262,20 @@ public struct PlayerStatus: Codable, Sendable {
         self.audioDeviceSampleRate = try container.decodeIfPresent(Double.self, forKey: .audioDeviceSampleRate)
         self.audioDeviceBitDepth = try container.decodeIfPresent(Int.self, forKey: .audioDeviceBitDepth)
         self.isBitPerfect = try container.decodeIfPresent(Bool.self, forKey: .isBitPerfect)
+        self.isDacMutingGuardEnabled = try container.decodeIfPresent(Bool.self, forKey: .isDacMutingGuardEnabled)
+        self.dacMutingGuardMs = try container.decodeIfPresent(Int.self, forKey: .dacMutingGuardMs)
+        self.spectralAnalysis = try container.decodeIfPresent(SpectralAnalysisInfo.self, forKey: .spectralAnalysis)
+        self.ampVolumeControlEnabled = try container.decodeIfPresent(Bool.self, forKey: .ampVolumeControlEnabled)
+        self.ampBrandName = try container.decodeIfPresent(String.self, forKey: .ampBrandName)
+        self.ampVolume = try container.decodeIfPresent(Int.self, forKey: .ampVolume)
+        self.ampMaxVolume = try container.decodeIfPresent(Int.self, forKey: .ampMaxVolume)
+        self.ampMuted = try container.decodeIfPresent(Bool.self, forKey: .ampMuted)
+        self.ampConnected = try container.decodeIfPresent(Bool.self, forKey: .ampConnected)
+        self.ampSoundCheckEnabled = try container.decodeIfPresent(Bool.self, forKey: .ampSoundCheckEnabled)
+        self.ampLowVolSmartNormEnabled = try container.decodeIfPresent(Bool.self, forKey: .ampLowVolSmartNormEnabled)
+        self.ampSoundCheckGainDb = try container.decodeIfPresent(Double.self, forKey: .ampSoundCheckGainDb)
+        self.ampSoundCheckOffset = try container.decodeIfPresent(Int.self, forKey: .ampSoundCheckOffset)
+        self.ampBaseVolume = try container.decodeIfPresent(Int.self, forKey: .ampBaseVolume)
     }
 
     public var isPlaying: Bool {
@@ -135,6 +306,8 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
     public var isCurrent: Bool?
     public var sampleRate: Int?
     public var bitDepth: Int?
+    public var catalogId: String?
+    public var persistentId: String?
 
     public var formattedDuration: String {
         guard duration > 0 else { return "0:00" }
@@ -165,6 +338,8 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
         case isCurrent = "is_current"
         case sampleRate = "sample_rate"
         case bitDepth = "bit_depth"
+        case catalogId = "catalog_id"
+        case persistentId = "persistent_id"
     }
 
     public init(
@@ -187,7 +362,9 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
         index: Int? = nil,
         isCurrent: Bool? = nil,
         sampleRate: Int? = nil,
-        bitDepth: Int? = nil
+        bitDepth: Int? = nil,
+        catalogId: String? = nil,
+        persistentId: String? = nil
     ) {
         self.id = id
         self.numericId = numericId
@@ -209,6 +386,8 @@ public struct TrackInfo: Codable, Sendable, Identifiable {
         self.isCurrent = isCurrent
         self.sampleRate = sampleRate
         self.bitDepth = bitDepth
+        self.catalogId = catalogId
+        self.persistentId = persistentId
     }
 }
 
@@ -606,4 +785,247 @@ public struct PersonalMixesResponse: Codable, Sendable {
         self.stations = stations
     }
 }
+
+// MARK: - Apple Digital Booklet Viewer (PDF)
+
+public struct BookletPageInfo: Codable, Sendable, Equatable {
+    public var pageIndex: Int
+    public var pageNumber: Int
+    public var width: Double
+    public var height: Double
+    public var aspectRatio: Double
+    public var title: String?
+    public var imageUrl: String
+    public var thumbUrl: String
+
+    enum CodingKeys: String, CodingKey {
+        case pageIndex = "page_index"
+        case pageNumber = "page_number"
+        case width
+        case height
+        case aspectRatio = "aspect_ratio"
+        case title
+        case imageUrl = "image_url"
+        case thumbUrl = "thumb_url"
+    }
+
+    public init(
+        pageIndex: Int,
+        pageNumber: Int,
+        width: Double,
+        height: Double,
+        aspectRatio: Double,
+        title: String? = nil,
+        imageUrl: String,
+        thumbUrl: String
+    ) {
+        self.pageIndex = pageIndex
+        self.pageNumber = pageNumber
+        self.width = width
+        self.height = height
+        self.aspectRatio = aspectRatio
+        self.title = title
+        self.imageUrl = imageUrl
+        self.thumbUrl = thumbUrl
+    }
+}
+
+public struct BookletTrackCreditInfo: Codable, Sendable, Equatable {
+    public var number: Int
+    public var discNumber: Int
+    public var title: String
+    public var artist: String
+    public var composer: String
+    public var durationSeconds: Double
+    public var isrc: String
+    public var audioBadge: String
+    public var commentary: String
+    public var producers: [String]
+    public var vocals: [String]
+    public var instruments: [String]
+    public var samples: [String]
+    public var studios: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case number
+        case discNumber = "disc_number"
+        case title
+        case artist
+        case composer
+        case durationSeconds = "duration_seconds"
+        case isrc
+        case audioBadge = "audio_badge"
+        case commentary
+        case producers
+        case vocals
+        case instruments
+        case samples
+        case studios
+    }
+
+    public init(
+        number: Int,
+        discNumber: Int = 1,
+        title: String,
+        artist: String,
+        composer: String,
+        durationSeconds: Double,
+        isrc: String = "",
+        audioBadge: String = "",
+        commentary: String = "",
+        producers: [String] = [],
+        vocals: [String] = [],
+        instruments: [String] = [],
+        samples: [String] = [],
+        studios: [String] = []
+    ) {
+        self.number = number
+        self.discNumber = discNumber
+        self.title = title
+        self.artist = artist
+        self.composer = composer
+        self.durationSeconds = durationSeconds
+        self.isrc = isrc
+        self.audioBadge = audioBadge
+        self.commentary = commentary
+        self.producers = producers
+        self.vocals = vocals
+        self.instruments = instruments
+        self.samples = samples
+        self.studios = studios
+    }
+}
+
+public struct BookletEditorialContent: Codable, Sendable, Equatable {
+    public var genre: String
+    public var releaseDate: String
+    public var recordLabel: String
+    public var copyright: String
+    public var isMasteredForItunes: Bool
+    public var audioTraits: [String]
+    public var artworkUrl: String
+    public var summaryQuote: String
+    public var editorialParagraphs: [String]
+    public var recordingStudios: [String]
+    public var tracks: [BookletTrackCreditInfo]
+
+    enum CodingKeys: String, CodingKey {
+        case genre
+        case releaseDate = "release_date"
+        case recordLabel = "record_label"
+        case copyright
+        case isMasteredForItunes = "is_mastered_for_itunes"
+        case audioTraits = "audio_traits"
+        case artworkUrl = "artwork_url"
+        case summaryQuote = "summary_quote"
+        case editorialParagraphs = "editorial_paragraphs"
+        case recordingStudios = "recording_studios"
+        case tracks
+    }
+
+    public init(
+        genre: String = "",
+        releaseDate: String = "",
+        recordLabel: String = "",
+        copyright: String = "",
+        isMasteredForItunes: Bool = false,
+        audioTraits: [String] = [],
+        artworkUrl: String = "",
+        summaryQuote: String = "",
+        editorialParagraphs: [String] = [],
+        recordingStudios: [String] = [],
+        tracks: [BookletTrackCreditInfo] = []
+    ) {
+        self.genre = genre
+        self.releaseDate = releaseDate
+        self.recordLabel = recordLabel
+        self.copyright = copyright
+        self.isMasteredForItunes = isMasteredForItunes
+        self.audioTraits = audioTraits
+        self.artworkUrl = artworkUrl
+        self.summaryQuote = summaryQuote
+        self.editorialParagraphs = editorialParagraphs
+        self.recordingStudios = recordingStudios
+        self.tracks = tracks
+    }
+}
+
+public struct BookletInfo: Codable, Sendable, Equatable {
+    public var available: Bool
+    public var bookletId: String
+    public var title: String
+    public var album: String
+    public var artist: String
+    public var source: String
+    public var sourceTitle: String
+    public var isOriginalPdf: Bool
+    public var hasEditorialNotes: Bool
+    public var pageCount: Int
+    public var fileSizeBytes: Int
+    public var recordLabel: String?
+    public var copyright: String?
+    public var releaseDate: String?
+    public var pdfUrl: String
+    public var pages: [BookletPageInfo]
+    public var editorial: BookletEditorialContent?
+
+    enum CodingKeys: String, CodingKey {
+        case available
+        case bookletId = "booklet_id"
+        case title
+        case album
+        case artist
+        case source
+        case sourceTitle = "source_title"
+        case isOriginalPdf = "is_original_pdf"
+        case hasEditorialNotes = "has_editorial_notes"
+        case pageCount = "page_count"
+        case fileSizeBytes = "file_size_bytes"
+        case recordLabel = "record_label"
+        case copyright
+        case releaseDate = "release_date"
+        case pdfUrl = "pdf_url"
+        case pages
+        case editorial
+    }
+
+    public init(
+        available: Bool,
+        bookletId: String,
+        title: String,
+        album: String,
+        artist: String,
+        source: String,
+        sourceTitle: String,
+        isOriginalPdf: Bool,
+        hasEditorialNotes: Bool = false,
+        pageCount: Int,
+        fileSizeBytes: Int,
+        recordLabel: String? = nil,
+        copyright: String? = nil,
+        releaseDate: String? = nil,
+        pdfUrl: String,
+        pages: [BookletPageInfo],
+        editorial: BookletEditorialContent? = nil
+    ) {
+        self.available = available
+        self.bookletId = bookletId
+        self.title = title
+        self.album = album
+        self.artist = artist
+        self.source = source
+        self.sourceTitle = sourceTitle
+        self.isOriginalPdf = isOriginalPdf
+        self.hasEditorialNotes = hasEditorialNotes
+        self.pageCount = pageCount
+        self.fileSizeBytes = fileSizeBytes
+        self.recordLabel = recordLabel
+        self.copyright = copyright
+        self.releaseDate = releaseDate
+        self.pdfUrl = pdfUrl
+        self.pages = pages
+        self.editorial = editorial
+    }
+}
+
 

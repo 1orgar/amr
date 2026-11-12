@@ -122,8 +122,10 @@ final class UPnPMediaRendererServerTests: XCTestCase {
         // startIfEnabled should return false when disabled
         XCTAssertFalse(server.startIfEnabled(port: 8090))
 
-        // Toggle back to true
-        server.setEnabled(true)
+        // Toggle back to true (persist preference without leaving network listener active in test process)
+        server.isEnabled = true
+        server.stop()
+        SSDPService.shared.stop()
         XCTAssertTrue(server.isEnabled)
         XCTAssertTrue(UserDefaults.standard.bool(forKey: UPnPMediaRendererServer.defaultsKey))
     }

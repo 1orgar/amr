@@ -199,20 +199,7 @@ public final class PlaybackRouter: @unchecked Sendable {
     }
 
     public func stopAndClearAMRQueue() {
-        if isTestingEnvironment {
-            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
-            return
-        }
-        _ = AppleScriptExecutor.shared.execute("""
-        tell application "Music"
-            try
-                stop
-            end try
-            try
-                delete (every user playlist whose name is "Очередь AMR")
-            end try
-        end tell
-        """)
+        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
     }
 
     public func playTrackByDatabaseIdViaAMRQueue(_ dbId: Int, generation: UInt64? = nil) -> Bool {
@@ -236,20 +223,9 @@ public final class PlaybackRouter: @unchecked Sendable {
                 set foundTrack to (first track of library playlist 1 whose database ID is \(dbId))
             end try
             if foundTrack is missing value then
-                repeat with p in (get every subscription playlist)
-                    try
-                        set foundTrack to (first track of p whose database ID is \(dbId))
-                        exit repeat
-                    end try
-                end repeat
-            end if
-            if foundTrack is missing value then
-                repeat with p in (get every user playlist)
-                    try
-                        set foundTrack to (first track of p whose database ID is \(dbId))
-                        exit repeat
-                    end try
-                end repeat
+                try
+                    set foundTrack to (first track whose database ID is \(dbId))
+                end try
             end if
             if foundTrack is not missing value then
                 set shuffle enabled to false

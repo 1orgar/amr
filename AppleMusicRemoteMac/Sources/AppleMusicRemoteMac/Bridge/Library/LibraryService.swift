@@ -48,7 +48,7 @@ public final class LibraryService: @unchecked Sendable {
 
     public func getPlaylists(forceRefresh: Bool = false) -> [PlaylistInfo] {
         lock.lock()
-        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 30.0 {
+        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 120.0 {
             let list = cached.playlists
             lock.unlock()
             return list
@@ -59,7 +59,7 @@ public final class LibraryService: @unchecked Sendable {
         defer { playlistsFetchLock.unlock() }
 
         lock.lock()
-        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 30.0 {
+        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 120.0 {
             let list = cached.playlists
             lock.unlock()
             return list
@@ -71,7 +71,7 @@ public final class LibraryService: @unchecked Sendable {
 
         MusicAppProvider.shared.ensureMusicAppRunning()
 
-        // 1. Ultra-fast batch query via AppleScript (queries all playlists in ~0.05s)
+        // 1. Ultra-fast batch query via AppleScript (queries all playlists in ~0.05s, skipping full-library track counts)
         let scriptSrc = """
         tell application "Music"
             set res to {}
@@ -80,11 +80,13 @@ public final class LibraryService: @unchecked Sendable {
                 repeat with p in pList
                     try
                         set pName to (name of p as string)
-                        set pCount to 0
-                        try
-                            set pCount to (count of tracks of p)
-                        end try
-                        set end of res to (pName & "|||" & pCount)
+                        if pName is not in {"Музыка", "Music", "Медиатека", "Библиотека", "Очередь AMR"} then
+                            set pCount to 0
+                            try
+                                set pCount to (count of tracks of p)
+                            end try
+                            set end of res to (pName & "|||" & pCount)
+                        end if
                     end try
                 end repeat
             end try
@@ -190,7 +192,7 @@ public final class LibraryService: @unchecked Sendable {
     public func getPlaylistTracks(name: String) -> [TrackInfo] {
         guard !name.isEmpty else { return [] }
         lock.lock()
-        if let entry = playlistTracksCache[name], Date().timeIntervalSince(entry.timestamp) < 20.0 {
+        if let entry = playlistTracksCache[name], Date().timeIntervalSince(entry.timestamp) < 120.0 {
             let cached = entry.tracks
             lock.unlock()
             return cached
@@ -209,7 +211,7 @@ public final class LibraryService: @unchecked Sendable {
         defer { plLock.unlock() }
 
         lock.lock()
-        if let entry = playlistTracksCache[name], Date().timeIntervalSince(entry.timestamp) < 20.0 {
+        if let entry = playlistTracksCache[name], Date().timeIntervalSince(entry.timestamp) < 120.0 {
             let cached = entry.tracks
             lock.unlock()
             return cached
@@ -280,14 +282,10 @@ public final class LibraryService: @unchecked Sendable {
 
                         var artUrl = ""
                         if dbId > 0 {
-                            if let cached = ArtworkService.shared.getCachedTrackArtwork(id: dbId) {
-                                artUrl = "data:image/jpeg;base64,\(cached.base64EncodedString())"
-                            } else {
-                                let encN = tName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                                let encA = tArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                                let encAl = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                                artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
-                            }
+                            let encN = tName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                            let encA = tArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                            let encAl = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                            artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
                         } else if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
                             artUrl = cached
                         } else if let local = ArtworkService.shared.findLocalTrackArtwork(name: tName, artist: tArtist), !local.isEmpty {
@@ -425,7 +423,7 @@ public final class LibraryService: @unchecked Sendable {
 
     public func getLibrarySongs() -> [TrackInfo] {
         lock.lock()
-        if let entry = librarySongsCache, Date().timeIntervalSince(entry.timestamp) < 30.0 {
+        if let entry = librarySongsCache, Date().timeIntervalSince(entry.timestamp) < 300.0 {
             let cached = entry.tracks
             lock.unlock()
             return cached
@@ -436,7 +434,7 @@ public final class LibraryService: @unchecked Sendable {
         defer { librarySongsFetchLock.unlock() }
 
         lock.lock()
-        if let entry = librarySongsCache, Date().timeIntervalSince(entry.timestamp) < 30.0 {
+        if let entry = librarySongsCache, Date().timeIntervalSince(entry.timestamp) < 300.0 {
             let cached = entry.tracks
             lock.unlock()
             return cached
@@ -514,8 +512,12 @@ public final class LibraryService: @unchecked Sendable {
                 }
             }
 
-            let subSongs = getSubscriptionPlaylistSongs()
-            for song in subSongs {
+            let cachedSubSongs: [TrackInfo] = {
+                lock.lock()
+                defer { lock.unlock() }
+                return subscriptionSongsCache?.tracks ?? []
+            }()
+            for song in cachedSubSongs {
                 let norm = Self.normalizeMatchingTitle(song.name)
                 if !norm.isEmpty {
                     normMap[norm, default: []].append(song)
@@ -657,10 +659,15 @@ public final class LibraryService: @unchecked Sendable {
 
     public func resolveLocalLibraryMatches(_ tracks: [TrackInfo], updateNames: Bool = false) -> [TrackInfo] {
         guard !tracks.isEmpty else { return tracks }
-        _ = getLibrarySongs()
         lock.lock()
+        let needsRefresh = librarySongsCache == nil || Date().timeIntervalSince(librarySongsCache!.timestamp) >= 300.0
         let normMap = librarySongsByNormalizedTitle
         lock.unlock()
+        if needsRefresh && !PlaybackRouter.shared.isTestingEnvironment {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
+                _ = self.getLibrarySongs()
+            }
+        }
         guard !normMap.isEmpty else { return tracks }
 
         var resolved = tracks
@@ -695,6 +702,9 @@ public final class LibraryService: @unchecked Sendable {
                     }
                 }
                 if let match = matchedTrack {
+                    if resolved[i].catalogId == nil, AppleSoundCheckService.isValidCatalogId(resolved[i].id) {
+                        resolved[i].catalogId = resolved[i].id
+                    }
                     resolved[i].numericId = match.numericId
                     resolved[i].isLocal = true
                     if resolved[i].duration <= 0 && match.duration > 0 {
@@ -895,127 +905,46 @@ public final class LibraryService: @unchecked Sendable {
 
     public func getPersonalHomeFeed() -> [String: Any] {
         lock.lock()
-        if let feed = cachedHomeFeed, let ts = homeFeedTimestamp, Date().timeIntervalSince(ts) < 20.0 {
+        if let feed = cachedHomeFeed, let ts = homeFeedTimestamp, Date().timeIntervalSince(ts) < 60.0 {
             lock.unlock()
             return feed
         }
         lock.unlock()
 
-        guard let app = MusicAppProvider.shared.getMusicApp() else { return [:] }
-        let playlists = app.playlists()
-        var allTracks = [[String: Any]]()
-        var playlistsList = [[String: Any]]()
+        let songs = getLibrarySongs()
+        let playlists = getPlaylists()
 
-        for pObj in playlists {
-            guard let p = pObj as? SBObject else { continue }
-            let pName = p.sbName
-            if pName == "Музыка" || pName == "Music" || pName == "Медиатека" || pName == "Библиотека" {
-                if let tracks = p.sbTracks {
-                    let total = tracks.count
-                    let maxScan = min(total, 120)
-                    let startIdx = max(0, total - maxScan)
-                    for i in startIdx..<total {
-                        guard let t = tracks[i] as? SBObject else { continue }
-                        let name = t.sbName
-                        let artist = t.sbArtist
-                        let album = t.sbAlbum
-                        let dur = t.sbDuration
-                        let dbId = t.sbDatabaseID
-
-                        if isValidTrack(name: name, artist: artist, duration: dur) {
-                            let playedCount = t.sbPlayedCount
-                            let playedDate = t.sbPlayedDate?.timeIntervalSince1970 ?? 0
-                            let dateAdded = t.sbDateAdded?.timeIntervalSince1970 ?? 0
-
-                            PlaybackStateStore.shared.setTrackMetadata(id: dbId, name: name, artist: artist, album: album)
-
-                            allTracks.append([
-                                "id": "\(dbId)",
-                                "numeric_id": dbId,
-                                "name": name,
-                                "artist": artist,
-                                "album": album,
-                                "duration": dur,
-                                "played_count": playedCount,
-                                "played_date": playedDate,
-                                "date_added": dateAdded,
-                                "artwork": "/api/artwork/track?id=\(dbId)",
-                                "is_local": true
-                            ])
-                        }
-                    }
-                }
-            } else if pName != "Медиатека" && pName != "Музыка" && pName != "Music" && pName != "Очередь AMR" {
-                let count = p.sbTracks?.count ?? 0
-                if count > 0 {
-                    let enc = pName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                    playlistsList.append([
-                        "name": pName,
-                        "track_count": count,
-                        "artwork": "/api/artwork/playlist?name=\(enc)",
-                        "is_playlist": true
-                    ])
-                }
-            }
+        let allTracks: [[String: Any]] = songs.suffix(120).map { t in
+            let dbId = t.numericId ?? Int(t.id) ?? 0
+            return [
+                "id": t.id,
+                "numeric_id": dbId,
+                "name": t.name,
+                "artist": t.artist,
+                "album": t.album,
+                "duration": t.duration,
+                "played_count": t.favorited ? 5 : 1,
+                "played_date": 0.0,
+                "date_added": 0.0,
+                "artwork": t.artworkUrl.isEmpty ? "/api/artwork/track?id=\(dbId)" : t.artworkUrl,
+                "is_local": true
+            ]
         }
 
-        // 1. Top Picks (played_count > 0)
-        let topCandidates = allTracks.filter { ($0["played_count"] as? Int ?? 0) > 0 }
-        let topPicks = topCandidates.sorted { ($0["played_count"] as? Int ?? 0) > ($1["played_count"] as? Int ?? 0) }
-        var seenTop = Set<String>()
-        var dedupTop = [[String: Any]]()
-        for track in topPicks {
-            let name = (track["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let artist = (track["artist"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let key = "\(name)|\(artist)"
-            if !name.isEmpty && !seenTop.contains(key) {
-                seenTop.insert(key)
-                dedupTop.append(track)
-            }
+        let playlistsList: [[String: Any]] = playlists.compactMap { p in
+            guard p.trackCount > 0 else { return nil }
+            let enc = p.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            return [
+                "name": p.name,
+                "track_count": p.trackCount,
+                "artwork": p.artworkUrl ?? "/api/artwork/playlist?name=\(enc)",
+                "is_playlist": true
+            ]
         }
-        let top15 = Array(dedupTop.prefix(15))
 
-        // 2. Recently Played
-        let recentCandidates = allTracks.filter { ($0["played_date"] as? Double ?? 0) > 0 }
-        let recentlyPlayed = recentCandidates.sorted { ($0["played_date"] as? Double ?? 0) > ($1["played_date"] as? Double ?? 0) }
-        var seenRecent = Set<String>()
-        var deduplicatedRecent = [[String: Any]]()
-        for track in recentlyPlayed {
-            let name = (track["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let artist = (track["artist"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let key = "\(name)|\(artist)"
-            if !name.isEmpty && !seenRecent.contains(key) {
-                seenRecent.insert(key)
-                deduplicatedRecent.append(track)
-            }
-        }
-        if deduplicatedRecent.isEmpty {
-            for track in allTracks.prefix(30) {
-                let name = (track["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                let artist = (track["artist"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                let key = "\(name)|\(artist)"
-                if !name.isEmpty && !seenRecent.contains(key) {
-                    seenRecent.insert(key)
-                    deduplicatedRecent.append(track)
-                }
-            }
-        }
-        let recent15 = Array(deduplicatedRecent.prefix(30))
-
-        // 3. Recently Added
-        let recentlyAdded = allTracks.sorted { ($0["date_added"] as? Double ?? 0) > ($1["date_added"] as? Double ?? 0) }
-        var seenAdded = Set<String>()
-        var dedupAdded = [[String: Any]]()
-        for track in recentlyAdded {
-            let name = (track["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let artist = (track["artist"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let key = "\(name)|\(artist)"
-            if !name.isEmpty && !seenAdded.contains(key) {
-                seenAdded.insert(key)
-                dedupAdded.append(track)
-            }
-        }
-        let added15 = Array(dedupAdded.prefix(15))
+        let top15 = Array(allTracks.prefix(15))
+        let recent15 = Array(allTracks.suffix(30).reversed())
+        let added15 = Array(allTracks.suffix(15).reversed())
 
         let feed: [String: Any] = [
             "top_picks": top15,

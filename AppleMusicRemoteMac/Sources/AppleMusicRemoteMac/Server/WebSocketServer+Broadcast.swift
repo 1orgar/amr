@@ -124,6 +124,61 @@ extension WebSocketServer {
         }
     }
 
+    public func sendEvent(name: String, data: [String: Any], to connection: NWConnection) {
+        let envelope: [String: Any] = [
+            "event": name,
+            "type": name,
+            "data": sanitizeForJSON(data)
+        ]
+        if let json = try? JSONSerialization.data(withJSONObject: envelope),
+           let text = String(data: json, encoding: .utf8) {
+            sendText(text, to: connection)
+        }
+    }
+
+    public func pushDeviceAuthStatus(for record: ClientDeviceRecord, newlyAuthorized: Bool) {
+        let connIds = ClientDeviceManager.shared.getConnectionIds(forDeviceId: record.deviceId)
+        guard !connIds.isEmpty else { return }
+
+        clientLock.lock()
+        let conns = connIds.compactMap { clients[$0] }
+        clientLock.unlock()
+
+        let dict = record.dictionary
+        for conn in conns {
+            sendEvent(name: "device_auth_status", data: dict, to: conn)
+        }
+
+        if newlyAuthorized && record.isAuthorized {
+            let status = MusicBridge.shared.getPlayerStatus()
+            for conn in conns {
+                sendEvent("player_state_changed", data: status, to: conn)
+            }
+            Task {
+                let queue = await MusicBridge.shared.getPlaybackQueue()
+                for conn in conns {
+                    sendEvent("queue", data: queue, to: conn)
+                }
+            }
+        }
+    }
+
+    public func pushDeviceRemoved(for record: ClientDeviceRecord) {
+        let connIds = ClientDeviceManager.shared.getConnectionIds(forDeviceId: record.deviceId)
+        guard !connIds.isEmpty else { return }
+
+        clientLock.lock()
+        let conns = connIds.compactMap { clients[$0] }
+        clientLock.unlock()
+
+        var dict = record.dictionary
+        dict["authorized"] = false
+        dict["removed"] = true
+        for conn in conns {
+            sendEvent(name: "device_auth_status", data: dict, to: conn)
+        }
+    }
+
     public func broadcastEvent<T: Encodable>(_ eventName: String, data: T) {
         let env = EventEnvelope(event: eventName, type: eventName, data: data)
         if let encoded = try? JSONEncoder().encode(env),
@@ -164,8 +219,11 @@ extension WebSocketServer {
     }
 
     public func broadcastText(_ text: String) {
+        let unauthIds = ClientDeviceManager.shared.getUnauthorizedConnectionIds()
         clientLock.lock()
-        let active = Array(clients.values)
+        let active = clients.compactMap { (id, conn) -> NWConnection? in
+            unauthIds.contains(id) ? nil : conn
+        }
         clientLock.unlock()
 
         for conn in active {
@@ -175,8 +233,11 @@ extension WebSocketServer {
 
     public func broadcastStatus(status customStatus: PlayerStatus? = nil, includeQueue: Bool = false) {
         let status = customStatus ?? MusicBridge.shared.getPlayerStatus()
+        let unauthIds = ClientDeviceManager.shared.getUnauthorizedConnectionIds()
         clientLock.lock()
-        let active = Array(clients.values)
+        let active = clients.compactMap { (id, conn) -> NWConnection? in
+            unauthIds.contains(id) ? nil : conn
+        }
         clientLock.unlock()
 
         for conn in active {
@@ -188,9 +249,6 @@ extension WebSocketServer {
                 let queue = await MusicBridge.shared.getPlaybackQueue()
                 for conn in active {
                     sendEvent("queue_changed", data: queue, to: conn)
-                }
-                await MainActor.run {
-                    MenuManager.shared.updateMenuState(with: status)
                 }
             }
         }

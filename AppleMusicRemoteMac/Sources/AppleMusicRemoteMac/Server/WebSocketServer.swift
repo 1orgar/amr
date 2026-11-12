@@ -27,6 +27,8 @@ public final class WebSocketServer: @unchecked Sendable {
     let liveStreamLock = NSLock()
     let clientLock = NSRecursiveLock()
     let sendLock = NSRecursiveLock()
+    let curateTaskLock = NSLock()
+    var activeCurateTask: Task<Void, Never>?
     var isRunning = false
     public private(set) var port: Int = 8080
 
@@ -251,9 +253,35 @@ public final class WebSocketServer: @unchecked Sendable {
         let count = clients.count
         clientLock.unlock()
 
+        ClientDeviceManager.shared.unregisterConnection(connectionId: clientId)
         conn.cancel()
         NSLog("[WebSocket] Client disconnected. Total clients: %d", count)
         delegate?.webSocketServer(self, didUpdateClientCount: count)
+    }
+
+    internal func extractRemoteIP(from connection: NWConnection) -> String {
+        switch connection.endpoint {
+        case .hostPort(let host, _):
+            let raw = "\(host)"
+            if let pct = raw.firstIndex(of: "%") {
+                return String(raw[..<pct])
+            }
+            return raw
+        default:
+            return ""
+        }
+    }
+
+    internal func extractCookie(named name: String, from headerString: String) -> String? {
+        guard let cookieLine = extractHeader(named: "cookie", from: headerString) else { return nil }
+        let target = name.lowercased() + "="
+        for part in cookieLine.components(separatedBy: ";") {
+            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.lowercased().hasPrefix(target) {
+                return String(trimmed.dropFirst(target.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return nil
     }
 
     private func readInitialConnection(clientId: UUID, connection: NWConnection, buffer: Data) {
@@ -316,11 +344,36 @@ public final class WebSocketServer: @unchecked Sendable {
                     NSLog("[WebSocket] Handshake complete. Total WebSocket clients: %d", count)
                     self.delegate?.webSocketServer(self, didUpdateClientCount: count)
 
-                    let status = MusicBridge.shared.getPlayerStatus()
-                    self.sendEvent("player_state_changed", data: status, to: c)
-                    Task {
-                        let queue = await MusicBridge.shared.getPlaybackQueue()
-                        self.sendEvent("queue", data: queue, to: c)
+                    if let cookieUid = self.extractCookie(named: "amr_device_uid", from: headerString),
+                       !cookieUid.isEmpty {
+                        let remoteIP = self.extractRemoteIP(from: c)
+                        let existing = ClientDeviceManager.shared.getDevice(deviceId: cookieUid)
+                        let record = ClientDeviceManager.shared.registerConnection(
+                            connectionId: clientId,
+                            deviceId: cookieUid,
+                            deviceName: existing?.deviceName ?? "",
+                            deviceType: existing?.deviceType ?? "mobile",
+                            preferredLockScreen: existing?.lockScreenControls,
+                            remoteIP: remoteIP
+                        )
+                        self.sendEvent(name: "device_auth_status", data: record.dictionary, to: c)
+                        if record.isAuthorized {
+                            let status = MusicBridge.shared.getPlayerStatus()
+                            self.sendEvent("player_state_changed", data: status, to: c)
+                            Task {
+                                let queue = await MusicBridge.shared.getPlaybackQueue()
+                                self.sendEvent("queue", data: queue, to: c)
+                            }
+                        }
+                    } else {
+                        // Headless / Node.js / API WebSocket client without PWA cookie:
+                        // send initial status & queue immediately for API compatibility.
+                        let status = MusicBridge.shared.getPlayerStatus()
+                        self.sendEvent("player_state_changed", data: status, to: c)
+                        Task {
+                            let queue = await MusicBridge.shared.getPlaybackQueue()
+                            self.sendEvent("queue", data: queue, to: c)
+                        }
                     }
 
                     self.readWebSocketFrames(clientId: clientId, connection: c, buffer: restData)
@@ -343,7 +396,7 @@ public final class WebSocketServer: @unchecked Sendable {
     }
 
     private func readRemainingHTTPBody(clientId: UUID, connection: NWConnection, headerString: String, buffer: Data, expectedLen: Int) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self, weak connection] content, _, isComplete, error in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 524288) { [weak self, weak connection] content, _, isComplete, error in
             guard let self = self, let conn = connection else { return }
             if let error = error {
                 NSLog("[Server] HTTP body receive error: %@", error.localizedDescription)
@@ -370,7 +423,7 @@ public final class WebSocketServer: @unchecked Sendable {
             case 0x01:
                 if let text = String(data: payload, encoding: .utf8) {
                     Task {
-                        await self.processClientTextMessage(text, connection: connection)
+                        await self.processClientTextMessage(text, clientId: clientId, connection: connection)
                     }
                 }
             case 0x02:
@@ -537,17 +590,20 @@ public final class WebSocketServer: @unchecked Sendable {
             let state = status.playerState
             let pos = status.position
             let trackId = status.track?.id ?? ""
+            let trackName = status.track?.name ?? ""
+            let trackArtist = status.track?.artist ?? ""
+            let trackCompositeKey = (!trackId.isEmpty || !trackName.isEmpty) ? "\(trackId)|\(trackName)|\(trackArtist)" : ""
 
             let stateChanged = (state != self.lastKnownState)
-            let trackChanged = (!trackId.isEmpty && trackId != self.lastKnownTrackId)
+            let trackChanged = (!trackCompositeKey.isEmpty && trackCompositeKey != self.lastKnownTrackId)
             let posJumped = abs(pos - self.lastKnownPosition) > 2.5
             let isPlaying = (state == "playing")
 
             if stateChanged || trackChanged || posJumped || (isPlaying && Date().timeIntervalSince(self.lastBroadcastTime) >= 3.0) {
                 self.lastKnownState = state
                 self.lastKnownPosition = pos
-                if !trackId.isEmpty {
-                    self.lastKnownTrackId = trackId
+                if !trackCompositeKey.isEmpty {
+                    self.lastKnownTrackId = trackCompositeKey
                 }
                 self.lastBroadcastTime = Date()
                 self.broadcastStatus(includeQueue: trackChanged)

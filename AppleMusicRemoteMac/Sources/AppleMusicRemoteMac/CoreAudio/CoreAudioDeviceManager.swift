@@ -55,12 +55,88 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
     public var onDevicesChanged: (([AudioOutputDevice]) -> Void)?
     public var onSampleRateChanged: ((AudioDeviceID, Double) -> Void)?
 
+    // MARK: - DAC Muting Guard Configuration & Telemetry
+
+    private static let keyMutingGuardEnabled = "DACMutingGuardEnabled"
+    private static let keyMutingGuardDurationMs = "DACMutingGuardDurationMs"
+    public static let supportedMutingGuardDurationsMs: [Int] = [50, 100, 150, 250]
+
+    private let mutingGuardLock = NSLock()
+    private let mutingGuardQueue = DispatchQueue(label: "org.ksholokhov.amr.dacmutingguard", qos: .userInteractive)
+    private var unmuteWorkItem: DispatchWorkItem?
+    private var isMutingGuardEnabledInternal: Bool
+    private var mutingGuardDurationMsInternal: Int
+    private var isMutingGuardActiveInternal: Bool = false
+    private var mutingGuardActivationCountInternal: Int = 0
+    private var preGuardAppVolume: Int?
+    private var hardwareMutedDeviceID: AudioDeviceID?
+
+    /// Whether DAC Muting Guard (click-free relay switching) is enabled in app configuration.
+    public var isMutingGuardEnabled: Bool {
+        get {
+            mutingGuardLock.lock()
+            defer { mutingGuardLock.unlock() }
+            return isMutingGuardEnabledInternal
+        }
+        set {
+            mutingGuardLock.lock()
+            let changed = (isMutingGuardEnabledInternal != newValue)
+            isMutingGuardEnabledInternal = newValue
+            UserDefaults.standard.set(newValue, forKey: Self.keyMutingGuardEnabled)
+            mutingGuardLock.unlock()
+            if changed {
+                NSLog("[CoreAudioDeviceManager] 🔇 DAC Muting Guard is now: %@", newValue ? "ON (\(mutingGuardDurationMs) ms)" : "OFF")
+            }
+        }
+    }
+
+    /// Silence pre-pause / relay settling duration in milliseconds (30...500 ms, default 100 ms).
+    public var mutingGuardDurationMs: Int {
+        get {
+            mutingGuardLock.lock()
+            defer { mutingGuardLock.unlock() }
+            return mutingGuardDurationMsInternal
+        }
+        set {
+            let clamped = max(30, min(500, newValue))
+            mutingGuardLock.lock()
+            let changed = (mutingGuardDurationMsInternal != clamped)
+            mutingGuardDurationMsInternal = clamped
+            UserDefaults.standard.set(clamped, forKey: Self.keyMutingGuardDurationMs)
+            mutingGuardLock.unlock()
+            if changed {
+                NSLog("[CoreAudioDeviceManager] ⏱️ DAC Muting Guard duration set to: %d ms", clamped)
+            }
+        }
+    }
+
+    /// True while DAC Muting Guard is actively holding digital silence during a sample-rate switch.
+    public var isMutingGuardActive: Bool {
+        mutingGuardLock.lock()
+        defer { mutingGuardLock.unlock() }
+        return isMutingGuardActiveInternal
+    }
+
+    /// Total number of times DAC Muting Guard has engaged during this session.
+    public var mutingGuardActivationCount: Int {
+        mutingGuardLock.lock()
+        defer { mutingGuardLock.unlock() }
+        return mutingGuardActivationCountInternal
+    }
+
     private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var sampleRateListenerBlock: AudioObjectPropertyListenerBlock?
     private var devicesListListenerBlock: AudioObjectPropertyListenerBlock?
     private var monitoredDeviceID: AudioDeviceID?
 
     private init() {
+        if UserDefaults.standard.object(forKey: Self.keyMutingGuardEnabled) == nil {
+            self.isMutingGuardEnabledInternal = false
+        } else {
+            self.isMutingGuardEnabledInternal = UserDefaults.standard.bool(forKey: Self.keyMutingGuardEnabled)
+        }
+        let savedMs = UserDefaults.standard.integer(forKey: Self.keyMutingGuardDurationMs)
+        self.mutingGuardDurationMsInternal = (savedMs >= 30 && savedMs <= 500) ? savedMs : 100
         setupHardwareListeners()
     }
 
@@ -214,14 +290,20 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         let currentRate = doubleProperty(objectID: targetID, selector: kAudioDevicePropertyNominalSampleRate) ?? 0
 
         // If rate is already identical and bit depth does not require modification, skip CoreAudio calls
-        if abs(currentRate - targetRate) < 0.5 {
-            if bitDepth == nil || isCurrentBitDepth(UInt32(bitDepth!), deviceID: targetID, sampleRate: targetRate) {
-                return true
-            }
+        let needsRateSwitch = abs(currentRate - targetRate) >= 0.5
+        let needsBitDepthSwitch = (bitDepth != nil) && !isCurrentBitDepth(UInt32(bitDepth!), deviceID: targetID, sampleRate: targetRate)
+        if !needsRateSwitch && !needsBitDepthSwitch {
+            return true
+        }
+
+        let useMutingGuard = isMutingGuardEnabled && (needsRateSwitch || needsBitDepthSwitch)
+        let guardMs = mutingGuardDurationMs
+        if useMutingGuard {
+            engageMutingGuardPreSwitch(deviceID: targetID, durationMs: guardMs, fromRate: currentRate, toRate: targetRate)
         }
 
         var rateChanged = false
-        if abs(currentRate - targetRate) >= 0.5 {
+        if needsRateSwitch {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyNominalSampleRate,
                 mScope: kAudioObjectPropertyScopeGlobal,
@@ -244,12 +326,146 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             bitsChanged = setStreamBitDepth(UInt32(targetBits), sampleRate: targetRate, deviceID: targetID)
         }
 
+        if useMutingGuard {
+            scheduleMutingGuardPostSwitchRelease(deviceID: targetID, durationMs: guardMs, targetRate: targetRate)
+        }
+
         if rateChanged || bitsChanged {
             let bitDepthStr = bitDepth != nil ? ", \(bitDepth!) бит" : ""
-            NSLog("[CoreAudioDeviceManager] ✅ Switched device %u format: %.1f kHz%@ (was %.1f kHz)",
-                  targetID, targetRate / 1000.0, bitDepthStr, currentRate / 1000.0)
+            let guardTag = useMutingGuard ? " [🔇 DAC Muting Guard \(guardMs)ms]" : ""
+            NSLog("[CoreAudioDeviceManager] ✅ Switched device %u format: %.1f kHz%@ (was %.1f kHz)%@",
+                  targetID, targetRate / 1000.0, bitDepthStr, currentRate / 1000.0, guardTag)
         }
         return true
+    }
+
+    // MARK: - DAC Muting Guard Implementation (Click-Free Relay Switching)
+
+    /// Executes a deterministic DAC Muting Guard cycle around a custom format-switch closure (used in live switching & unit tests).
+    public func performClickFreeSwitchCycle(
+        deviceID: AudioDeviceID = 0,
+        fromRate: Double,
+        toRate: Double,
+        switchOperation: () -> Void,
+        completion: (() -> Void)? = nil
+    ) {
+        let needsSwitch = abs(fromRate - toRate) >= 0.5
+        guard isMutingGuardEnabled && needsSwitch else {
+            switchOperation()
+            completion?()
+            return
+        }
+        let guardMs = mutingGuardDurationMs
+        engageMutingGuardPreSwitch(deviceID: deviceID, durationMs: guardMs, fromRate: fromRate, toRate: toRate)
+        switchOperation()
+        scheduleMutingGuardPostSwitchRelease(deviceID: deviceID, durationMs: guardMs, targetRate: toRate, completion: completion)
+    }
+
+    private func engageMutingGuardPreSwitch(deviceID: AudioDeviceID, durationMs: Int, fromRate: Double, toRate: Double) {
+        mutingGuardLock.lock()
+        unmuteWorkItem?.cancel()
+        unmuteWorkItem = nil
+        let wasAlreadyActive = isMutingGuardActiveInternal
+        isMutingGuardActiveInternal = true
+        mutingGuardActivationCountInternal += 1
+
+        if !wasAlreadyActive && !PlaybackRouter.shared.isTestingEnvironment {
+            if let app = MusicAppProvider.shared.getMusicApp() {
+                let currentVol = app.soundVolume
+                if currentVol > 0 {
+                    preGuardAppVolume = currentVol
+                }
+                app.soundVolume = 0
+            }
+            if deviceID != 0 && setHardwareMute(true, for: deviceID) {
+                hardwareMutedDeviceID = deviceID
+            }
+        }
+        mutingGuardLock.unlock()
+
+        AudioProcessTapService.shared.setMutingGuardZeroFill(true)
+
+        // Drain CoreAudio output FIFO with digital silence before flipping the hardware oscillator/relay
+        let preDelaySec: Double
+        if PlaybackRouter.shared.isTestingEnvironment {
+            preDelaySec = min(0.015, Double(durationMs) * 0.30 / 1000.0)
+        } else if Thread.isMainThread {
+            preDelaySec = min(0.020, Double(durationMs) * 0.25 / 1000.0)
+        } else {
+            preDelaySec = min(0.045, Double(durationMs) * 0.30 / 1000.0)
+        }
+        if preDelaySec > 0.001 {
+            usleep(UInt32(preDelaySec * 1_000_000))
+        }
+    }
+
+    private func scheduleMutingGuardPostSwitchRelease(
+        deviceID: AudioDeviceID,
+        durationMs: Int,
+        targetRate: Double,
+        completion: (() -> Void)? = nil
+    ) {
+        let postDelaySec: Double
+        if PlaybackRouter.shared.isTestingEnvironment {
+            postDelaySec = min(0.035, Double(durationMs) * 0.70 / 1000.0)
+        } else {
+            postDelaySec = max(0.025, Double(durationMs) * 0.70 / 1000.0)
+        }
+
+        mutingGuardLock.lock()
+        unmuteWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.releaseMutingGuard(targetRate: targetRate)
+            completion?()
+        }
+        unmuteWorkItem = item
+        mutingGuardLock.unlock()
+
+        mutingGuardQueue.asyncAfter(deadline: .now() + postDelaySec, execute: item)
+    }
+
+    private func releaseMutingGuard(targetRate: Double) {
+        mutingGuardLock.lock()
+        let mutedDev = hardwareMutedDeviceID
+        hardwareMutedDeviceID = nil
+        let savedVol = preGuardAppVolume
+        preGuardAppVolume = nil
+        isMutingGuardActiveInternal = false
+        unmuteWorkItem = nil
+        mutingGuardLock.unlock()
+
+        if !PlaybackRouter.shared.isTestingEnvironment {
+            if let devID = mutedDev, devID != 0 {
+                _ = setHardwareMute(false, for: devID)
+            }
+            if !PlaybackStateStore.shared.isDLNAMuted && !AudioDuckingController.shared.isDucked {
+                let restoreVol = PlaybackStateStore.shared.isVolumeLockedTo100 ? 100 : (savedVol ?? 100)
+                if let app = MusicAppProvider.shared.getMusicApp() {
+                    app.soundVolume = restoreVol
+                }
+            }
+        }
+
+        AudioProcessTapService.shared.setMutingGuardZeroFill(false)
+    }
+
+    @discardableResult
+    private func setHardwareMute(_ mute: Bool, for deviceID: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var isSettable: DarwinBoolean = false
+        guard AudioObjectHasProperty(deviceID, &address),
+              AudioObjectIsPropertySettable(deviceID, &address, &isSettable) == noErr,
+              isSettable.boolValue else {
+            return false
+        }
+        var val: UInt32 = mute ? 1 : 0
+        let size = UInt32(MemoryLayout<UInt32>.size)
+        return AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, &val) == noErr
     }
 
     private func isCurrentBitDepth(_ targetBits: UInt32, deviceID: AudioDeviceID, sampleRate: Double) -> Bool {

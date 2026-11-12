@@ -13,6 +13,7 @@ public final class QueueManager: @unchecked Sendable {
     public static let shared = QueueManager()
 
     private let lock = NSLock()
+    let monitorLock = NSRecursiveLock()
     private var albumTracksCache: [String: (timestamp: Date, tracks: [TrackInfo])] = [:]
     var queueTimer: DispatchSourceTimer?
     let queueTimerQueue = DispatchQueue(label: "org.ksholokhov.amr.queue.timer", qos: .utility)
@@ -77,13 +78,32 @@ public final class QueueManager: @unchecked Sendable {
             return PlaybackQueueInfo()
         }
 
-        let curTrack = app.currentTrack
+        let (hasCustomQueue, customQueue, customQueueName, activeCustomIdx, isBusyOrAMRQueue) = PlaybackStateStore.shared.withLock {
+            (
+                PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
+                PlaybackStateStore.shared.activeCustomQueue,
+                PlaybackStateStore.shared.activeCustomQueueName,
+                PlaybackStateStore.shared.activeCustomQueueIndex,
+                PlaybackStateStore.shared.isTransitioningTrack ||
+                    PlaybackStateStore.shared.isStagingCloudTrack ||
+                    !PlaybackStateStore.shared.currentTrackPlaybackConfirmed ||
+                    PlaybackStateStore.shared.currentOriginalPlaylistName == "Очередь AMR"
+            )
+        }
+
+        let curTrack = (!hasCustomQueue || !isBusyOrAMRQueue) ? app.currentTrack : nil
         var curName = curTrack?.sbName ?? ""
         var curArtist = curTrack?.sbArtist ?? ""
         var curAlbum = curTrack?.sbAlbum ?? ""
         var curDbId = (curTrack?.value(forKey: "databaseID") as? Int) ?? 0
 
-        if curName.isEmpty {
+        if hasCustomQueue && isBusyOrAMRQueue && activeCustomIdx >= 0 && activeCustomIdx < customQueue.count {
+            let expectedTrack = customQueue[activeCustomIdx]
+            curName = expectedTrack.name
+            curArtist = expectedTrack.artist
+            curAlbum = expectedTrack.album
+            curDbId = expectedTrack.numericId ?? curDbId
+        } else if curName.isEmpty {
             let status = PlayerStatusEngine.shared.getPlayerStatus()
             if let tr = status.track, !tr.name.isEmpty {
                 curName = tr.name
@@ -104,16 +124,11 @@ public final class QueueManager: @unchecked Sendable {
             }
         }
 
-        let (hasCustomQueue, customQueue, customQueueName) = PlaybackStateStore.shared.withLock {
-            (
-                PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
-                PlaybackStateStore.shared.activeCustomQueue,
-                PlaybackStateStore.shared.activeCustomQueueName
-            )
-        }
-
         // Fast path: nothing is playing and no custom queue is active
         if !hasCustomQueue && curName.isEmpty {
+            if let entry = cached, Date().timeIntervalSince(entry.timestamp) < 5.0, entry.info.totalTracks == 0 {
+                return entry.info
+            }
             let history = getRecentlyPlayed(limit: 25)
             let queueInfo = PlaybackQueueInfo(
                 playlist: "Apple Music",
@@ -124,19 +139,24 @@ public final class QueueManager: @unchecked Sendable {
                 tracks: [],
                 historyTracks: history
             )
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.playbackQueueCache = (Date(), queueInfo)
+            }
             return queueInfo
         }
 
         // 0. Custom Queue Playback
         if hasCustomQueue {
-            let (activeIdx, isTransitioning) = PlaybackStateStore.shared.withLock {
+            let (activeIdx, isTransitioning, origPl, isShufActive) = PlaybackStateStore.shared.withLock {
                 (
                     PlaybackStateStore.shared.activeCustomQueueIndex,
-                    PlaybackStateStore.shared.isTransitioningTrack
+                    PlaybackStateStore.shared.isTransitioningTrack || PlaybackStateStore.shared.isStagingCloudTrack || !PlaybackStateStore.shared.currentTrackPlaybackConfirmed,
+                    PlaybackStateStore.shared.currentOriginalPlaylistName,
+                    PlaybackStateStore.shared.isShuffleQueueActive
                 )
             }
             var matchedIdx = activeIdx
-            if !curName.isEmpty && !isTransitioning {
+            if !curName.isEmpty && !isTransitioning && origPl != "Очередь AMR" {
                 if activeIdx < customQueue.count && isTrackMatching(expected: customQueue[activeIdx], candidateName: curName, candidateArtist: curArtist) {
                     matchedIdx = activeIdx
                 } else if let foundIdx = customQueue.firstIndex(where: { isTrackMatching(expected: $0, candidateName: curName, candidateArtist: curArtist) }) {
@@ -189,7 +209,7 @@ public final class QueueManager: @unchecked Sendable {
                 playlist: customQueueName ?? "Очередь",
                 currentIndex: matchedIdx,
                 totalTracks: formattedTracks.count,
-                shuffle: app.shuffleEnabled,
+                shuffle: isShufActive,
                 upcomingTracks: upcoming,
                 tracks: formattedTracks,
                 historyTracks: recentHistory
@@ -224,7 +244,12 @@ public final class QueueManager: @unchecked Sendable {
         } else if let orig = origPl, !orig.isEmpty {
             isRadioDetected = false
         } else if isStreamTrack && curPlNameRaw.isEmpty {
-            isRadioDetected = true
+            let curKind = ((curTrack?.value(forKey: "kind") as? String) ?? "").lowercased()
+            let curDur = (curTrack?.value(forKey: "duration") as? Double) ?? 0
+            let lowerName = curName.lowercased()
+            if curKind.contains("stream") || curKind.contains("поток") || lowerName.hasPrefix("станция:") || lowerName.hasPrefix("station:") || curDur <= 0 {
+                isRadioDetected = true
+            }
         }
 
         if isRadioDetected {
@@ -308,7 +333,7 @@ public final class QueueManager: @unchecked Sendable {
         } else if !curPlName.isEmpty && curPlName != "Музыка" && curPlName != "Music" && curPlName != "Медиатека" {
             tracksList = LibraryService.shared.getPlaylistTracks(name: curPlName)
         }
-        if tracksList.isEmpty && !curPlName.isEmpty {
+        if tracksList.isEmpty && !curPlName.isEmpty && curPlName != "Музыка" && curPlName != "Music" && curPlName != "Медиатека" {
             tracksList = LibraryService.shared.getCurrentPlaylistTracks()
         }
 

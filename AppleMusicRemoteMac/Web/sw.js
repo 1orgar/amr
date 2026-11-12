@@ -1,5 +1,5 @@
 // Apple Music Remote (AMR) - Service Worker for PWA
-const CACHE_NAME = 'amr-shell-v6';
+const CACHE_NAME = 'amr-shell-v15';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

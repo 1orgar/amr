@@ -55,6 +55,9 @@ swiftc -parse-as-library \
     -framework ScriptingBridge \
     -framework CoreImage \
     -framework CoreAudio \
+    -framework Accelerate \
+    -framework NaturalLanguage \
+    -framework PDFKit \
     -framework CryptoKit \
     -framework ServiceManagement \
     "${SWIFT_SOURCES[@]}" \
@@ -81,8 +84,12 @@ else
     echo "ℹ️ AuthKey_MJHWRCSZHH.p8 not found; building without embedded key"
 fi
 
+# Resolve latest Git Commit for Info.plist
+GIT_COMMIT_SHORT="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo "7278dab")"
+GIT_COMMIT_DATE="$(git -C "$ROOT_DIR" log -1 --format="%cs" 2>/dev/null || echo "2026-11-04")"
+
 # Create Info.plist
-cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
+cat << EOF > "$CONTENTS_DIR/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -94,9 +101,13 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
     <key>CFBundleIdentifier</key>
     <string>org.ksholokhov.amr.mac</string>
     <key>CFBundleVersion</key>
-    <string>2.4.0</string>
+    <string>2.5.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.4.0</string>
+    <string>2.5.0</string>
+    <key>AMRGitCommit</key>
+    <string>$GIT_COMMIT_SHORT</string>
+    <key>AMRGitCommitDate</key>
+    <string>$GIT_COMMIT_DATE</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
@@ -111,6 +122,10 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
     <string>Apple Music Remote needs access to Apple Music to control playback and view your library.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Apple Music Remote needs permission to control the Music app.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Apple Music Remote needs audio capture access to perform real-time spectral quality verification and stream lossless PCM audio.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Apple Music Remote needs audio access to perform real-time spectral quality verification.</string>
     <key>NSBonjourServices</key>
     <array>
         <string>_applemusicremote._tcp</string>

@@ -15,6 +15,480 @@ extension WebUIContent {
 (function () {
   'use strict';
 
+  // --- Automatic English (EN) Localization for Non-Russian Device Locales ---
+  function detectIsEnglishLocale() {
+    try {
+      const qsLang = new URLSearchParams(window.location.search).get('lang');
+      if (qsLang === 'en') return true;
+      if (qsLang === 'ru') return false;
+      const saved = localStorage.getItem('amr_ui_lang');
+      if (saved === 'en') return true;
+      if (saved === 'ru') return false;
+    } catch (_) {}
+    const langs = (navigator.languages && navigator.languages.length > 0)
+      ? navigator.languages
+      : [navigator.language || 'ru'];
+    const primary = String(langs[0] || 'ru').trim().toLowerCase();
+    return !primary.startsWith('ru');
+  }
+
+  const IS_EN = detectIsEnglishLocale();
+  if (IS_EN && document.documentElement) {
+    document.documentElement.lang = 'en';
+  }
+
+  const RU_TO_EN_EXACT = {
+    'Сейчас': 'Now Playing',
+    'Главная': 'Home',
+    'Медиатека': 'Library',
+    'Очередь': 'Up Next',
+    'Поиск': 'Search',
+    'Подборки': 'Collections',
+    'Очередь воспроизведения': 'Playing Next',
+    'Очистить далее': 'Clear',
+    'СЕЙЧАС ИГРАЕТ': 'NOW PLAYING',
+    'ДАЛЕЕ В ОЧЕРЕДИ': 'UP NEXT',
+    'Нет предстоящих треков': 'No upcoming tracks',
+    'Плейлисты и альбомы': 'Playlists & Albums',
+    'Обновить': 'Refresh',
+    'Обновить список': 'Refresh list',
+    'Загрузка плейлистов...': 'Loading playlists...',
+    'Плейлисты не найдены': 'No playlists found',
+    'Плейлисты': 'Playlists',
+    'ПЛЕЙЛИСТ': 'PLAYLIST',
+    'АЛЬБОМ': 'ALBUM',
+    'Альбом': 'Album',
+    'Плейлист': 'Playlist',
+    'Исполнитель': 'Artist',
+    'Название': 'Title',
+    'Без названия': 'Untitled',
+    'Слушать': 'Play',
+    'Слушать всё': 'Play All',
+    'Перемешать': 'Shuffle',
+    'В медиатеку': 'Add to Library',
+    'В медиатеке ✓': 'In Library ✓',
+    'Добавлено ✓': 'Added ✓',
+    'Добавление...': 'Adding...',
+    'Буклет PDF': 'Booklet PDF',
+    'БУКЛЕТ PDF': 'BOOKLET PDF',
+    'Загрузка треков...': 'Loading tracks...',
+    'Загрузка треков альбома...': 'Loading album tracks...',
+    'Нет треков': 'No tracks',
+    'Плейлист пуст': 'Playlist is empty',
+    'Подборка лучших': 'Top Picks',
+    'Еженедельные миксы': 'Personal Mixes',
+    'Новинки и альбомы': 'New Releases & Albums',
+    'Станции для вас': 'Stations for You',
+    'Вы недавно слушали': 'Recently Played',
+    'Жанры и категории': 'Genres & Moods',
+    'Для вас': 'Made for You',
+    'Рекомендации': 'Recommendations',
+    'ИСТОРИЯ': 'HISTORY',
+    'Недавно прослушанные треки': 'Recently Played Tracks',
+    'Нет недавних треков': 'No recent tracks',
+    'Загрузка миксов...': 'Loading mixes...',
+    'Загрузка альбомов...': 'Loading albums...',
+    'Загрузка станций...': 'Loading stations...',
+    'Нет данных по альбомам': 'No albums available',
+    'Моя станция': 'My Station',
+    'МОЯ СТАНЦИЯ': 'MY STATION',
+    'Станция открытий': 'Discovery Station',
+    'СТАНЦИЯ ОТКРЫТИЙ': 'DISCOVERY STATION',
+    'В моем вкусе': 'Favorites Mix',
+    'В моём вкусе': 'Favorites Mix',
+    'В МОЁМ ВКУСЕ': 'FAVORITES MIX',
+    'СЕЙЧАС НА ПОВТОРЕ': 'HEAVY ROTATION',
+    'НОВИНКИ ДЛЯ ВАС': 'NEW MUSIC MIX',
+    'ЧИЛЛ-МИКС': 'CHILL MIX',
+    'ДРАЙВ-МИКС': 'GET UP! MIX',
+    'МИКС ДЛЯ ДРУЗЕЙ': 'FRIENDS MIX',
+    'РАДИОСТАНЦИЯ ПО АРТИСТУ': 'ARTIST STATION',
+    'Персональная радиостанция': 'Personal Radio Station',
+    'Специально для вас': 'Made for You',
+    'Новые треки под ваш вкус': 'New music tailored to your taste',
+    'Радиостанция': 'Radio Station',
+    'Плейлист медиатеки': 'Library Playlist',
+    'Топ-альбом': 'Top Album',
+    'Главные мировые релизы': 'Global Premieres & Shows',
+    'Культовые хиты': 'Essential Hits',
+    'Современное кантри': 'Modern Country',
+    'Спокойный ритм и фоновые биты': 'Relaxing beats & ambient grooves',
+    'Популярные поп-треки': 'Chart-topping pop anthems',
+    'Клубный драйв и энергия': 'Club & festival energy',
+    'Глубокий атмосферный грув': 'Deep atmospheric groove',
+    'Классика мирового рока': 'Timeless rock legends',
+    '🔥 Поп-музыка': '🔥 Pop',
+    '🎸 Рок & Альтернатива': '🎸 Rock & Alternative',
+    '🎤 Хип-хоп & Рэп': '🎤 Hip-Hop & Rap',
+    '⚡ Электроника & Dance': '⚡ Dance & Electronic',
+    '🎻 Неоклассика': '🎻 Neoclassical',
+    '🎬 Саундтреки': '🎬 Soundtracks',
+    'Поиск в Apple Music...': 'Search Apple Music...',
+    'Все': 'All',
+    'Песни': 'Songs',
+    'Альбомы': 'Albums',
+    'Артисты': 'Artists',
+    'ПЕСНИ': 'SONGS',
+    'АЛЬБОМЫ': 'ALBUMS',
+    'ПЛЕЙЛИСТЫ': 'PLAYLISTS',
+    'ИСПОЛНИТЕЛИ': 'ARTISTS',
+    'Ищите любимые треки, альбомы и исполнителей': 'Search for songs, albums, playlists, and artists',
+    'Поиск в каталоге Apple Music...': 'Searching Apple Music catalog...',
+    'Ничего не найдено': 'No results found',
+    'Загрузить ещё': 'Load More',
+    'Не играет': 'Not Playing',
+    'Действия с треком': 'Track Actions',
+    'Перейти к альбому': 'Go to Album',
+    'Не указан': 'Unknown Album',
+    'Цифровой буклет (PDF)': 'Digital Booklet (PDF)',
+    'Официальный буклет альбома Apple Music': 'Official Apple Music Digital Booklet',
+    'Создать радио по треку': 'Create Station from Track',
+    'Создать радио по исполнителю': 'Create Station from Artist',
+    'Избранное': 'Favorite',
+    'В избранное': 'Add to Favorites',
+    'Ещё': 'More',
+    'Случайно': 'Shuffle',
+    'Предыдущий': 'Previous',
+    'Предыдущий трек': 'Previous Track',
+    'Воспроизвести': 'Play',
+    'Воспроизведение': 'Play / Pause',
+    'Воспроизведение / Пауза': 'Play / Pause',
+    'Следующий': 'Next',
+    'Следующий трек': 'Next Track',
+    'Повтор': 'Repeat',
+    'Режим повтора': 'Repeat Mode',
+    'Отключить звук': 'Mute',
+    'Без звука': 'Mute',
+    'Громкость': 'Volume',
+    'Позиция трека': 'Track Position',
+    'Развернуть проигрыватель': 'Expand Player',
+    'Закрыть': 'Close',
+    'Очистить': 'Clear',
+    'Назад к главной': 'Back to Home',
+    'Параметры потока и ЦАП': 'Signal Path & DAC Settings',
+    'Инспектор аудиопотока и спектральный верификатор': 'Signal Path & Spectral Verifier',
+    'Статус спектрального верификатора vDSP FFT': 'vDSP FFT Spectral Verifier Status',
+    'Тракт сигнала': 'Signal Path',
+    'Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.': 'DAC sample rate is hardware-locked to the stream. Zero bit-depth degradation.',
+    'ИСТОЧНИК': 'SOURCE',
+    'АУДИОДВИЖОК': 'AUDIO ENGINE',
+    'ВЫХОДНОЙ ЦАП': 'OUTPUT DAC',
+    'УСИЛИТЕЛЬ': 'AMPLIFIER',
+    'В плейлист': 'Save as Playlist',
+    'Сохранить очередь в плейлист Apple Music': 'Save queue as Apple Music playlist',
+    'СЕТЕВОЙ СТРИМЕР': 'NETWORK STREAMER',
+    'СЕТЕВОЙ ЦАП': 'NETWORK DAC',
+    'ЦАП': 'DAC',
+    'Сменить устройство вывода': 'Change Output Device',
+    'Аудиовыход': 'Audio Output',
+    'Аудиовыход macOS': 'macOS Audio Output',
+    'Прямое подключение macOS CoreAudio': 'Direct macOS CoreAudio Output',
+    'Bit-Perfect 100% Lock • Zero DSP • Bypass микшера': 'Bit-Perfect 100% Lock • Zero DSP • Mixer Bypass',
+    'СПЕКТРАЛЬНЫЙ ВЕРИФИКАТОР • vDSP FFT': 'SPECTRAL VERIFIER • vDSP FFT',
+    'FFT АНАЛИЗ...': 'FFT ANALYZING...',
+    'Полоса ВЧ': 'HF Bandwidth',
+    'Ультразвук (>22k)': 'Ultrasonic (>22k)',
+    'Разрядность LSB': 'LSB Bit Depth',
+    '24-бит (Честный)': '24-bit (True LSB)',
+    '24-бит (Честный LSB)': '24-bit (True LSB)',
+    'Подлинный студийный Hi-Res мастер: зафиксирована живая ультразвуковая составляющая и активность всех 24 бит.': 'Authentic studio Hi-Res master: live ultrasonic energy and active 24-bit LSB verified.',
+    'Аудиоустройства вывода': 'Audio Output Devices',
+    'Выберите активный ЦАП, аудиовыход macOS или сетевой стример': 'Select active DAC, macOS output, or network streamer',
+    'Загрузка устройств...': 'Loading devices...',
+    'Нет доступных аудиоустройств': 'No audio devices available',
+    'DLNA Стример': 'DLNA Streamer',
+    'Активен': 'Active',
+    'Выбрать': 'Select',
+    'СИНХРОНИЗИРОВАНО': 'SYNCHRONIZED',
+    'ТРЕБУЕТСЯ ВХОД': 'SIGN IN REQUIRED',
+    'Требуется вход': 'Sign in required',
+    'Синхронизировано': 'Synchronized',
+    'Диагностика': 'Diagnostics',
+    'Диагностика аккаунта': 'Account Diagnostics',
+    'Apple ID & Медиатека': 'Apple ID & Library',
+    'Учетная запись Mac:': 'Mac Account:',
+    'Статус синхронизации:': 'Sync Status:',
+    'Синхронизировано с Mac': 'Synchronized with Mac',
+    'Не синхронизировано': 'Not Synchronized',
+    'Проверка...': 'Checking...',
+    'Регион Apple Music:': 'Apple Music Storefront:',
+    'Подписка Apple Music:': 'Apple Music Subscription:',
+    'Активна': 'Active',
+    'Не активна': 'Inactive',
+    'Проверить заново': 'Check Again',
+    'Готово': 'Done',
+    'Подключите Apple ID': 'Connect Apple ID',
+    'Для работы с каталогом, воспроизведения очередей в iCloud и персональных рекомендаций требуется авторизация в Apple Music.': 'Sign in to Apple Music to browse the catalog, sync iCloud playback queues, and access personal recommendations.',
+    'Bit-Perfect звук в исходном качестве (ALAC / Hi-Res)': 'Bit-Perfect audio in native resolution (ALAC / Hi-Res)',
+    'Синхронизация результатов поиска в iCloud-очереди': 'Seamless iCloud playback queue synchronization',
+    'Персональная «Моя станция» и музыкальные открытия': 'Personal "My Station" and Discovery mixes',
+    'Войти через Apple ID': 'Sign In with Apple ID',
+    'Инициализация MusicKit...': 'Initializing MusicKit...',
+    'Получение ключа разработчика...': 'Fetching developer token...',
+    'Ожидание авторизации Apple ID...': 'Waiting for Apple ID sign-in...',
+    'Загрузка MusicKit.js... Повторите через 2 секунды': 'Loading MusicKit.js... Try again in 2 seconds',
+    '✦ ЖИВАЯ ОБЛОЖКА': '✦ MOTION ARTWORK',
+    'Медиатека и станции': 'Library & Stations',
+    'Станции, персональные миксы и плейлисты': 'Stations, personal mixes & playlists',
+    'Закрыть медиатеку': 'Close Library',
+    'Выйти из StandBy / TV Mode (Esc)': 'Exit StandBy / TV Mode (Esc)',
+    'Закрыть StandBy Mode': 'Close StandBy Mode',
+    'WLED Подсветка': 'WLED Ambilight',
+    'Режим работы': 'Lighting Mode',
+    'Режим работы WLED DDP': 'WLED DDP Lighting Mode',
+    'Настройки WLED DDP': 'WLED DDP Settings',
+    'Настройки WLED DDP Ambilight': 'WLED DDP Ambilight Settings',
+    'Режим подсветки WLED DDP': 'WLED DDP Lighting Mode',
+    'Без подсветки': 'Off',
+    'Синусоида ритма (стоячая волна)': 'Rhythm Sine Wave',
+    'Спектральный эквалайзер (Бас · Вокал · Верх)': 'Spectral Equalizer (Bass · Mids · Highs)',
+    'Симметричный пульс (раскрытие от центра)': 'Symmetric Center VU Pulse',
+    'Живой Ambilight (16 зон + пульс музыки)': 'Live Ambilight (16 Zones + Audio Pulse)',
+    'Гармонический резонанс (цвет + мелодия)': 'Harmonic Resonance (Color + Melody)',
+    'Статичная палитра обложки': 'Static Artwork Palette',
+    'Цифровой буклет альбома': 'Digital Album Booklet',
+    'Открыть цифровой буклет альбома (PDF)': 'Open Digital Album Booklet (PDF)',
+    'Открыть цифровой буклет альбома Apple Music (PDF)': 'Open Apple Music Digital Booklet (PDF)',
+    'Закрыть буклет (Esc)': 'Close Booklet (Esc)',
+    'Закрыть буклет': 'Close Booklet',
+    'Загрузка буклета...': 'Loading booklet...',
+    'О версии и настройки устройства': 'Version Info & Device Settings',
+    'Система и Устройство': 'System & Device',
+    'Авторизованный клиент • Bit-Perfect CoreAudio • vDSP FFT': 'Authorized Client • Bit-Perfect CoreAudio • vDSP FFT',
+    'СБОРКА': 'BUILD',
+    'УСТРОЙСТВО': 'DEVICE',
+    'ЭКРАН БЛОКИРОВКИ • MEDIASESSION': 'LOCK SCREEN • MEDIASESSION',
+    'АКТИВНО': 'ACTIVE',
+    'ОТКЛЮЧЕНО': 'DISABLED',
+    'Сборка': 'Build',
+    'Устройство': 'Device',
+    'Имя этого устройства': 'This Device Name',
+    'Имя устройства': 'Device Name',
+    'Экран блокировки и Dynamic Island': 'Lock Screen & Dynamic Island',
+    'Управление плеером на заблокированном экране, в Пункте управления и на Apple Watch': 'Player controls on the Lock Screen, Control Center, and Apple Watch',
+    'Ожидание авторизации на Mac': 'Waiting for Authorization on Mac',
+    'Ожидание авторизации устройства': 'Waiting for Device Authorization',
+    'Код устройства': 'Device Code',
+    'Экран блокировки включён': 'Lock Screen controls enabled',
+    'Экран блокировки выключен': 'Lock Screen controls disabled',
+    'Имя устройства сохранено': 'Device name saved',
+    'Поделиться доступом': 'Share Access',
+    'Скрыть QR-код': 'Hide QR Code',
+    'Скопировать ссылку': 'Copy Link',
+    'Отправить...': 'Share...',
+    'Ссылка для подключения скопирована': 'Connection link copied',
+    'Отсканируйте камерой смартфона или планшета — устройство подключится и авторизуется автоматически': 'Scan with a phone or tablet camera — the device will connect and authorize automatically',
+    'QR-код для быстрого подключения и авторизации': 'QR code for instant connection and authorization',
+    '✨ AI Подбор': '✨ AI Curator',
+    'ИИ Подбор': 'AI Curator',
+    'ИИ Подбор по атмосфере': 'AI Mood Curator',
+    'ИИ Подбор по атмосфере (Apple Neural Engine)': 'AI Mood Curator (Apple Neural Engine)',
+    'Закрыть ИИ Подбор': 'Close AI Curator',
+    'Нажмите на тег для мгновенного воспроизведения • Листайте вниз для бесконечной подгрузки': 'Tap any tag to play immediately • Scroll down for infinite loading',
+    'Подгрузить ещё варианты ↓': 'Load more ideas ↓',
+    'Другие варианты': 'Other suggestions',
+    'Сгенерировать другие варианты промптов': 'Generate other prompt ideas',
+    'Введите название песни, альбома, плейлиста или артиста': 'Enter a song, album, playlist, or artist',
+    'Умный семантический поиск и Промпт-Куратор': 'Smart Semantic Search & Prompt Curator',
+    'Опишите настроение, звуковую сцену, эпоху или инструменты свободным текстом — нативный движок macOS соберёт готовую аудиофильскую очередь из каталога Apple Music.': 'Describe a mood, soundstage, era, or instruments in free text — the native macOS engine will assemble a ready-to-play audiophile queue from Apple Music.',
+    '🎷 Ночной нуар-джаз с саксофоном': '🎷 Late-night noir jazz with sax',
+    '🎸 Аналоговый прог-рок 70-х': '🎸 70s analog progressive rock',
+    '🎹 Эмбиент и пианино для фокуса': '🎹 Deep ambient & piano for focus',
+    '🎙️ Эталонный вокал и акустика': '🎙️ Reference vocals & acoustics',
+    '🌃 Кинематографичный синтвейв 80-х': '🌃 Cinematic 80s synthwave',
+    '🔊 Бристольский трип-хоп и даунтемпо': '🔊 Bristol trip-hop & downtempo',
+    '🎻 Камерные струнные и виолончель': '🎻 Chamber strings & live cello',
+    '🌊 Дрим-поп и воздушный шугейз': '🌊 Dream-pop & airy shoegaze',
+    '🥃 Классический блюз-рок на лампе': '🥃 Tube-driven blues rock',
+    '🎺 Джаз-фанк и винтажный Rhodes': '🎺 Jazz-funk & vintage Rhodes',
+    '🌌 Космическая электроника (Берлин)': '🌌 Berlin school cosmic synth',
+    '☕ Босса-нова и акустика 60-х': '☕ 60s bossa nova & nylon guitar',
+    '🥁 Сложный мат-рок и полиритмия': '🥁 Math-rock & odd-meter drums',
+    '🕯️ Дарк-джаз и кинематографичный нуар': '🕯️ Dark jazz & cinematic noir',
+    '🎛️ Минимал-техно и даб-аккорды': '🎛️ Dub techno & deep sub-bass',
+    '🪕 Инди-фолк и камерная акустика': '🪕 Indie folk & warm acoustics',
+    '🎼 Симфонические саундтреки': '🎼 Epic orchestral soundtracks',
+    '🪩 Японский сити-поп 80-х': '🪩 80s Japanese city pop & funk',
+    'Опишите настроение, сцену или инструменты...': 'Describe mood, soundstage, or instruments...',
+    'Подбор нативным ИИ (Apple Neural Engine)...': 'Curating with on-device AI (Apple Neural Engine)...',
+    'Слушать подборку': 'Play Session',
+    'ПЕСНИ ПОДБОРКИ': 'CURATED TRACKS',
+    'РЕКОМЕНДОВАННЫЕ АЛЬБОМЫ': 'RECOMMENDED ALBUMS',
+    'Собрать AI-подборку': 'Build AI Session',
+    'Нет связи с Mac': 'Disconnected from Mac',
+    'Попытка автоматического переподключения к Apple Music...': 'Attempting to reconnect to Apple Music...',
+    'Переподключиться': 'Reconnect',
+    'Загрузка...': 'Loading...',
+    'Запуск трека...': 'Starting track...',
+    'Запуск альбома...': 'Starting album...',
+    'Запуск плейлиста...': 'Starting playlist...',
+    'Перемешивание...': 'Shuffling...',
+    'Перемешивание альбома...': 'Shuffling album...',
+    'Запуск станции...': 'Starting station...',
+    'Подключение к станции...': 'Connecting to station...',
+    'Переход к треку...': 'Switching track...',
+    'Запуск результатов...': 'Playing search results...',
+    'Воспроизведение...': 'Playing...',
+    'Синхронизация очереди в Apple Music (~10 сек)...': 'Syncing queue in Apple Music (~10s)...',
+    '★ Добавлено в избранное': '★ Added to Favorites',
+    '☆ Удалено из избранного': '☆ Removed from Favorites',
+    '★ Альбом добавлен в медиатеку Apple Music': '★ Album added to Apple Music Library',
+    '★ Плейлист добавлен в медиатеку Apple Music': '★ Playlist added to Apple Music Library',
+    'Плейлист добавлен в медиатеку Apple Music': 'Playlist added to Apple Music Library',
+    'Не удалось добавить в медиатеку': 'Could not add to Library',
+    'У текущего трека нет буклета Apple Music': 'No Digital Booklet for current track',
+    'Для этого альбома нет официального буклета в Apple Music': 'No official Digital Booklet available for this album',
+    'Не удалось загрузить цифровой буклет Apple Music': 'Failed to load Apple Music Digital Booklet',
+    'Обнаружен апскейл Lossy (128 → 256 kbps)': 'Lossy Upscale Detected (128 → 256 kbps)',
+    'Обнаружен транскод из Lossy (MP3 / AAC)': 'Lossy Transcode Detected (MP3 / AAC)',
+    'Обнаружен апсемплинг (Fake Hi-Res)': 'Upsampling Detected (Fake Hi-Res)',
+    'Zero-Padded контейнер (16-бит в 24-бит)': 'Zero-Padded Container (16-bit in 24-bit)',
+    'Честный AAC 256 kbps': 'Authentic AAC 256 kbps',
+    'Сжатый поток AAC 256 kbps': 'Compressed AAC 256 kbps Stream',
+    'Спектральный анализ потока...': 'Analyzing stream spectrum...',
+    'Ожидание воспроизведения...': 'Waiting for playback...',
+    'Спектральный анализ отключен': 'Spectral analysis disabled'
+  };
+
+  function translateTextToEn(raw) {
+    if (!IS_EN || !raw || typeof raw !== 'string') return raw;
+    const trimmed = raw.trim();
+    if (!trimmed) return raw;
+    if (RU_TO_EN_EXACT[trimmed]) {
+      return raw.replace(trimmed, RU_TO_EN_EXACT[trimmed]);
+    }
+    let out = raw;
+    out = out
+      .replace(/^Запуск\s+(.+)\.\.\.$/i, 'Starting $1...')
+      .replace(/Попытка переподключения через (\d+)с\.\.\. \(попытка (\d+)\)/i, 'Reconnecting in $1s... (attempt $2)')
+      .replace(/Apple Music:\s*подписка активна\s*•\s*Регион\s*([A-Z]+)\s*•\s*Медиатека синхронизирована/i, 'Apple Music: Active • Storefront $1 • Library Synced')
+      .replace(/Апсемплинг CD \(срез\s*([\d.]+)\s*(?:кГц|kHz)\)/i, 'Upsampled CD ($1 kHz cut)')
+      .replace(/Lossy-транскод \(([^•]+)•\s*срез\s*([\d.]+)\s*(?:кГц|kHz)\)/i, 'Lossy Transcode ($1• $2 kHz cut)')
+      .replace(/Lossy-апскейл \(([^)]+)\)/i, 'Lossy Upscale ($1)')
+      .replace(/В потоке\s*([\d.]+)\s*(?:кГц|kHz)\s*отсутствует ультразвуковая энергия выше 22\.05\s*(?:кГц|kHz)\s*\(([^)]+)\)\.\s*Трек получен апсемплингом из 44\.1\s*(?:кГц|kHz)\./i, 'No ultrasonic energy above 22.05 kHz ($2) in $1 kHz stream. Track is upsampled from 44.1 kHz.')
+      .replace(/Обнаружен резкий кирпичный срез ВЧ на\s*([\d.]+)\s*(?:кГц|kHz)\s*при контейнере ALAC\.\s*Вероятно,\s*исходник был сжат в MP3\/AAC\s*\(([^)]+)\)\./i, 'Brickwall HF cutoff detected at $1 kHz inside ALAC container. Source was likely transcoded from lossy MP3/AAC ($2).')
+      .replace(/Несмотря на битрейт потока 256 kbps,\s*спектр резко обрывается на\s*([\d.]+)\s*(?:кГц|kHz)[^.]*\.\s*Запись пережата из низкого битрейта\s*\(([^)]+)\)\./i, 'Despite 256 kbps stream bitrate, spectrum cuts off sharply at $1 kHz. Track was re-encoded from low bitrate ($2).')
+      .replace(/Поток AAC 256 kbps соответствует эталонному профилю:\s*верхняя граница спектра простирается до\s*([\d.]+)\s*(?:кГц|kHz)[^.]*\./i, 'AAC 256 kbps stream matches reference profile: upper frequency extends to $1 kHz with no signs of low-bitrate upscale.')
+      .replace(/Спектр чистый \(до\s*([\d.]+)\s*(?:кГц|kHz)\),\s*но младшие 8 бит \(17–24\) всех сэмплов равны нулю\.\s*Реальная разрядность мастера — 16 бит\./i, 'Clean spectrum (up to $1 kHz), but lower 8 bits (17–24) are all zero. True master bit depth is 16-bit.')
+      .replace(/Подлинный студийный Hi-Res мастер:\s*зафиксирована живая ультразвуковая составляющая до\s*([\d.]+)\s*(?:кГц|kHz)\s*\(([^)]+)\)\s*и честные\s*(\d+)\s*бит\./i, 'Authentic studio Hi-Res master: live ultrasonic energy verified up to $1 kHz ($2) with true $3-bit resolution.')
+      .replace(/Подлинный 24-битный студийный мастер 48\s*(?:кГц|kHz):\s*полный спектр до\s*([\d.]+)\s*(?:кГц|kHz)\s*и активные младшие разряды \(LSB 24-bit\)\./i, 'Authentic 24-bit / 48 kHz studio master: full spectrum up to $1 kHz and active 24-bit LSB.')
+      .replace(/Честный Lossless-спектр до\s*([\d.]+)\s*(?:кГц|kHz)\s*без признаков психоакустической фильтрации MP3\/AAC\s*\(([^)]+)\)\./i, 'Verified Lossless spectrum up to $1 kHz with no MP3/AAC psychoacoustic filtering ($2).')
+      .replace(/Сбор PCM-фреймов из CoreAudio Process Tap\s*\(([^)]+)\)\s*для верификации спектра vDSP FFT\./i, 'Capturing PCM frames from CoreAudio Process Tap ($1) for vDSP FFT verification.')
+      .replace(/Накопление пиковой ВЧ-огибающей трека[^.]*\.\.\./i, 'Accumulating peak HF envelope (awaiting high-frequency transients above 16 kHz)...')
+      .replace(/Формат контейнера ALAC\s*([^.]+)\.\s*Включите воспроизведение для живого БПФ-анализа спектра\./i, 'ALAC container ($1). Start playback for live FFT spectral verification.')
+      .replace(/Воспроизводится сжатый поток AAC\s*\(([^)]+)\)\.\s*Включите воспроизведение для проверки спектра\./i, 'Playing compressed AAC stream ($1). Start playback for spectral check.')
+      .replace(/Частота ЦАП \(([^)]+)\) аппаратно синхронизирована с потоком\.\s*Деградация разрядности исключена\./i, 'DAC sample rate ($1) is hardware-locked to the stream. Zero bit-depth degradation.')
+      .replace(/Hi-Res PCM поток \(([^)]+)\) захватывается напрямую из Music\.app и передается на сетевой рендерер без передискретизации\./i, 'Hi-Res PCM stream ($1) is captured directly from Music.app and streamed bit-perfectly to the network renderer.')
+      .replace(/Воспроизводится сжатый поток AAC 256 kbps \(полоса до ~19\.5 кГц\)\.\s*Для Bit-Perfect переключитесь на ALAC Lossless\./i, 'Playing compressed AAC 256 kbps stream (~19.5 kHz bandwidth). Switch to ALAC Lossless for Bit-Perfect output.')
+      .replace(/Передискретизация \(([^)]+)\)/i, 'Resampling ($1)')
+      .replace(/Частота или разрядность источника \(([^)]+)\) отличается от текущего режима вывода \(([^)]+)\)\./i, 'Source format ($1) differs from current output mode ($2).')
+      .replace(/Прямое подключение macOS CoreAudio HAL \(([^)]+)\)/i, 'Direct macOS CoreAudio HAL ($1)')
+      .replace(/Прямой вывод CoreAudio \(Bit-Perfect 100% • Громкость: ([^)]+)\)/i, 'Direct CoreAudio Output (Bit-Perfect 100% • Volume: $1)')
+      .replace(/Прямой вывод CoreAudio \(Bit-Perfect 100% • Ожидание ([^)]+)\)/i, 'Direct CoreAudio Output (Bit-Perfect 100% • Waiting for $1)')
+      .replace(/Сетевой (Hi-Res|Lossless|PCM) стриминг \(([^)]+)\)\s*•\s*(.+)/i, 'Network $1 Streaming ($2) • $3')
+      .replace(/Сетевой стример\s*•\s*До 192 кГц Hi-Res\s*•\s*(.+)/i, 'Network Streamer • Up to 192 kHz Hi-Res • $1')
+      .replace(/\((\d+)\s*частот\)/i, '($1 rates)')
+      .replace(/Декодирование в PCM/g, 'Decoded to PCM')
+      .replace(/Декодирование AAC → PCM/g, 'AAC → PCM Decode')
+      .replace(/Бесконечный PCM поток/g, 'Continuous PCM Stream')
+      .replace(/Bypass микшера/g, 'Mixer Bypass')
+      .replace(/(\d+)-бит\s*\(Честный(?:\s*LSB)?\)/gi, '$1-bit (True LSB)')
+      .replace(/(\d+)-бит\s*\(в\s*(\d+)-бит\)/gi, '$1-bit (in $2-bit)')
+      .replace(/(\d+)-бит/gi, '$1-bit')
+      .replace(/Нет\s*\(<([-\d.]+)\s*dB\)/gi, 'None (<$1 dB)')
+      .replace(/Н\/Д\s*\(≤\s*48\s*(?:кГц|kHz)\)/gi, 'N/A (≤ 48 kHz)')
+      .replace(/до\s*([\d.]+)\s*кГц/gi, 'up to $1 kHz')
+      .replace(/([\d.]+)\s*кГц/gi, '$1 kHz')
+      .replace(/(\d+)\s*Гц/gi, '$1 Hz')
+      .replace(/(\d+)\s*мс/gi, '$1 ms')
+      .replace(/(\d+)\s*трек(?:ов|а)?/gi, '$1 tracks')
+      .replace(/(\d+)\s*стр\./gi, '$1 pp.')
+      .replace(/Страница\s*(\d+)/gi, 'Page $1');
+    return out;
+  }
+
+  function localizeDomNode(root) {
+    if (!IS_EN || !root) return;
+    if (root.nodeType === Node.TEXT_NODE) {
+      const val = root.nodeValue;
+      if (val && /[А-Яа-яЁё]/.test(val)) {
+        const next = translateTextToEn(val);
+        if (next !== val) root.nodeValue = next;
+      }
+      return;
+    }
+    if (root.nodeType !== Node.ELEMENT_NODE) return;
+    const attrs = ['title', 'placeholder', 'aria-label', 'alt'];
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i];
+      if (root.hasAttribute && root.hasAttribute(attr)) {
+        const cur = root.getAttribute(attr);
+        if (cur && /[А-Яа-яЁё]/.test(cur)) {
+          const next = translateTextToEn(cur);
+          if (next !== cur) root.setAttribute(attr, next);
+        }
+      }
+    }
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false);
+    let node = walker.nextNode();
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const val = node.nodeValue;
+        if (val && /[А-Яа-яЁё]/.test(val)) {
+          const next = translateTextToEn(val);
+          if (next !== val) node.nodeValue = next;
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        for (let i = 0; i < attrs.length; i++) {
+          const attr = attrs[i];
+          if (node.hasAttribute && node.hasAttribute(attr)) {
+            const cur = node.getAttribute(attr);
+            if (cur && /[А-Яа-яЁё]/.test(cur)) {
+              const next = translateTextToEn(cur);
+              if (next !== cur) node.setAttribute(attr, next);
+            }
+          }
+        }
+      }
+      node = walker.nextNode();
+    }
+  }
+
+  if (IS_EN) {
+    localizeDomNode(document.body);
+    const i18nObserver = new MutationObserver((mutations) => {
+      for (let i = 0; i < mutations.length; i++) {
+        const m = mutations[i];
+        if (m.type === 'characterData') {
+          localizeDomNode(m.target);
+        } else if (m.type === 'attributes') {
+          const el = m.target;
+          const attr = m.attributeName;
+          if (el && attr && el.hasAttribute(attr)) {
+            const cur = el.getAttribute(attr);
+            if (cur && /[А-Яа-яЁё]/.test(cur)) {
+              const next = translateTextToEn(cur);
+              if (next !== cur) el.setAttribute(attr, next);
+            }
+          }
+        } else if (m.type === 'childList') {
+          for (let j = 0; j < m.addedNodes.length; j++) {
+            localizeDomNode(m.addedNodes[j]);
+          }
+        }
+      }
+    });
+    if (document.body) {
+      i18nObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['title', 'placeholder', 'aria-label', 'alt']
+      });
+    }
+  }
+
   // --- PWA Service Worker Registration ---
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -24,9 +498,165 @@ extension WebUIContent {
     });
   }
 
+  // --- Persistent Client Device Identity (Cookie + CacheStorage + localStorage) ---
+  function readCookieValue(name) {
+    try {
+      const target = name.toLowerCase() + '=';
+      const parts = (document.cookie || '').split(';');
+      for (const p of parts) {
+        const trimmed = p.trim();
+        if (trimmed.toLowerCase().startsWith(target)) {
+          return decodeURIComponent(trimmed.slice(target.length).trim());
+        }
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  function writePersistentCookie(name, val) {
+    try {
+      document.cookie = `${name}=${encodeURIComponent(val)}; path=/; max-age=315360000; SameSite=Lax`;
+    } catch (e) {}
+  }
+
+  function generateUUIDv4() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID().toLowerCase();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  function computeShortDeviceId(uid) {
+    const clean = String(uid || '').replace(/-/g, '').toUpperCase();
+    if (clean.length >= 8) {
+      return `${clean.slice(0, 4)}-${clean.slice(4, 8)}`;
+    }
+    return clean || '----';
+  }
+
+  function persistUidToSecureStore(uid) {
+    if (!uid) return;
+    writePersistentCookie('amr_device_uid', uid);
+    try { localStorage.setItem('amr_device_uid', uid); } catch (e) {}
+    if ('caches' in window) {
+      caches.open('amr-device-secure-store-v1').then((cache) => {
+        cache.put('/__amr_device_uid', new Response(uid, { headers: { 'Content-Type': 'text/plain' } }));
+      }).catch(() => {});
+    }
+  }
+
+  function detectClientDeviceProfile() {
+    const ua = navigator.userAgent || '';
+    const platform = navigator.platform || '';
+    const maxTouch = navigator.maxTouchPoints || 0;
+    const isIPad = /iPad/i.test(ua) || (platform === 'MacIntel' && maxTouch > 1);
+    const isIPhone = /iPhone|iPod/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const isAndroidMobile = isAndroid && /Mobile/i.test(ua);
+    const isTV = /TV|Web0S|Tizen|BRAVIA|AppleTV|CrKey/i.test(ua);
+
+    let deviceType = 'desktop';
+    let defaultName = 'Mac / Desktop';
+
+    if (isTV) {
+      deviceType = 'tv';
+      defaultName = 'Smart TV';
+    } else if (isIPad || (isAndroid && !isAndroidMobile)) {
+      deviceType = 'tablet';
+      defaultName = isIPad ? 'iPad' : 'Android Tablet';
+    } else if (isIPhone || isAndroidMobile) {
+      deviceType = 'mobile';
+      defaultName = isIPhone ? 'iPhone' : 'Android Phone';
+    } else if (/Macintosh|Mac OS X/i.test(ua)) {
+      deviceType = 'desktop';
+      defaultName = /Safari/i.test(ua) && !/Chrome/i.test(ua) ? 'Mac (Safari)' : 'Mac (Browser)';
+    } else if (/Windows/i.test(ua)) {
+      deviceType = 'desktop';
+      defaultName = 'Windows PC';
+    }
+
+    let uid = readCookieValue('amr_device_uid');
+    if (!uid) {
+      try { uid = localStorage.getItem('amr_device_uid') || ''; } catch (e) {}
+    }
+    if (!uid) {
+      uid = generateUUIDv4();
+    }
+    persistUidToSecureStore(uid);
+
+    let savedName = '';
+    try { savedName = localStorage.getItem('amr_device_name') || ''; } catch (e) {}
+    const deviceName = savedName.trim() || defaultName;
+
+    let savedLockPref = null;
+    const cookieLock = readCookieValue('amr_lock_screen');
+    if (cookieLock === 'true' || cookieLock === 'false') {
+      savedLockPref = (cookieLock === 'true');
+    } else {
+      try {
+        const lsLock = localStorage.getItem('amr_lock_screen_controls');
+        if (lsLock === 'true' || lsLock === 'false') {
+          savedLockPref = (lsLock === 'true');
+        }
+      } catch (e) {}
+    }
+
+    const defaultLockScreen = (deviceType === 'mobile');
+    const lockScreenControls = savedLockPref !== null ? savedLockPref : defaultLockScreen;
+
+    let inviteToken = '';
+    try {
+      const urlParams = new URLSearchParams(window.location.search || '');
+      const urlInvite = (urlParams.get('invite') || '').trim();
+      if (urlInvite) {
+        inviteToken = urlInvite;
+        try { sessionStorage.setItem('amr_invite_token', urlInvite); } catch (e) {}
+        urlParams.delete('invite');
+        const newQuery = urlParams.toString();
+        const cleanUrl = window.location.pathname + (newQuery ? `?${newQuery}` : '') + (window.location.hash || '');
+        if (window.history && typeof window.history.replaceState === 'function') {
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+      } else {
+        inviteToken = (sessionStorage.getItem('amr_invite_token') || '').trim();
+      }
+    } catch (e) {}
+
+    return {
+      deviceId: uid,
+      shortId: computeShortDeviceId(uid),
+      deviceName,
+      deviceType,
+      lockScreenControls,
+      inviteToken
+    };
+  }
+
+  const initialDeviceProfile = detectClientDeviceProfile();
+
   // --- Application State ---
   const state = {
     connected: false,
+    deviceId: initialDeviceProfile.deviceId,
+    deviceShortId: initialDeviceProfile.shortId,
+    deviceName: initialDeviceProfile.deviceName,
+    deviceType: initialDeviceProfile.deviceType,
+    deviceAuthorized: false, // Updated by server on connect (false -> shows auth waiting screen first)
+    initialAuthFetched: false,
+    inviteToken: initialDeviceProfile.inviteToken || '',
+    shareAccessUrl: '',
+    lockScreenControls: initialDeviceProfile.lockScreenControls,
+    aiCuratorEnabled: true,
+    pinnedAiPrompts: [],
+    activeAiCuratedPrompt: '',
+    pendingStandbyAiAutoPlay: false,
+    isAiCurating: false,
+    gitCommit: '7278dab',
+    gitCommitDate: '2026-11-04',
     playbackState: 'stopped', // 'playing', 'paused', 'stopped'
     playerState: 'stopped', // 'playing', 'paused', 'stopped'
     pendingPlayUntil: 0,
@@ -36,6 +666,12 @@ extension WebUIContent {
     volume: 100,
     previousVolume: 100,
     lockVolume100: localStorage.getItem('amr_lock_volume_100') !== null ? (localStorage.getItem('amr_lock_volume_100') === 'true') : true,
+    ampVolumeControlEnabled: false,
+    ampBrandName: 'Rotel',
+    ampVolume: 35,
+    ampMaxVolume: 96,
+    ampMuted: false,
+    ampConnected: false,
     isDraggingVolume: false,
     shuffle: false,
     repeatMode: 'off', // 'off', 'one', 'all'
@@ -68,6 +704,8 @@ extension WebUIContent {
     audioDeviceName: '',
     audioDeviceSampleRate: 44100,
     isBitPerfect: true,
+    dacMutingGuardEnabled: false,
+    dacMutingGuardMs: 100,
     audioDevices: [],
 
     // Apple MusicKit & User Token
@@ -77,11 +715,14 @@ extension WebUIContent {
     isAccountSynced: false,
     accountHealth: null,
 
-    // Scrubber local tracking
+    // Scrubber local tracking & watchdog timestamps
     isScrubbing: false,
     scrubValue: 0,
     lastSyncPos: 0,
-    lastSyncTime: performance.now()
+    lastSyncTime: performance.now(),
+    lastServerMessageAt: Date.now(),
+    lastSpectralUpdateAt: performance.now(),
+    lastEndOfTrackPollAt: 0
   };
   window.__amr_state = state;
 
@@ -189,6 +830,8 @@ extension WebUIContent {
     playerTitle: document.getElementById('player-title'),
     playerArtist: document.getElementById('player-artist'),
     playerAlbum: document.getElementById('player-album'),
+    btnGoToAlbum: document.getElementById('btn-go-to-album'),
+    btnAiTrackVibe: document.getElementById('btn-ai-track-vibe'),
     btnCreateStation: document.getElementById('btn-create-station'),
     btnFavorite: document.getElementById('btn-favorite'),
     audioQualityBadge: document.getElementById('audio-quality-badge'),
@@ -198,13 +841,17 @@ extension WebUIContent {
     mobileDacBadge: document.getElementById('mobile-dac-badge'),
     mobileDacText: document.getElementById('mobile-dac-text'),
 
-    // Station Picker Modal
+    // Station Picker / Track Actions Modal (•••)
     stationPickerModal: document.getElementById('station-picker-modal'),
     btnCloseStationModal: document.getElementById('btn-close-station-modal'),
+    btnAiMixByTrack: document.getElementById('btn-ai-mix-by-track'),
+    stationOptAiVibeSub: document.getElementById('station-opt-ai-vibe-sub'),
     btnStationByTrack: document.getElementById('btn-station-by-track'),
     btnStationByArtist: document.getElementById('btn-station-by-artist'),
+    stationOptAlbumName: document.getElementById('station-opt-album-name'),
     stationOptTrackName: document.getElementById('station-opt-track-name'),
     stationOptArtistName: document.getElementById('station-opt-artist-name'),
+    moreBookletDot: document.getElementById('more-booklet-dot'),
 
     // Scrubber
     scrubberContainer: document.getElementById('scrubber-container'),
@@ -229,6 +876,8 @@ extension WebUIContent {
     queueCurrentGroup: document.getElementById('queue-current-group'),
     queueCurrentTrack: document.getElementById('queue-current-track'),
     queueUpcomingList: document.getElementById('queue-upcoming-list'),
+    btnSaveQueuePlaylist: document.getElementById('btn-save-queue-playlist'),
+    btnSaveQueueText: document.getElementById('btn-save-queue-text'),
     btnClearQueue: document.getElementById('btn-clear-queue'),
 
     // Library Elements
@@ -266,6 +915,15 @@ extension WebUIContent {
     volumeThumb: document.getElementById('volume-thumb'),
     volumeLevelText: document.getElementById('volume-level-text'),
     playerBottomNotice: document.querySelector('.player-bottom-notice .dac-notice-text'),
+    // StandBy / TV Mode Inline Volume Bar
+    standbyVolumeSection: document.getElementById('standby-volume-section'),
+    standbyBtnVolumeMute: document.getElementById('standby-btn-volume-mute'),
+    standbyVolFill: document.getElementById('standby-vol-fill'),
+    standbyVolThumb: document.getElementById('standby-vol-thumb'),
+    standbyVolLoupe: document.getElementById('standby-vol-loupe'),
+    standbyVolLoupeText: document.getElementById('standby-vol-loupe-text'),
+    standbyVolumeInput: document.getElementById('standby-volume-input'),
+    standbyVolumeText: document.getElementById('standby-volume-text'),
     // Signal Path Modal
     qualityModal: document.getElementById('quality-modal'),
     btnCloseModal: document.getElementById('btn-close-modal'),
@@ -275,6 +933,12 @@ extension WebUIContent {
     signalDacRate: document.getElementById('signal-dac-rate'),
     signalDacName: document.getElementById('signal-dac-name'),
     signalDacDetails: document.getElementById('signal-dac-details'),
+    signalConnectorAmp: document.getElementById('signal-connector-amp'),
+    signalNodeAmp: document.getElementById('signal-node-amp'),
+    signalAmpDot: document.getElementById('signal-amp-dot'),
+    signalAmpVolumeBadge: document.getElementById('signal-amp-volume-badge'),
+    signalAmpName: document.getElementById('signal-amp-name'),
+    signalAmpDetails: document.getElementById('signal-amp-details'),
     btnOpenDevices: document.getElementById('btn-open-devices'),
     // Audio Devices Modal
     devicesModal: document.getElementById('devices-modal'),
@@ -293,6 +957,7 @@ extension WebUIContent {
   function markWaitingForPlayback(options = {}) {
     state.waitingForPlayback = true;
     state.waitingTrackSignature = (state.track && state.track.name) ? `${state.track.name}:${state.track.artist || ''}` : null;
+    state.waitingExpectedTrackName = options.expectedTrackName ? String(options.expectedTrackName).trim().toLowerCase() : null;
     state.waitingStartTime = Date.now();
     state.waitingIsStation = Boolean(options.isStation);
     state.waitingTargetName = options.targetName || null;
@@ -317,7 +982,7 @@ extension WebUIContent {
       document.body.classList.add('ui-blocked');
 
       if (dom.busyMessage) {
-        dom.busyMessage.textContent = message;
+        dom.busyMessage.textContent = translateTextToEn(message);
       }
       if (dom.busyOverlay) {
         dom.busyOverlay.classList.remove('hidden');
@@ -332,10 +997,21 @@ extension WebUIContent {
       }
 
       // Safety timeout: automatically unblock after timeout if server is slow
-      const safetyMs = (message.includes('Синхронизация') || message.includes('очереди') || message.includes('Apple Music')) ? 20000 : 8000;
+      const isLongOp = Boolean(
+        state.isAiCurating ||
+        message.includes('ИИ') ||
+        message.includes('AI') ||
+        message.includes('Синхронизация') ||
+        message.includes('очереди') ||
+        message.includes('Apple Music')
+      );
+      const safetyMs = isLongOp ? 25000 : 10000;
       busyTimeout = setTimeout(() => {
+        state.isAiCurating = false;
+        state.pendingStandbyAiAutoPlay = false;
         state.waitingForPlayback = false;
         state.waitingTrackSignature = null;
+        state.waitingExpectedTrackName = null;
         state.waitingIsStation = false;
         state.waitingTargetName = null;
         if (state.isLaunchingStation) {
@@ -348,8 +1024,10 @@ extension WebUIContent {
         setUIBusy(false);
       }, safetyMs);
     } else {
+      state.isAiCurating = false;
       state.waitingForPlayback = false;
       state.waitingTrackSignature = null;
+      state.waitingExpectedTrackName = null;
       state.waitingIsStation = false;
       state.waitingTargetName = null;
       if (state.isLaunchingStation) {
@@ -411,20 +1089,23 @@ extension WebUIContent {
 
     socket.onopen = function () {
       state.connected = true;
+      state.lastServerMessageAt = Date.now();
+      state.initialAuthFetched = false;
       reconnectAttempt = 0;
       dom.overlay.classList.add('hidden');
 
-      // Request initial status, queue, library, and explore feed
-      send({ action: 'get_status' });
-      send({ action: 'get_queue' });
-      send({ action: 'get_playlists' });
-      send({ action: 'get_explore', params: { country: state.trends.country } });
-      send({ action: 'get_audio_devices' });
-      send({ action: 'get_user_token_status' });
-      send({ action: 'get_developer_token' });
-      send({ action: 'get_account_status' });
-      send({ action: 'get_wled_settings' });
-      send({ action: 'get_info' });
+      // Step 1: Register this PWA device UID & verify device authorization FIRST.
+      // Apple ID / MusicKit / catalog checks run ONLY after the device is authorized on Mac.
+      send({
+        action: 'register_device',
+        params: {
+          device_id: state.deviceId,
+          device_name: state.deviceName,
+          device_type: state.deviceType,
+          lock_screen_controls: state.lockScreenControls,
+          invite_token: state.inviteToken || ''
+        }
+      });
     };
 
     socket.onmessage = function (event) {
@@ -440,6 +1121,9 @@ extension WebUIContent {
       state.connected = false;
       state.initialViewSelected = false;
       dom.overlay.classList.remove('hidden');
+      syncSilentAudio(false);
+      syncMotionVideoPlaybackState();
+      ScreenWakeLockManager.syncByPlaybackAndConnection();
       scheduleReconnect();
     };
 
@@ -447,6 +1131,9 @@ extension WebUIContent {
       state.connected = false;
       state.initialViewSelected = false;
       dom.overlay.classList.remove('hidden');
+      syncSilentAudio(false);
+      syncMotionVideoPlaybackState();
+      ScreenWakeLockManager.syncByPlaybackAndConnection();
     };
   }
 
@@ -474,10 +1161,50 @@ extension WebUIContent {
 
   // --- Server Message Dispatcher ---
   function handleServerMessage(msg) {
+    if (!msg || typeof msg !== 'object') return;
+    state.lastServerMessageAt = Date.now();
     const type = (msg.event || msg.action || msg.type || '').toLowerCase();
+    if (msg.status === 'error' && type !== 'device_auth_status' && type !== 'register_device') {
+      if (state.isBusyAction || state.waitingForPlayback || state.isAiCurating) {
+        state.isAiCurating = false;
+        state.pendingStandbyAiAutoPlay = false;
+        state.waitingForPlayback = false;
+        setUIBusy(false);
+      }
+      return;
+    }
     const data = msg.data !== undefined ? msg.data : msg;
 
     switch (type) {
+      case 'device_auth_status':
+      case 'register_device':
+      case 'get_device_status':
+        handleDeviceAuthStatus(data);
+        break;
+
+      case 'share_access_qr':
+      case 'get_share_access_qr':
+      case 'generate_share_access_qr':
+        handleShareAccessQR(data);
+        break;
+
+      case 'ai_curate':
+      case 'curate_music':
+      case 'ai_curate_result':
+        updateAiCuratedResults(data);
+        break;
+
+      case 'ai_curator_settings':
+      case 'get_ai_curator_settings':
+      case 'refresh_ai_prompts':
+        handleAiCuratorSettings(data);
+        break;
+
+      case 'get_artwork_palette':
+      case 'artwork_palette':
+        AmbientBackgroundManager.applyServerPalette(data);
+        break;
+
       case 'player_state_changed':
       case 'status':
       case 'get_status':
@@ -558,11 +1285,53 @@ extension WebUIContent {
         applyMotionArtwork(data);
         break;
 
+      case 'get_spectral_analysis':
+      case 'spectral_analysis':
+        if (data && data.verdict) {
+          state.spectralAnalysis = data;
+          state.lastSpectralUpdateAt = performance.now();
+          updateSignalPathDetails();
+        }
+        break;
+
       case 'get_info':
       case 'info':
         if (data && data.version) {
           const vEls = document.querySelectorAll('.brand-ver');
           vEls.forEach(el => { el.textContent = `v${data.version}`; });
+        }
+        if (data && data.git_commit) {
+          state.gitCommit = String(data.git_commit);
+        }
+        if (data && data.git_commit_date) {
+          state.gitCommitDate = String(data.git_commit_date);
+        }
+        if (data && data.ai_curator_enabled !== undefined) {
+          state.aiCuratorEnabled = Boolean(data.ai_curator_enabled);
+          syncAiCuratorEnabledUI();
+        }
+        syncDeviceInfoUI();
+        break;
+
+      case 'add_playlist_to_library':
+      case 'add_album_to_library':
+        if (dom.btnAddPlaylistLibrary) {
+          const ok = (data && data.status === 'ok') || msg.status === 'ok';
+          const isAlb = Boolean((data && data.is_album) || (state.currentPlaylistDetail && state.currentPlaylistDetail.isAlbum));
+          if (ok) {
+            dom.btnAddPlaylistLibrary.disabled = true;
+            if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
+            dom.btnAddPlaylistLibrary.classList.add('added');
+            if (state.currentPlaylistDetail) {
+              state.currentPlaylistDetail.is_local = true;
+            }
+            showToast(isAlb ? '★ Альбом добавлен в медиатеку Apple Music' : '★ Плейлист добавлен в медиатеку Apple Music');
+          } else {
+            dom.btnAddPlaylistLibrary.disabled = false;
+            if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+            dom.btnAddPlaylistLibrary.classList.remove('added');
+            showToast('Не удалось добавить в медиатеку');
+          }
         }
         break;
 
@@ -630,20 +1399,32 @@ extension WebUIContent {
     const incomingSig = (incomingTrack && incomingTrack.name) ? `${incomingTrack.name}:${incomingTrack.artist || ''}` : '';
     const isRadioNow = Boolean(data.is_radio || data.isRadio || (data.playlist && data.playlist.includes('Станция')));
 
-    if (state.waitingForPlayback) {
+    if (state.isAiCurating) {
+      // Do not dismiss the busy spinner while the Mac is still generating the AI selection
+    } else if (state.waitingForPlayback) {
       // We are waiting for a newly launched track/queue to start.
       // Do NOT dismiss spinner if player is still reporting the OLD track!
-      const hasTrackChanged = isNewTrack && incomingSig !== state.waitingTrackSignature;
-      const isTargetPlaying = state.waitingTargetName && (
-        (data.playlist && (data.playlist.toLowerCase().includes(state.waitingTargetName.toLowerCase()) || data.playlist.includes('Очередь AMR'))) ||
-        (incomingTrack && incomingTrack.name && incomingTrack.name.toLowerCase().includes(state.waitingTargetName.toLowerCase()))
+      const hasTrackChanged = Boolean(isNewTrack && incomingSig && incomingSig !== state.waitingTrackSignature);
+      const matchesExpectedTrack = Boolean(
+        state.waitingExpectedTrackName &&
+        incomingTrack &&
+        incomingTrack.name &&
+        incomingTrack.name.trim().toLowerCase() === state.waitingExpectedTrackName
       );
-      const hasWaitedEnough = (Date.now() - (state.waitingStartTime || 0)) > 600;
-      if ((incomingState === 'playing' && (hasTrackChanged || isTargetPlaying || hasWaitedEnough)) || (isRadioNow && (state.isLaunchingStation || state.waitingIsStation))) {
+      const isTargetPlaying = Boolean(
+        state.waitingTargetName &&
+        !state.waitingTrackSignature &&
+        ((data.playlist && data.playlist.toLowerCase().includes(state.waitingTargetName.toLowerCase())) ||
+         (incomingTrack && incomingTrack.name && incomingTrack.name.toLowerCase().includes(state.waitingTargetName.toLowerCase())))
+      );
+      const elapsedWaitMs = Date.now() - (state.waitingStartTime || 0);
+      const hasWaitedEnough = state.waitingTrackSignature ? (elapsedWaitMs > 6000) : (elapsedWaitMs > 600);
+      if ((incomingState === 'playing' && (hasTrackChanged || matchesExpectedTrack || isTargetPlaying || hasWaitedEnough)) || (isRadioNow && (state.isLaunchingStation || state.waitingIsStation))) {
         state.pendingPlayUntil = 0;
         state.playerState = 'playing';
         state.waitingForPlayback = false;
         state.waitingTrackSignature = null;
+        state.waitingExpectedTrackName = null;
         state.waitingIsStation = false;
         state.isLaunchingStation = false;
         if (state.stationLaunchTimeout) {
@@ -721,6 +1502,12 @@ extension WebUIContent {
     state.shuffle = Boolean(data.shuffle);
     state.repeatMode = data.repeat || data.repeatMode || 'off';
     state.audioQuality = data.audio_quality || data.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
+    if (newTrack && state.pendingFavoriteUntil && Date.now() < state.pendingFavoriteUntil) {
+      const incomingKey = `${newTrack.artist || ''}|${newTrack.name || ''}`;
+      if (state.pendingFavoriteTrackKey === incomingKey) {
+        newTrack.favorited = state.pendingFavoriteValue;
+      }
+    }
     state.track = newTrack;
 
     if (data.audio_device_name !== undefined || data.audioDeviceName !== undefined) {
@@ -735,6 +1522,28 @@ extension WebUIContent {
     if (data.is_bit_perfect !== undefined || data.isBitPerfect !== undefined) {
       state.isBitPerfect = data.is_bit_perfect !== undefined ? Boolean(data.is_bit_perfect) : Boolean(data.isBitPerfect);
     }
+    if (data.dac_muting_guard_enabled !== undefined || data.isDacMutingGuardEnabled !== undefined) {
+      state.dacMutingGuardEnabled = data.dac_muting_guard_enabled !== undefined ? Boolean(data.dac_muting_guard_enabled) : Boolean(data.isDacMutingGuardEnabled);
+    }
+    if (data.dac_muting_guard_ms !== undefined || data.dacMutingGuardMs !== undefined) {
+      state.dacMutingGuardMs = Number(data.dac_muting_guard_ms || data.dacMutingGuardMs) || 100;
+    }
+    const hasTrackSwitched = Boolean(
+      oldTrack && newTrack && (newTrack.name !== oldTrack.name || newTrack.artist !== oldTrack.artist)
+    );
+    const incomingSa = data.spectral_analysis || data.spectralAnalysis;
+    if (hasTrackSwitched) {
+      const prevEnabled = incomingSa && incomingSa.is_enabled !== undefined
+        ? Boolean(incomingSa.is_enabled)
+        : (state.spectralAnalysis ? (state.spectralAnalysis.is_enabled !== false && state.spectralAnalysis.isEnabled !== false) : true);
+      state.spectralAnalysis = Object.assign({}, incomingSa || {}, {
+        is_enabled: prevEnabled,
+        verdict: prevEnabled ? 'analyzing' : 'disabled',
+        analyzed_frames_count: 0
+      });
+    } else if (incomingSa) {
+      state.spectralAnalysis = incomingSa;
+    }
 
     if (data.lock_volume_100 !== undefined) {
       state.lockVolume100 = Boolean(data.lock_volume_100);
@@ -744,11 +1553,50 @@ extension WebUIContent {
       try { localStorage.setItem('amr_lock_volume_100', String(state.lockVolume100)); } catch (e) {}
     }
 
+    if (data.amp_volume_control !== undefined) {
+      state.ampVolumeControlEnabled = Boolean(data.amp_volume_control) && state.lockVolume100;
+    } else if (!state.lockVolume100) {
+      state.ampVolumeControlEnabled = false;
+    }
+    if (data.amp_brand_name !== undefined && data.amp_brand_name) {
+      state.ampBrandName = String(data.amp_brand_name);
+    }
+    if (data.amp_max_volume !== undefined && Number(data.amp_max_volume) > 0) {
+      state.ampMaxVolume = Number(data.amp_max_volume);
+    }
+    const prevVol = state.volume;
+    const prevMute = state.ampMuted;
+    if (data.amp_muted !== undefined) {
+      state.ampMuted = Boolean(data.amp_muted);
+    }
+    if (data.amp_connected !== undefined) {
+      state.ampConnected = Boolean(data.amp_connected);
+    }
+    if (data.amp_volume !== undefined && data.amp_volume !== null) {
+      state.ampVolume = Math.max(0, Math.min(state.ampMaxVolume || 100, Number(data.amp_volume)));
+    }
+    if (data.amp_soundcheck_enabled !== undefined) {
+      state.ampSoundCheckEnabled = Boolean(data.amp_soundcheck_enabled);
+    }
+    if (data.amp_soundcheck_gain_db !== undefined) {
+      state.ampSoundCheckGainDb = data.amp_soundcheck_gain_db !== null ? Number(data.amp_soundcheck_gain_db) : null;
+    }
+    if (data.amp_soundcheck_offset !== undefined) {
+      state.ampSoundCheckOffset = data.amp_soundcheck_offset !== null ? Number(data.amp_soundcheck_offset) : 0;
+    }
+    if (data.amp_base_volume !== undefined && data.amp_base_volume !== null) {
+      state.ampBaseVolume = Number(data.amp_base_volume);
+    }
+
+    const maxVol = (state.lockVolume100 && state.ampVolumeControlEnabled) ? (state.ampMaxVolume || 80) : 100;
     if (data.volume !== undefined) {
-      state.volume = Math.max(0, Math.min(100, Number(data.volume)));
+      state.volume = Math.max(0, Math.min(maxVol, Number(data.volume)));
       if (state.volume > 0) {
         state.previousVolume = state.volume;
       }
+    }
+    if (!state.isDraggingVolume && state.initialViewSelected && (state.volume !== prevVol || state.ampMuted !== prevMute)) {
+      triggerStandbyVolumePulse();
     }
 
     renderNowPlaying();
@@ -1070,25 +1918,100 @@ extension WebUIContent {
       this.activeLayer = nextLayer;
       dom.ambientBackdrop.classList.add('active');
 
-      // Extract 16 spatial perimeter zones for WLED DDP Ambilight & RGB tuples for StandBy TV backdrop
-      const wledZones = this.extractWledZones(img);
+      // Extract 16 spatial perimeter zones for WLED DDP Ambilight ONLY when WLED is enabled
       const rgbColors = palette.map((rgbaStr) => {
         const m = rgbaStr.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
         return m ? [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)] : [250, 35, 59];
       });
-      send({
-        action: 'update_wled_palette',
-        params: { colors: wledZones.length >= 4 ? wledZones : rgbColors }
-      });
+      if (state.wledEnabled) {
+        const wledZones = this.extractWledZones(img);
+        send({
+          action: 'update_wled_palette',
+          params: { colors: wledZones.length >= 4 ? wledZones : rgbColors }
+        });
+      }
       const standbyBg = document.getElementById('standby-ambient-bg');
       if (standbyBg && rgbColors.length >= 3) {
-        const [c0, c1, c2] = rgbColors;
-        standbyBg.style.background = `
-          radial-gradient(circle at 24% 48%, rgba(${c0[0]}, ${c0[1]}, ${c0[2]}, 0.44), transparent 55%),
-          radial-gradient(circle at 78% 32%, rgba(${c1[0]}, ${c1[1]}, ${c1[2]}, 0.34), transparent 58%),
-          radial-gradient(circle at 60% 82%, rgba(${c2[0]}, ${c2[1]}, ${c2[2]}, 0.28), rgba(4, 4, 6, 0.96) 75%)
-        `;
+        this.applyStandbyAmbientColors(rgbColors);
       }
+
+      // When Native AI (Apple Neural Engine) is enabled, request Vision Saliency palette from macOS
+      if (state.aiCuratorEnabled) {
+        send({
+          action: 'get_artwork_palette',
+          params: {
+            url: artUrl,
+            track_id: Number(state.currentTrackId || 0) || 0
+          }
+        });
+      }
+    },
+
+    lastStandbyBgKey: '',
+    applyStandbyAmbientColors(rgbColors) {
+      const standbyBg = document.getElementById('standby-ambient-bg');
+      if (!standbyBg || !Array.isArray(rgbColors) || rgbColors.length < 3) return;
+      const [c0, c1, c2] = rgbColors;
+      const bgKey = `${c0[0]},${c0[1]},${c0[2]}|${c1[0]},${c1[1]},${c1[2]}|${c2[0]},${c2[1]},${c2[2]}`;
+      if (bgKey === this.lastStandbyBgKey) return;
+      this.lastStandbyBgKey = bgKey;
+      standbyBg.style.background = `
+        radial-gradient(circle at 24% 48%, rgba(${c0[0]}, ${c0[1]}, ${c0[2]}, 0.38), transparent 62%),
+        radial-gradient(circle at 78% 32%, rgba(${c1[0]}, ${c1[1]}, ${c1[2]}, 0.30), transparent 65%),
+        radial-gradient(circle at 60% 82%, rgba(${c2[0]}, ${c2[1]}, ${c2[2]}, 0.24), transparent 68%),
+        #040406
+      `;
+      const rtaBackdrop = document.getElementById('standby-rta-backdrop');
+      if (rtaBackdrop) {
+        const br = Math.min(255, Math.round(c0[0] * 0.65 + 110));
+        const bg = Math.min(255, Math.round(c0[1] * 0.65 + 110));
+        const bb = Math.min(255, Math.round(c0[2] * 0.65 + 110));
+        rtaBackdrop.style.setProperty('--rta-bar-rgb', `${br}, ${bg}, ${bb}`);
+      }
+    },
+
+    applyServerPalette(data) {
+      if (!data || data.status !== 'ok' || !Array.isArray(data.ambient_rgb) || data.ambient_rgb.length < 3) {
+        return;
+      }
+      if (!dom.ambientBackdrop) return;
+      const rgbList = data.ambient_rgb.map((arr) => [
+        Math.max(0, Math.min(255, Number(arr[0]) || 30)),
+        Math.max(0, Math.min(255, Number(arr[1]) || 30)),
+        Math.max(0, Math.min(255, Number(arr[2]) || 45))
+      ]);
+      while (rgbList.length < 4) {
+        rgbList.push(rgbList[rgbList.length - 1]);
+      }
+
+      const tunedBlobs = [
+        this.tuneColor({ r: rgbList[0][0], g: rgbList[0][1], b: rgbList[0][2] }, 1.35, 0.42),
+        this.tuneColor({ r: rgbList[1][0], g: rgbList[1][1], b: rgbList[1][2] }, 1.25, 0.36),
+        this.tuneColor({ r: rgbList[2][0], g: rgbList[2][1], b: rgbList[2][2] }, 1.30, 0.38),
+        this.tuneColor({ r: rgbList[3][0], g: rgbList[3][1], b: rgbList[3][2] }, 1.20, 0.32)
+      ];
+      const serverKey = 'vision|' + tunedBlobs.join('|');
+      if (serverKey === this.currentPaletteKey) return;
+      this.currentPaletteKey = serverKey;
+
+      const nextLayer = this.activeLayer === 'a' ? 'b' : 'a';
+      const targetElem = nextLayer === 'a' ? dom.ambientLayerA : dom.ambientLayerB;
+      const prevElem = this.activeLayer === 'a' ? dom.ambientLayerA : dom.ambientLayerB;
+
+      if (targetElem) {
+        targetElem.style.setProperty('--blob-1', tunedBlobs[0]);
+        targetElem.style.setProperty('--blob-2', tunedBlobs[1]);
+        targetElem.style.setProperty('--blob-3', tunedBlobs[2]);
+        targetElem.style.setProperty('--blob-4', tunedBlobs[3]);
+        targetElem.classList.add('visible');
+      }
+      if (prevElem) {
+        prevElem.classList.remove('visible');
+      }
+      this.activeLayer = nextLayer;
+      dom.ambientBackdrop.classList.add('active');
+
+      this.applyStandbyAmbientColors(rgbList);
     },
 
     clear() {
@@ -1156,33 +2079,153 @@ extension WebUIContent {
     img.src = artUrl;
   }
 
+  let marqueeRafId = 0;
+
+  function updateSingleTitleMarquee(el, forceRecalc = false) {
+    if (!el) return;
+    const text = el.textContent || '';
+    if (!forceRecalc && el.dataset.marqueeText === text) {
+      return;
+    }
+    const viewport = el.closest('.title-marquee-viewport') || el.parentElement;
+    if (!viewport) return;
+
+    const viewportWidth = Math.floor(viewport.clientWidth);
+    if (viewportWidth <= 0) return;
+
+    const sig = `${text}|${viewportWidth}`;
+    if (!forceRecalc && el.dataset.marqueeSig === sig) {
+      el.dataset.marqueeText = text;
+      return;
+    }
+    el.dataset.marqueeSig = sig;
+    el.dataset.marqueeText = text;
+
+    el.classList.remove('is-marquee');
+    viewport.classList.remove('is-marquee');
+    el.style.removeProperty('--marquee-distance');
+    el.style.removeProperty('--marquee-duration');
+
+    // Measure true unconstrained single-line width across all browsers (including WebKit/Safari)
+    el.style.display = 'inline-block';
+    el.style.width = 'max-content';
+    el.style.maxWidth = 'none';
+    el.style.overflow = 'visible';
+    el.style.textOverflow = 'clip';
+    const textWidth = Math.ceil(el.getBoundingClientRect().width);
+    el.style.display = '';
+    el.style.width = '';
+    el.style.maxWidth = '';
+    el.style.overflow = '';
+    el.style.textOverflow = '';
+
+    const overflow = Math.ceil(textWidth - viewportWidth);
+
+    if (overflow > 2) {
+      // Extra padding so the last character clears the right-edge gradient mask completely
+      const rightPad = Math.max(20, Math.round(viewportWidth * 0.055));
+      const distance = -(overflow + rightPad);
+      const duration = Math.max(7.0, Math.min(20.0, (Math.abs(distance) / 36) + 3.6));
+      el.style.setProperty('--marquee-distance', `${distance}px`);
+      el.style.setProperty('--marquee-duration', `${duration.toFixed(1)}s`);
+      el.classList.add('is-marquee');
+      viewport.classList.add('is-marquee');
+    }
+  }
+
+  function refreshAllTitleMarquees(forceRecalc = false) {
+    if (marqueeRafId) cancelAnimationFrame(marqueeRafId);
+    marqueeRafId = requestAnimationFrame(() => {
+      marqueeRafId = 0;
+      const force = Boolean(forceRecalc === true);
+      updateSingleTitleMarquee(dom.playerTitle, force);
+      updateSingleTitleMarquee(dom.miniTitle, force);
+      updateSingleTitleMarquee(document.getElementById('standby-title'), force);
+    });
+  }
+
+  window.addEventListener('resize', () => refreshAllTitleMarquees(true));
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => refreshAllTitleMarquees(true), 120);
+  });
+
   function renderNowPlaying() {
     const isPlaying = state.playerState === 'playing';
     const t = state.track;
 
     // Track Meta
     if (t) {
-      dom.playerTitle.textContent = t.name || 'Без названия';
-      dom.playerArtist.textContent = t.artist || 'Неизвестный исполнитель';
-      dom.playerAlbum.textContent = t.album || '';
+      const titleText = t.name || 'Без названия';
+      const albumText = (t.album || '').trim();
+      const artistText = t.artist || 'Неизвестный исполнитель';
+      if (dom.playerTitle.textContent !== titleText) {
+        dom.playerTitle.textContent = titleText;
+      }
+      dom.playerTitle.title = titleText;
+      if (dom.playerArtist.textContent !== artistText) {
+        dom.playerArtist.textContent = artistText;
+      }
+      if (dom.playerAlbum.textContent !== albumText) {
+        dom.playerAlbum.textContent = albumText;
+      }
+      dom.playerAlbum.classList.toggle('clickable-album', Boolean(albumText));
+      dom.playerAlbum.title = albumText ? `Перейти к альбому «${albumText}»` : '';
+      if (dom.btnGoToAlbum) {
+        dom.btnGoToAlbum.disabled = !albumText;
+        dom.btnGoToAlbum.title = albumText ? `Перейти к альбому «${albumText}»` : 'Перейти к альбому';
+      }
+      if (dom.btnAiTrackVibe) {
+        dom.btnAiTrackVibe.disabled = !t.name;
+        dom.btnAiTrackVibe.classList.toggle('hidden', !state.aiCuratorEnabled);
+        dom.btnAiTrackVibe.title = t.name
+          ? translateTextToEn(`✨ ИИ-подбор по вайбу «${t.name}»`)
+          : translateTextToEn('✨ ИИ-подбор по вайбу текущего трека');
+      }
       const art = getArtworkSrc(t);
       setPlayerArtwork(art);
       dom.btnFavorite.classList.toggle('active', Boolean(t.favorited));
       if (dom.miniBtnFavorite) dom.miniBtnFavorite.classList.toggle('active', Boolean(t.favorited));
 
       // Mini Player sync
-      dom.miniTitle.textContent = t.name || 'Без названия';
-      dom.miniArtist.textContent = t.artist || 'Apple Music';
+      if (dom.miniTitle.textContent !== titleText) {
+        dom.miniTitle.textContent = titleText;
+      }
+      const miniArtistText = t.artist || 'Apple Music';
+      if (dom.miniArtist.textContent !== miniArtistText) {
+        dom.miniArtist.textContent = miniArtistText;
+      }
     } else {
-      dom.playerTitle.textContent = 'Не играет';
-      dom.playerArtist.textContent = 'Apple Music';
-      dom.playerAlbum.textContent = '';
+      if (dom.playerTitle.textContent !== 'Не играет') {
+        dom.playerTitle.textContent = 'Не играет';
+      }
+      dom.playerTitle.title = 'Не играет';
+      if (dom.playerArtist.textContent !== 'Apple Music') {
+        dom.playerArtist.textContent = 'Apple Music';
+      }
+      if (dom.playerAlbum.textContent !== '') {
+        dom.playerAlbum.textContent = '';
+      }
+      dom.playerAlbum.classList.remove('clickable-album');
+      dom.playerAlbum.title = '';
+      if (dom.btnGoToAlbum) {
+        dom.btnGoToAlbum.disabled = true;
+        dom.btnGoToAlbum.title = 'Перейти к альбому';
+      }
+      if (dom.btnAiTrackVibe) {
+        dom.btnAiTrackVibe.disabled = true;
+        dom.btnAiTrackVibe.classList.toggle('hidden', !state.aiCuratorEnabled);
+        dom.btnAiTrackVibe.title = translateTextToEn('✨ ИИ-подбор по вайбу текущего трека');
+      }
       setPlayerArtwork('apple-touch-icon.svg');
       dom.btnFavorite.classList.remove('active');
       if (dom.miniBtnFavorite) dom.miniBtnFavorite.classList.remove('active');
 
-      dom.miniTitle.textContent = 'Не играет';
-      dom.miniArtist.textContent = 'Apple Music';
+      if (dom.miniTitle.textContent !== 'Не играет') {
+        dom.miniTitle.textContent = 'Не играет';
+      }
+      if (dom.miniArtist.textContent !== 'Apple Music') {
+        dom.miniArtist.textContent = 'Apple Music';
+      }
     }
 
     // Play/Pause button icons
@@ -1244,21 +2287,183 @@ extension WebUIContent {
     renderCurrentQueueTrack(dom.queueCurrentTrack);
     updateMediaSession();
     syncStandbyAndMotionCoverUI();
+    syncCurrentTrackBookletAvailability();
+    refreshAllTitleMarquees();
+  }
+
+  let standbyVolPulseTimer = null;
+  let standbyVolLoupeTimer = null;
+
+  function triggerStandbyVolumePulse() {
+    if (!dom.standbyVolumeSection) return;
+    dom.standbyVolumeSection.classList.add('vol-active-pulse');
+    if (standbyVolPulseTimer) clearTimeout(standbyVolPulseTimer);
+    standbyVolPulseTimer = setTimeout(() => {
+      if (dom.standbyVolumeSection) {
+        dom.standbyVolumeSection.classList.remove('vol-active-pulse');
+      }
+    }, 2200);
+  }
+
+  function showStandbyVolumeLoupe(autoHideMs = 0) {
+    if (!dom.standbyVolumeSection) return;
+    dom.standbyVolumeSection.classList.add('is-scrubbing', 'vol-active-pulse');
+    if (dom.standbyVolLoupe) dom.standbyVolLoupe.classList.add('visible');
+    if (standbyVolLoupeTimer) clearTimeout(standbyVolLoupeTimer);
+    if (autoHideMs > 0) {
+      standbyVolLoupeTimer = setTimeout(() => {
+        hideStandbyVolumeLoupe();
+      }, autoHideMs);
+    }
+  }
+
+  function hideStandbyVolumeLoupe() {
+    if (standbyVolLoupeTimer) {
+      clearTimeout(standbyVolLoupeTimer);
+      standbyVolLoupeTimer = null;
+    }
+    if (dom.standbyVolumeSection) {
+      dom.standbyVolumeSection.classList.remove('is-scrubbing');
+    }
+    if (dom.standbyVolLoupe) {
+      dom.standbyVolLoupe.classList.remove('visible');
+    }
+  }
+
+  function updateStandbyLoupePosition(vol, pct, isMuted) {
+    const cleanPct = isMuted ? 0 : Math.max(0, Math.min(100, pct));
+    if (dom.standbyVolFill) {
+      dom.standbyVolFill.style.width = `${cleanPct}%`;
+    }
+    if (dom.standbyVolThumb) {
+      dom.standbyVolThumb.style.left = `${cleanPct}%`;
+    }
+    if (dom.standbyVolLoupe) {
+      const clampedLoupeLeft = Math.max(8, Math.min(92, cleanPct));
+      dom.standbyVolLoupe.style.left = `${clampedLoupeLeft}%`;
+    }
+    if (dom.standbyVolLoupeText) {
+      dom.standbyVolLoupeText.textContent = (isMuted || vol === 0) ? 'MUTE' : `${vol}%`;
+    }
+  }
+
+  function syncSignalPathAmpNode() {
+    const isExtAmpMode = Boolean(state.lockVolume100 && state.ampVolumeControlEnabled);
+    if (dom.signalConnectorAmp) {
+      dom.signalConnectorAmp.classList.toggle('hidden', !isExtAmpMode);
+    }
+    if (dom.signalNodeAmp) {
+      dom.signalNodeAmp.classList.toggle('hidden', !isExtAmpMode);
+    }
+    if (!isExtAmpMode) return;
+
+    const brand = state.ampBrandName || 'Усилитель';
+    const maxVol = Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80));
+    const vol = Math.max(0, Math.min(maxVol, Number(state.volume) || 0));
+
+    if (dom.signalAmpDot) {
+      dom.signalAmpDot.classList.toggle('active', Boolean(state.ampConnected));
+    }
+    if (dom.signalAmpName) {
+      dom.signalAmpName.textContent = brand;
+    }
+    if (dom.signalAmpVolumeBadge) {
+      dom.signalAmpVolumeBadge.textContent = state.ampMuted ? 'MUTE' : `${vol}%`;
+    }
+    if (dom.signalAmpDetails) {
+      let scNote = '';
+      if (state.ampSoundCheckEnabled && state.ampSoundCheckGainDb !== null && state.ampSoundCheckGainDb !== undefined && !isNaN(state.ampSoundCheckGainDb)) {
+        const gainVal = Number(state.ampSoundCheckGainDb);
+        const gainSign = gainVal >= 0 ? '+' : '';
+        const offVal = Number(state.ampSoundCheckOffset) || 0;
+        const offSign = offVal >= 0 ? '+' : '';
+        const baseVol = state.ampBaseVolume !== undefined ? Number(state.ampBaseVolume) : vol;
+        scNote = IS_EN
+          ? ` • SoundCheck ${gainSign}${gainVal.toFixed(1)} dB (${offSign}${offVal}%, base ${baseVol}%)`
+          : ` • SoundCheck ${gainSign}${gainVal.toFixed(1)} дБ (${offSign}${offVal}%, база ${baseVol}%)`;
+      } else if (state.ampSoundCheckEnabled) {
+        scNote = IS_EN ? ' • SoundCheck iTunNORM' : ' • SoundCheck iTunNORM';
+      }
+      dom.signalAmpDetails.textContent = state.ampConnected
+        ? (IS_EN ? `TCP Volume Control • Cap ${maxVol}%${scNote}` : `Управление громкостью по TCP • Лимит до ${maxVol}%${scNote}`)
+        : (IS_EN ? `Waiting for TCP connection • Cap ${maxVol}%${scNote}` : `Ожидание подключения по TCP • Лимит до ${maxVol}%${scNote}`);
+    }
   }
 
   function renderVolumeUI() {
-    if (state.lockVolume100) {
+    const isExtAmpMode = Boolean(state.lockVolume100 && state.ampVolumeControlEnabled);
+    syncSignalPathAmpNode();
+
+    if (state.lockVolume100 && !isExtAmpMode) {
       if (dom.volumeSection) dom.volumeSection.classList.add('hidden');
+      if (dom.standbyVolumeSection) dom.standbyVolumeSection.classList.add('hidden');
       if (dom.playerBottomNotice) {
         dom.playerBottomNotice.textContent = 'Прямой вывод CoreAudio (Bit-Perfect DAC • 100%)';
       }
+      return;
+    }
+
+    if (dom.volumeSection) dom.volumeSection.classList.remove('hidden');
+    if (dom.standbyVolumeSection) dom.standbyVolumeSection.classList.remove('hidden');
+
+    if (isExtAmpMode) {
+      const brand = state.ampBrandName || 'AMP';
+      const maxVol = Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80));
+      const vol = Math.max(0, Math.min(maxVol, Number(state.volume) || 0));
+      const pct = Math.max(0, Math.min(100, (vol / maxVol) * 100));
+      const labelStr = state.ampMuted ? `${brand} • MUTE` : `${brand} • ${vol}%`;
+
+      if (dom.playerBottomNotice) {
+        let scBadge = '';
+        if (state.ampSoundCheckEnabled && state.ampSoundCheckGainDb !== null && state.ampSoundCheckGainDb !== undefined && !isNaN(state.ampSoundCheckGainDb)) {
+          const g = Number(state.ampSoundCheckGainDb);
+          scBadge = ` • SoundCheck ${g >= 0 ? '+' : ''}${g.toFixed(1)} дБ`;
+        }
+        dom.playerBottomNotice.textContent = state.ampConnected
+          ? `Прямой вывод CoreAudio (Bit-Perfect 100% • Громкость: ${brand} TCP • макс. ${maxVol}%${scBadge})`
+          : `Прямой вывод CoreAudio (Bit-Perfect 100% • Ожидание ${brand} TCP${scBadge})`;
+      }
+      if (dom.volumeInput) {
+        dom.volumeInput.min = '0';
+        dom.volumeInput.max = String(maxVol);
+        if (!state.isDraggingVolume) {
+          dom.volumeInput.value = String(vol);
+        }
+      }
+      if (dom.volumeTrackFill) {
+        dom.volumeTrackFill.style.width = `${pct}%`;
+      }
+      if (dom.volumeThumb) {
+        dom.volumeThumb.style.left = `${pct}%`;
+      }
+      if (dom.volumeLevelText) {
+        dom.volumeLevelText.textContent = labelStr;
+      }
+      if (dom.standbyVolumeInput) {
+        dom.standbyVolumeInput.min = '0';
+        dom.standbyVolumeInput.max = String(maxVol);
+        if (!state.isDraggingVolume) {
+          dom.standbyVolumeInput.value = String(vol);
+        }
+      }
+      updateStandbyLoupePosition(vol, pct, Boolean(state.ampMuted));
+      if (dom.standbyVolumeText) {
+        dom.standbyVolumeText.textContent = labelStr;
+      }
+      if (dom.standbyBtnVolumeMute) {
+        dom.standbyBtnVolumeMute.classList.toggle('muted', Boolean(state.ampMuted || vol === 0));
+      }
+      updateVolumeIcon(state.ampMuted ? 0 : Math.round(pct));
     } else {
-      if (dom.volumeSection) dom.volumeSection.classList.remove('hidden');
+      const labelStr = `${state.volume}%`;
       if (dom.playerBottomNotice) {
         dom.playerBottomNotice.textContent = 'Прямой вывод CoreAudio (Регулируемая громкость)';
       }
-      if (dom.volumeInput && !state.isDraggingVolume) {
-        dom.volumeInput.value = state.volume;
+      if (dom.volumeInput) {
+        dom.volumeInput.max = '100';
+        if (!state.isDraggingVolume) {
+          dom.volumeInput.value = String(state.volume);
+        }
       }
       if (dom.volumeTrackFill) {
         dom.volumeTrackFill.style.width = `${state.volume}%`;
@@ -1267,26 +2472,37 @@ extension WebUIContent {
         dom.volumeThumb.style.left = `${state.volume}%`;
       }
       if (dom.volumeLevelText) {
-        dom.volumeLevelText.textContent = `${state.volume}%`;
+        dom.volumeLevelText.textContent = labelStr;
+      }
+      if (dom.standbyVolumeInput) {
+        dom.standbyVolumeInput.min = '0';
+        dom.standbyVolumeInput.max = '100';
+        if (!state.isDraggingVolume) {
+          dom.standbyVolumeInput.value = String(state.volume);
+        }
+      }
+      updateStandbyLoupePosition(state.volume, state.volume, state.volume === 0);
+      if (dom.standbyVolumeText) {
+        dom.standbyVolumeText.textContent = labelStr;
+      }
+      if (dom.standbyBtnVolumeMute) {
+        dom.standbyBtnVolumeMute.classList.toggle('muted', state.volume === 0);
       }
       updateVolumeIcon(state.volume);
     }
   }
 
   function updateVolumeIcon(vol) {
-    if (!dom.volumeIcon) return;
     const wave1 = dom.volumeSection ? dom.volumeSection.querySelector('#vol-wave-1') : null;
     const wave2 = dom.volumeSection ? dom.volumeSection.querySelector('#vol-wave-2') : null;
-    if (vol === 0) {
-      if (wave1) wave1.style.display = 'none';
-      if (wave2) wave2.style.display = 'none';
-    } else if (vol < 50) {
-      if (wave1) wave1.style.display = 'block';
-      if (wave2) wave2.style.display = 'none';
-    } else {
-      if (wave1) wave1.style.display = 'block';
-      if (wave2) wave2.style.display = 'block';
-    }
+    const sbWave1 = document.getElementById('standby-vol-wave-1');
+    const sbWave2 = document.getElementById('standby-vol-wave-2');
+    const show1 = vol > 0 ? 'block' : 'none';
+    const show2 = vol >= 50 ? 'block' : 'none';
+    if (wave1) wave1.style.display = show1;
+    if (wave2) wave2.style.display = show2;
+    if (sbWave1) sbWave1.style.display = show1;
+    if (sbWave2) sbWave2.style.display = show2;
   }
 
   // --- Tactile & Haptic Engine ---
@@ -1392,6 +2608,9 @@ extension WebUIContent {
   }
 
   function initSilentAudio() {
+    if (!state.lockScreenControls || !state.deviceAuthorized) {
+      return null;
+    }
     if (!silentAudioEl) {
       silentAudioEl = document.getElementById('bg-silent-audio');
     }
@@ -1405,12 +2624,42 @@ extension WebUIContent {
       silentAudioEl.src = '/assets/silence.m4a?v=2';
       silentAudioEl.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;';
       document.body.appendChild(silentAudioEl);
+    } else if (!silentAudioEl.getAttribute('src')) {
+      silentAudioEl.src = '/assets/silence.m4a?v=2';
     }
     attachSilentAudioListeners(silentAudioEl);
     return silentAudioEl;
   }
 
+  function teardownMediaSessionAndSilentAudio() {
+    const el = silentAudioEl || document.getElementById('bg-silent-audio');
+    if (el) {
+      try {
+        el.pause();
+        el.currentTime = 0;
+        el.removeAttribute('src');
+        el.load();
+      } catch (e) {}
+    }
+    silentAudioUnlocked = false;
+    lastMediaSessionKey = '';
+
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = 'none';
+        navigator.mediaSession.metadata = null;
+        ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto', 'seekbackward', 'seekforward', 'stop'].forEach((act) => {
+          try { navigator.mediaSession.setActionHandler(act, null); } catch (e) {}
+        });
+      } catch (e) {}
+    }
+  }
+
   function syncSilentAudio(isPlaying) {
+    if (!state.lockScreenControls || !state.deviceAuthorized) {
+      teardownMediaSessionAndSilentAudio();
+      return;
+    }
     const el = initSilentAudio();
     if (!el) return;
 
@@ -1439,12 +2688,16 @@ extension WebUIContent {
 
   // Synchronously unlock audio & Web Audio on EVERY user gesture until unlocked
   function unlockAudioOnUserGesture() {
-    const el = initSilentAudio();
     const ctx = getHapticAudioContext();
     if (ctx && ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
 
+    if (!state.lockScreenControls || !state.deviceAuthorized) {
+      return;
+    }
+
+    const el = initSilentAudio();
     if (!silentAudioUnlocked && el) {
       const p = el.play();
       if (p !== undefined) {
@@ -1492,6 +2745,10 @@ extension WebUIContent {
   let lastMediaSessionKey = '';
   function setupMediaSession() {
     if (!('mediaSession' in navigator)) return;
+    if (!state.lockScreenControls || !state.deviceAuthorized) {
+      teardownMediaSessionAndSilentAudio();
+      return;
+    }
 
     try {
       navigator.mediaSession.setActionHandler('play', () => {
@@ -1553,6 +2810,10 @@ extension WebUIContent {
 
   function updateMediaSession() {
     if (!('mediaSession' in navigator)) return;
+    if (!state.lockScreenControls || !state.deviceAuthorized) {
+      teardownMediaSessionAndSilentAudio();
+      return;
+    }
 
     // Ensure action handlers are persistently bound to the active WebKit MediaSession
     setupMediaSession();
@@ -1637,52 +2898,138 @@ extension WebUIContent {
     return raw;
   }
 
+  let cachedSbFill = null;
+  let cachedSbThumb = null;
+  let cachedSbInput = null;
+  let cachedSbElapsed = null;
+  let cachedSbRemaining = null;
+  let lastRenderedElapsedStr = '';
+  let lastRenderedRemStr = '';
+  let lastScrubberFrameMs = 0;
+
   function updateScrubberUI(currentPos, totalDur) {
-    const sbFill = document.getElementById('standby-progress-fill');
-    const sbElapsed = document.getElementById('standby-time-elapsed');
-    const sbRemaining = document.getElementById('standby-time-remaining');
+    if (!cachedSbFill) cachedSbFill = document.getElementById('standby-progress-fill');
+    if (!cachedSbThumb) cachedSbThumb = document.getElementById('standby-progress-thumb');
+    if (!cachedSbInput) cachedSbInput = document.getElementById('standby-progress-input');
+    if (!cachedSbElapsed) cachedSbElapsed = document.getElementById('standby-time-elapsed');
+    if (!cachedSbRemaining) cachedSbRemaining = document.getElementById('standby-time-remaining');
+
     if (totalDur <= 0) {
       dom.scrubberFill.style.width = '0%';
       dom.scrubberThumb.style.left = '0%';
       dom.miniProgressFill.style.width = '0%';
-      dom.timeElapsed.textContent = '0:00';
-      dom.timeRemaining.textContent = '-0:00';
+      if (lastRenderedElapsedStr !== '0:00') {
+        lastRenderedElapsedStr = '0:00';
+        dom.timeElapsed.textContent = '0:00';
+        if (cachedSbElapsed) cachedSbElapsed.textContent = '0:00';
+      }
+      if (lastRenderedRemStr !== '-0:00') {
+        lastRenderedRemStr = '-0:00';
+        dom.timeRemaining.textContent = '-0:00';
+        if (cachedSbRemaining) cachedSbRemaining.textContent = '-0:00';
+      }
       dom.scrubberInput.value = 0;
-      if (sbFill) sbFill.style.width = '0%';
-      if (sbElapsed) sbElapsed.textContent = '0:00';
-      if (sbRemaining) sbRemaining.textContent = '-0:00';
+      if (cachedSbFill) cachedSbFill.style.width = '0%';
+      if (cachedSbThumb) cachedSbThumb.style.left = '0%';
+      if (cachedSbInput) cachedSbInput.value = 0;
       return;
     }
 
     const clampedPos = Math.max(0, Math.min(currentPos, totalDur));
     const percent = (clampedPos / totalDur) * 100;
+    const pctStr = `${percent.toFixed(2)}%`;
+    const tvVisible = isStandbyOrLandscapeVisible();
 
-    dom.scrubberFill.style.width = `${percent}%`;
-    dom.scrubberThumb.style.left = `${percent}%`;
-    dom.miniProgressFill.style.width = `${percent}%`;
-    dom.scrubberInput.value = percent;
+    if (tvVisible) {
+      if (cachedSbFill) cachedSbFill.style.width = pctStr;
+      if (cachedSbThumb) cachedSbThumb.style.left = pctStr;
+      if (cachedSbInput && !state.isScrubbing) cachedSbInput.value = percent;
+    } else {
+      dom.scrubberFill.style.width = pctStr;
+      dom.scrubberThumb.style.left = pctStr;
+      dom.miniProgressFill.style.width = pctStr;
+      dom.scrubberInput.value = percent;
+      if (cachedSbFill) cachedSbFill.style.width = pctStr;
+      if (cachedSbThumb) cachedSbThumb.style.left = pctStr;
+      if (cachedSbInput && !state.isScrubbing) cachedSbInput.value = percent;
+    }
 
     const elapsedStr = formatTime(clampedPos);
     const remaining = totalDur - clampedPos;
     const remStr = `-${formatTime(remaining)}`;
-    dom.timeElapsed.textContent = elapsedStr;
-    dom.timeRemaining.textContent = remStr;
-    if (sbFill) sbFill.style.width = `${percent}%`;
-    if (sbElapsed) sbElapsed.textContent = elapsedStr;
-    if (sbRemaining) sbRemaining.textContent = remStr;
+    if (elapsedStr !== lastRenderedElapsedStr) {
+      lastRenderedElapsedStr = elapsedStr;
+      dom.timeElapsed.textContent = elapsedStr;
+      if (cachedSbElapsed) cachedSbElapsed.textContent = elapsedStr;
+    }
+    if (remStr !== lastRenderedRemStr) {
+      lastRenderedRemStr = remStr;
+      dom.timeRemaining.textContent = remStr;
+      if (cachedSbRemaining) cachedSbRemaining.textContent = remStr;
+    }
   }
 
-  // --- Optimistic 60fps Scrubber Loop ---
-  function scrubberAnimationLoop() {
+  // --- Optimistic Scrubber Loop (throttled to ~20fps normally, 4fps in TV Mode) ---
+  function scrubberAnimationLoop(nowMs) {
     if (state.playerState === 'playing' && !state.isScrubbing && state.duration > 0) {
-      const now = performance.now();
-      const deltaSec = (now - state.lastSyncTime) / 1000;
-      const currentPos = Math.min(state.duration, state.lastSyncPos + deltaSec);
-      updateScrubberUI(currentPos, state.duration);
+      const ts = nowMs || performance.now();
+      const intervalMs = isStandbyOrLandscapeVisible() ? 250 : 50;
+      if (ts - lastScrubberFrameMs >= intervalMs) {
+        lastScrubberFrameMs = ts;
+        const deltaSec = (ts - state.lastSyncTime) / 1000;
+        const rawPos = state.lastSyncPos + deltaSec;
+        const currentPos = Math.min(state.duration, rawPos);
+        updateScrubberUI(currentPos, state.duration);
+
+        // If spectral data went stale (>1.2s) while RTA bars are still raised above floor, wake up RTA decay loop
+        if (!standbyRtaRafId && (ts - (state.lastSpectralUpdateAt || 0)) > 1200 && isStandbyOrLandscapeVisible()) {
+          for (let i = 0; i < standbyRtaBarCount; i++) {
+            if (standbyRtaCurrent[i] > 0.035 || standbyRtaTarget[i] > 0.035) {
+              ensureStandbyRtaAnimLoop();
+              break;
+            }
+          }
+        }
+
+        // Watchdog: if seek bar has been pinned at 100% for > 1.5s without a track transition event,
+        // actively poll status & queue from the server to recover immediately.
+        if (rawPos >= state.duration + 1.5 && state.connected && state.deviceAuthorized) {
+          const nowWall = Date.now();
+          if (nowWall - (state.lastEndOfTrackPollAt || 0) >= 2500) {
+            state.lastEndOfTrackPollAt = nowWall;
+            send({ action: 'get_status' });
+            send({ action: 'get_queue' });
+            send({
+              action: 'client_log',
+              params: {
+                level: 'warn',
+                message: `Scrubber pinned at 100% (${Math.round(state.duration)}s) for ${(rawPos - state.duration).toFixed(1)}s on track "${(state.track && state.track.name) || ''}" — polling status & queue`
+              }
+            });
+            ensureStandbyRtaAnimLoop();
+          }
+        }
+      }
     }
     requestAnimationFrame(scrubberAnimationLoop);
   }
   requestAnimationFrame(scrubberAnimationLoop);
+
+  // --- WebSocket Half-Open & Track Transition Watchdog ---
+  setInterval(() => {
+    if (!state.connected || !state.deviceAuthorized) return;
+    if (document.hidden) return;
+    const silenceMs = Date.now() - (state.lastServerMessageAt || Date.now());
+    if (state.playerState === 'playing') {
+      if (silenceMs >= 9000) {
+        // Half-open TCP/WebSocket connection stalled for >9s during active playback: force reconnect
+        connectWebSocket();
+      } else if (silenceMs >= 4500) {
+        send({ action: 'get_status' });
+        send({ action: 'get_queue' });
+      }
+    }
+  }, 2500);
 
   // --- Scrubber User Interaction ---
   dom.scrubberInput.addEventListener('input', function (e) {
@@ -1833,17 +3180,68 @@ extension WebUIContent {
     });
   });
 
-  dom.btnFavorite.addEventListener('click', () => {
+  let toastTimerId = 0;
+
+  function showToast(message, durationMs = 1900) {
+    if (!message) return;
+    let hud = document.getElementById('amr-toast-hud');
+    if (!hud) {
+      hud = document.createElement('div');
+      hud.id = 'amr-toast-hud';
+      hud.className = 'amr-toast-hud';
+      hud.setAttribute('role', 'status');
+      hud.setAttribute('aria-live', 'polite');
+      document.body.appendChild(hud);
+    }
+    hud.textContent = message;
+    if (toastTimerId) clearTimeout(toastTimerId);
+    requestAnimationFrame(() => {
+      hud.classList.add('visible');
+    });
+    toastTimerId = setTimeout(() => {
+      hud.classList.remove('visible');
+    }, durationMs);
+  }
+
+  function handleToggleFavorite(e) {
+    if (e) e.stopPropagation();
     triggerHaptic('toggle');
-    send({ action: 'favorite' });
-  });
+
+    const t = state.track;
+    const currentFav = Boolean(t && t.favorited);
+    const nextFav = !currentFav;
+
+    if (t) {
+      t.favorited = nextFav;
+      state.pendingFavoriteUntil = Date.now() + 3500;
+      state.pendingFavoriteTrackKey = `${t.artist || ''}|${t.name || ''}`;
+      state.pendingFavoriteValue = nextFav;
+    }
+
+    const sbFavBtn = document.getElementById('standby-btn-favorite');
+    [dom.btnFavorite, dom.miniBtnFavorite, sbFavBtn].forEach(btn => {
+      if (!btn) return;
+      btn.classList.toggle('active', nextFav);
+      if (!nextFav) {
+        btn.classList.remove('unpop-anim');
+        void btn.offsetWidth;
+        btn.classList.add('unpop-anim');
+      } else {
+        btn.classList.remove('unpop-anim');
+      }
+    });
+
+    showToast(nextFav ? '★ Добавлено в избранное' : '☆ Удалено из избранного');
+    send({
+      action: 'favorite',
+      params: { favorited: nextFav }
+    });
+  }
+
+  dom.btnFavorite.addEventListener('click', handleToggleFavorite);
 
   if (dom.miniBtnFavorite) {
-    dom.miniBtnFavorite.addEventListener('click', (e) => {
-      e.stopPropagation();
-      triggerHaptic('toggle');
-      send({ action: 'favorite' });
-    });
+    dom.miniBtnFavorite.addEventListener('click', handleToggleFavorite);
   }
 
   dom.btnReconnect.addEventListener('click', () => {
@@ -1878,7 +3276,67 @@ extension WebUIContent {
 
     const ratesMatch = !sourceRateHz || Math.abs(sourceRateHz - devRateHz) <= 500;
     const depthsMatch = !sourceBitDepth || outBitDepth >= sourceBitDepth;
-    const isVerified = (state.isBitPerfect !== false) && !isLossy && ratesMatch && depthsMatch;
+    const isHardwareMatched = (state.isBitPerfect !== false) && ratesMatch && depthsMatch;
+    const isVerified = isHardwareMatched && !isLossy;
+
+    const sa = state.spectralAnalysis || {};
+    const saEnabled = sa.is_enabled !== false && sa.isEnabled !== false && sa.verdict !== 'disabled';
+    const saVerdict = saEnabled ? (sa.verdict || 'analyzing') : '';
+    const analyzedFrames = Number(sa.analyzed_frames_count !== undefined ? sa.analyzed_frames_count : (sa.analyzedFramesCount || 0));
+    const isPendingValidation = !saEnabled || !saVerdict || saVerdict === 'analyzing' || (state.playerState !== 'playing' && analyzedFrames === 0);
+    const isSpectralFake = !isPendingValidation && (saVerdict === 'upsampled' || saVerdict === 'lossy_transcode' || saVerdict === 'lossy_upscaled');
+    const isSpectralZeroPad = !isPendingValidation && saVerdict === 'zero_padded';
+
+    // Color the play icon (.icon-dac) inside quality badges according to quality match / mismatch,
+    // or reset to gray (no color class) when a new track starts / while analyzing
+    const sbDacBadge = document.getElementById('standby-dac-badge');
+    const qualityBadges = [dom.audioQualityBadge, dom.mobileDacBadge, dom.desktopDacBadge, sbDacBadge].filter(Boolean);
+    qualityBadges.forEach(badge => {
+      badge.classList.remove('quality-ok', 'quality-warn', 'quality-bad');
+      if (!isPendingValidation) {
+        const badgeQualityClass = isSpectralFake
+          ? 'quality-bad'
+          : ((isSpectralZeroPad || (!isLossy && !isHardwareMatched)) ? 'quality-warn' : 'quality-ok');
+        badge.classList.add(badgeQualityClass);
+      }
+    });
+
+    // Sync TV / StandBy spectral verification pill badge
+    const sbSpectralBadge = document.getElementById('standby-spectral-badge');
+    if (sbSpectralBadge) {
+      sbSpectralBadge.classList.toggle('hidden', !saEnabled);
+      if (saEnabled) {
+        const tvVerdict = isPendingValidation ? 'analyzing' : saVerdict;
+        const sRate = Number(sa.sample_rate || sa.sampleRate || devRateHz);
+        const tvBadgeMap = {
+          verified_hires: sRate > 48000 ? '✓ TRUE HI-RES' : '✓ TRUE 24-BIT',
+          verified_lossless: '✓ TRUE LOSSLESS',
+          upsampled: '⚠ FAKE HI-RES • 22K CUT',
+          lossy_transcode: '⚠ LOSSY TRANSCODE',
+          lossy_upscaled: '⚠ UPSCALE 128→256K',
+          zero_padded: '⚠ ZERO-PADDED 16→24',
+          aac_lossy: '✓ AAC 256 KBPS',
+          analyzing: 'FFT АНАЛИЗ...'
+        };
+        sbSpectralBadge.textContent = tvBadgeMap[tvVerdict] || 'FFT АНАЛИЗ...';
+        sbSpectralBadge.classList.remove('authentic', 'warning', 'bad', 'neutral');
+        if (tvVerdict === 'upsampled' || tvVerdict === 'lossy_transcode' || tvVerdict === 'lossy_upscaled') {
+          sbSpectralBadge.classList.add('bad');
+        } else if (tvVerdict === 'zero_padded') {
+          sbSpectralBadge.classList.add('warning');
+        } else if (tvVerdict === 'aac_lossy' || tvVerdict === 'analyzing') {
+          sbSpectralBadge.classList.add('neutral');
+        } else {
+          sbSpectralBadge.classList.add('authentic');
+        }
+      }
+    }
+
+    const isModalOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
+    if (!isModalOpen) {
+      renderSpectralAnalysisUI();
+      return;
+    }
 
     if (dom.signalSourceBadge) dom.signalSourceBadge.textContent = formatBadge;
     if (dom.signalSourceTitle) {
@@ -1928,19 +3386,38 @@ extension WebUIContent {
           ? 'CoreAudio Process Tap • Декодирование AAC → PCM 16-бит / 44.1 кГц'
           : 'CoreAudio Process Tap (Bit-Perfect) • Бесконечный PCM поток';
       } else {
+        const guardLabel = state.dacMutingGuardEnabled === true
+          ? `DAC Muting Guard (${state.dacMutingGuardMs || 100} мс)`
+          : 'Bypass микшера';
+        const ampLabel = (state.lockVolume100 && state.ampVolumeControlEnabled)
+          ? `${state.ampBrandName || 'AMP'} TCP Vol ${state.ampMuted ? 'MUTE' : state.volume}`
+          : 'Zero DSP';
         signalEngineMeta.textContent = isLossy
           ? 'CoreAudio HAL • Декодирование AAC → PCM 16-бит / 44.1 кГц'
-          : 'Bit-Perfect 100% Lock • Zero DSP • Bypass микшера';
+          : `Bit-Perfect 100% Lock • ${guardLabel} • ${ampLabel}`;
       }
     }
     const signalVerifiedCard = document.querySelector('.signal-verified-card');
     const signalVerifiedTitle = document.querySelector('.signal-verified-title');
     const signalVerifiedDesc = document.querySelector('.signal-verified-desc');
+    const hasTopWarning = !isVerified || isSpectralFake || isSpectralZeroPad;
     if (signalVerifiedCard) {
-      signalVerifiedCard.classList.toggle('warning', !isVerified);
+      signalVerifiedCard.classList.toggle('warning', hasTopWarning);
     }
     if (signalVerifiedTitle && signalVerifiedDesc) {
-      if (isVerified) {
+      if (saVerdict === 'lossy_upscaled') {
+        signalVerifiedTitle.textContent = 'Обнаружен апскейл Lossy (128 → 256 kbps)';
+        signalVerifiedDesc.textContent = sa.verdict_description || sa.verdictDescription || 'Спектр жестко обрезан ниже 16.5 кГц — низкобитрейтный исходник (MP3/AAC 128 kbps) перекодирован в AAC 256 kbps.';
+      } else if (saVerdict === 'lossy_transcode') {
+        signalVerifiedTitle.textContent = 'Обнаружен транскод из Lossy (MP3 / AAC)';
+        signalVerifiedDesc.textContent = sa.verdict_description || sa.verdictDescription || 'Внутри контейнера ALAC Lossless обнаружен жесткий срез ВЧ, характерный для сжатия с потерями.';
+      } else if (saVerdict === 'upsampled') {
+        signalVerifiedTitle.textContent = 'Обнаружен апсемплинг (Fake Hi-Res)';
+        signalVerifiedDesc.textContent = sa.verdict_description || sa.verdictDescription || 'Поток передается в Hi-Res контейнере, но спектр ограничен частотой CD (22.05 кГц).';
+      } else if (saVerdict === 'zero_padded') {
+        signalVerifiedTitle.textContent = 'Zero-Padded контейнер (16-бит в 24-бит)';
+        signalVerifiedDesc.textContent = sa.verdict_description || sa.verdictDescription || 'Младшие 8 бит в 24-битном потоке пустые — реальный динамический диапазон составляет 16 бит.';
+      } else if (isVerified) {
         signalVerifiedTitle.textContent = 'Bit-Perfect Verified';
         if (isNetworkRenderer) {
           signalVerifiedDesc.textContent = `Hi-Res PCM поток (${outBitDepth}-бит / ${rateKhz} кГц) захватывается напрямую из Music.app и передается на сетевой рендерер без передискретизации.`;
@@ -1949,7 +3426,7 @@ extension WebUIContent {
         }
       } else if (isLossy) {
         signalVerifiedTitle.textContent = 'Lossy Stream (AAC 256 kbps)';
-        signalVerifiedDesc.textContent = 'Воспроизводится сжатый поток AAC. Для Bit-Perfect переключитесь на трек в формате ALAC Lossless.';
+        signalVerifiedDesc.textContent = 'Воспроизводится сжатый поток AAC 256 kbps (полоса до ~19.5 кГц). Для Bit-Perfect переключитесь на ALAC Lossless.';
       } else {
         const srcKhz = sourceRateHz ? (sourceRateHz / 1000).toFixed(1).replace(/\.0$/, '') : rateKhz;
         const srcBits = sourceBitDepth || 24;
@@ -1957,21 +3434,383 @@ extension WebUIContent {
         signalVerifiedDesc.textContent = `Частота или разрядность источника (${srcBits}-бит / ${srcKhz} кГц) отличается от текущего режима вывода (${outBitDepth}-бит / ${rateKhz} кГц).`;
       }
     }
+    syncSignalPathAmpNode();
+    renderSpectralAnalysisUI();
+  }
+
+  let spectralPollTimer = null;
+  let standbyRtaRafId = null;
+  let lastStandbyRtaFrameMs = 0;
+  let cachedStandbyRtaBackdrop = null;
+  let cachedStandbyRtaBarsWrap = null;
+  let standbyRtaBarEls = [];
+  const standbyRtaBarCount = 64;
+  const standbyRtaCurrent = new Float32Array(standbyRtaBarCount).fill(0.03);
+  const standbyRtaTarget = new Float32Array(standbyRtaBarCount).fill(0.03);
+  const standbyRtaVelocity = new Float32Array(standbyRtaBarCount).fill(0.0);
+  const standbyRtaRendered = new Float32Array(standbyRtaBarCount).fill(-1);
+  const standbyRtaClassState = new Uint8Array(standbyRtaBarCount).fill(255);
+
+  function stepStandbyRtaAnimation(nowMs) {
+    const sa = state.spectralAnalysis || {};
+    const saEnabled = sa.is_enabled !== false && sa.isEnabled !== false && sa.verdict !== 'disabled';
+    if (standbyRtaBarEls.length !== standbyRtaBarCount || !saEnabled || !isStandbyOrLandscapeVisible()) {
+      standbyRtaRafId = null;
+      return;
+    }
+
+    const ts = nowMs || performance.now();
+    // Cap RTA GPU transform updates to ~24fps (40ms) so iPad mini / ProMotion displays stay cool
+    if (ts - lastStandbyRtaFrameMs < 40) {
+      standbyRtaRafId = requestAnimationFrame(stepStandbyRtaAnimation);
+      return;
+    }
+    lastStandbyRtaFrameMs = ts;
+
+    // If spectral updates stopped arriving (>1.2s stale) or player is not playing, decay targets to floor
+    // so spectrum bars never freeze in mid-air during track transitions or stalls.
+    const spectralStale = (ts - (state.lastSpectralUpdateAt || 0)) > 1200;
+    const shouldDecayToFloor = (state.playerState !== 'playing') || spectralStale;
+
+    let hasMotion = false;
+
+    for (let i = 0; i < standbyRtaBarCount; i++) {
+      if (shouldDecayToFloor && standbyRtaTarget[i] > 0.03) {
+        standbyRtaTarget[i] = Math.max(0.03, standbyRtaTarget[i] * 0.82);
+        if (standbyRtaTarget[i] > 0.032) {
+          hasMotion = true;
+        }
+      }
+      const tgt = Math.max(0.025, Math.min(0.96, standbyRtaTarget[i]));
+      const cur = standbyRtaCurrent[i];
+      const diff = tgt - cur;
+
+      // Smooth spring-damped interpolation (soft attack, silky exponential release)
+      const factor = diff > 0 ? 0.24 : 0.13;
+      standbyRtaVelocity[i] = standbyRtaVelocity[i] * 0.52 + diff * factor;
+      const nextVal = Math.max(0.025, Math.min(0.96, cur + standbyRtaVelocity[i]));
+      standbyRtaCurrent[i] = nextVal;
+
+      if (Math.abs(diff) > 0.003 || Math.abs(standbyRtaVelocity[i]) > 0.002) {
+        hasMotion = true;
+      }
+
+      if (Math.abs(nextVal - standbyRtaRendered[i]) > 0.003) {
+        standbyRtaRendered[i] = nextVal;
+        const bar = standbyRtaBarEls[i];
+        if (bar) {
+          bar.style.transform = `scale3d(1, ${nextVal.toFixed(3)}, 1)`;
+        }
+      }
+    }
+
+    if (hasMotion) {
+      standbyRtaRafId = requestAnimationFrame(stepStandbyRtaAnimation);
+    } else {
+      standbyRtaRafId = null;
+    }
+  }
+
+  function ensureStandbyRtaAnimLoop() {
+    if (!standbyRtaRafId && isStandbyOrLandscapeVisible()) {
+      standbyRtaRafId = requestAnimationFrame(stepStandbyRtaAnimation);
+    }
+  }
+
+  function renderStandbyRtaBackdrop(sa, saEnabled, isLossy, sRate, isWarning) {
+    if (!cachedStandbyRtaBackdrop) cachedStandbyRtaBackdrop = document.getElementById('standby-rta-backdrop');
+    if (!cachedStandbyRtaBarsWrap) cachedStandbyRtaBarsWrap = document.getElementById('standby-rta-bars');
+    const backdrop = cachedStandbyRtaBackdrop;
+    const barsWrap = cachedStandbyRtaBarsWrap;
+    if (!backdrop || !barsWrap) return;
+
+    backdrop.classList.toggle('hidden', !saEnabled);
+    if (!saEnabled || !isStandbyOrLandscapeVisible()) return;
+
+    const barCount = standbyRtaBarCount;
+    if (barsWrap.children.length !== barCount || standbyRtaBarEls.length !== barCount) {
+      barsWrap.innerHTML = '';
+      standbyRtaBarEls = [];
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < barCount; i++) {
+        const b = document.createElement('div');
+        b.className = 'standby-rta-bar';
+        frag.appendChild(b);
+        standbyRtaBarEls.push(b);
+        standbyRtaRendered[i] = -1;
+        standbyRtaClassState[i] = 255;
+      }
+      barsWrap.appendChild(frag);
+    }
+
+    const rawBands = Array.isArray(sa.rta_bands || sa.rtaBands) && (sa.rta_bands || sa.rtaBands).length === 32
+      ? (sa.rta_bands || sa.rtaBands)
+      : null;
+    const isPlaying = state.playerState === 'playing';
+    const isHiResRate = sRate >= 88200;
+    const splitBarIdx = isHiResRate ? 40 : 48;
+
+    // 1. Interpolate 32 FFT bands to 64 raw targets
+    const unsmoothed = new Float32Array(barCount);
+    for (let i = 0; i < barCount; i++) {
+      if (!isPlaying || !rawBands) {
+        unsmoothed[i] = 0.03;
+        continue;
+      }
+      const pos = (i / (barCount - 1)) * 31;
+      const idx0 = Math.floor(pos);
+      const idx1 = Math.min(31, idx0 + 1);
+      const frac = pos - idx0;
+      // Smoothstep interpolation between bins
+      const t = frac * frac * (3 - 2 * frac);
+      const v0 = Number.isFinite(Number(rawBands[idx0])) ? Number(rawBands[idx0]) : 0.03;
+      const v1 = Number.isFinite(Number(rawBands[idx1])) ? Number(rawBands[idx1]) : 0.03;
+      unsmoothed[i] = v0 * (1 - t) + v1 * t;
+    }
+
+    // 2. Apply 5-tap Gaussian spatial smoothing across neighboring bars for a liquid wave curve
+    for (let i = 0; i < barCount; i++) {
+      const bar = standbyRtaBarEls[i];
+      if (!isPlaying || !rawBands) {
+        standbyRtaTarget[i] = 0.03;
+        if (standbyRtaClassState[i] !== 4) {
+          standbyRtaClassState[i] = 4;
+          bar.classList.remove('ultrasonic', 'warning-bar');
+          bar.classList.add('depleted');
+        }
+        continue;
+      }
+
+      const m2 = unsmoothed[Math.max(0, i - 2)];
+      const m1 = unsmoothed[Math.max(0, i - 1)];
+      const c0 = unsmoothed[i];
+      const p1 = unsmoothed[Math.min(barCount - 1, i + 1)];
+      const p2 = unsmoothed[Math.min(barCount - 1, i + 2)];
+      const val = m2 * 0.08 + m1 * 0.22 + c0 * 0.40 + p1 * 0.22 + p2 * 0.08;
+
+      standbyRtaTarget[i] = Math.max(0.03, Math.min(0.95, val * 0.92));
+
+      const isAboveBoundary = i >= splitBarIdx;
+      const isDepleted = isAboveBoundary && (isWarning || isLossy || val < 0.06);
+      const isUltra = isAboveBoundary && !isDepleted && !isWarning;
+      const isWarn = isWarning && !isDepleted;
+      const classMask = (isUltra ? 1 : 0) | (isWarn ? 2 : 0) | (isDepleted ? 4 : 0);
+      if (standbyRtaClassState[i] !== classMask) {
+        standbyRtaClassState[i] = classMask;
+        bar.classList.toggle('ultrasonic', isUltra);
+        bar.classList.toggle('warning-bar', isWarn);
+        bar.classList.toggle('depleted', isDepleted);
+      }
+      if (!standbyRtaRafId) {
+        const tgtVal = standbyRtaTarget[i];
+        standbyRtaRendered[i] = tgtVal;
+        bar.style.transform = `scale3d(1, ${tgtVal.toFixed(3)}, 1)`;
+      }
+    }
+
+    ensureStandbyRtaAnimLoop();
+  }
+
+  function renderSpectralAnalysisUI() {
+    const quality = state.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
+    const isLossy = quality.toUpperCase().includes('AAC') || quality.toUpperCase().includes('MP3');
+    const devRateHz = state.audioDeviceSampleRate || 44100;
+    const sa = state.spectralAnalysis || {};
+    const saEnabled = sa.is_enabled !== false && sa.isEnabled !== false && sa.verdict !== 'disabled';
+    const verdict = sa.verdict || (isLossy ? 'aac_lossy' : (devRateHz > 48000 ? 'verified_hires' : 'verified_lossless'));
+    const sRate = Number(sa.sample_rate || sa.sampleRate || devRateHz);
+    const isWarning = (verdict === 'upsampled' || verdict === 'lossy_transcode' || verdict === 'zero_padded' || verdict === 'lossy_upscaled');
+
+    renderStandbyRtaBackdrop(sa, saEnabled, isLossy, sRate, isWarning);
+
+    const isModalOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
+    if (!isModalOpen) return;
+
+    const card = document.getElementById('signal-spectral-card');
+    if (!card) return;
+
+    card.classList.toggle('hidden', !saEnabled);
+    if (!saEnabled) return;
+
+    const nyquistHz = Number(sa.nyquist_frequency_hz || sa.nyquistFrequencyHz || (sRate / 2));
+    const cutoffHz = Number(sa.cutoff_frequency_hz || sa.cutoffFrequencyHz || (isLossy ? 19200 : nyquistHz));
+    const effBits = Number(sa.effective_bit_depth || sa.effectiveBitDepth || (isLossy ? 16 : (sRate >= 48000 ? 24 : 16)));
+    const claimedBits = Number(sa.claimed_bit_depth || sa.claimedBitDepth || effBits);
+    const isZeroPadded = Boolean(sa.is_zero_padded || sa.isZeroPadded);
+    const ultraDb = Number(sa.ultrasonic_energy_db !== undefined ? sa.ultrasonic_energy_db : (sa.ultrasonicEnergyDb !== undefined ? sa.ultrasonicEnergyDb : -92));
+
+    const isNeutral = (verdict === 'aac_lossy' || verdict === 'analyzing');
+
+    card.classList.toggle('warning', isWarning);
+    card.classList.toggle('authentic', !isWarning && !isNeutral);
+
+    const badgeEl = document.getElementById('spectral-verdict-badge');
+    if (badgeEl) {
+      badgeEl.classList.toggle('warning', isWarning);
+      badgeEl.classList.toggle('neutral', isNeutral);
+      const badgeMap = {
+        verified_hires: sRate > 48000 ? 'TRUE HI-RES' : 'TRUE 24-BIT',
+        verified_lossless: 'TRUE LOSSLESS',
+        upsampled: 'FAKE HI-RES • 22k CUT',
+        lossy_transcode: 'LOSSY TRANSCODE',
+        lossy_upscaled: 'UPSCALE 128→256K',
+        zero_padded: 'ZERO-PADDED 16→24',
+        aac_lossy: 'AAC 256 KBPS',
+        analyzing: 'FFT АНАЛИЗ...'
+      };
+      badgeEl.textContent = badgeMap[verdict] || 'TRUE LOSSLESS';
+    }
+
+    const titleEl = document.getElementById('spectral-verdict-title');
+    if (titleEl) {
+      titleEl.textContent = sa.verdict_title || sa.verdictTitle || (isLossy ? 'Сжатый поток AAC 256 kbps' : 'Verified True Lossless');
+    }
+
+    const descEl = document.getElementById('spectral-verdict-desc');
+    if (descEl) {
+      descEl.textContent = sa.verdict_description || sa.verdictDescription || 'Спектральный анализ потока CoreAudio Process Tap через Accelerate vDSP FFT.';
+    }
+
+    const cutoffEl = document.getElementById('spectral-metric-cutoff');
+    if (cutoffEl) {
+      cutoffEl.textContent = `до ${(cutoffHz / 1000).toFixed(1)} кГц`;
+    }
+
+    const ultraEl = document.getElementById('spectral-metric-ultra');
+    if (ultraEl) {
+      if (sRate >= 88200) {
+        ultraEl.textContent = ultraDb > -80 ? `${Math.round(ultraDb)} dBFS` : 'Нет (<-82 dB)';
+      } else {
+        ultraEl.textContent = 'Н/Д (≤ 48 кГц)';
+      }
+    }
+
+    const bitsEl = document.getElementById('spectral-metric-bits');
+    if (bitsEl) {
+      if (isZeroPadded) {
+        bitsEl.textContent = `16-бит (в ${claimedBits}-бит)`;
+      } else {
+        bitsEl.textContent = `${effBits}-бит (${effBits >= 24 ? 'Честный LSB' : 'PCM'})`;
+      }
+    }
+
+    const markerEl = document.getElementById('spectral-cutoff-marker');
+    const markerLabelEl = document.getElementById('spectral-cutoff-marker-label');
+    const axisRefEl = document.getElementById('spectral-axis-ref');
+    const axisNyqEl = document.getElementById('spectral-axis-nyquist');
+    const isHiResRate = sRate >= 88200;
+
+    if (markerEl && markerLabelEl) {
+      markerEl.style.left = isHiResRate ? '62.5%' : '75%';
+      markerLabelEl.textContent = isHiResRate ? '22.05 кГц CD' : '18.0 кГц AAC';
+    }
+    if (axisRefEl) {
+      axisRefEl.textContent = isHiResRate ? '22.05 кГц' : '18.0 кГц';
+    }
+    if (axisNyqEl) {
+      axisNyqEl.textContent = `${(nyquistHz / 1000).toFixed(1).replace(/\.0$/, '')} кГц`;
+    }
+
+    const barsContainer = document.getElementById('spectral-rta-bars');
+    if (barsContainer) {
+      if (barsContainer.children.length !== 32) {
+        barsContainer.innerHTML = '';
+        for (let i = 0; i < 32; i++) {
+          const b = document.createElement('div');
+          b.className = 'spectral-rta-bar';
+          barsContainer.appendChild(b);
+        }
+      }
+      const rawBands = Array.isArray(sa.rta_bands || sa.rtaBands) && (sa.rta_bands || sa.rtaBands).length === 32
+        ? (sa.rta_bands || sa.rtaBands)
+        : null;
+
+      const splitIdx = isHiResRate ? 20 : 24;
+      for (let i = 0; i < 32; i++) {
+        const bar = barsContainer.children[i];
+        let val = rawBands ? Number(rawBands[i]) : 0.08;
+        if (!Number.isFinite(val)) val = 0.05;
+        const pct = Math.max(6, Math.min(100, Math.round(val * 100)));
+        bar.style.height = `${pct}%`;
+
+        const isAboveBoundary = i >= splitIdx;
+        const isDepleted = isAboveBoundary && (isWarning || isLossy || val < 0.06);
+        bar.classList.toggle('ultrasonic', isAboveBoundary && !isDepleted && !isWarning);
+        bar.classList.toggle('warning-bar', isWarning && !isDepleted);
+        bar.classList.toggle('depleted', isDepleted);
+      }
+    }
+  }
+
+  function stopSpectralPolling() {
+    if (spectralPollTimer) {
+      clearInterval(spectralPollTimer);
+      spectralPollTimer = null;
+    }
+  }
+
+  function isStandbyOrLandscapeVisible() {
+    const overlay = document.getElementById('standby-tv-overlay');
+    const isExplicitOpen = Boolean(overlay && !overlay.classList.contains('hidden'));
+    const isMobileLandscape = window.innerHeight <= 540 && window.innerWidth > window.innerHeight;
+    return isExplicitOpen || isMobileLandscape;
+  }
+
+  let spectralPollTickCount = 0;
+  function syncSpectralPolling() {
+    const sa = state.spectralAnalysis || {};
+    const saEnabled = sa.is_enabled !== false && sa.isEnabled !== false && sa.verdict !== 'disabled';
+    const isModalOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
+    const isPlayingAndEnabled = state.playerState === 'playing' && saEnabled;
+
+    if (isModalOpen || isPlayingAndEnabled) {
+      if (!spectralPollTimer) {
+        spectralPollTickCount = 0;
+        spectralPollTimer = setInterval(() => {
+          spectralPollTickCount += 1;
+          const curSa = state.spectralAnalysis || {};
+          const curEnabled = curSa.is_enabled !== false && curSa.isEnabled !== false && curSa.verdict !== 'disabled';
+          const modalStillOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
+          const tvStillActive = isStandbyOrLandscapeVisible() && state.playerState === 'playing' && curEnabled;
+          const isCachedPass = Boolean(curSa.is_cached || curSa.isCached);
+          const stillAnalyzing = state.playerState === 'playing' && curEnabled && !isCachedPass && (!curSa.verdict || curSa.verdict === 'analyzing');
+          const playingActive = state.playerState === 'playing' && curEnabled;
+          if (!modalStillOpen && !playingActive) {
+            stopSpectralPolling();
+            return;
+          }
+          if (modalStillOpen || tvStillActive || stillAnalyzing || (!isCachedPass && spectralPollTickCount % 2 === 0)) {
+            send({ action: 'get_spectral_analysis' });
+          }
+        }, 210);
+      }
+      ensureStandbyRtaAnimLoop();
+    } else {
+      stopSpectralPolling();
+      ensureStandbyRtaAnimLoop();
+    }
   }
 
   const openQualityModal = () => {
     triggerHaptic('light');
     updateSignalPathDetails();
     if (dom.qualityModal) dom.qualityModal.classList.remove('hidden');
+    send({ action: 'get_spectral_analysis' });
+    syncSpectralPolling();
   };
 
   if (dom.audioQualityBadge) dom.audioQualityBadge.addEventListener('click', openQualityModal);
   if (dom.desktopDacBadge) dom.desktopDacBadge.addEventListener('click', openQualityModal);
   if (dom.mobileDacBadge) dom.mobileDacBadge.addEventListener('click', openQualityModal);
+  const standbyDacBadgeEl = document.getElementById('standby-dac-badge');
+  const standbySpectralBadgeEl = document.getElementById('standby-spectral-badge');
+  if (standbyDacBadgeEl) standbyDacBadgeEl.addEventListener('click', openQualityModal);
+  if (standbySpectralBadgeEl) standbySpectralBadgeEl.addEventListener('click', openQualityModal);
 
   if (dom.btnCloseModal) {
     dom.btnCloseModal.addEventListener('click', () => {
       if (dom.qualityModal) dom.qualityModal.classList.add('hidden');
+      syncSpectralPolling();
     });
   }
 
@@ -2103,7 +3942,7 @@ extension WebUIContent {
               developerToken: devToken,
               app: {
                 name: 'Apple Music Remote',
-                build: '2.4.0'
+                build: '2.5.0'
               }
             });
             musicKitInstance = window.MusicKit.getInstance();
@@ -2127,6 +3966,13 @@ extension WebUIContent {
   }
 
   function updateUserTokenStatus(data) {
+    if (!state.deviceAuthorized || (data && data.status === 'error')) {
+      if (dom.modalAppleAuth) {
+        dom.modalAppleAuth.classList.add('hidden');
+        dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
+      }
+      return;
+    }
     const hasToken = Boolean(data && (data.has_user_token !== undefined ? data.has_user_token : data.hasUserToken));
     state.hasUserToken = hasToken;
     if (data && data.storefront) {
@@ -2306,15 +4152,102 @@ extension WebUIContent {
     });
   }
 
-  // --- Station Creation Modal Listeners ---
+  // --- Go to Album Action & Station Creation Modal Listeners ---
+  function openCurrentTrackAlbum() {
+    const t = state.track;
+    const albumName = t && t.album ? t.album.trim() : '';
+    if (!albumName) return;
+    triggerHaptic('light');
+    if (typeof bookletState !== 'undefined' && bookletState.isOpen) {
+      closeBookletViewer();
+    }
+    const art = getArtworkSrc(t);
+    const origin = isDesktopLayout() ? 'library' : 'player';
+    openAlbumDetail({
+      id: '',
+      name: albumName,
+      artist: (t && t.artist) ? t.artist : '',
+      artwork: art,
+      url: ''
+    }, origin);
+  }
+
+  if (dom.btnGoToAlbum) {
+    dom.btnGoToAlbum.addEventListener('click', () => {
+      if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+      openCurrentTrackAlbum();
+    });
+  }
+
+  if (dom.playerAlbum) {
+    dom.playerAlbum.addEventListener('click', openCurrentTrackAlbum);
+  }
+
+  function triggerAiMixFromCurrentTrack() {
+    triggerHaptic('medium');
+    if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+    const trackName = (state.track && state.track.name) ? state.track.name.trim() : '';
+    const artistName = (state.track && state.track.artist) ? state.track.artist.trim() : '';
+    const albumName = (state.track && state.track.album) ? state.track.album.trim() : '';
+    if (!trackName) {
+      showToast(translateTextToEn('Сначала запустите трек для ИИ-подбора по вайбу'));
+      return;
+    }
+    const sbAiVibeBtn = document.getElementById('standby-btn-ai-track-vibe');
+    [dom.btnAiTrackVibe, sbAiVibeBtn].forEach((b) => {
+      if (!b) return;
+      b.classList.add('loading-pulse');
+      setTimeout(() => b.classList.remove('loading-pulse'), 2200);
+    });
+    state.isAiCurating = true;
+    state.pendingStandbyAiAutoPlay = true;
+    setUIBusy(true, translateTextToEn(`✨ ИИ-подбор по вайбу «${trackName}»...`));
+    send({
+      action: 'ai_curate_from_track',
+      params: {
+        name: trackName,
+        artist: artistName,
+        album: albumName,
+        country: state.userStorefront || state.trends.country || 'ru',
+        auto_play: true
+      }
+    });
+  }
+
+  if (dom.btnAiTrackVibe) {
+    dom.btnAiTrackVibe.addEventListener('click', triggerAiMixFromCurrentTrack);
+  }
+
+  if (dom.btnAiMixByTrack) {
+    dom.btnAiMixByTrack.addEventListener('click', triggerAiMixFromCurrentTrack);
+  }
+
   if (dom.btnCreateStation) {
     dom.btnCreateStation.addEventListener('click', () => {
       triggerHaptic('light');
+      const albumText = (state.track && state.track.album) ? state.track.album.trim() : '';
+      const trackText = (state.track && state.track.name) ? state.track.name.trim() : '';
+      const artistText = (state.track && state.track.artist) ? state.track.artist.trim() : '';
+      if (dom.stationOptAlbumName) {
+        dom.stationOptAlbumName.textContent = albumText || 'Не указан';
+      }
+      if (dom.btnGoToAlbum) {
+        dom.btnGoToAlbum.disabled = !albumText;
+      }
+      if (dom.btnAiMixByTrack) {
+        dom.btnAiMixByTrack.disabled = !trackText;
+        dom.btnAiMixByTrack.classList.toggle('hidden', !state.aiCuratorEnabled);
+      }
+      if (dom.stationOptAiVibeSub) {
+        dom.stationOptAiVibeSub.textContent = trackText
+          ? `${artistText ? artistText + ' — ' : ''}${trackText}`
+          : translateTextToEn('Бесконечная волна 20+ треков по атмосфере');
+      }
       if (dom.stationOptTrackName) {
-        dom.stationOptTrackName.textContent = (state.track && state.track.name) ? state.track.name : 'Не играет';
+        dom.stationOptTrackName.textContent = trackText || 'Не играет';
       }
       if (dom.stationOptArtistName) {
-        dom.stationOptArtistName.textContent = (state.track && state.track.artist) ? state.track.artist : 'Apple Music';
+        dom.stationOptArtistName.textContent = artistText || 'Apple Music';
       }
       if (dom.stationPickerModal) {
         dom.stationPickerModal.classList.remove('hidden');
@@ -2387,14 +4320,28 @@ extension WebUIContent {
   let volumeSendTimeout = null;
 
   function sendThrottledVolume(val) {
-    const vol = Math.max(0, Math.min(100, Math.round(Number(val) || 0)));
+    const isExtAmpMode = Boolean(state.lockVolume100 && state.ampVolumeControlEnabled);
+    const maxVol = isExtAmpMode ? Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80)) : 100;
+    const vol = Math.max(0, Math.min(maxVol, Math.round(Number(val) || 0)));
     state.volume = vol;
-    if (vol > 0) state.previousVolume = vol;
+    if (vol > 0) {
+      state.previousVolume = vol;
+      if (isExtAmpMode) state.ampMuted = false;
+    }
 
-    if (dom.volumeTrackFill) dom.volumeTrackFill.style.width = `${vol}%`;
-    if (dom.volumeThumb) dom.volumeThumb.style.left = `${vol}%`;
-    if (dom.volumeLevelText) dom.volumeLevelText.textContent = `${vol}%`;
-    updateVolumeIcon(vol);
+    const pct = Math.max(0, Math.min(100, (vol / maxVol) * 100));
+    const brand = state.ampBrandName || 'AMP';
+    const labelStr = isExtAmpMode ? `${brand} • ${vol}%` : `${vol}%`;
+
+    if (dom.volumeTrackFill) dom.volumeTrackFill.style.width = `${pct}%`;
+    if (dom.volumeThumb) dom.volumeThumb.style.left = `${pct}%`;
+    if (dom.volumeLevelText) dom.volumeLevelText.textContent = labelStr;
+    updateStandbyLoupePosition(vol, pct, vol === 0);
+    if (dom.standbyVolumeText) dom.standbyVolumeText.textContent = labelStr;
+    if (dom.standbyBtnVolumeMute) dom.standbyBtnVolumeMute.classList.toggle('muted', vol === 0);
+    syncSignalPathAmpNode();
+    updateVolumeIcon(Math.round(pct));
+    triggerStandbyVolumePulse();
 
     const now = Date.now();
     if (now - lastVolumeSendTime >= 75) {
@@ -2409,9 +4356,28 @@ extension WebUIContent {
     }
   }
 
+  function handleMuteToggleClick() {
+    triggerHaptic('toggle');
+    triggerStandbyVolumePulse();
+    if (state.lockVolume100 && state.ampVolumeControlEnabled) {
+      state.ampMuted = !state.ampMuted;
+      renderVolumeUI();
+      send({ action: 'toggle_amp_mute', params: { muted: state.ampMuted } });
+      return;
+    }
+    if (state.volume > 0) {
+      state.previousVolume = state.volume;
+      sendThrottledVolume(0);
+    } else {
+      const restore = state.previousVolume > 0 ? state.previousVolume : 50;
+      sendThrottledVolume(restore);
+    }
+  }
+
   if (dom.volumeInput) {
     dom.volumeInput.addEventListener('input', (e) => {
       state.isDraggingVolume = true;
+      if (dom.standbyVolumeInput) dom.standbyVolumeInput.value = e.target.value;
       sendThrottledVolume(e.target.value);
     });
 
@@ -2422,17 +4388,42 @@ extension WebUIContent {
     });
   }
 
-  if (dom.btnVolumeMute) {
-    dom.btnVolumeMute.addEventListener('click', () => {
-      triggerHaptic('toggle');
-      if (state.volume > 0) {
-        state.previousVolume = state.volume;
-        sendThrottledVolume(0);
-      } else {
-        const restore = state.previousVolume > 0 ? state.previousVolume : 50;
-        sendThrottledVolume(restore);
-      }
+  if (dom.standbyVolumeInput) {
+    dom.standbyVolumeInput.addEventListener('pointerdown', () => {
+      state.isDraggingVolume = true;
+      showStandbyVolumeLoupe(0);
     });
+    dom.standbyVolumeInput.addEventListener('touchstart', () => {
+      state.isDraggingVolume = true;
+      showStandbyVolumeLoupe(0);
+    }, { passive: true });
+
+    dom.standbyVolumeInput.addEventListener('input', (e) => {
+      state.isDraggingVolume = true;
+      showStandbyVolumeLoupe(0);
+      if (dom.volumeInput) dom.volumeInput.value = e.target.value;
+      sendThrottledVolume(e.target.value);
+    });
+
+    const finishStandbyVolScrub = (e) => {
+      state.isDraggingVolume = false;
+      if (e && e.target && e.target.value !== undefined) {
+        sendThrottledVolume(e.target.value);
+      }
+      showStandbyVolumeLoupe(750);
+      triggerHaptic('light');
+    };
+
+    dom.standbyVolumeInput.addEventListener('change', finishStandbyVolScrub);
+    dom.standbyVolumeInput.addEventListener('pointerup', () => showStandbyVolumeLoupe(750));
+    dom.standbyVolumeInput.addEventListener('touchend', () => showStandbyVolumeLoupe(750), { passive: true });
+  }
+
+  if (dom.btnVolumeMute) {
+    dom.btnVolumeMute.addEventListener('click', handleMuteToggleClick);
+  }
+  if (dom.standbyBtnVolumeMute) {
+    dom.standbyBtnVolumeMute.addEventListener('click', handleMuteToggleClick);
   }
 
   // --- Queue View Handling ---
@@ -2545,6 +4536,47 @@ extension WebUIContent {
   dom.btnClearQueue.addEventListener('click', () => {
     send({ action: 'queue_clear' });
   });
+
+  if (dom.btnSaveQueuePlaylist) {
+    dom.btnSaveQueuePlaylist.addEventListener('click', () => {
+      const cur = (state.track && state.track.name) ? [state.track] : [];
+      const upcoming = Array.isArray(state.queue.upcoming) ? state.queue.upcoming : [];
+      const allQueueTracks = [...cur, ...upcoming];
+      if (allQueueTracks.length === 0) {
+        showToast(IS_EN ? 'Queue is empty' : 'Очередь пуста');
+        return;
+      }
+      triggerHaptic('medium');
+      let plName = '';
+      if (state.activeAiCuratedTitle) {
+        plName = state.activeAiCuratedTitle;
+      } else if (state.queue.playlist && state.queue.playlist !== 'Очередь AMR') {
+        plName = state.queue.playlist;
+      }
+      dom.btnSaveQueuePlaylist.disabled = true;
+      dom.btnSaveQueuePlaylist.classList.add('saved');
+      if (dom.btnSaveQueueText) {
+        dom.btnSaveQueueText.textContent = translateTextToEn('В медиатеке ✓');
+      }
+      send({
+        action: 'save_queue_to_playlist',
+        params: {
+          name: plName,
+          tracks: allQueueTracks
+        }
+      });
+      showToast(IS_EN ? '★ Queue saved to Apple Music playlists' : '★ Очередь сохранена в плейлисты Apple Music');
+      setTimeout(() => {
+        if (dom.btnSaveQueuePlaylist) {
+          dom.btnSaveQueuePlaylist.disabled = false;
+          dom.btnSaveQueuePlaylist.classList.remove('saved');
+        }
+        if (dom.btnSaveQueueText) {
+          dom.btnSaveQueueText.textContent = translateTextToEn('В плейлист');
+        }
+      }, 3200);
+    });
+  }
 
   // --- Library / Playlists Handling ---
   function updatePlaylists(data) {
@@ -2666,6 +4698,8 @@ extension WebUIContent {
         dom.btnAddPlaylistLibrary.classList.remove('added');
       }
     }
+    const btnDetailBookletPl = document.getElementById('btn-detail-booklet');
+    if (btnDetailBookletPl) btnDetailBookletPl.classList.add('hidden');
 
     navigateToView('view-library', 'library', true);
     if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.add('hidden');
@@ -2694,8 +4728,20 @@ extension WebUIContent {
     if (dom.playlistTracksList) dom.playlistTracksList.innerHTML = '<div class="loading-state">Загрузка треков альбома...</div>';
 
     if (dom.btnAddPlaylistLibrary) {
-      dom.btnAddPlaylistLibrary.style.display = 'none';
+      dom.btnAddPlaylistLibrary.style.display = '';
+      if (alb.is_local || alb.in_library) {
+        dom.btnAddPlaylistLibrary.disabled = true;
+        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
+        dom.btnAddPlaylistLibrary.classList.add('added');
+      } else {
+        dom.btnAddPlaylistLibrary.disabled = false;
+        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+        dom.btnAddPlaylistLibrary.classList.remove('added');
+      }
     }
+    const btnDetailBookletAlb = document.getElementById('btn-detail-booklet');
+    if (btnDetailBookletAlb) btnDetailBookletAlb.classList.add('hidden');
+    syncDetailAlbumBookletAvailability(alb);
 
     navigateToView('view-library', 'library', true);
     if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.add('hidden');
@@ -2721,6 +4767,12 @@ extension WebUIContent {
 
     if (origin === 'search') {
       navigateToView('view-search', 'search');
+    } else if (origin === 'player') {
+      if (!isDesktopLayout()) {
+        switchMobileView('view-now-playing', true);
+      } else {
+        dom.playlistsBrowsePane.classList.remove('hidden');
+      }
     } else if (origin === 'home-grid') {
       navigateToView('view-home', 'home');
       if (dom.viewHome) dom.viewHome.classList.remove('active');
@@ -2844,20 +4896,27 @@ extension WebUIContent {
 
   if (dom.btnAddPlaylistLibrary) {
     dom.btnAddPlaylistLibrary.addEventListener('click', () => {
-      if (!state.currentPlaylistDetail || !state.currentPlaylistDetail.id) return;
-      const plId = state.currentPlaylistDetail.id;
-      const plName = state.currentPlaylistDetail.name || state.currentPlaylistDetail.title || '';
+      if (!state.currentPlaylistDetail) return;
+      const isAlbum = Boolean(state.currentPlaylistDetail.isAlbum);
+      const itemId = state.currentPlaylistDetail.id || (state.currentAlbumDetail && state.currentAlbumDetail.id) || '';
+      const itemName = state.currentPlaylistDetail.name || state.currentPlaylistDetail.title || '';
+      const itemArtist = state.currentPlaylistDetail.artist || state.currentPlaylistDetail.sub || state.currentPlaylistDetail.subtitle || (state.currentAlbumDetail && state.currentAlbumDetail.artist) || '';
+      const tracks = isAlbum
+        ? ((state.currentAlbumDetail && state.currentAlbumDetail.tracks) || [])
+        : (state.currentPlaylistTracks || []);
+
       dom.btnAddPlaylistLibrary.disabled = true;
       if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'Добавление...';
       send({
         action: 'add_playlist_to_library',
-        params: { id: plId, name: plName }
+        params: {
+          id: itemId,
+          name: itemName,
+          artist: itemArtist,
+          is_album: isAlbum,
+          tracks: tracks
+        }
       });
-      setTimeout(() => {
-        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'Добавлено ✓';
-        dom.btnAddPlaylistLibrary.classList.add('added');
-        showToast('Плейлист добавлен в медиатеку Apple Music');
-      }, 1000);
     });
   }
 
@@ -2866,6 +4925,19 @@ extension WebUIContent {
     if (!alb) return;
     state.currentAlbumDetail = alb;
     state.currentPlaylistDetail = { ...alb, isAlbum: true };
+    if (dom.btnAddPlaylistLibrary) {
+      dom.btnAddPlaylistLibrary.style.display = '';
+      const tracksArr = alb.tracks || [];
+      const allLocal = tracksArr.length > 0 && tracksArr.every(t => Boolean(t.is_local || t.isLocal));
+      if (alb.is_local || alb.in_library || allLocal) {
+        dom.btnAddPlaylistLibrary.disabled = true;
+        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
+        dom.btnAddPlaylistLibrary.classList.add('added');
+      } else if (!dom.btnAddPlaylistLibrary.classList.contains('added')) {
+        dom.btnAddPlaylistLibrary.disabled = false;
+        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+      }
+    }
     if (dom.detailTitle) dom.detailTitle.textContent = alb.name || 'Альбом';
     if (dom.detailMeta) {
       const parts = [];
@@ -2892,7 +4964,7 @@ extension WebUIContent {
       const dur = formatTime(t.duration || 0);
 
       row.innerHTML = `
-        <span class="track-index-num">${t.index || idx + 1}</span>
+        <span class="track-index-num">${idx + 1}</span>
         <div class="track-details">
           <span class="track-row-title">${escapeHtml(t.name || 'Без названия')}</span>
           <span class="track-row-artist">${escapeHtml(t.artist || alb.artist || '')}</span>
@@ -2989,6 +5061,12 @@ extension WebUIContent {
   // --- Search Handling ---
   let searchDebounceTimer = null;
 
+  function isIncompleteAiStyleQuery(rawQuery) {
+    const clean = String(rawQuery || '').trim().toLowerCase();
+    if (clean.length < 3) return true;
+    return /^(в|в\s+с\w*|в\s+стиле(\s+(гр\w*|гуп\w*|арт\w*|исп\w*|муз\w*))?|как(\s+у(\s+(гр\w*|гуп\w*|арт\w*))?)?|похож\w*(\s+на(\s+(гр\w*|гуп\w*|арт\w*))?)?|в\s+духе(\s+(гр\w*|гуп\w*))?|что-?то(\s+вроде)?|типа(\s+(гр\w*|гуп\w*))?|in(\s+the(\s+style(\s+of)?)?)?|like|similar(\s+to)?)$/i.test(clean);
+  }
+
   dom.searchInput.addEventListener('input', function (e) {
     const q = e.target.value.trim();
     state.searchQuery = q;
@@ -2996,34 +5074,557 @@ extension WebUIContent {
 
     clearTimeout(searchDebounceTimer);
     if (!q) {
-      dom.searchResults.innerHTML = `
-        <div class="search-placeholder">
-          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#38383a" stroke-width="1.5">
-            <circle cx="11" cy="11" r="8"/>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <p>Ищите любимые треки, альбомы и исполнителей</p>
-        </div>`;
+      renderSearchPlaceholder();
+      return;
+    }
+
+    if (state.searchScope === 'ai' && isIncompleteAiStyleQuery(q)) {
       return;
     }
 
     searchDebounceTimer = setTimeout(() => {
       executeSearch(q, state.searchScope);
-    }, 280);
+    }, state.searchScope === 'ai' ? 560 : 280);
   });
+
+  dom.searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      const q = e.target.value.trim();
+      if (!q) return;
+      clearTimeout(searchDebounceTimer);
+      executeSearch(q, state.searchScope);
+    }
+  });
+
+  const AI_PROMPT_SUGGESTIONS_POOL = [
+    {
+      labelRu: '🎷 Ночной нуар-джаз с саксофоном',
+      labelEn: '🎷 Late-night noir jazz with sax',
+      promptRu: 'Ночной нуар-джаз с тёплым саксофоном и контрабасом',
+      promptEn: 'Late-night noir jazz with warm tenor saxophone and upright bass'
+    },
+    {
+      labelRu: '🎸 Аналоговый прог-рок 70-х',
+      labelEn: '🎸 70s analog progressive rock',
+      promptRu: 'Аналоговый прог-рок 70-х с широкой голографической сценой',
+      promptEn: '1970s analog progressive rock with wide holographic soundstage'
+    },
+    {
+      labelRu: '🎹 Эмбиент и пианино для фокуса',
+      labelEn: '🎹 Deep ambient & piano for focus',
+      promptRu: 'Глубокий эмбиент и неоклассическое пианино для фокуса',
+      promptEn: 'Deep ambient and neoclassical felt piano for focus'
+    },
+    {
+      labelRu: '🎙️ Эталонный вокал и акустика',
+      labelEn: '🎙️ Reference vocals & acoustics',
+      promptRu: 'Аудиофильский эталонный женский вокал и живая акустика',
+      promptEn: 'Audiophile reference female vocal and intimate acoustic guitar'
+    },
+    {
+      labelRu: '🌃 Кинематографичный синтвейв 80-х',
+      labelEn: '🌃 Cinematic 80s synthwave',
+      promptRu: 'Кинематографичный синтвейв 80-х и глубокий аналоговый синт',
+      promptEn: 'Cinematic 1980s synthwave and deep analog synthesizers'
+    },
+    {
+      labelRu: '🔊 Бристольский трип-хоп и даунтемпо',
+      labelEn: '🔊 Bristol trip-hop & downtempo',
+      promptRu: 'Бристольский трип-хоп 90-х и глубокий даунтемпо с суббасом',
+      promptEn: '1990s Bristol trip-hop and deep downtempo sub-bass groove'
+    },
+    {
+      labelRu: '🎻 Камерные струнные и виолончель',
+      labelEn: '🎻 Chamber strings & live cello',
+      promptRu: 'Скандинавская неоклассика, живая виолончель и камерные струнные',
+      promptEn: 'Nordic neoclassical chamber strings and intimate acoustic cello'
+    },
+    {
+      labelRu: '🌊 Дрим-поп и воздушный шугейз',
+      labelEn: '🌊 Dream-pop & airy shoegaze',
+      promptRu: 'Атмосферный дрим-поп и воздушный шугейз с гитарным ревербом',
+      promptEn: 'Atmospheric dream-pop and ethereal shoegaze with lush reverb'
+    },
+    {
+      labelRu: '🥃 Классический блюз-рок на лампе',
+      labelEn: '🥃 Tube-driven blues rock',
+      promptRu: 'Аудиофильский блюз-рок с живой ламповой гитарой и органом Hammond',
+      promptEn: 'Audiophile blues rock with warm tube guitar and Hammond organ'
+    },
+    {
+      labelRu: '🎺 Джаз-фанк и винтажный Rhodes',
+      labelEn: '🎺 Jazz-funk & vintage Rhodes',
+      promptRu: 'Винтажный джаз-фанк 70-х, тёплый Fender Rhodes и плотный грув',
+      promptEn: '1970s spiritual jazz-funk with warm Fender Rhodes and tight bass'
+    },
+    {
+      labelRu: '🌌 Космическая электроника (Берлин)',
+      labelEn: '🌌 Berlin school cosmic synth',
+      promptRu: 'Космическая аналоговая электроника в стиле берлинской школы и секвенсоры',
+      promptEn: 'Cosmic Berlin-school analog modular synthesizers and arpeggios'
+    },
+    {
+      labelRu: '☕ Босса-нова и акустика 60-х',
+      labelEn: '☕ 60s bossa nova & nylon guitar',
+      promptRu: 'Тёплая бразильская босса-нова 60-х с нейлоновой гитарой и мягким вокалом',
+      promptEn: 'Warm 1960s Brazilian bossa nova with nylon guitar and soft vocals'
+    },
+    {
+      labelRu: '🥁 Сложный мат-рок и полиритмия',
+      labelEn: '🥁 Math-rock & odd-meter drums',
+      promptRu: 'Инструментальный пост-рок и полиритмический прог с эталонной динамикой барабанов',
+      promptEn: 'Instrumental post-rock and polyrhythmic prog with reference drum dynamics'
+    },
+    {
+      labelRu: '🕯️ Дарк-джаз и кинематографичный нуар',
+      labelEn: '🕯️ Dark jazz & cinematic noir',
+      promptRu: 'Медленный дарк-джаз, баритон-саксофон и атмосфера дождливого ночного города',
+      promptEn: 'Slow cinematic dark jazz with baritone sax and rainy midnight atmosphere'
+    },
+    {
+      labelRu: '🎛️ Минимал-техно и даб-аккорды',
+      labelEn: '🎛️ Dub techno & deep sub-bass',
+      promptRu: 'Глубокий даб-техно и гипнотический минимал с бархатным суббасом',
+      promptEn: 'Deep hypnotic dub techno and minimal electronica with cavernous sub-bass'
+    },
+    {
+      labelRu: '🪕 Инди-фолк и камерная акустика',
+      labelEn: '🪕 Indie folk & warm acoustics',
+      promptRu: 'Камерный инди-фолк, живой пальцевый перебор гитары и интимная сцена',
+      promptEn: 'Intimate indie folk with fingerstyle acoustic guitar and natural room acoustics'
+    },
+    {
+      labelRu: '🎼 Симфонические саундтреки',
+      labelEn: '🎼 Epic orchestral soundtracks',
+      promptRu: 'Масштабные симфонические саундтреки с широким динамическим диапазоном',
+      promptEn: 'Epic orchestral film scores with wide audiophile dynamic range'
+    },
+    {
+      labelRu: '🪩 Японский сити-поп 80-х',
+      labelEn: '🪩 80s Japanese city pop & funk',
+      promptRu: 'Японский сити-поп и соул-фанк 80-х с ярким слэп-басом и духовыми',
+      promptEn: '1980s Japanese city pop and boogie funk with slap bass and brass'
+    }
+  ];
+
+  const AI_DYNAMIC_MOODS = [
+    { icon: '🎷', shortRu: 'Ночной нуар', fullRu: 'Ночной атмосферный нуар', shortEn: 'Midnight noir', fullEn: 'Late-night atmospheric noir' },
+    { icon: '🌌', shortRu: 'Глубокий космос', fullRu: 'Глубокая космическая атмосфера', shortEn: 'Deep cosmos', fullEn: 'Deep cosmic atmosphere' },
+    { icon: '🕯️', shortRu: 'Интимная сцена', fullRu: 'Камерная интимная акустика близкого поля', shortEn: 'Intimate stage', fullEn: 'Near-field intimate chamber acoustics' },
+    { icon: '⚡', shortRu: 'Высокий драйв', fullRu: 'Высокодинамичный драйв и панч', shortEn: 'High-energy drive', fullEn: 'High-contrast dynamic drive and punch' },
+    { icon: '🌊', shortRu: 'Голографический 3D', fullRu: 'Широкая голографическая звуковая сцена', shortEn: '3D soundstage', fullEn: 'Wide holographic 3D soundstage' },
+    { icon: '🥃', shortRu: 'Тёплая лампа', fullRu: 'Тёплое аналоговое ламповое звучание', shortEn: 'Warm tube glow', fullEn: 'Warm analog vacuum-tube timbre' },
+    { icon: '🌧️', shortRu: 'Дождливый город', fullRu: 'Меланхолия дождливого ночного мегаполиса', shortEn: 'Rainy midnight', fullEn: 'Rainy midnight metropolis atmosphere' },
+    { icon: '🧘', shortRu: 'Глубокий фокус', fullRu: 'Спокойная гипнотическая концентрация', shortEn: 'Deep focus', fullEn: 'Hypnotic calm for deep focus' },
+    { icon: '🌆', shortRu: 'Неоновый ретро', fullRu: 'Кинематографичный неоновый ретро-вайб', shortEn: 'Neon retro', fullEn: 'Cinematic neon retro atmosphere' },
+    { icon: '🏔️', shortRu: 'Северный воздух', fullRu: 'Прозрачная скандинавская прохлада', shortEn: 'Nordic air', fullEn: 'Crystalline Nordic spaciousness' },
+    { icon: '🔥', shortRu: 'Живая студия', fullRu: 'Энергия живой студийной записи с одного дубля', shortEn: 'Live studio take', fullEn: 'Raw one-take live studio energy' },
+    { icon: '🌙', shortRu: 'После полуночи', fullRu: 'Мягкий бархатный грув после полуночи', shortEn: 'After-hours', fullEn: 'Velvet after-hours lounge groove' },
+    { icon: '💎', shortRu: 'Кристальный Hi-Res', fullRu: 'Эталонная прозрачность и микродинамика', shortEn: 'Reference Hi-Res', fullEn: 'Reference transparency and micro-dynamics' },
+    { icon: '🎞️', shortRu: 'Магнитная лента', fullRu: 'Винтажный мастеринг на аналоговую ленту', shortEn: 'Analog tape', fullEn: 'Vintage reel-to-reel analog tape warmth' },
+    { icon: '🌅', shortRu: 'Рассветный чилл', fullRu: 'Тёплый солнечный рассветный грув', shortEn: 'Sunrise chill', fullEn: 'Warm golden-hour sunrise groove' },
+    { icon: '🌀', shortRu: 'Психоделика', fullRu: 'Глубокое психоделическое погружение', shortEn: 'Psychedelic voyage', fullEn: 'Deep psychedelic sonic immersion' }
+  ];
+
+  const AI_DYNAMIC_GENRES = [
+    { shortRu: 'прог-рок 70-х', fullRu: 'прогрессивный рок 70-х', shortEn: '70s prog rock', fullEn: '1970s progressive rock' },
+    { shortRu: 'кул-джаз', fullRu: 'модальный и кул-джаз', shortEn: 'cool jazz', fullEn: 'modal and cool jazz' },
+    { shortRu: 'трип-хоп 90-х', fullRu: 'бристольский трип-хоп и даунтемпо', shortEn: '90s trip-hop', fullEn: 'Bristol trip-hop and downtempo' },
+    { shortRu: 'неоклассика', fullRu: 'современная камерная неоклассика', shortEn: 'neoclassical', fullEn: 'modern chamber neoclassical' },
+    { shortRu: 'синтвейв 80-х', fullRu: 'аналоговый синтвейв и электроника 80-х', shortEn: '80s synthwave', fullEn: '1980s analog synthwave' },
+    { shortRu: 'блюз-рок', fullRu: 'аудиофильский блюз-рок', shortEn: 'blues rock', fullEn: 'audiophile blues rock' },
+    { shortRu: 'даб-техно', fullRu: 'глубокое даб-техно и минимал', shortEn: 'dub techno', fullEn: 'deep dub techno and minimal' },
+    { shortRu: 'джаз-фанк', fullRu: 'грувовый джаз-фанк и соул', shortEn: 'jazz-funk', fullEn: 'groovy spiritual jazz-funk' },
+    { shortRu: 'пост-рок', fullRu: 'инструментальный кинематографичный пост-рок', shortEn: 'post-rock', fullEn: 'cinematic instrumental post-rock' },
+    { shortRu: 'босса-нова 60-х', fullRu: 'бразильская босса-нова 60-х', shortEn: '60s bossa nova', fullEn: '1960s Brazilian bossa nova' },
+    { shortRu: 'дрим-поп и шугейз', fullRu: 'воздушный дрим-поп и шугейз', shortEn: 'dream-pop & shoegaze', fullEn: 'ethereal dream-pop and shoegaze' },
+    { shortRu: 'японский сити-поп', fullRu: 'японский сити-поп и буги-фанк 80-х', shortEn: 'Japanese city pop', fullEn: '1980s Japanese city pop and funk' },
+    { shortRu: 'дарк-джаз', fullRu: 'медленный кинематографичный дарк-джаз', shortEn: 'dark jazz', fullEn: 'slow cinematic dark jazz' },
+    { shortRu: 'инди-фолк', fullRu: 'акустический инди-фолк', shortEn: 'indie folk', fullEn: 'intimate acoustic indie folk' },
+    { shortRu: 'берлинский эмбиент', fullRu: 'космическая электроника берлинской школы', shortEn: 'Berlin school synth', fullEn: 'Berlin-school modular electronica' },
+    { shortRu: 'симфо-саундтрек', fullRu: 'эпический оркестровый саундтрек', shortEn: 'epic film score', fullEn: 'epic orchestral film score' },
+    { shortRu: 'афробит и фьюжн', fullRu: 'полиритмический афробит и джаз-фьюжн', shortEn: 'afrobeat fusion', fullEn: 'polyrhythmic afrobeat and jazz fusion' },
+    { shortRu: 'нео-соул', fullRu: 'бархатный нео-соул и R&B', shortEn: 'neo-soul', fullEn: 'velvet audiophile neo-soul' }
+  ];
+
+  const AI_DYNAMIC_INSTRUMENTS = [
+    { shortRu: 'с саксофоном', fullRu: 'с бархатным тенор-саксофоном и контрабасом', shortEn: 'with tenor sax', fullEn: 'with warm tenor saxophone and upright bass' },
+    { shortRu: 'и фетровое пианино', fullRu: 'с мягким фетровым пианино и виолончелью', shortEn: '& felt piano', fullEn: 'with intimate felt piano and cello' },
+    { shortRu: 'и живой вокал', fullRu: 'с эталонным женским вокалом близкого микрофона', shortEn: '& reference vocals', fullEn: 'with close-mic reference female vocals' },
+    { shortRu: 'и ламповая гитара', fullRu: 'с певучей электрогитарой и органом Hammond', shortEn: '& tube guitar', fullEn: 'with singing tube guitar and Hammond organ' },
+    { shortRu: 'и аналоговый Moog', fullRu: 'с глубоким аналоговым синтезатором Moog и арпеджио', shortEn: '& analog Moog', fullEn: 'with deep Moog synthesizers and arpeggios' },
+    { shortRu: 'и глубокий суббас', fullRu: 'с упругим суббасом и чёткой атакой барабанов', shortEn: '& deep sub-bass', fullEn: 'with visceral sub-bass and crisp drum transients' },
+    { shortRu: 'и Fender Rhodes', fullRu: 'с тёплым электропиано Fender Rhodes и щётками', shortEn: '& Fender Rhodes', fullEn: 'with warm Fender Rhodes and brushed drums' },
+    { shortRu: 'и акустическая гитара', fullRu: 'с живым пальцевым перебором акустической гитары', shortEn: '& acoustic guitar', fullEn: 'with fingerstyle acoustic guitar and natural room reverb' },
+    { shortRu: 'и камерные струнные', fullRu: 'с живым струнным квартетом и широким залом', shortEn: '& chamber strings', fullEn: 'with live string quartet and concert hall acoustics' },
+    { shortRu: 'и слэп-бас', fullRu: 'с фанковым слэп-басом и духовой секцией', shortEn: '& slap bass', fullEn: 'with tight slap bass and brass section' },
+    { shortRu: 'и вибрафон', fullRu: 'с мерцающим вибрафоном и мягкой перкуссией', shortEn: '& vibraphone', fullEn: 'with shimmering vibraphone and percussion' },
+    { shortRu: 'и баритон-саксофон', fullRu: 'с низким баритон-саксофоном и густым ревербом', shortEn: '& baritone sax', fullEn: 'with smoky baritone sax and lush reverb' }
+  ];
+
+  const seenAiPromptKeys = new Set();
+  try {
+    const savedSeen = JSON.parse(sessionStorage.getItem('amr_seen_ai_prompts_v1') || '[]');
+    if (Array.isArray(savedSeen)) {
+      savedSeen.forEach(k => seenAiPromptKeys.add(String(k)));
+    }
+  } catch (_) {}
+
+  function recordSeenAiPromptKey(key) {
+    if (!key) return;
+    seenAiPromptKeys.add(key.toLowerCase());
+    if (seenAiPromptKeys.size > 160) {
+      const arr = Array.from(seenAiPromptKeys).slice(-100);
+      seenAiPromptKeys.clear();
+      arr.forEach(k => seenAiPromptKeys.add(k));
+    }
+    try {
+      sessionStorage.setItem('amr_seen_ai_prompts_v1', JSON.stringify(Array.from(seenAiPromptKeys)));
+    } catch (_) {}
+  }
+
+  function synthesizeDynamicClientPrompt() {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const m = AI_DYNAMIC_MOODS[Math.floor(Math.random() * AI_DYNAMIC_MOODS.length)];
+      const g = AI_DYNAMIC_GENRES[Math.floor(Math.random() * AI_DYNAMIC_GENRES.length)];
+      const inst = AI_DYNAMIC_INSTRUMENTS[Math.floor(Math.random() * AI_DYNAMIC_INSTRUMENTS.length)];
+      const labelRu = `${m.icon} ${m.shortRu} • ${g.shortRu} ${inst.shortRu}`;
+      const promptRu = `${m.fullRu}: ${g.fullRu} ${inst.fullRu}`;
+      const labelEn = `${m.icon} ${m.shortEn} • ${g.shortEn} ${inst.shortEn}`;
+      const promptEn = `${m.fullEn}: ${g.fullEn} ${inst.fullEn}`;
+      if (!seenAiPromptKeys.has(promptRu.toLowerCase())) {
+        recordSeenAiPromptKey(promptRu);
+        return { labelRu, promptRu, labelEn, promptEn };
+      }
+    }
+    const m = AI_DYNAMIC_MOODS[Math.floor(Math.random() * AI_DYNAMIC_MOODS.length)];
+    const g = AI_DYNAMIC_GENRES[Math.floor(Math.random() * AI_DYNAMIC_GENRES.length)];
+    const inst = AI_DYNAMIC_INSTRUMENTS[Math.floor(Math.random() * AI_DYNAMIC_INSTRUMENTS.length)];
+    return {
+      labelRu: `${m.icon} ${m.shortRu} • ${g.shortRu} ${inst.shortRu}`,
+      promptRu: `${m.fullRu}: ${g.fullRu} ${inst.fullRu}`,
+      labelEn: `${m.icon} ${m.shortEn} • ${g.shortEn} ${inst.shortEn}`,
+      promptEn: `${m.fullEn}: ${g.fullEn} ${inst.fullEn}`
+    };
+  }
+
+  function generateFreshAiPromptsBatch(count = 6) {
+    const unseenBase = AI_PROMPT_SUGGESTIONS_POOL
+      .filter(p => !seenAiPromptKeys.has((p.promptRu || '').toLowerCase()))
+      .sort(() => Math.random() - 0.5);
+
+    const batch = [];
+    const baseQuota = Math.min(unseenBase.length, Math.max(2, Math.floor(count / 2)));
+    for (let i = 0; i < baseQuota; i++) {
+      const item = unseenBase[i];
+      recordSeenAiPromptKey(item.promptRu);
+      batch.push(item);
+    }
+    while (batch.length < count) {
+      batch.push(synthesizeDynamicClientPrompt());
+    }
+    return batch.sort(() => Math.random() - 0.5);
+  }
+
+  let currentAiPromptsBatch = generateFreshAiPromptsBatch(6);
+
+  function rotateAiPromptSuggestions() {
+    currentAiPromptsBatch = generateFreshAiPromptsBatch(6);
+    renderAiPromptChipsGrid(true);
+    send({
+      action: 'refresh_ai_prompts',
+      params: {
+        exclude_prompts: currentAiPromptsBatch.map(p => IS_EN ? p.promptEn : p.promptRu)
+      }
+    });
+  }
+
+  function isPromptPinnedClient(prompt) {
+    const clean = String(prompt || '').trim().toLowerCase();
+    if (!clean || !Array.isArray(state.pinnedAiPrompts)) return false;
+    return state.pinnedAiPrompts.some((p) => {
+      const p1 = String(p.prompt || '').trim().toLowerCase();
+      const p2 = String(p.prompt_ru || p.promptRu || '').trim().toLowerCase();
+      const p3 = String(p.prompt_en || p.promptEn || '').trim().toLowerCase();
+      return p1 === clean || p2 === clean || p3 === clean;
+    });
+  }
+
+  function renderAiPromptChipItemHtml(item, isPinnedSection = false) {
+    const prompt = IS_EN ? (item.promptEn || item.prompt_en || item.prompt || '') : (item.promptRu || item.prompt_ru || item.prompt || '');
+    const label = IS_EN ? (item.labelEn || item.label_en || item.label || prompt) : (item.labelRu || item.label_ru || item.label || prompt);
+    const pinned = isPinnedSection || isPromptPinnedClient(prompt);
+    return `<div class="ai-prompt-chip-item ${pinned ? 'is-pinned' : ''}">
+      <button type="button" class="ai-prompt-chip" data-ai-prompt="${escapeHtml(prompt)}" data-ai-label="${escapeHtml(label)}">${escapeHtml(label)}</button>
+      <button type="button" class="ai-chip-pin-btn ${pinned ? 'active' : ''}" data-pin-prompt="${escapeHtml(prompt)}" data-pin-label="${escapeHtml(label)}" title="${translateTextToEn(pinned ? 'Убрать из избранных вайбов' : 'Закрепить вайб в избранном')}" aria-label="Pin">${pinned ? '★' : '☆'}</button>
+    </div>`;
+  }
+
+  function renderPinnedAiSectionHtml() {
+    if (!Array.isArray(state.pinnedAiPrompts) || state.pinnedAiPrompts.length === 0) {
+      return '';
+    }
+    const itemsHtml = state.pinnedAiPrompts.map((item) => renderAiPromptChipItemHtml(item, true)).join('');
+    return `
+      <div class="ai-pinned-section">
+        <div class="ai-pinned-header">
+          <span class="ai-pinned-badge">★ ${translateTextToEn('ИЗБРАННЫЕ ВАЙБЫ')}</span>
+        </div>
+        <div class="ai-curator-prompts-grid ai-pinned-grid">
+          ${itemsHtml}
+        </div>
+      </div>`;
+  }
+
+  function togglePinAiPrompt(prompt, label) {
+    const cleanPrompt = String(prompt || '').trim();
+    if (!cleanPrompt) return;
+    const cleanLabel = String(label || cleanPrompt).trim();
+    const currentlyPinned = isPromptPinnedClient(cleanPrompt);
+    triggerHaptic('light');
+
+    if (currentlyPinned) {
+      const lower = cleanPrompt.toLowerCase();
+      state.pinnedAiPrompts = (state.pinnedAiPrompts || []).filter((p) => {
+        const p1 = String(p.prompt || '').trim().toLowerCase();
+        const p2 = String(p.prompt_ru || p.promptRu || '').trim().toLowerCase();
+        const p3 = String(p.prompt_en || p.promptEn || '').trim().toLowerCase();
+        return p1 !== lower && p2 !== lower && p3 !== lower;
+      });
+      showToast(translateTextToEn('Удалено из избранных вайбов'));
+    } else {
+      const entry = {
+        label: cleanLabel,
+        prompt: cleanPrompt,
+        label_ru: cleanLabel,
+        prompt_ru: cleanPrompt,
+        label_en: cleanLabel,
+        prompt_en: cleanPrompt
+      };
+      state.pinnedAiPrompts = [entry, ...(state.pinnedAiPrompts || [])];
+      showToast(translateTextToEn('★ Вайб закреплён в избранном'));
+    }
+
+    send({
+      action: 'toggle_ai_pin_prompt',
+      params: {
+        prompt: cleanPrompt,
+        label: cleanLabel,
+        label_ru: cleanLabel,
+        prompt_ru: cleanPrompt,
+        label_en: cleanLabel,
+        prompt_en: cleanPrompt
+      }
+    });
+
+    syncPinnedAiPromptsUI();
+  }
+
+  function syncPinnedAiPromptsUI() {
+    const pinnedContainer = document.getElementById('ai-pinned-prompts-container');
+    if (pinnedContainer) {
+      pinnedContainer.innerHTML = renderPinnedAiSectionHtml();
+    }
+    const mainGrid = document.getElementById('ai-main-prompts-grid');
+    if (mainGrid) {
+      mainGrid.innerHTML = currentAiPromptsBatch.map((item) => renderAiPromptChipItemHtml(item, false)).join('');
+    }
+    if (pinnedContainer || mainGrid) {
+      bindAiPromptChips();
+    }
+
+    const heroPinBtn = document.getElementById('btn-ai-curated-pin');
+    const heroPinText = document.getElementById('btn-ai-curated-pin-text');
+    if (heroPinBtn) {
+      const pPrompt = heroPinBtn.getAttribute('data-pin-prompt') || state.activeAiCuratedPrompt || '';
+      const isPin = isPromptPinnedClient(pPrompt);
+      heroPinBtn.classList.toggle('active', isPin);
+      if (heroPinText) {
+        heroPinText.textContent = translateTextToEn(isPin ? '★ В избранном' : '☆ Закрепить вайб');
+      }
+    }
+
+    document.querySelectorAll('#standby-ai-tag-cloud .standby-ai-tag-pill').forEach((pill) => {
+      const pPrompt = pill.getAttribute('data-ai-prompt') || '';
+      const isPin = isPromptPinnedClient(pPrompt);
+      pill.classList.toggle('is-pinned', isPin);
+      const badge = pill.querySelector('.standby-tag-pin-badge');
+      if (badge) {
+        badge.textContent = isPin ? '★' : '☆';
+        badge.classList.toggle('active', isPin);
+      }
+    });
+  }
+
+  function renderAiPromptChipsGrid(animateBtn = false) {
+    const grid = document.getElementById('ai-main-prompts-grid') || document.querySelector('.ai-curator-prompts-grid');
+    if (!grid) return;
+    grid.innerHTML = currentAiPromptsBatch.map((item) => renderAiPromptChipItemHtml(item, false)).join('');
+    const pinnedContainer = document.getElementById('ai-pinned-prompts-container');
+    if (pinnedContainer) {
+      pinnedContainer.innerHTML = renderPinnedAiSectionHtml();
+    }
+    bindAiPromptChips();
+
+    if (animateBtn) {
+      const refreshBtn = document.getElementById('btn-refresh-ai-prompts');
+      if (refreshBtn) {
+        refreshBtn.classList.remove('spinning');
+        void refreshBtn.offsetWidth;
+        refreshBtn.classList.add('spinning');
+        setTimeout(() => refreshBtn.classList.remove('spinning'), 460);
+      }
+    }
+  }
+
+  function syncAiCuratorEnabledUI() {
+    const aiFilterChip = document.querySelector('.filter-chip-ai');
+    if (aiFilterChip) {
+      aiFilterChip.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
+    const standbyAiBtn = document.getElementById('standby-btn-ai-curator');
+    if (standbyAiBtn) {
+      standbyAiBtn.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
+    const standbyAiVibeBtn = document.getElementById('standby-btn-ai-track-vibe');
+    if (standbyAiVibeBtn) {
+      standbyAiVibeBtn.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
+    if (dom.btnAiTrackVibe) {
+      dom.btnAiTrackVibe.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
+    if (dom.btnAiMixByTrack) {
+      dom.btnAiMixByTrack.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
+    if (!state.aiCuratorEnabled) {
+      const standbyAiModal = document.getElementById('standby-ai-modal');
+      if (standbyAiModal && !standbyAiModal.classList.contains('hidden')) {
+        standbyAiModal.classList.add('hidden');
+        standbyAiModal.setAttribute('aria-hidden', 'true');
+      }
+    }
+    if (!state.aiCuratorEnabled && state.searchScope === 'ai') {
+      state.searchScope = 'all';
+      dom.filterChips.forEach(c => c.classList.toggle('active', c.dataset.scope === 'all'));
+      if (dom.searchInput) {
+        dom.searchInput.placeholder = translateTextToEn('Поиск в Apple Music...');
+      }
+    }
+    if (!state.searchQuery) {
+      renderSearchPlaceholder();
+    }
+  }
+
+  function handleAiCuratorSettings(data) {
+    if (!data || typeof data !== 'object') return;
+    if (data.is_apple_silicon !== undefined) {
+      state.isAppleSilicon = Boolean(data.is_apple_silicon);
+    }
+    if (Array.isArray(data.pinned)) {
+      state.pinnedAiPrompts = data.pinned;
+      syncPinnedAiPromptsUI();
+    }
+    if (data.is_enabled !== undefined || data.isEnabled !== undefined) {
+      const nextEnabled = (state.isAppleSilicon === false)
+        ? false
+        : Boolean(data.is_enabled !== undefined ? data.is_enabled : data.isEnabled);
+      if (state.aiCuratorEnabled !== nextEnabled) {
+        state.aiCuratorEnabled = nextEnabled;
+        syncAiCuratorEnabledUI();
+        if (dom.playerArtwork && dom.playerArtwork.complete && currentLoadedArtworkUrl && currentLoadedArtworkUrl !== 'apple-touch-icon.svg') {
+          AmbientBackgroundManager.currentPaletteKey = '';
+          AmbientBackgroundManager.updateFromImage(dom.playerArtwork, currentLoadedArtworkUrl);
+        }
+      }
+    }
+  }
+
+  function renderSearchPlaceholder() {
+    if (!dom.searchResults) return;
+    if (!state.aiCuratorEnabled) {
+      dom.searchResults.innerHTML = `
+        <div class="search-placeholder">
+          <div class="search-placeholder-minimal">${translateTextToEn('Введите название песни, альбома, плейлиста или артиста')}</div>
+        </div>`;
+      return;
+    }
+
+    const chipsHtml = currentAiPromptsBatch.map((item) => renderAiPromptChipItemHtml(item, false)).join('');
+
+    dom.searchResults.innerHTML = `
+      <div class="search-placeholder">
+        <div class="ai-curator-landing-card">
+          <div class="ai-curator-landing-top">
+            <span class="ai-curator-engine-pill">✨ APPLE NEURAL ENGINE • ON-DEVICE AI</span>
+            <button type="button" id="btn-refresh-ai-prompts" class="ai-refresh-prompts-btn" title="${translateTextToEn('Сгенерировать другие варианты промптов')}">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>${translateTextToEn('Другие варианты')}</span>
+            </button>
+          </div>
+          <h3 class="ai-curator-landing-title">${translateTextToEn('Умный семантический поиск и Промпт-Куратор')}</h3>
+          <p class="ai-curator-landing-desc">${translateTextToEn('Опишите настроение, звуковую сцену, эпоху или инструменты свободным текстом — нативный движок macOS соберёт готовую аудиофильскую очередь из каталога Apple Music.')}</p>
+          <div id="ai-pinned-prompts-container">${renderPinnedAiSectionHtml()}</div>
+          <div id="ai-main-prompts-grid" class="ai-curator-prompts-grid">
+            ${chipsHtml}
+          </div>
+        </div>
+      </div>`;
+    bindAiPromptChips();
+  }
+
+  function bindAiPromptChips() {
+    document.querySelectorAll('.ai-prompt-chip').forEach((btn) => {
+      if (btn.dataset.boundAiChip === '1') return;
+      btn.dataset.boundAiChip = '1';
+      btn.addEventListener('click', () => {
+        const prompt = btn.getAttribute('data-ai-prompt') || '';
+        if (!prompt) return;
+        dom.filterChips.forEach(c => c.classList.toggle('active', c.dataset.scope === 'ai'));
+        state.searchScope = 'ai';
+        dom.searchInput.value = prompt;
+        dom.searchInput.placeholder = translateTextToEn('Опишите настроение, сцену или инструменты...');
+        dom.btnClearSearch.classList.remove('hidden');
+        state.searchQuery = prompt;
+        executeSearch(prompt, 'ai');
+      });
+    });
+
+    document.querySelectorAll('.ai-chip-pin-btn').forEach((pinBtn) => {
+      if (pinBtn.dataset.boundAiPin === '1') return;
+      pinBtn.dataset.boundAiPin = '1';
+      pinBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const pPrompt = pinBtn.getAttribute('data-pin-prompt') || '';
+        const pLabel = pinBtn.getAttribute('data-pin-label') || pPrompt;
+        togglePinAiPrompt(pPrompt, pLabel);
+      });
+    });
+
+    const refreshBtn = document.getElementById('btn-refresh-ai-prompts');
+    if (refreshBtn && refreshBtn.dataset.boundRefresh !== '1') {
+      refreshBtn.dataset.boundRefresh = '1';
+      refreshBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerHaptic('light');
+        rotateAiPromptSuggestions();
+      });
+    }
+  }
+
+  // Render fresh randomized AI prompt suggestions immediately on startup
+  renderSearchPlaceholder();
 
   dom.btnClearSearch.addEventListener('click', () => {
     dom.searchInput.value = '';
     dom.btnClearSearch.classList.add('hidden');
     state.searchQuery = '';
-    dom.searchResults.innerHTML = `
-      <div class="search-placeholder">
-        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#38383a" stroke-width="1.5">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <p>Ищите любимые треки, альбомы и исполнителей</p>
-      </div>`;
+    renderSearchPlaceholder();
   });
 
   dom.filterChips.forEach(chip => {
@@ -3031,8 +5632,17 @@ extension WebUIContent {
       dom.filterChips.forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       state.searchScope = chip.dataset.scope;
+      if (dom.searchInput) {
+        dom.searchInput.placeholder = translateTextToEn(
+          state.searchScope === 'ai'
+            ? 'Опишите настроение, сцену или инструменты...'
+            : 'Поиск в Apple Music...'
+        );
+      }
       if (state.searchQuery) {
         executeSearch(state.searchQuery, state.searchScope);
+      } else {
+        renderSearchPlaceholder();
       }
     });
   });
@@ -3043,6 +5653,21 @@ extension WebUIContent {
   let isSearchLoadingMore = false;
 
   function executeSearch(query, scope, offset = 0) {
+    if (scope === 'ai') {
+      currentSearchSongs = [];
+      currentSearchOffset = 0;
+      currentSearchHasMore = false;
+      dom.searchResults.innerHTML = `<div class="loading-state">${translateTextToEn('Подбор нативным ИИ (Apple Neural Engine)...')}</div>`;
+      send({
+        action: 'ai_curate',
+        params: {
+          prompt: query,
+          country: state.userStorefront || state.trends.country || 'ru'
+        }
+      });
+      return;
+    }
+
     if (offset === 0) {
       currentSearchSongs = [];
       currentSearchOffset = 0;
@@ -3111,6 +5736,193 @@ extension WebUIContent {
     return row;
   }
 
+  function updateAiCuratedResults(data) {
+    state.isAiCurating = false;
+    if (!data || typeof data !== 'object') {
+      state.pendingStandbyAiAutoPlay = false;
+      setUIBusy(false);
+      dom.searchResults.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+      return;
+    }
+
+    const songs = data.songs || [];
+    const albums = data.albums || [];
+    const title = data.title || (IS_EN ? 'AI Sonic Selection' : 'AI-Подборка');
+    const subtitle = data.subtitle || '';
+    const engine = data.engine || 'Apple Neural Engine • NaturalLanguage 512-D';
+    const tags = Array.isArray(data.tags) ? data.tags : [];
+    const shouldAutoPlay = Boolean(data.auto_play || state.pendingStandbyAiAutoPlay);
+    if (!shouldAutoPlay && state.searchScope === 'ai' && data.prompt && state.searchQuery) {
+      const respPrompt = String(data.prompt).trim().toLowerCase();
+      const currQuery = String(state.searchQuery).trim().toLowerCase();
+      if (respPrompt && currQuery && respPrompt !== currQuery) {
+        return;
+      }
+    }
+    state.pendingStandbyAiAutoPlay = false;
+    const curatorPrompt = String(data.prompt || state.searchQuery || title).trim();
+    state.activeAiCuratedTitle = `✨ ${title}`;
+    state.activeAiCuratedPrompt = curatorPrompt;
+
+    currentSearchSongs = [...songs];
+    currentSearchOffset = songs.length;
+    currentSearchHasMore = false;
+
+    if (shouldAutoPlay && songs.length > 0) {
+      showToast(`✨ ${title}`);
+      playSearchResultsList([...songs], false, 0, {
+        queueName: `✨ ${title}`,
+        query: '',
+        curatorPrompt: curatorPrompt
+      });
+    } else if (shouldAutoPlay && songs.length === 0) {
+      setUIBusy(false);
+      showToast(IS_EN ? 'No matching tracks found' : 'Не удалось подобрать треки по запросу');
+    }
+
+    dom.searchResults.innerHTML = '';
+
+    // 1. Render AI Curated Session Hero Card
+    const heroCard = document.createElement('div');
+    heroCard.className = 'ai-curated-session-card';
+
+    const tagsHtml = tags.map(t => `<span class="ai-curated-tag">${escapeHtml(String(t))}</span>`).join('');
+    const isHeroPinned = isPromptPinnedClient(curatorPrompt);
+
+    heroCard.innerHTML = `
+      <div class="ai-curated-header-top">
+        <span class="ai-curator-engine-pill">✨ ${escapeHtml(engine)}</span>
+      </div>
+      <h3 class="ai-curated-title">${escapeHtml(title)}</h3>
+      ${subtitle ? `<p class="ai-curated-subtitle">${escapeHtml(subtitle)}</p>` : ''}
+      ${tagsHtml ? `<div class="ai-curated-tags">${tagsHtml}</div>` : ''}
+      <div class="ai-curated-actions">
+        <button type="button" class="btn-search-action btn-search-play-all" id="btn-ai-curated-play">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <polygon points="6 3 20 12 6 21 6 3"/>
+          </svg>
+          <span>${translateTextToEn('Слушать подборку')}</span>
+        </button>
+        <button type="button" class="btn-search-action btn-search-shuffle" id="btn-ai-curated-shuffle">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 3 21 3 21 8"/>
+            <line x1="4" y1="20" x2="21" y2="3"/>
+            <polyline points="21 16 21 21 16 21"/>
+            <line x1="15" y1="15" x2="21" y2="21"/>
+            <line x1="4" y1="4" x2="9" y2="9"/>
+          </svg>
+          <span>${translateTextToEn('Перемешать')}</span>
+        </button>
+        <button type="button" class="btn-search-action ${isHeroPinned ? 'active' : ''}" id="btn-ai-curated-pin" data-pin-prompt="${escapeHtml(curatorPrompt)}" data-pin-label="${escapeHtml(title)}">
+          <span id="btn-ai-curated-pin-text">${translateTextToEn(isHeroPinned ? '★ В избранном' : '☆ Закрепить вайб')}</span>
+        </button>
+        <button type="button" class="btn-search-action" id="btn-ai-curated-save">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span id="btn-ai-curated-save-text">${translateTextToEn('В медиатеку')}</span>
+        </button>
+      </div>
+    `;
+    dom.searchResults.appendChild(heroCard);
+
+    const btnPlay = heroCard.querySelector('#btn-ai-curated-play');
+    const btnShuffle = heroCard.querySelector('#btn-ai-curated-shuffle');
+    const btnPin = heroCard.querySelector('#btn-ai-curated-pin');
+    const btnSave = heroCard.querySelector('#btn-ai-curated-save');
+    const btnSaveText = heroCard.querySelector('#btn-ai-curated-save-text');
+
+    if (btnPlay && songs.length > 0) {
+      btnPlay.addEventListener('click', () => {
+        playSearchResultsList([...songs], false, 0, {
+          queueName: `✨ ${title}`,
+          query: '',
+          curatorPrompt: curatorPrompt
+        });
+      });
+    }
+    if (btnShuffle && songs.length > 0) {
+      btnShuffle.addEventListener('click', () => {
+        playSearchResultsList([...songs], true, 0, {
+          queueName: `✨ ${title}`,
+          query: '',
+          curatorPrompt: curatorPrompt
+        });
+      });
+    }
+    if (btnPin && curatorPrompt) {
+      btnPin.addEventListener('click', () => {
+        togglePinAiPrompt(curatorPrompt, `✨ ${title}`);
+      });
+    }
+    if (btnSave && songs.length > 0) {
+      btnSave.addEventListener('click', () => {
+        btnSave.disabled = true;
+        if (btnSaveText) btnSaveText.textContent = translateTextToEn('В медиатеке ✓');
+        send({
+          action: 'add_playlist_to_library',
+          params: {
+            name: `✨ ${title}`,
+            tracks: songs
+          }
+        });
+        showToast('★ Плейлист добавлен в медиатеку Apple Music');
+      });
+    }
+
+    // 2. Render Curated Tracks
+    if (songs.length > 0) {
+      const heading = document.createElement('h3');
+      heading.className = 'search-section-title';
+      heading.textContent = translateTextToEn('ПЕСНИ ПОДБОРКИ');
+      dom.searchResults.appendChild(heading);
+
+      const list = document.createElement('div');
+      list.id = 'search-songs-list';
+      list.className = 'track-list';
+      songs.forEach(s => {
+        list.appendChild(createTrackRow(s));
+      });
+      dom.searchResults.appendChild(list);
+    }
+
+    // 3. Render Recommended Albums
+    if (albums.length > 0) {
+      const heading = document.createElement('h3');
+      heading.className = 'search-section-title';
+      heading.textContent = translateTextToEn('РЕКОМЕНДОВАННЫЕ АЛЬБОМЫ');
+      dom.searchResults.appendChild(heading);
+
+      const grid = document.createElement('div');
+      grid.className = 'playlists-grid';
+      albums.forEach(alb => {
+        const card = document.createElement('div');
+        card.className = 'playlist-card';
+        const art = alb.artwork_url || alb.artwork || 'apple-touch-icon.svg';
+
+        card.innerHTML = `
+          <img class="playlist-card-art" src="${art}" alt="" loading="lazy">
+          <span class="playlist-card-title">${escapeHtml(alb.name || alb.collectionName || '')}</span>
+          <span class="playlist-card-count">${escapeHtml(alb.artist || alb.artistName || '')}</span>
+        `;
+
+        card.addEventListener('click', () => {
+          openAlbumDetail({
+            id: `${alb.id || alb.collectionId || ''}`,
+            name: alb.name || alb.collectionName || '',
+            artist: alb.artist || alb.artistName || '',
+            artwork: art,
+            url: alb.url || alb.collectionViewUrl || ''
+          }, 'search');
+        });
+
+        grid.appendChild(card);
+      });
+      dom.searchResults.appendChild(grid);
+    }
+  }
+
   function updateSearchResults(data) {
     if (!data) {
       dom.searchResults.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
@@ -3168,6 +5980,8 @@ extension WebUIContent {
     }
 
     // Initial search result (offset === 0)
+    state.activeAiCuratedTitle = '';
+    state.activeAiCuratedPrompt = '';
     currentSearchSongs = [...songs];
     currentSearchOffset = songs.length;
     currentSearchHasMore = hasMore;
@@ -3178,6 +5992,22 @@ extension WebUIContent {
     }
 
     dom.searchResults.innerHTML = '';
+
+    // Offer 1-click AI Sonic Curation when user types a multi-word descriptive query
+    if (state.aiCuratorEnabled && state.searchScope !== 'ai' && state.searchQuery && state.searchQuery.trim().split(/\s+/).length >= 2) {
+      const aiBanner = document.createElement('div');
+      aiBanner.className = 'ai-suggest-banner';
+      aiBanner.innerHTML = `
+        <span class="ai-suggest-banner-text">✨ ${escapeHtml(IS_EN ? `Curate an AI sonic session for «${state.searchQuery}»` : `Собрать AI-подборку по настроению «${state.searchQuery}»`)}</span>
+        <span class="ai-suggest-banner-cta">${translateTextToEn('Собрать AI-подборку')} ›</span>
+      `;
+      aiBanner.addEventListener('click', () => {
+        dom.filterChips.forEach(c => c.classList.toggle('active', c.dataset.scope === 'ai'));
+        state.searchScope = 'ai';
+        executeSearch(state.searchQuery, 'ai');
+      });
+      dom.searchResults.appendChild(aiBanner);
+    }
 
     // Render Songs
     if (songs.length > 0 && (state.searchScope === 'all' || state.searchScope === 'songs')) {
@@ -3373,17 +6203,32 @@ extension WebUIContent {
     }
   }
 
-  function playSearchResultsList(songs, shuffle, startIndex = 0) {
+  function playSearchResultsList(songs, shuffle, startIndex = 0, options = {}) {
     if (!songs || songs.length === 0) return;
+    const isAiCurated = Boolean(options.queueName || state.activeAiCuratedTitle);
+    const resolvedQueueName = options.queueName || state.activeAiCuratedTitle || 'Результаты поиска';
+    const resolvedQuery = options.query !== undefined ? options.query : (isAiCurated ? '' : (state.searchQuery || ''));
+    const resolvedCuratorPrompt = options.curatorPrompt !== undefined
+      ? options.curatorPrompt
+      : (isAiCurated ? (state.activeAiCuratedPrompt || '') : '');
+    const firstSong = songs[startIndex] || songs[0];
+    const expectedFirstTitle = firstSong ? (firstSong.name || firstSong.trackName || '') : '';
     optimisticPlay();
-    markWaitingForPlayback({ targetName: 'Результаты поиска' });
-    setUIBusy(true, shuffle ? 'Перемешивание...' : 'Запуск результатов...');
+    markWaitingForPlayback({
+      targetName: resolvedQueueName,
+      expectedTrackName: shuffle ? '' : expectedFirstTitle
+    });
+    const busyText = isAiCurated
+      ? (IS_EN ? `Starting «${resolvedQueueName}»...` : `Запуск «${resolvedQueueName}»...`)
+      : (shuffle ? 'Перемешивание...' : 'Запуск результатов...');
+    setUIBusy(true, busyText);
     const formatted = songs.map(s => ({
       id: `${s.id || s.trackId || ''}`,
       numeric_id: s.numeric_id || s.numericId || undefined,
       name: s.name || s.trackName || '',
       artist: s.artist || s.artistName || '',
       album: s.album || s.collectionName || '',
+      duration: Number(s.duration) || (s.trackTimeMillis ? Math.round(s.trackTimeMillis / 1000) : 0),
       url: s.url || s.trackViewUrl || '',
       artwork_url: s.artwork_url || s.artwork || '',
       is_local: Boolean(s.is_local || s.isLocal)
@@ -3395,7 +6240,9 @@ extension WebUIContent {
         tracks: formatted,
         startIndex: startIndex,
         shuffle: Boolean(shuffle),
-        query: state.searchQuery || ''
+        queue_name: resolvedQueueName,
+        query: resolvedQuery,
+        curator_prompt: resolvedCuratorPrompt
       }
     });
 
@@ -4929,6 +7776,7 @@ extension WebUIContent {
     } else if (viewId === 'view-home' || viewId === 'view-trends') {
       if (!skipFetch) loadTrends();
     }
+    refreshAllTitleMarquees();
   }
 
   function minimizeNowPlaying() {
@@ -5220,22 +8068,107 @@ extension WebUIContent {
     return `track|${(track || '').trim().toLowerCase()}|${(artist || '').trim().toLowerCase()}|${(album || '').trim().toLowerCase()}`;
   }
 
+  function unloadVideoElement(vid) {
+    if (!vid) return;
+    vid.onloadeddata = null;
+    vid.onerror = null;
+    vid.classList.remove('visible');
+    vid.classList.add('hidden');
+    try {
+      vid.pause();
+    } catch (_) {}
+    if (vid.hasAttribute('src') || vid.currentSrc) {
+      vid.removeAttribute('src');
+      try {
+        vid.load();
+      } catch (_) {}
+    }
+  }
+
+  function isMotionVideoPlaybackAllowed() {
+    return Boolean(state.connected && state.playerState === 'playing');
+  }
+
+  function syncMotionVideoPlaybackState() {
+    const allowPlay = isMotionVideoPlaybackAllowed();
+    const tvActive = isStandbyOrLandscapeVisible();
+    const activeVid = document.getElementById(tvActive ? 'standby-motion-video' : 'player-motion-video');
+    const inactiveVid = document.getElementById(tvActive ? 'player-motion-video' : 'standby-motion-video');
+    if (inactiveVid && !inactiveVid.paused) {
+      try { inactiveVid.pause(); } catch (_) {}
+    }
+    if (!activeVid || !activeVid.getAttribute('src') || !activeVid.classList.contains('visible')) return;
+    if (allowPlay) {
+      if (activeVid.paused) {
+        activeVid.play().catch(() => {});
+      }
+    } else if (!activeVid.paused) {
+      try { activeVid.pause(); } catch (_) {}
+    }
+  }
+
+  function bindAndPlayMotionVideoElement(vid, url) {
+    if (!vid || !url) return;
+    if (vid.getAttribute('src') === url && vid.classList.contains('visible')) {
+      syncMotionVideoPlaybackState();
+      return;
+    }
+    vid.classList.remove('hidden');
+    vid.muted = true;
+    vid.loop = true;
+    vid.playsInline = true;
+    vid.onloadeddata = () => {
+      vid.classList.add('visible');
+      if (isMotionVideoPlaybackAllowed()) {
+        vid.play().catch(() => {});
+      } else {
+        try { vid.pause(); } catch (_) {}
+      }
+      if (ScreenWakeLockManager.isActive) {
+        ScreenWakeLockManager.syncFallbackVideoState();
+      }
+    };
+    vid.onerror = () => {
+      unloadVideoElement(vid);
+      if (ScreenWakeLockManager.isActive) {
+        ScreenWakeLockManager.syncFallbackVideoState();
+      }
+    };
+    vid.src = url;
+  }
+
+  function syncActiveMotionVideoTarget() {
+    const pVid = document.getElementById('player-motion-video');
+    const sbVid = document.getElementById('standby-motion-video');
+    const sbBadge = document.getElementById('standby-motion-badge');
+    if (!currentMotionVideoUrl) {
+      unloadVideoElement(pVid);
+      unloadVideoElement(sbVid);
+      if (sbBadge) sbBadge.classList.add('hidden');
+      return;
+    }
+    const tvActive = isStandbyOrLandscapeVisible();
+    if (tvActive) {
+      unloadVideoElement(pVid);
+      bindAndPlayMotionVideoElement(sbVid, currentMotionVideoUrl);
+    } else {
+      unloadVideoElement(sbVid);
+      bindAndPlayMotionVideoElement(pVid, currentMotionVideoUrl);
+    }
+    if (sbBadge) sbBadge.classList.remove('hidden');
+  }
+
   function hideMotionVideos() {
     const pVid = document.getElementById('player-motion-video');
     const sbVid = document.getElementById('standby-motion-video');
     const sbBadge = document.getElementById('standby-motion-badge');
-    if (pVid) {
-      pVid.classList.remove('visible');
-      pVid.classList.add('hidden');
-      pVid.removeAttribute('src');
-    }
-    if (sbVid) {
-      sbVid.classList.remove('visible');
-      sbVid.classList.add('hidden');
-      sbVid.removeAttribute('src');
-    }
+    unloadVideoElement(pVid);
+    unloadVideoElement(sbVid);
     if (sbBadge) sbBadge.classList.add('hidden');
     currentMotionVideoUrl = '';
+    if (ScreenWakeLockManager.isActive) {
+      ScreenWakeLockManager.syncFallbackVideoState();
+    }
   }
 
   function applyMotionVideoUrl(url) {
@@ -5243,30 +8176,12 @@ extension WebUIContent {
       hideMotionVideos();
       return;
     }
-    if (currentMotionVideoUrl === url) return;
+    if (currentMotionVideoUrl === url) {
+      syncActiveMotionVideoTarget();
+      return;
+    }
     currentMotionVideoUrl = url;
-
-    const pVid = document.getElementById('player-motion-video');
-    const sbVid = document.getElementById('standby-motion-video');
-    const sbBadge = document.getElementById('standby-motion-badge');
-
-    [pVid, sbVid].forEach((vid) => {
-      if (!vid) return;
-      vid.classList.remove('hidden');
-      vid.src = url;
-      vid.muted = true;
-      vid.loop = true;
-      vid.playsInline = true;
-      vid.onloadeddata = () => {
-        vid.classList.add('visible');
-        vid.play().catch(() => {});
-      };
-      vid.onerror = () => {
-        vid.classList.remove('visible');
-        vid.classList.add('hidden');
-      };
-    });
-    if (sbBadge) sbBadge.classList.remove('hidden');
+    syncActiveMotionVideoTarget();
   }
 
   function applyMotionArtwork(data) {
@@ -5306,11 +8221,21 @@ extension WebUIContent {
     const sbDac = document.getElementById('standby-dac-badge');
     const sbPlay = document.getElementById('standby-icon-play');
     const sbPause = document.getElementById('standby-icon-pause');
+    const sbFav = document.getElementById('standby-btn-favorite');
+    const sbAiVibe = document.getElementById('standby-btn-ai-track-vibe');
 
     if (t && t.name) {
-      if (sbTitle) sbTitle.textContent = t.name || 'Без названия';
-      if (sbArtist) sbArtist.textContent = t.artist || 'Apple Music';
-      if (sbAlbum) sbAlbum.textContent = t.album || '';
+      const sbTitleText = t.name || 'Без названия';
+      const sbArtistText = t.artist || 'Apple Music';
+      const sbAlbumText = t.album || '';
+      if (sbTitle && sbTitle.textContent !== sbTitleText) sbTitle.textContent = sbTitleText;
+      if (sbArtist && sbArtist.textContent !== sbArtistText) sbArtist.textContent = sbArtistText;
+      if (sbAlbum && sbAlbum.textContent !== sbAlbumText) sbAlbum.textContent = sbAlbumText;
+      if (sbFav) sbFav.classList.toggle('active', Boolean(t.favorited));
+      if (sbAiVibe) {
+        sbAiVibe.disabled = false;
+        sbAiVibe.classList.toggle('hidden', !state.aiCuratorEnabled);
+      }
       const art = getArtworkSrc(t);
       if (sbArt && sbArt.dataset.targetSrc !== art) {
         sbArt.dataset.targetSrc = art;
@@ -5340,9 +8265,14 @@ extension WebUIContent {
         }
       }
     } else {
-      if (sbTitle) sbTitle.textContent = 'Не играет';
-      if (sbArtist) sbArtist.textContent = 'Apple Music';
-      if (sbAlbum) sbAlbum.textContent = '';
+      if (sbTitle && sbTitle.textContent !== 'Не играет') sbTitle.textContent = 'Не играет';
+      if (sbArtist && sbArtist.textContent !== 'Apple Music') sbArtist.textContent = 'Apple Music';
+      if (sbAlbum && sbAlbum.textContent !== '') sbAlbum.textContent = '';
+      if (sbFav) sbFav.classList.remove('active');
+      if (sbAiVibe) {
+        sbAiVibe.disabled = true;
+        sbAiVibe.classList.toggle('hidden', !state.aiCuratorEnabled);
+      }
       if (sbArt) {
         sbArt.dataset.targetSrc = 'apple-touch-icon.svg';
         sbArt.src = 'apple-touch-icon.svg';
@@ -5353,7 +8283,11 @@ extension WebUIContent {
       }
     }
 
-    if (sbDac) {
+    const sbDacText = document.getElementById('standby-dac-text');
+    if (sbDacText) {
+      const devPart = state.audioDeviceName ? ` · ${state.audioDeviceName}` : '';
+      sbDacText.textContent = `${formatDacPill(state.audioQuality)}${devPart}`;
+    } else if (sbDac) {
       const devPart = state.audioDeviceName ? ` · ${state.audioDeviceName}` : '';
       sbDac.textContent = `${formatDacPill(state.audioQuality)}${devPart}`;
     }
@@ -5369,6 +8303,10 @@ extension WebUIContent {
     }
 
     updateStandbyActiveTile();
+    syncMotionVideoPlaybackState();
+    ScreenWakeLockManager.syncByPlaybackAndConnection();
+    syncSpectralPolling();
+    refreshAllTitleMarquees();
   }
 
   let lastStandbyTilesSignature = '';
@@ -5376,6 +8314,7 @@ extension WebUIContent {
   function openStandbyLibraryModal() {
     const modal = document.getElementById('standby-library-modal');
     if (!modal) return;
+    closeStandbyAiModal();
     renderStandbyQuickTiles();
     if (!state.playlists || state.playlists.length === 0) {
       send({ action: 'get_playlists' });
@@ -5388,6 +8327,192 @@ extension WebUIContent {
 
   function closeStandbyLibraryModal() {
     const modal = document.getElementById('standby-library-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  // =========================================================================
+  // Fullscreen StandBy / TV Mode AI Sonic Curator Tag Cloud (Infinite Scroll)
+  // =========================================================================
+  const AI_TV_THEMES = ['violet', 'indigo', 'cyan', 'rose', 'amber', 'emerald'];
+  const AI_TV_SIZES = ['lg', 'xl', 'md', 'lg', 'xl', 'md'];
+
+  let standbyAiGeneratedCount = 0;
+  let standbyAiScrollBound = false;
+
+  function buildNextStandbyAiTagItem() {
+    const seq = standbyAiGeneratedCount++;
+    const raw = (seq % 3 === 0)
+      ? generateFreshAiPromptsBatch(1)[0]
+      : synthesizeDynamicClientPrompt();
+    const theme = AI_TV_THEMES[Math.floor(Math.random() * AI_TV_THEMES.length)];
+    const size = AI_TV_SIZES[seq % AI_TV_SIZES.length];
+    return {
+      label: IS_EN ? (raw.labelEn || raw.label_en || raw.label) : (raw.labelRu || raw.label_ru || raw.label),
+      prompt: IS_EN ? (raw.promptEn || raw.prompt_en || raw.prompt) : (raw.promptRu || raw.prompt_ru || raw.prompt),
+      theme,
+      size
+    };
+  }
+
+  function triggerStandbyAiTagPlay(prompt, label) {
+    if (!prompt) return;
+    triggerHaptic('medium');
+    closeStandbyAiModal();
+    state.isAiCurating = true;
+    state.pendingStandbyAiAutoPlay = true;
+    state.searchQuery = prompt;
+    setUIBusy(true, (IS_EN ? 'AI Curating: ' : 'ИИ-подбор: ') + label.replace(/^[^\w\sа-яА-ЯёЁ]+\s*/, '') + '...');
+    send({
+      action: 'ai_curate',
+      params: {
+        prompt: prompt,
+        country: state.userStorefront || state.trends.country || 'ru',
+        auto_play: true
+      }
+    });
+  }
+
+  function formatStandbyAiTagHtml(rawLabel) {
+    const str = String(rawLabel || '').trim();
+    const emojiMatch = str.match(/^(\S+)\s+([\s\S]+)$/);
+    let icon = '';
+    let rest = str;
+    if (emojiMatch && /^[^\wа-яА-ЯёЁ]+$/.test(emojiMatch[1])) {
+      icon = emojiMatch[1];
+      rest = emojiMatch[2].trim();
+    }
+    const iconSpan = icon ? `<span class="ai-tag-icon">${escapeHtml(icon)}</span>` : '';
+    const parts = rest.split(/\s*•\s*/);
+    if (parts.length >= 2) {
+      const line1 = parts[0].trim();
+      const line2 = parts.slice(1).join(' · ').trim();
+      return `<span class="ai-tag-line-top">${iconSpan}<span class="ai-tag-main">${escapeHtml(line1)}</span></span><span class="ai-tag-sub">${escapeHtml(line2)}</span>`;
+    }
+    const words = rest.split(/\s+/);
+    if (words.length >= 3) {
+      const mid = Math.ceil(words.length / 2);
+      const line1 = words.slice(0, mid).join(' ');
+      const line2 = words.slice(mid).join(' ');
+      return `<span class="ai-tag-line-top">${iconSpan}<span class="ai-tag-main">${escapeHtml(line1)}</span></span><span class="ai-tag-sub">${escapeHtml(line2)}</span>`;
+    }
+    return `<span class="ai-tag-line-top">${iconSpan}<span class="ai-tag-main">${escapeHtml(rest)}</span></span>`;
+  }
+
+  function createStandbyAiTagPillElement(item, forcePinned = false) {
+    const isPinned = forcePinned || isPromptPinnedClient(item.prompt);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `standby-ai-tag-pill tag-size-${item.size || 'lg'} tag-theme-${item.theme || 'violet'}${isPinned ? ' is-pinned' : ''}`;
+    btn.setAttribute('data-ai-prompt', item.prompt);
+    btn.innerHTML = `${formatStandbyAiTagHtml(item.label)}<span class="standby-tag-pin-badge ${isPinned ? 'active' : ''}" title="${translateTextToEn('Закрепить / открепить вайб')}">${isPinned ? '★' : '☆'}</span>`;
+    const pinBadge = btn.querySelector('.standby-tag-pin-badge');
+    if (pinBadge) {
+      pinBadge.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        togglePinAiPrompt(item.prompt, item.label);
+      });
+    }
+    btn.addEventListener('click', () => {
+      triggerStandbyAiTagPlay(item.prompt, item.label);
+    });
+    return btn;
+  }
+
+  function appendStandbyAiTagBatch(count = 24) {
+    const cloud = document.getElementById('standby-ai-tag-cloud');
+    if (!cloud) return;
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < count; i++) {
+      const item = buildNextStandbyAiTagItem();
+      frag.appendChild(createStandbyAiTagPillElement(item, false));
+    }
+    cloud.appendChild(frag);
+  }
+
+  function resetAndGenerateStandbyAiTagCloud() {
+    const cloud = document.getElementById('standby-ai-tag-cloud');
+    const scrollEl = document.getElementById('standby-ai-scroll');
+    if (!cloud) return;
+    cloud.innerHTML = '';
+    if (scrollEl) scrollEl.scrollTop = 0;
+    standbyAiGeneratedCount = 0;
+    if (Array.isArray(state.pinnedAiPrompts) && state.pinnedAiPrompts.length > 0) {
+      const pinFrag = document.createDocumentFragment();
+      state.pinnedAiPrompts.forEach((p, idx) => {
+        const prompt = IS_EN ? (p.promptEn || p.prompt_en || p.prompt || '') : (p.promptRu || p.prompt_ru || p.prompt || '');
+        const label = IS_EN ? (p.labelEn || p.label_en || p.label || prompt) : (p.labelRu || p.label_ru || p.label || prompt);
+        if (!prompt) return;
+        pinFrag.appendChild(createStandbyAiTagPillElement({
+          label,
+          prompt,
+          size: idx % 2 === 0 ? 'xl' : 'lg',
+          theme: AI_TV_THEMES[idx % AI_TV_THEMES.length]
+        }, true));
+      });
+      cloud.appendChild(pinFrag);
+    }
+    appendStandbyAiTagBatch(28);
+  }
+
+  function ensureStandbyAiScrollBinding() {
+    if (standbyAiScrollBound) return;
+    const scrollEl = document.getElementById('standby-ai-scroll');
+    const sentinel = document.getElementById('standby-ai-sentinel');
+    const loadMoreBtn = document.getElementById('btn-standby-ai-load-more');
+    if (!scrollEl) return;
+    standbyAiScrollBound = true;
+
+    let throttleTick = false;
+    scrollEl.addEventListener('scroll', () => {
+      if (throttleTick) return;
+      throttleTick = true;
+      requestAnimationFrame(() => {
+        throttleTick = false;
+        if (scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 320) {
+          appendStandbyAiTagBatch(18);
+        }
+      });
+    }, { passive: true });
+
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener('click', () => {
+        triggerHaptic('light');
+        appendStandbyAiTagBatch(18);
+      });
+    }
+
+    if ('IntersectionObserver' in window && sentinel) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            appendStandbyAiTagBatch(18);
+          }
+        });
+      }, { root: scrollEl, rootMargin: '260px' });
+      io.observe(sentinel);
+    }
+  }
+
+  function openStandbyAiModal() {
+    if (!state.aiCuratorEnabled) return;
+    const modal = document.getElementById('standby-ai-modal');
+    if (!modal) return;
+    closeStandbyLibraryModal();
+    const p = document.getElementById('top-settings-popover');
+    if (p) p.classList.add('hidden');
+
+    resetAndGenerateStandbyAiTagCloud();
+    ensureStandbyAiScrollBinding();
+
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeStandbyAiModal() {
+    const modal = document.getElementById('standby-ai-modal');
     if (!modal) return;
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
@@ -5606,6 +8731,10 @@ extension WebUIContent {
     });
 
     updateStandbyActiveTile();
+    syncMotionVideoPlaybackState();
+    ScreenWakeLockManager.syncByPlaybackAndConnection();
+    syncSpectralPolling();
+    refreshAllTitleMarquees();
   }
 
   function updateWledSettingsUI(data) {
@@ -5654,32 +8783,248 @@ extension WebUIContent {
     });
   }
 
+  // ==========================================================================
+  // Multi-Layer Screen Wake Lock Engine for iPadOS / iOS PWA & Desktop TV Mode
+  // Layer 1: W3C Screen Wake Lock API (navigator.wakeLock.request('screen'))
+  // Layer 2: Active 2fps <canvas> captureStream -> <video playsinline muted>
+  //          (Prevents iPadOS Standalone PWA from auto-locking when no Motion
+  //          Cover is playing — works around WebKit Bug #254545)
+  // ==========================================================================
+  const ScreenWakeLockManager = {
+    sentinel: null,
+    keepAliveVideo: null,
+    keepAliveCanvas: null,
+    keepAliveTimer: null,
+    tickToggle: false,
+    isActive: false,
+    lastTouchRearmTs: 0,
+
+    shouldHoldWakeLock() {
+      if (!isStandbyOrLandscapeVisible()) return false;
+      if (!state.connected) return false;
+      const isPlayingOrStarting =
+        state.playerState === 'playing' ||
+        state.waitingForPlayback ||
+        state.isAiCurating ||
+        Boolean(state.pendingPlayUntil && Date.now() < state.pendingPlayUntil);
+      return isPlayingOrStarting;
+    },
+
+    syncByPlaybackAndConnection() {
+      if (this.shouldHoldWakeLock()) {
+        if (!this.isActive) {
+          this.acquire();
+        } else {
+          this.syncFallbackVideoState();
+        }
+      } else if (this.isActive) {
+        this.release();
+      }
+    },
+
+    async acquire() {
+      if (!this.shouldHoldWakeLock()) {
+        this.release();
+        return;
+      }
+      this.isActive = true;
+      await this.acquireNativeWakeLock();
+      this.syncFallbackVideoState();
+    },
+
+    async acquireNativeWakeLock() {
+      if (!this.isActive) return;
+      if ('wakeLock' in navigator && navigator.wakeLock && typeof navigator.wakeLock.request === 'function') {
+        try {
+          if (!this.sentinel || this.sentinel.released) {
+            this.sentinel = await navigator.wakeLock.request('screen');
+            this.sentinel.addEventListener('release', () => {
+              if (this.isActive && document.visibilityState === 'visible') {
+                setTimeout(() => {
+                  this.acquireNativeWakeLock().then(() => this.syncFallbackVideoState());
+                }, 500);
+              }
+            });
+          }
+        } catch (_) {}
+      }
+    },
+
+    isNativeSentinelHeld() {
+      return Boolean(this.sentinel && !this.sentinel.released);
+    },
+
+    isStandbyMotionVideoPlaying() {
+      const sbVid = document.getElementById('standby-motion-video');
+      return Boolean(sbVid && !sbVid.paused && sbVid.classList.contains('visible') && sbVid.currentSrc);
+    },
+
+    syncFallbackVideoState() {
+      if (!this.isActive) {
+        this.stopVideoKeepAlive();
+        return;
+      }
+      // If native W3C Screen Wake Lock is held OR a Motion Cover <video> is actively playing,
+      // do NOT waste CPU/GPU running a live canvas.captureStream(2) -> <video> MediaStream pipeline.
+      if (this.isNativeSentinelHeld() || this.isStandbyMotionVideoPlaying()) {
+        this.stopVideoKeepAlive();
+      } else {
+        this.startVideoKeepAlive();
+      }
+    },
+
+    stopVideoKeepAlive() {
+      if (this.keepAliveTimer) {
+        clearInterval(this.keepAliveTimer);
+        this.keepAliveTimer = null;
+      }
+      if (this.keepAliveVideo && !this.keepAliveVideo.paused) {
+        try {
+          this.keepAliveVideo.pause();
+        } catch (_) {}
+      }
+    },
+
+    startVideoKeepAlive() {
+      if (!this.isActive) return;
+      try {
+        if (!this.keepAliveCanvas) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 16;
+          canvas.height = 16;
+          this.keepAliveCanvas = canvas;
+        }
+        const ctx = this.keepAliveCanvas.getContext('2d');
+        const drawTick = () => {
+          if (!ctx) return;
+          this.tickToggle = !this.tickToggle;
+          ctx.fillStyle = this.tickToggle ? '#010102' : '#020101';
+          ctx.fillRect(0, 0, 16, 16);
+        };
+        drawTick();
+
+        if (!this.keepAliveTimer) {
+          this.keepAliveTimer = setInterval(() => {
+            if (!this.isActive) return;
+            if (this.isNativeSentinelHeld() || this.isStandbyMotionVideoPlaying()) {
+              this.stopVideoKeepAlive();
+              return;
+            }
+            drawTick();
+            if (this.keepAliveVideo && this.keepAliveVideo.paused) {
+              this.keepAliveVideo.play().catch(() => {});
+            }
+            if (!this.sentinel || this.sentinel.released) {
+              this.acquireNativeWakeLock();
+            }
+          }, 2000);
+        }
+
+        if (!this.keepAliveVideo) {
+          const vid = document.createElement('video');
+          vid.id = 'standby-wakelock-video';
+          vid.muted = true;
+          vid.defaultMuted = true;
+          vid.loop = true;
+          vid.playsInline = true;
+          vid.setAttribute('playsinline', '');
+          vid.setAttribute('webkit-playsinline', '');
+          vid.setAttribute('muted', '');
+          // Must have non-zero opacity & size inside the visible viewport so iPadOS WebKit
+          // does not cull the video decoder and drop the display sleep assertion
+          vid.style.cssText = 'position:fixed;bottom:1px;right:1px;width:2px;height:2px;opacity:0.015;pointer-events:none;z-index:9999;';
+          const overlay = document.getElementById('standby-tv-overlay') || document.body;
+          overlay.appendChild(vid);
+          this.keepAliveVideo = vid;
+
+          const captureFn = this.keepAliveCanvas.captureStream || this.keepAliveCanvas.webkitCaptureStream;
+          if (typeof captureFn === 'function') {
+            const stream = captureFn.call(this.keepAliveCanvas, 1);
+            vid.srcObject = stream;
+          }
+        }
+
+        if (this.keepAliveVideo && this.keepAliveVideo.paused) {
+          this.keepAliveVideo.play().catch(() => {});
+        }
+      } catch (_) {}
+    },
+
+    release() {
+      this.isActive = false;
+      this.stopVideoKeepAlive();
+      if (this.sentinel) {
+        try {
+          this.sentinel.release();
+        } catch (_) {}
+        this.sentinel = null;
+      }
+    }
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      syncMotionVideoPlaybackState();
+      ScreenWakeLockManager.syncByPlaybackAndConnection();
+    }
+  });
+
+  // Ensure touch/click while TV mode is active re-arms the iPadOS gesture-gated wakeLock when playing (throttled)
+  ['touchend', 'click'].forEach((evtName) => {
+    document.addEventListener(evtName, () => {
+      if (!ScreenWakeLockManager.shouldHoldWakeLock()) return;
+      const now = performance.now();
+      if (now - ScreenWakeLockManager.lastTouchRearmTs < 3000) return;
+      ScreenWakeLockManager.lastTouchRearmTs = now;
+      if (!ScreenWakeLockManager.isNativeSentinelHeld()) {
+        ScreenWakeLockManager.acquire();
+      }
+    }, { passive: true });
+  });
+
   function openStandbyMode() {
     if (isMobilePhoneViewport() || window.innerWidth < 768) return;
     const overlay = document.getElementById('standby-tv-overlay');
     if (!overlay) return;
+    document.body.classList.add('tv-mode-open');
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
+    ScreenWakeLockManager.syncByPlaybackAndConnection();
     try {
       localStorage.setItem('amr_tv_mode_active', '1');
       localStorage.removeItem('amr_default_tv_mode');
     } catch (_) {}
-    renderStandbyQuickTiles();
     if (!state.playlists || state.playlists.length === 0) {
       send({ action: 'get_playlists' });
     }
     syncStandbyAndMotionCoverUI();
+    syncActiveMotionVideoTarget();
+    updateScrubberUI(state.lastSyncPos, state.duration);
     updateStandbyClock();
+    refreshAllTitleMarquees(true);
+    send({ action: 'get_spectral_analysis' });
+    syncSpectralPolling();
     const p = document.getElementById('top-settings-popover');
     if (p) p.classList.add('hidden');
   }
 
   function closeStandbyMode() {
     closeStandbyLibraryModal();
+    closeStandbyAiModal();
+    ScreenWakeLockManager.release();
+    document.body.classList.remove('tv-mode-open');
+    if (standbyRtaRafId) {
+      cancelAnimationFrame(standbyRtaRafId);
+      standbyRtaRafId = null;
+    }
     const overlay = document.getElementById('standby-tv-overlay');
     if (!overlay) return;
     overlay.classList.add('hidden');
     overlay.setAttribute('aria-hidden', 'true');
+    syncActiveMotionVideoTarget();
+    syncSpectralPolling();
+    updateScrubberUI(state.lastSyncPos, state.duration);
+    refreshAllTitleMarquees(true);
     try {
       localStorage.setItem('amr_tv_mode_active', '0');
       localStorage.removeItem('amr_default_tv_mode');
@@ -5775,15 +9120,58 @@ extension WebUIContent {
     const btnCloseStandbyLib = document.getElementById('btn-close-standby-library');
     if (btnCloseStandbyLib) btnCloseStandbyLib.addEventListener('click', closeStandbyLibraryModal);
 
+    const btnStandbyAi = document.getElementById('standby-btn-ai-curator');
+    if (btnStandbyAi) btnStandbyAi.addEventListener('click', openStandbyAiModal);
+
+    const btnStandbyAiRefresh = document.getElementById('btn-standby-ai-refresh');
+    if (btnStandbyAiRefresh) {
+      btnStandbyAiRefresh.addEventListener('click', () => {
+        triggerHaptic('light');
+        resetAndGenerateStandbyAiTagCloud();
+      });
+    }
+
+    const btnCloseStandbyAi = document.getElementById('btn-close-standby-ai');
+    if (btnCloseStandbyAi) btnCloseStandbyAi.addEventListener('click', closeStandbyAiModal);
+
     const sbPlayPause = document.getElementById('standby-btn-play-pause');
     const sbPrev = document.getElementById('standby-btn-prev');
     const sbNext = document.getElementById('standby-btn-next');
+    const sbFavBtn = document.getElementById('standby-btn-favorite');
+    const sbAiVibeBtn = document.getElementById('standby-btn-ai-track-vibe');
     const sbTrack = document.getElementById('standby-progress-track');
 
     if (sbPlayPause) sbPlayPause.addEventListener('click', togglePlayPause);
     if (sbPrev) sbPrev.addEventListener('click', () => sendThrottledTransport('previous'));
     if (sbNext) sbNext.addEventListener('click', () => sendThrottledTransport('next'));
-    if (sbTrack) {
+    if (sbFavBtn) {
+      sbFavBtn.addEventListener('click', handleToggleFavorite);
+    }
+    if (sbAiVibeBtn) {
+      sbAiVibeBtn.addEventListener('click', triggerAiMixFromCurrentTrack);
+    }
+    const sbProgressInput = document.getElementById('standby-progress-input');
+    if (sbProgressInput) {
+      sbProgressInput.addEventListener('input', (e) => {
+        if (!state.duration || state.duration <= 0) return;
+        state.isScrubbing = true;
+        const percent = parseFloat(e.target.value);
+        const targetPos = (percent / 100) * state.duration;
+        state.scrubValue = targetPos;
+        const pctStr = `${percent.toFixed(2)}%`;
+        const sbFill = document.getElementById('standby-progress-fill');
+        const sbThumb = document.getElementById('standby-progress-thumb');
+        const sbElapsed = document.getElementById('standby-time-elapsed');
+        const sbRem = document.getElementById('standby-time-remaining');
+        if (sbFill) sbFill.style.width = pctStr;
+        if (sbThumb) sbThumb.style.left = pctStr;
+        if (sbElapsed) sbElapsed.textContent = formatTime(targetPos);
+        if (sbRem) sbRem.textContent = `-${formatTime(Math.max(0, state.duration - targetPos))}`;
+      });
+      sbProgressInput.addEventListener('change', commitScrub);
+      sbProgressInput.addEventListener('pointerup', commitScrub);
+      sbProgressInput.addEventListener('touchend', commitScrub);
+    } else if (sbTrack) {
       sbTrack.addEventListener('click', (e) => {
         if (!state.duration || state.duration <= 0) return;
         const rect = sbTrack.getBoundingClientRect();
@@ -5796,8 +9184,18 @@ extension WebUIContent {
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        const bookletModal = document.getElementById('booklet-viewer-modal');
+        if (bookletModal && !bookletModal.classList.contains('hidden')) {
+          closeBookletViewer();
+          return;
+        }
         if (popover && !popover.classList.contains('hidden')) {
           popover.classList.add('hidden');
+          return;
+        }
+        const aiModal = document.getElementById('standby-ai-modal');
+        if (aiModal && !aiModal.classList.contains('hidden')) {
+          closeStandbyAiModal();
           return;
         }
         const libModal = document.getElementById('standby-library-modal');
@@ -5813,11 +9211,867 @@ extension WebUIContent {
     });
   }
 
+  // =========================================================================
+  // APPLE DIGITAL BOOKLET VIEWER (OFFICIAL APPLE PDF READER)
+  // - Desktop / Tablet Landscape: Replaces right column (.inline-right-pane)
+  // - StandBy TV & Mobile Portrait: Fullscreen (.fullscreen-mode)
+  // - Pages rendered sequentially on the full width of the area
+  // =========================================================================
+
+  const bookletState = {
+    isOpen: false,
+    info: null,
+    targetAlbum: '',
+    targetArtist: '',
+    targetAlbumId: '',
+    lastCheckedTrackKey: ''
+  };
+
+  const bookletAvailabilityCache = new Map();
+
+  function makeBookletCacheKey(album, artist) {
+    return `${(artist || '').trim().toLowerCase()}|${(album || '').trim().toLowerCase()}`;
+  }
+
+  function syncBookletViewerLayoutMode() {
+    const modal = document.getElementById('booklet-viewer-modal');
+    if (!modal) return;
+
+    const isTvOrMobileLandscape = isStandbyOrLandscapeVisible();
+    const isDesktopTwoCol = isDesktopLayout() && !isTvOrMobileLandscape;
+
+    if (isDesktopTwoCol) {
+      modal.classList.add('inline-right-pane');
+      modal.classList.remove('fullscreen-mode');
+      const rightPane = document.querySelector('.content-panel-wrapper');
+      if (rightPane) {
+        const rect = rightPane.getBoundingClientRect();
+        if (rect.width > 100 && rect.left > 0) {
+          modal.style.left = `${Math.round(rect.left)}px`;
+        } else {
+          modal.style.left = '';
+        }
+      }
+    } else {
+      modal.classList.add('fullscreen-mode');
+      modal.classList.remove('inline-right-pane');
+      modal.style.left = '';
+    }
+
+    const btnOpenNowPlaying = document.getElementById('btn-open-booklet');
+    if (btnOpenNowPlaying) {
+      btnOpenNowPlaying.classList.toggle('active', bookletState.isOpen);
+    }
+  }
+
+  async function fetchBookletInfoCached({ album, artist, albumId = '', trackName = '', refresh = false }) {
+    const cleanAlbum = (album || '').trim();
+    const cleanArtist = (artist || '').trim();
+    if (!cleanAlbum) return null;
+
+    const cacheKey = makeBookletCacheKey(cleanAlbum, cleanArtist);
+    if (!refresh && bookletAvailabilityCache.has(cacheKey)) {
+      return bookletAvailabilityCache.get(cacheKey);
+    }
+
+    const qs = new URLSearchParams({
+      album: cleanAlbum,
+      artist: cleanArtist,
+      album_id: albumId || '',
+      track: trackName || '',
+      refresh: refresh ? '1' : '0'
+    });
+    const resp = await fetch(`/api/booklet/info?${qs.toString()}`, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const info = await resp.json();
+    bookletAvailabilityCache.set(cacheKey, info);
+    return info;
+  }
+
+  async function syncCurrentTrackBookletAvailability() {
+    const btnOpenNowPlaying = document.getElementById('btn-open-booklet');
+    const btnOpenStandby = document.getElementById('standby-booklet-btn');
+    const moreDot = dom.moreBookletDot || document.getElementById('more-booklet-dot');
+    const bookletSub = document.getElementById('station-opt-booklet-sub');
+    const t = state.track;
+    const album = t && t.album ? t.album.trim() : '';
+    const artist = t && t.artist ? t.artist.trim() : '';
+
+    if (!album) {
+      bookletState.lastCheckedTrackKey = '';
+      if (btnOpenNowPlaying) btnOpenNowPlaying.classList.add('hidden');
+      if (btnOpenStandby) btnOpenStandby.classList.add('hidden');
+      if (moreDot) moreDot.classList.add('hidden');
+      return;
+    }
+
+    const key = makeBookletCacheKey(album, artist);
+    if (key === bookletState.lastCheckedTrackKey && bookletAvailabilityCache.has(key)) {
+      const cached = bookletAvailabilityCache.get(key);
+      const isAvail = Boolean(cached && cached.available && cached.page_count > 0);
+      if (btnOpenNowPlaying) btnOpenNowPlaying.classList.toggle('hidden', !isAvail);
+      if (btnOpenStandby) btnOpenStandby.classList.toggle('hidden', !isAvail);
+      if (moreDot) moreDot.classList.toggle('hidden', !isAvail);
+      if (bookletSub && isAvail) {
+        bookletSub.textContent = `${album} • ${cached.page_count} стр.`;
+      }
+      return;
+    }
+
+    bookletState.lastCheckedTrackKey = key;
+    if (btnOpenNowPlaying) btnOpenNowPlaying.classList.add('hidden');
+    if (btnOpenStandby) btnOpenStandby.classList.add('hidden');
+    if (moreDot) moreDot.classList.add('hidden');
+
+    try {
+      const info = await fetchBookletInfoCached({
+        album,
+        artist,
+        trackName: (t && t.name) || ''
+      });
+      if (bookletState.lastCheckedTrackKey !== key) return;
+      const isAvail = Boolean(info && info.available && info.page_count > 0);
+      if (btnOpenNowPlaying) btnOpenNowPlaying.classList.toggle('hidden', !isAvail);
+      if (btnOpenStandby) btnOpenStandby.classList.toggle('hidden', !isAvail);
+      if (moreDot) moreDot.classList.toggle('hidden', !isAvail);
+      if (bookletSub && isAvail) {
+        bookletSub.textContent = `${album} • ${info.page_count} стр.`;
+      }
+    } catch (err) {
+      if (btnOpenNowPlaying) btnOpenNowPlaying.classList.add('hidden');
+      if (btnOpenStandby) btnOpenStandby.classList.add('hidden');
+      if (moreDot) moreDot.classList.add('hidden');
+    }
+  }
+
+  async function syncDetailAlbumBookletAvailability(alb) {
+    const btnDetailBooklet = document.getElementById('btn-detail-booklet');
+    if (!btnDetailBooklet || !alb) return;
+    btnDetailBooklet.classList.add('hidden');
+
+    const album = (alb.name || alb.title || '').trim();
+    const artist = (alb.artist || alb.sub || alb.subtitle || '').trim();
+    const albumId = alb.id || '';
+    if (!album) return;
+
+    try {
+      const info = await fetchBookletInfoCached({ album, artist, albumId });
+      const curDet = state.currentPlaylistDetail;
+      if (!curDet || !curDet.isAlbum || (curDet.name || curDet.title || '').trim() !== album) return;
+      const isAvail = Boolean(info && info.available && info.page_count > 0);
+      btnDetailBooklet.classList.toggle('hidden', !isAvail);
+    } catch (err) {
+      btnDetailBooklet.classList.add('hidden');
+    }
+  }
+
+  async function openBookletViewer(customTarget = null) {
+    triggerHaptic('light');
+    const modal = document.getElementById('booklet-viewer-modal');
+    if (!modal) return;
+
+    const album = (customTarget && customTarget.album)
+      || (state.track && state.track.album)
+      || '';
+    const artist = (customTarget && customTarget.artist)
+      || (state.track && state.track.artist)
+      || '';
+    const albumId = (customTarget && customTarget.albumId) || '';
+    const trackName = (state.track && state.track.name) || '';
+
+    if (!album) {
+      showToast('У текущего трека нет буклета Apple Music');
+      return;
+    }
+
+    // If clicking the Now Playing booklet button while it's already open for this album, toggle close
+    if (!customTarget && bookletState.isOpen && bookletState.targetAlbum === album) {
+      closeBookletViewer();
+      return;
+    }
+
+    bookletState.isOpen = true;
+    bookletState.targetAlbum = album;
+    bookletState.targetArtist = artist;
+    bookletState.targetAlbumId = albumId;
+
+    syncBookletViewerLayoutMode();
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+
+    const loadingEl = document.getElementById('booklet-loading');
+    const listEl = document.getElementById('booklet-pages-list');
+    const viewport = document.getElementById('booklet-viewport');
+
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (listEl) listEl.innerHTML = '';
+    if (viewport) viewport.scrollTop = 0;
+
+    await fetchAndRenderBooklet({ album, artist, albumId, trackName, refresh: false });
+  }
+
+  function closeBookletViewer() {
+    const modal = document.getElementById('booklet-viewer-modal');
+    if (!modal) return;
+    bookletState.isOpen = false;
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    const btnOpenNowPlaying = document.getElementById('btn-open-booklet');
+    if (btnOpenNowPlaying) {
+      btnOpenNowPlaying.classList.remove('active');
+    }
+  }
+
+  async function fetchAndRenderBooklet({ album, artist, albumId = '', trackName = '', refresh = false }) {
+    const loadingEl = document.getElementById('booklet-loading');
+    try {
+      const info = await fetchBookletInfoCached({ album, artist, albumId, trackName, refresh });
+      if (!info || !info.available || !info.pages || info.pages.length === 0) {
+        closeBookletViewer();
+        showToast('Для этого альбома нет официального буклета в Apple Music');
+        return;
+      }
+      applyBookletInfo(info);
+    } catch (err) {
+      console.warn('Booklet load error:', err);
+      closeBookletViewer();
+      showToast('Не удалось загрузить цифровой буклет Apple Music');
+    } finally {
+      if (loadingEl) loadingEl.classList.add('hidden');
+    }
+  }
+
+  function applyBookletInfo(info) {
+    if (!info || !info.available || !info.pages || info.pages.length === 0) return;
+    bookletState.info = info;
+    renderBookletSequentialPages();
+  }
+
+  function renderBookletSequentialPages() {
+    const listEl = document.getElementById('booklet-pages-list');
+    const info = bookletState.info;
+    if (!listEl || !info || !info.pages) return;
+
+    listEl.innerHTML = '';
+
+    // When structured editorial data is present (non-scanned PDF), render native responsive HTML
+    // using the system / PWA font stack & rem sizes so mobile text is crisp and comfortable to read.
+    if (info.editorial && !info.is_original_pdf) {
+      renderNativeEditorialBookletDOM(listEl, info, info.editorial);
+      return;
+    }
+
+    info.pages.forEach((p, idx) => {
+      const card = document.createElement('div');
+      card.className = 'booklet-seq-page-card';
+
+      const img = document.createElement('img');
+      img.className = 'booklet-seq-page-img';
+      img.src = p.image_url;
+      img.alt = p.title || `Страница ${idx + 1}`;
+      img.loading = idx < 2 ? 'eager' : 'lazy';
+
+      card.appendChild(img);
+      listEl.appendChild(card);
+    });
+  }
+
+  function renderNativeEditorialBookletDOM(container, info, ed) {
+    const albumName = info.album || bookletState.targetAlbum || '';
+    const artistName = info.artist || bookletState.targetArtist || '';
+    const releaseDate = ed.release_date || info.release_date || '';
+    const recordLabel = ed.record_label || info.record_label || '';
+    const copyright = ed.copyright || info.copyright || '';
+    const genre = ed.genre || '';
+    const isADM = Boolean(ed.is_mastered_for_itunes);
+    const traits = Array.isArray(ed.audio_traits) ? ed.audio_traits : [];
+    const tracks = Array.isArray(ed.tracks) ? ed.tracks : [];
+    const paras = Array.isArray(ed.editorial_paragraphs) ? ed.editorial_paragraphs : [];
+    const coverSrc = ed.artwork_url || (state.track ? getArtworkSrc(state.track) : 'apple-touch-icon.svg');
+    const totalSections = 2 + (tracks.length > 0 ? 1 : 0);
+
+    // 1. Cover Section
+    const coverSec = document.createElement('section');
+    coverSec.className = 'booklet-native-page';
+    const metaParts = [];
+    if (genre) metaParts.push(genre);
+    if (releaseDate) metaParts.push(String(releaseDate).slice(0, 4));
+    if (tracks.length > 0) {
+      metaParts.push(IS_EN ? `${tracks.length} tracks` : `${tracks.length} композиций`);
+    }
+    const summaryQuote = ed.summary_quote || '';
+    const badgeLabel = isADM ? 'APPLE DIGITAL MASTER' : 'APPLE MUSIC EDITION';
+
+    coverSec.innerHTML = `
+      <div class="booklet-native-topbar">
+        <span class="booklet-native-kicker">APPLE MUSIC • DIGITAL BOOKLET</span>
+        <span class="booklet-native-edition-badge">${escapeHtml(badgeLabel)}</span>
+      </div>
+      <div class="booklet-native-cover-wrap">
+        <img class="booklet-native-cover-img" src="${escapeHtml(coverSrc)}" alt="${escapeHtml(albumName)}" loading="eager">
+        <div class="booklet-native-cover-meta">
+          <h1 class="booklet-native-album-title">${escapeHtml(albumName)}</h1>
+          <div class="booklet-native-album-artist">${escapeHtml(artistName)}</div>
+          ${metaParts.length ? `<div class="booklet-native-album-sub">${escapeHtml(metaParts.join('  •  '))}</div>` : ''}
+          ${summaryQuote ? `<p class="booklet-native-quote">${escapeHtml(summaryQuote)}</p>` : ''}
+        </div>
+      </div>
+      <div class="booklet-native-footer">
+        <span>${escapeHtml(recordLabel || copyright)}</span>
+        <span>${IS_EN ? `PAGE 1 / ${totalSections}` : `СТР. 1 / ${totalSections}`}</span>
+      </div>
+    `;
+    container.appendChild(coverSec);
+
+    // 2. Editorial & Release Specs Section
+    const edSec = document.createElement('section');
+    edSec.className = 'booklet-native-page';
+    const totalSec = Math.round(tracks.reduce((acc, t) => acc + (Number(t.duration_seconds) || 0), 0));
+    const runtimeStr = tracks.length > 0
+      ? (IS_EN
+        ? `${Math.floor(totalSec / 60)} min ${String(totalSec % 60).padStart(2, '0')} sec (${tracks.length} tracks)`
+        : `${Math.floor(totalSec / 60)} мин ${String(totalSec % 60).padStart(2, '0')} сек (${tracks.length} треков)`)
+      : '—';
+    const masteringStr = isADM
+      ? 'Apple Digital Master • Lossless'
+      : (traits.length > 0 ? traits.join(', ') : 'Apple Music Lossless');
+
+    const specs = [
+      { label: IS_EN ? 'ARTIST' : 'ИСПОЛНИТЕЛЬ', value: artistName || '—' },
+      { label: IS_EN ? 'RELEASE DATE' : 'ДАТА РЕЛИЗА', value: releaseDate || '—' },
+      { label: IS_EN ? 'GENRE' : 'ЖАНР', value: genre || '—' },
+      { label: IS_EN ? 'RECORD LABEL' : 'ЛЕЙБЛ / ИЗДАТЕЛЬ', value: recordLabel || '—' },
+      { label: IS_EN ? 'RUNTIME' : 'ХРОНОМЕТРАЖ', value: runtimeStr },
+      { label: IS_EN ? 'APPLE MASTERING' : 'МАСТЕРИНГ APPLE', value: masteringStr }
+    ];
+
+    const parasHtml = paras.map(p => `<p class="booklet-native-para">${escapeHtml(p)}</p>`).join('');
+    const specsHtml = specs.map(s => `
+      <div class="booklet-native-spec-item">
+        <span class="booklet-native-spec-label">${escapeHtml(s.label)}</span>
+        <span class="booklet-native-spec-value">${escapeHtml(s.value)}</span>
+      </div>
+    `).join('');
+
+    edSec.innerHTML = `
+      <div class="booklet-native-sec-header">
+        <div class="booklet-native-kicker">${IS_EN ? 'ALBUM STORY, RECORDING & CONCEPT' : 'ИСТОРИЯ СОЗДАНИЯ, ЗАПИСЬ И КОНЦЕПЦИЯ АЛЬБОМА'}</div>
+        <h2 class="booklet-native-sec-title">${escapeHtml(albumName)}</h2>
+        <div class="booklet-native-sec-sub">${escapeHtml(artistName)}</div>
+      </div>
+      ${parasHtml ? `<div class="booklet-native-body">${parasHtml}</div>` : ''}
+      <div class="booklet-native-specs-card">${specsHtml}</div>
+      <div class="booklet-native-footer">
+        <span>${escapeHtml(copyright || recordLabel)}</span>
+        <span>${IS_EN ? `PAGE 2 / ${totalSections}` : `СТР. 2 / ${totalSections}`}</span>
+      </div>
+    `;
+    container.appendChild(edSec);
+
+    // 3. Track-by-Track & Credits Section
+    if (tracks.length > 0) {
+      const trkSec = document.createElement('section');
+      trkSec.className = 'booklet-native-page';
+
+      const tracksHtml = tracks.map(t => {
+        const numStr = String(t.number || 1).padStart(2, '0');
+        const durSec = Math.round(Number(t.duration_seconds) || 0);
+        const durStr = durSec > 0
+          ? `${Math.floor(durSec / 60)}:${String(durSec % 60).padStart(2, '0')}`
+          : '—';
+        const badges = [];
+        if (t.artist) badges.push(t.artist);
+        if (t.audio_badge) badges.push(t.audio_badge);
+        if (t.isrc) badges.push(`ISRC: ${t.isrc}`);
+
+        const creditRows = [];
+        if (t.composer) {
+          creditRows.push({
+            label: IS_EN ? 'WRITERS & COMPOSERS' : 'АВТОРЫ И КОМПОЗИТОРЫ',
+            val: t.composer
+          });
+        }
+        if (Array.isArray(t.producers) && t.producers.length > 0) {
+          creditRows.push({
+            label: IS_EN ? 'PRODUCTION & ARRANGEMENT' : 'ПРОДЮСИРОВАНИЕ И АРАНЖИРОВКА',
+            val: t.producers.join(' • ')
+          });
+        }
+        if (Array.isArray(t.vocals) && t.vocals.length > 0) {
+          creditRows.push({
+            label: IS_EN ? 'VOCALS' : 'ВОКАЛ',
+            val: t.vocals.join(' • ')
+          });
+        }
+        if (Array.isArray(t.instruments) && t.instruments.length > 0) {
+          creditRows.push({
+            label: IS_EN ? 'INSTRUMENTS & MUSICIANS' : 'ИНСТРУМЕНТЫ И МУЗЫКАНТЫ',
+            val: t.instruments.join(' • ')
+          });
+        }
+        if (Array.isArray(t.samples) && t.samples.length > 0) {
+          creditRows.push({
+            label: IS_EN ? 'SAMPLES & INTERPOLATIONS' : 'СЭМПЛЫ И ЦИТАТЫ',
+            val: t.samples.join(' • ')
+          });
+        }
+        if (Array.isArray(t.studios) && t.studios.length > 0) {
+          creditRows.push({
+            label: IS_EN ? 'RECORDING STUDIOS' : 'СТУДИИ ЗАПИСИ',
+            val: t.studios.join(' • ')
+          });
+        }
+
+        const creditsHtml = creditRows.length > 0
+          ? `<div class="booklet-native-track-credits">${creditRows.map(r => `
+              <div class="booklet-native-credit-row">
+                <span class="booklet-native-credit-label">${escapeHtml(r.label)}:</span> ${escapeHtml(r.val)}
+              </div>
+            `).join('')}</div>`
+          : '';
+
+        return `
+          <article class="booklet-native-track-card">
+            <div class="booklet-native-track-top">
+              <div class="booklet-native-track-title-wrap">
+                <span class="booklet-native-track-num">${escapeHtml(numStr)}</span>
+                <h3 class="booklet-native-track-title">${escapeHtml(t.title || '')}</h3>
+              </div>
+              <span class="booklet-native-track-dur">${escapeHtml(durStr)}</span>
+            </div>
+            ${badges.length ? `<div class="booklet-native-track-badges">${escapeHtml(badges.join('   •   '))}</div>` : ''}
+            ${t.commentary ? `<p class="booklet-native-track-comm">${escapeHtml(t.commentary)}</p>` : ''}
+            ${creditsHtml}
+          </article>
+        `;
+      }).join('');
+
+      trkSec.innerHTML = `
+        <div class="booklet-native-sec-header">
+          <div class="booklet-native-kicker">${IS_EN ? 'TRACK-BY-TRACK GUIDE & CREDITS' : 'ПОЛНОЕ ОПИСАНИЕ ПО КОМПОЗИЦИЯМ • TRACK-BY-TRACK & CREDITS'}</div>
+          <h2 class="booklet-native-sec-title">${escapeHtml(albumName)}</h2>
+          <div class="booklet-native-sec-sub">${escapeHtml(artistName)}</div>
+        </div>
+        <div class="booklet-native-tracks-list">${tracksHtml}</div>
+        <div class="booklet-native-footer">
+          <span>${escapeHtml(copyright || recordLabel)}</span>
+          <span>${IS_EN ? `PAGE 3 / ${totalSections}` : `СТР. 3 / ${totalSections}`}</span>
+        </div>
+      `;
+      container.appendChild(trkSec);
+    }
+  }
+
+  function setupBookletViewerControls() {
+    const btnOpenNowPlaying = document.getElementById('btn-open-booklet');
+    const btnOpenStandby = document.getElementById('standby-booklet-btn');
+    const btnOpenDetail = document.getElementById('btn-detail-booklet');
+    const btnClose = document.getElementById('btn-close-booklet');
+
+    if (btnOpenNowPlaying) {
+      btnOpenNowPlaying.addEventListener('click', () => {
+        if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+        openBookletViewer();
+      });
+    }
+    if (btnOpenStandby) {
+      btnOpenStandby.addEventListener('click', () => openBookletViewer());
+    }
+    if (btnOpenDetail) {
+      btnOpenDetail.addEventListener('click', () => {
+        const det = state.currentPlaylistDetail;
+        if (det && det.isAlbum) {
+          openBookletViewer({
+            album: det.name || det.title || '',
+            artist: det.artist || det.sub || det.subtitle || '',
+            albumId: det.id || ''
+          });
+        } else {
+          openBookletViewer();
+        }
+      });
+    }
+    if (btnClose) btnClose.addEventListener('click', closeBookletViewer);
+
+    window.addEventListener('resize', () => {
+      if (bookletState.isOpen) {
+        syncBookletViewerLayoutMode();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (bookletState.isOpen && e.key === 'Escape') {
+        e.preventDefault();
+        closeBookletViewer();
+      }
+    });
+  }
+
+  // --- Device Authorization & Top-Left AMR Info / Lock Screen Controller ---
+  function applyLockScreenControlsSetting(enabled, options = {}) {
+    const boolVal = Boolean(enabled);
+    state.lockScreenControls = boolVal;
+    writePersistentCookie('amr_lock_screen', boolVal ? 'true' : 'false');
+    try {
+      localStorage.setItem('amr_lock_screen_controls', boolVal ? 'true' : 'false');
+    } catch (e) {}
+
+    const lockCheckbox = document.getElementById('amr-lock-screen-checkbox');
+    if (lockCheckbox && lockCheckbox.checked !== boolVal) {
+      lockCheckbox.checked = boolVal;
+    }
+
+    if (!boolVal || !state.deviceAuthorized) {
+      teardownMediaSessionAndSilentAudio();
+    } else {
+      initSilentAudio();
+      setupMediaSession();
+      updateMediaSession();
+      if (state.playerState === 'playing') {
+        syncSilentAudio(true);
+      }
+    }
+
+    if (options.syncServer && state.connected) {
+      send({
+        action: 'update_device_settings',
+        params: {
+          device_id: state.deviceId,
+          lock_screen_controls: boolVal
+        }
+      });
+    }
+
+    if (options.showFeedback) {
+      showToast(boolVal ? 'Экран блокировки включён' : 'Экран блокировки выключен');
+    }
+    syncDeviceInfoUI();
+  }
+
+  function syncDeviceInfoUI() {
+    const commitBadgeEl = document.getElementById('amr-info-commit-badge');
+    const commitDetailsEl = document.getElementById('amr-info-commit-details');
+    const summaryEl = document.getElementById('amr-info-device-summary');
+    const deviceUidMetaEl = document.getElementById('amr-info-device-uid');
+    const nameInput = document.getElementById('amr-device-name-input');
+    const lockCheckbox = document.getElementById('amr-lock-screen-checkbox');
+    const lockNodeDot = document.getElementById('amr-lock-node-dot');
+    const lockStateBadge = document.getElementById('amr-lock-state-badge');
+    const authOverlay = document.getElementById('device-auth-overlay');
+    const authShortIdEl = document.getElementById('auth-device-short-id');
+    const authNameInput = document.getElementById('auth-device-name-input');
+    const authFullIdEl = document.getElementById('auth-device-full-id');
+
+    const commitHash = state.gitCommit || '7278dab';
+    const commitDate = state.gitCommitDate || '2026-11-04';
+    if (commitBadgeEl) {
+      commitBadgeEl.textContent = commitHash;
+    }
+    if (commitDetailsEl) {
+      commitDetailsEl.textContent = translateTextToEn(`Последний коммит: ${commitHash} (${commitDate}) • Pure Swift Server`);
+    }
+
+    const shortId = state.deviceShortId || computeShortDeviceId(state.deviceId);
+    if (summaryEl) {
+      summaryEl.textContent = `ID: ${shortId}`;
+    }
+    if (deviceUidMetaEl) {
+      deviceUidMetaEl.textContent = translateTextToEn(`UID: ${state.deviceId} • Авторизовано на Mac`);
+    }
+    if (nameInput && document.activeElement !== nameInput) {
+      nameInput.value = state.deviceName;
+    }
+    const isLockOn = Boolean(state.lockScreenControls);
+    if (lockCheckbox) {
+      lockCheckbox.checked = isLockOn;
+    }
+    if (lockNodeDot) {
+      lockNodeDot.classList.toggle('active', isLockOn);
+    }
+    if (lockStateBadge) {
+      lockStateBadge.textContent = translateTextToEn(isLockOn ? 'АКТИВНО' : 'ОТКЛЮЧЕНО');
+      lockStateBadge.classList.toggle('highlight-green', isLockOn);
+    }
+    if (authShortIdEl) {
+      authShortIdEl.textContent = shortId;
+    }
+    if (authNameInput && document.activeElement !== authNameInput) {
+      authNameInput.value = state.deviceName;
+    }
+    if (authFullIdEl) {
+      authFullIdEl.textContent = `UID: ${state.deviceId}`;
+    }
+
+    if (authOverlay) {
+      if (!state.deviceAuthorized) {
+        authOverlay.classList.remove('hidden');
+        authOverlay.setAttribute('aria-hidden', 'false');
+        if (dom.modalAppleAuth) {
+          dom.modalAppleAuth.classList.add('hidden');
+          dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
+        }
+      } else {
+        authOverlay.classList.add('hidden');
+        authOverlay.setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+
+  function handleDeviceAuthStatus(data) {
+    if (!data || typeof data !== 'object') return;
+
+    if (data.git_commit) {
+      state.gitCommit = String(data.git_commit);
+    }
+    if (data.git_commit_date) {
+      state.gitCommitDate = String(data.git_commit_date);
+    }
+    if (data.device_id) {
+      state.deviceId = String(data.device_id).toLowerCase();
+      persistUidToSecureStore(state.deviceId);
+    }
+    state.deviceShortId = data.short_id || computeShortDeviceId(state.deviceId);
+
+    if (data.device_name && String(data.device_name).trim()) {
+      state.deviceName = String(data.device_name).trim();
+      try { localStorage.setItem('amr_device_name', state.deviceName); } catch (e) {}
+    }
+
+    if (typeof data.authorized === 'boolean') {
+      state.deviceAuthorized = data.authorized;
+    }
+
+    if (typeof data.lock_screen_controls === 'boolean') {
+      applyLockScreenControlsSetting(data.lock_screen_controls, { syncServer: false, showFeedback: false });
+    } else if (!state.deviceAuthorized) {
+      teardownMediaSessionAndSilentAudio();
+    }
+
+    if (!state.deviceAuthorized) {
+      state.initialAuthFetched = false;
+    }
+
+    syncDeviceInfoUI();
+
+    // Load status, queue, library, and Apple ID / MusicKit status ONLY after device is authorized
+    if (state.deviceAuthorized && !state.initialAuthFetched && state.connected) {
+      state.initialAuthFetched = true;
+      send({ action: 'get_status' });
+      send({ action: 'get_queue' });
+      send({ action: 'get_playlists' });
+      send({ action: 'get_explore', params: { country: state.trends.country } });
+      send({ action: 'get_audio_devices' });
+      send({ action: 'get_user_token_status' });
+      send({ action: 'get_developer_token' });
+      send({ action: 'get_account_status' });
+      send({ action: 'get_wled_settings' });
+      send({ action: 'get_ai_curator_settings' });
+      send({ action: 'get_info' });
+    }
+  }
+
+  function handleShareAccessQR(data) {
+    if (!data || typeof data !== 'object') return;
+    const shareUrl = String(data.share_url || data.base_url || window.location.origin);
+    const qrDataUrl = String(data.qr_data_url || '');
+    state.shareAccessUrl = shareUrl;
+
+    const qrPanel = document.getElementById('amr-share-qr-panel');
+    const qrImg = document.getElementById('amr-share-qr-img');
+    const urlText = document.getElementById('amr-share-url-text');
+    const btnNativeShare = document.getElementById('btn-native-share-link');
+
+    if (qrImg && qrDataUrl) {
+      qrImg.src = qrDataUrl;
+    }
+    if (urlText) {
+      urlText.textContent = shareUrl;
+    }
+    if (btnNativeShare) {
+      btnNativeShare.classList.toggle('hidden', typeof navigator.share !== 'function');
+    }
+    if (qrPanel) {
+      qrPanel.classList.remove('hidden');
+    }
+  }
+
+  function setupAmrInfoAndDeviceAuthControls() {
+    const btnBrand = document.getElementById('btn-brand-info');
+    const mobileBtnBrand = document.getElementById('mobile-btn-brand-info');
+    const popover = document.getElementById('amr-info-popover');
+    const btnClose = document.getElementById('btn-close-amr-info');
+    const lockCheckbox = document.getElementById('amr-lock-screen-checkbox');
+    const nameInput = document.getElementById('amr-device-name-input');
+    const authNameInput = document.getElementById('auth-device-name-input');
+    const btnShareAccessQr = document.getElementById('btn-share-access-qr');
+    const btnShareAccessLabel = document.getElementById('amr-share-access-btn-label');
+    const qrPanel = document.getElementById('amr-share-qr-panel');
+    const btnCopyShareLink = document.getElementById('btn-copy-share-link');
+    const btnNativeShareLink = document.getElementById('btn-native-share-link');
+
+    // Attempt recovery from CacheStorage if cookie/localStorage had been wiped
+    if ('caches' in window) {
+      caches.open('amr-device-secure-store-v1').then((cache) => cache.match('/__amr_device_uid')).then((resp) => {
+        if (!resp) return null;
+        return resp.text();
+      }).then((cachedUid) => {
+        const clean = (cachedUid || '').trim().toLowerCase();
+        if (clean && clean !== state.deviceId) {
+          state.deviceId = clean;
+          state.deviceShortId = computeShortDeviceId(clean);
+          persistUidToSecureStore(clean);
+          syncDeviceInfoUI();
+          if (state.connected) {
+            send({
+              action: 'register_device',
+              params: {
+                device_id: state.deviceId,
+                device_name: state.deviceName,
+                device_type: state.deviceType,
+                lock_screen_controls: state.lockScreenControls,
+                invite_token: state.inviteToken || ''
+              }
+            });
+          }
+        }
+      }).catch(() => {});
+    }
+
+    syncDeviceInfoUI();
+
+    const togglePopover = (e) => {
+      if (e) e.stopPropagation();
+      if (!popover) return;
+      const topSettings = document.getElementById('top-settings-popover');
+      if (topSettings) topSettings.classList.add('hidden');
+      syncDeviceInfoUI();
+      popover.classList.toggle('hidden');
+    };
+
+    if (btnBrand) btnBrand.addEventListener('click', togglePopover);
+    if (mobileBtnBrand) mobileBtnBrand.addEventListener('click', togglePopover);
+    if (btnClose && popover) {
+      btnClose.addEventListener('click', () => popover.classList.add('hidden'));
+    }
+
+    if (popover) {
+      popover.addEventListener('click', (e) => {
+        if (e.target === popover) {
+          popover.classList.add('hidden');
+        }
+      });
+    }
+
+    if (btnShareAccessQr && qrPanel) {
+      btnShareAccessQr.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isCurrentlyHidden = qrPanel.classList.contains('hidden');
+        if (isCurrentlyHidden) {
+          qrPanel.classList.remove('hidden');
+          btnShareAccessQr.classList.add('active');
+          if (btnShareAccessLabel) {
+            btnShareAccessLabel.textContent = translateTextToEn('Скрыть QR-код');
+          }
+          send({ action: 'get_share_access_qr' });
+        } else {
+          qrPanel.classList.add('hidden');
+          btnShareAccessQr.classList.remove('active');
+          if (btnShareAccessLabel) {
+            btnShareAccessLabel.textContent = translateTextToEn('Поделиться доступом');
+          }
+        }
+      });
+    }
+
+    if (btnCopyShareLink) {
+      btnCopyShareLink.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const urlToCopy = state.shareAccessUrl || window.location.origin;
+        const onCopied = () => showToast('Ссылка для подключения скопирована');
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(urlToCopy).then(onCopied).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = urlToCopy;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            document.body.removeChild(ta);
+            onCopied();
+          });
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = urlToCopy;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (err) {}
+          document.body.removeChild(ta);
+          onCopied();
+        }
+      });
+    }
+
+    if (btnNativeShareLink) {
+      btnNativeShareLink.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const urlToShare = state.shareAccessUrl || window.location.origin;
+        if (typeof navigator.share === 'function') {
+          navigator.share({
+            title: 'Apple Music Remote',
+            text: translateTextToEn('Поделиться доступом'),
+            url: urlToShare
+          }).catch(() => {});
+        }
+      });
+    }
+
+    if (lockCheckbox) {
+      lockCheckbox.addEventListener('change', (e) => {
+        applyLockScreenControlsSetting(e.target.checked, { syncServer: true, showFeedback: true });
+      });
+    }
+
+    const commitDeviceName = (rawVal) => {
+      const trimmed = String(rawVal || '').trim();
+      if (!trimmed || trimmed === state.deviceName) return;
+      state.deviceName = trimmed;
+      try { localStorage.setItem('amr_device_name', trimmed); } catch (e) {}
+      syncDeviceInfoUI();
+      if (state.connected) {
+        send({
+          action: 'update_device_settings',
+          params: {
+            device_id: state.deviceId,
+            device_name: trimmed
+          }
+        });
+      }
+      showToast('Имя устройства сохранено');
+    };
+
+    [nameInput, authNameInput].forEach((inp) => {
+      if (!inp) return;
+      inp.addEventListener('change', (e) => commitDeviceName(e.target.value));
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          inp.blur();
+          commitDeviceName(inp.value);
+        }
+      });
+    });
+  }
+
   // Initialize
+  setupAmrInfoAndDeviceAuthControls();
   setupMediaSession();
   setupArtworkSwipeGestures();
   setupMiniPlayerGestures();
   setupStandbyAndWledControls();
+  setupBookletViewerControls();
   renderHeroCarousel({});
   renderHomeStations(DEFAULT_STATIONS);
   renderHomeGenres(DEFAULT_GENRES);

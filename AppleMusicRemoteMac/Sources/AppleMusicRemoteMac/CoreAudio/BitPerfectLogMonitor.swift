@@ -145,6 +145,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         self.pendingRate = nil
         self.pendingBitDepth = nil
         self.formatSwitchCountForCurrentTrack = 0
+        SpectralIntegrityAnalyzer.shared.resetForNewTrack(trackKey: cleanKey ?? "")
 
         if let sr = expectedSampleRate, let norm = self.normalizeRate(sr) {
             let rawDepth = expectedBitDepth ?? (norm >= 48000.0 ? 24 : 16)
@@ -596,8 +597,8 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
 
     private func applyFormat(rate: Double, bitDepth: Int) {
         CoreAudioDeviceManager.shared.setFormat(sampleRate: rate, bitDepth: bitDepth)
+        AudioProcessTapService.shared.setFormat(sampleRate: Int(rate), bitDepth: bitDepth)
         if DLNADiscoveryManager.shared.hasActiveRenderer {
-            AudioProcessTapService.shared.setFormat(sampleRate: Int(rate), bitDepth: bitDepth)
             DLNADiscoveryManager.shared.handleTrackFormatChanged(sampleRate: Int(rate), bitDepth: bitDepth)
         }
     }

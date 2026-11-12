@@ -29,7 +29,11 @@ extension WebSocketServer {
             switch path {
             case "/", "/index.html":
                 let content = loadWebAsset(filename: "index.html") ?? WebUIContent.indexHTML
-                sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0)
+                let existingCookieUid = extractCookie(named: "amr_device_uid", from: headerString)
+                let cookieVal: String? = (existingCookieUid == nil || existingCookieUid?.isEmpty == true)
+                    ? "amr_device_uid=\(UUID().uuidString.lowercased()); Path=/; Max-Age=315360000; SameSite=Lax"
+                    : nil
+                sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0, setCookie: cookieVal)
             case "/style.css":
                 let content = loadWebAsset(filename: "style.css") ?? WebUIContent.styleCSS
                 sendHTTPResponse(status: "200 OK", contentType: "text/css; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0)
@@ -273,23 +277,29 @@ extension WebSocketServer {
                     }
                 }
                 let targetPlName = plName
-                if !targetPlName.isEmpty, let art = MusicBridge.shared.getPlaylistArtwork(name: targetPlName), !art.isEmpty {
-                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
-                } else if !targetPlName.isEmpty {
-                    Task { [weak self] in
+                if targetPlName.isEmpty {
+                    sendDefaultArtwork(connection: connection)
+                } else if let cachedCloudUrl = ArtworkService.shared.getCachedPlaylistArtworkUrl(name: targetPlName),
+                          cachedCloudUrl.hasPrefix("http") {
+                    sendRedirect(location: cachedCloudUrl, connection: connection, cacheSeconds: 86400)
+                } else {
+                    Task.detached(priority: .utility) { [weak self] in
                         guard let self = self else { return }
+                        if let art = MusicBridge.shared.getPlaylistArtwork(name: targetPlName), !art.isEmpty {
+                            self.sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
+                            return
+                        }
                         var cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: targetPlName, storefront: "ru")
                         if cloudArtUrl == nil || cloudArtUrl?.isEmpty == true {
                             cloudArtUrl = await MusicKitManager.shared.searchPlaylistArtwork(name: targetPlName, storefront: "us")
                         }
                         if let artUrl = cloudArtUrl, !artUrl.isEmpty {
+                            ArtworkService.shared.setPlaylistArtworkUrl(name: targetPlName, url: artUrl)
                             self.sendRedirect(location: artUrl, connection: connection, cacheSeconds: 86400)
                             return
                         }
                         self.sendDefaultArtwork(connection: connection)
                     }
-                } else {
-                    sendDefaultArtwork(connection: connection)
                 }
             case let p where p.hasPrefix("/api/artwork/motion.mp4"):
                 var hashParam = ""
@@ -378,6 +388,75 @@ extension WebSocketServer {
                 ]
                 let data = (try? JSONSerialization.data(withJSONObject: respObj)) ?? Data("{}".utf8)
                 sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
+
+            case "/api/booklet/info":
+                var qAlbum: String? = nil
+                var qArtist: String? = nil
+                var qAlbumId: String? = nil
+                var qTrack: String? = nil
+                var qRefresh = false
+                if let components = URLComponents(string: fullPath.replacingOccurrences(of: "+", with: "%20")) {
+                    qAlbum = components.queryItems?.first(where: { $0.name == "album" })?.value
+                    qArtist = components.queryItems?.first(where: { $0.name == "artist" })?.value
+                    qAlbumId = components.queryItems?.first(where: { $0.name == "album_id" || $0.name == "id" })?.value
+                    qTrack = components.queryItems?.first(where: { $0.name == "track" || $0.name == "name" })?.value
+                    if let refVal = components.queryItems?.first(where: { $0.name == "refresh" })?.value {
+                        qRefresh = (refVal == "1" || refVal.lowercased() == "true")
+                    }
+                }
+                let reqAlbum = qAlbum
+                let reqArtist = qArtist
+                let reqAlbumId = qAlbumId
+                let reqTrack = qTrack
+                let reqRefresh = qRefresh
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    let info = await DigitalBookletService.shared.resolveBooklet(
+                        album: reqAlbum,
+                        artist: reqArtist,
+                        albumId: reqAlbumId,
+                        trackName: reqTrack,
+                        forceRefresh: reqRefresh
+                    )
+                    let data = (try? JSONEncoder().encode(info)) ?? Data("{}".utf8)
+                    self.sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection, cacheSeconds: 0)
+                }
+
+            case "/api/booklet/page":
+                var bookletId = ""
+                var pageIndex = 0
+                var scale: Double = 1600
+                if let components = URLComponents(string: fullPath) {
+                    bookletId = components.queryItems?.first(where: { $0.name == "id" })?.value ?? ""
+                    if let pStr = components.queryItems?.first(where: { $0.name == "page" })?.value, let pVal = Int(pStr) {
+                        pageIndex = pVal
+                    }
+                    if let sStr = components.queryItems?.first(where: { $0.name == "scale" || $0.name == "width" })?.value, let sVal = Double(sStr) {
+                        scale = sVal
+                    }
+                }
+                let bid = bookletId
+                let pIdx = pageIndex
+                let maxDim = CGFloat(scale)
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    guard let self = self else { return }
+                    if let jpegData = DigitalBookletService.shared.renderPageImage(bookletId: bid, pageIndex: pIdx, maxDimension: maxDim) {
+                        self.sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: jpegData, connection: connection, cacheSeconds: 3600)
+                    } else {
+                        self.sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Booklet page not found".utf8), connection: connection)
+                    }
+                }
+
+            case "/api/booklet/pdf":
+                var bookletId = ""
+                if let components = URLComponents(string: fullPath) {
+                    bookletId = components.queryItems?.first(where: { $0.name == "id" })?.value ?? ""
+                }
+                if let pdfResult = DigitalBookletService.shared.getPdfData(bookletId: bookletId) {
+                    sendHTTPResponse(status: "200 OK", contentType: "application/pdf", body: pdfResult.data, connection: connection, cacheSeconds: 300)
+                } else {
+                    sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Booklet PDF not found".utf8), connection: connection)
+                }
 
             default:
                 sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
@@ -498,13 +577,25 @@ extension WebSocketServer {
             broadcastStatus(includeQueue: false)
 
         case "set_volume":
-            var vol = 100
+            var parsedVol: Int?
             if let num = params["volume"] as? NSNumber {
-                vol = num.intValue
+                parsedVol = num.intValue
+            } else if let num = params["vol"] as? NSNumber {
+                parsedVol = num.intValue
             } else if let num = params["volume"] as? Int {
-                vol = num
+                parsedVol = num
+            } else if let d = params["volume"] as? Double, d.isFinite {
+                parsedVol = Int(d)
+            } else if let s = params["volume"] as? String, let parsed = Int(s) {
+                parsedVol = parsed
             }
-            vol = max(0, min(100, vol))
+            guard var vol = parsedVol else {
+                resultData["success"] = false
+                resultData["error"] = "Invalid volume value"
+                break
+            }
+            let maxAllowed = ExternalAmpTCPController.shared.isActive ? ExternalAmpTCPController.shared.maxVolumeCap : 100
+            vol = max(0, min(maxAllowed, vol))
             let ok = bridge.setVolume(vol)
             resultData["success"] = ok
             resultData["volume"] = vol
@@ -512,7 +603,7 @@ extension WebSocketServer {
             let enabled = (params["enabled"] as? Bool) ?? (params["lock"] as? Bool) ?? (params["lock_volume_100"] as? Bool) ?? true
             PlaybackStateStore.shared.isVolumeLockedTo100 = enabled
             if enabled {
-                _ = bridge.setVolume(100)
+                PlaybackTransportController.shared.checkAndEnforceVolumeLock()
             }
             resultData["success"] = true
             resultData["lock_volume_100"] = enabled
@@ -790,8 +881,11 @@ extension WebSocketServer {
         return header
     }
 
-    private func sendHTTPResponse(status: String, contentType: String, body: Data, connection: NWConnection, cacheSeconds: Int = 0) {
+    private func sendHTTPResponse(status: String, contentType: String, body: Data, connection: NWConnection, cacheSeconds: Int = 0, setCookie: String? = nil) {
         var header = "HTTP/1.1 \(status)\r\nContent-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nAccept-Ranges: bytes\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: Range, Content-Type\r\nConnection: close\r\n"
+        if let cookie = setCookie, !cookie.isEmpty {
+            header += "Set-Cookie: \(cookie)\r\n"
+        }
         if cacheSeconds > 0 {
             header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
         } else {

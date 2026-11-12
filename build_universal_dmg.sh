@@ -45,6 +45,9 @@ FRAMEWORKS=(
     -framework ScriptingBridge
     -framework CoreImage
     -framework CoreAudio
+    -framework Accelerate
+    -framework NaturalLanguage
+    -framework PDFKit
     -framework CryptoKit
     -framework ServiceManagement
 )
@@ -96,7 +99,10 @@ else
     echo "ℹ️ AuthKey_MJHWRCSZHH.p8 not found; building DMG without embedded key"
 fi
 
-cat << 'PLIST' > "$CONTENTS_DIR/Info.plist"
+GIT_COMMIT_SHORT="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo "7278dab")"
+GIT_COMMIT_DATE="$(git -C "$ROOT_DIR" log -1 --format="%cs" 2>/dev/null || echo "2026-11-04")"
+
+cat << PLIST > "$CONTENTS_DIR/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -108,9 +114,13 @@ cat << 'PLIST' > "$CONTENTS_DIR/Info.plist"
     <key>CFBundleIdentifier</key>
     <string>org.ksholokhov.amr.mac</string>
     <key>CFBundleVersion</key>
-    <string>2.4.0</string>
+    <string>2.5.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.4.0</string>
+    <string>2.5.0</string>
+    <key>AMRGitCommit</key>
+    <string>$GIT_COMMIT_SHORT</string>
+    <key>AMRGitCommitDate</key>
+    <string>$GIT_COMMIT_DATE</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -125,8 +135,14 @@ cat << 'PLIST' > "$CONTENTS_DIR/Info.plist"
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleMusicUsageDescription</key>
+    <string>Apple Music Remote needs access to Apple Music to control playback and view your library.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Apple Music Remote requires AppleEvents permission to control Music.app playback.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Apple Music Remote needs audio capture access to perform real-time spectral quality verification and stream lossless PCM audio.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Apple Music Remote needs audio access to perform real-time spectral quality verification.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Apple Music Remote uses the local network for Web UI, UPnP/DLNA, and mobile remote control.</string>
     <key>NSBonjourServices</key>

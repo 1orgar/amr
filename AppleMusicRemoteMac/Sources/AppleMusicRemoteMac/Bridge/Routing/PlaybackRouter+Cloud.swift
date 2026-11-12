@@ -586,16 +586,19 @@ extension PlaybackRouter {
                         PlaybackStateStore.shared.activeCustomQueue[idx].numericId = dbId
                         PlaybackStateStore.shared.activeCustomQueue[idx].isLocal = true
                     }
-                    let now = Date()
-                    PlaybackStateStore.shared.lastCloudPlayTime = now
-                    PlaybackStateStore.shared.lastSkipTime = now
-                    PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
-                    PlaybackStateStore.shared.lastWasPlayingCloud = true
-                    PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
                     return true
                 }
                 guard stillValid else { return false }
                 if playTrackByDatabaseIdViaAMRQueue(dbId, generation: gen) {
+                    let now = Date()
+                    PlaybackStateStore.shared.withLock {
+                        if PlaybackStateStore.shared.playbackGeneration == gen {
+                            PlaybackStateStore.shared.lastCloudPlayTime = now
+                            PlaybackStateStore.shared.lastSkipTime = now
+                            PlaybackStateStore.shared.lastWasPlayingCloud = true
+                            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+                        }
+                    }
                     PlaybackStateStore.shared.invalidateQueueCache()
                     PlaybackStateStore.shared.invalidateStatusCache()
                     return true
@@ -610,16 +613,16 @@ extension PlaybackRouter {
         if !isTestingEnvironment && urlOpener == nil, let n = name, !n.isEmpty {
             if let fallbackDbId = MusicKitManager.shared.findTrackDatabaseIdInMusicApp(name: n, artist: artist ?? ""), fallbackDbId > 0 {
                 if playTrackByDatabaseIdViaAMRQueue(fallbackDbId, generation: gen) {
+                    let now = Date()
                     PlaybackStateStore.shared.withLock {
                         let idx = PlaybackStateStore.shared.activeCustomQueueIndex
                         if idx >= 0 && idx < PlaybackStateStore.shared.activeCustomQueue.count {
                             PlaybackStateStore.shared.activeCustomQueue[idx].numericId = fallbackDbId
                             PlaybackStateStore.shared.activeCustomQueue[idx].isLocal = true
                         }
-                        let now = Date()
                         PlaybackStateStore.shared.lastCloudPlayTime = now
                         PlaybackStateStore.shared.lastSkipTime = now
-                        PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+                        PlaybackStateStore.shared.lastWasPlayingCloud = true
                         PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
                     }
                     PlaybackStateStore.shared.invalidateQueueCache()

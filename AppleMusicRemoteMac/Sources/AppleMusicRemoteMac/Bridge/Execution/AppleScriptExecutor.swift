@@ -12,13 +12,22 @@ public final class AppleScriptExecutor: @unchecked Sendable {
     public static let shared = AppleScriptExecutor()
 
     private let lock = NSLock()
-    private var compiledScripts: [String: NSAppleScript] = [:]
+    private let workerLock = NSLock()
+    private var workerGeneration: UInt64 = 1
+    private var workerQueue = DispatchQueue(label: "com.amr.applescript.worker.1", qos: .userInitiated)
+
+    private final class ExecutionBox: @unchecked Sendable {
+        var descriptor: NSAppleEventDescriptor?
+        var errorNumber: Int = 0
+        var errorMessage: String?
+    }
 
     private init() {}
 
     /// Executes an AppleScript source and returns the raw NSAppleEventDescriptor.
-    /// Safely prevents deadlocks by using timed lock acquisition and injecting
-    /// IPC timeouts directly inside the `tell application "Music"` block.
+    /// Safely prevents deadlocks by:
+    /// 1. Confining each NSAppleScript's lifecycle (init, compile, execute, dealloc) to a single thread inside an autoreleasepool (per Apple TN2084).
+    /// 2. Enforcing a hard 3.8s wall-clock watchdog with automatic worker queue rotation if macOS OpenScripting / AESendMessage ever stalls.
     public func executeDescriptor(_ source: String) -> NSAppleEventDescriptor? {
         if PlaybackRouter.shared.isTestingEnvironment {
             return nil
@@ -27,7 +36,7 @@ public final class AppleScriptExecutor: @unchecked Sendable {
             return nil
         }
 
-        guard lock.lock(before: Date().addingTimeInterval(4.0)) else {
+        guard lock.lock(before: Date().addingTimeInterval(3.5)) else {
             NSLog("[AppleScriptExecutor] Lock acquisition timeout (contended)")
             return nil
         }
@@ -36,7 +45,8 @@ public final class AppleScriptExecutor: @unchecked Sendable {
         var timedSource = source
         if !timedSource.contains("with timeout") {
             if let tellRange = timedSource.range(of: "tell application \"Music\""),
-               let endTellRange = timedSource.range(of: "end tell", options: .backwards) {
+               let endTellRange = timedSource.range(of: "end tell", options: .backwards),
+               tellRange.upperBound <= endTellRange.lowerBound {
                 let prefix = timedSource[..<tellRange.upperBound]
                 let body = timedSource[tellRange.upperBound..<endTellRange.lowerBound]
                 let suffix = timedSource[endTellRange.lowerBound...]
@@ -46,35 +56,53 @@ public final class AppleScriptExecutor: @unchecked Sendable {
             }
         }
 
-        var error: NSDictionary?
-        let script: NSAppleScript?
-        if timedSource.count <= 4096 {
-            if let cached = compiledScripts[timedSource] {
-                script = cached
-            } else {
-                let created = NSAppleScript(source: timedSource)
-                if let c = created {
-                    if compiledScripts.count >= 64 {
-                        compiledScripts.removeAll(keepingCapacity: true)
-                    }
-                    compiledScripts[timedSource] = c
+        let (currentWorker, capturedGen): (DispatchQueue, UInt64) = {
+            workerLock.lock()
+            defer { workerLock.unlock() }
+            return (workerQueue, workerGeneration)
+        }()
+
+        let box = ExecutionBox()
+        let sema = DispatchSemaphore(value: 0)
+        let scriptText = timedSource
+
+        currentWorker.async {
+            autoreleasepool {
+                var error: NSDictionary?
+                let script = NSAppleScript(source: scriptText)
+                let desc = script?.executeAndReturnError(&error)
+                if let err = error {
+                    box.errorMessage = err[NSAppleScript.errorMessage] as? String ?? "Unknown error"
+                    box.errorNumber = err[NSAppleScript.errorNumber] as? Int ?? 0
+                } else {
+                    box.descriptor = desc
                 }
-                script = created
             }
-        } else {
-            script = NSAppleScript(source: timedSource)
+            sema.signal()
         }
-        let descriptor = script?.executeAndReturnError(&error)
-        if let err = error {
-            let msg = err[NSAppleScript.errorMessage] as? String ?? "Unknown error"
-            let errNum = err[NSAppleScript.errorNumber] as? Int ?? 0
+
+        if sema.wait(timeout: .now() + 3.8) == .timedOut {
+            workerLock.lock()
+            if workerGeneration == capturedGen {
+                workerGeneration &+= 1
+                workerQueue = DispatchQueue(label: "com.amr.applescript.worker.\(workerGeneration)", qos: .userInitiated)
+            }
+            let newGen = workerGeneration
+            workerLock.unlock()
+            NSLog("[AppleScriptExecutor] ⚠️ Worker execution timed out (>3.8s) — rotated worker queue to gen=%llu", newGen)
+            MusicAppLifecycleManager.shared.reportIPCTimeout()
+            return nil
+        }
+
+        if let msg = box.errorMessage {
+            let errNum = box.errorNumber
             NSLog("[AppleScriptExecutor] Error (\(errNum)): \(msg)")
             if errNum == -1712 || msg.contains("timed out") || msg.contains("AppleEvent timed out") {
                 MusicAppLifecycleManager.shared.reportIPCTimeout()
             }
             return nil
         }
-        return descriptor
+        return box.descriptor
     }
 
     /// Executes AppleScript and returns (success, stringValue).

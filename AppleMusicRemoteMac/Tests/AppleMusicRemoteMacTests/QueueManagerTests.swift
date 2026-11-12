@@ -483,6 +483,37 @@ final class QueueManagerTests: XCTestCase {
         }
     }
 
+    func testAMRQueueAdvancesToNextTrackWhenConfirmedTrackTransitionsToForeignSameArtistTrack() {
+        let track1 = TrackInfo(id: "1", numericId: 101, name: "That Home", artist: "The Cinematic Orchestra", isLocal: true, index: 1)
+        let track2 = TrackInfo(id: "2", numericId: 102, name: "Almost Blue", artist: "Chet Baker", isLocal: true, index: 2)
+        let track3 = TrackInfo(id: "3", numericId: 103, name: "Peace Piece", artist: "Bill Evans", isLocal: true, index: 3)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track1, track2, track3]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-15.0)
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.isUserPaused = false
+        }
+
+        // Simulate Music.app auto-advancing in library playlist 1 to the next song of the same artist ("Familiar Ground")
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "Familiar Ground",
+            "Artist": "The Cinematic Orchestra"
+        ])
+
+        PlaybackStateStore.shared.withLock {
+            // Must intercept the foreign same-artist track and advance activeCustomQueueIndex to 1 ("Chet Baker - Almost Blue")
+            XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+            XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks.first?.name, "Peace Piece")
+            XCTAssertEqual(PlaybackStateStore.shared.latestHistoryTracks.first?.name, "That Home")
+        }
+    }
+
     func testPollerNeverStopsNativeNamedPlaylistPlayback() {
         let track1 = TrackInfo(id: "1", numericId: 101, name: "Sonne", artist: "Rammstein", isLocal: true, index: 1)
         let track2 = TrackInfo(id: "2", numericId: 102, name: "Ich will", artist: "Rammstein", isLocal: true, index: 2)
@@ -724,5 +755,155 @@ final class QueueManagerTests: XCTestCase {
         ])
 
         XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+    }
+
+    func testPastTrackNotificationInAMRPlaylistDoesNotCascadeOrClearQueue() {
+        let track0 = TrackInfo(id: "100", numericId: 32587, name: "Temptation", artist: "Diana Krall", duration: 210.0, isLocal: true)
+        let track1 = TrackInfo(id: "101", numericId: 32602, name: "Birds", artist: "Dominique Fils-Aimé", duration: 195.0, isLocal: true)
+        let track2 = TrackInfo(id: "102", numericId: 32605, name: "Baby I'm A Fool", artist: "Melody Gardot", duration: 212.0, isLocal: true)
+        let track3 = TrackInfo(id: "103", numericId: 32608, name: "Fields of Gold", artist: "Eva Cassidy", duration: 280.0, isLocal: true)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track0, track1, track2, track3]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 1 // User pressed Next Track -> playing track1 (Birds)
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-195.0)
+            PlaybackStateStore.shared.lastKnownPosition = 193.5
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+        }
+
+        // Track 1 (Birds) finishes -> advances to Track 2 (Baby I'm A Fool)
+        QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "smooth-advance")
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueue.count, 4)
+
+        // Simulate late draining notification from Music.app for previous track "Birds" (pastIdx = 1)
+        // Even if skip window expired and confirmed is true in "Очередь AMR", it must NEVER treat "Birds" as foreign!
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastSkipTime = Date().addingTimeInterval(-5.0)
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-5.0)
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+        }
+
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "Birds",
+            "Artist": "Dominique Fils-Aimé"
+        ])
+
+        // Must stay on index 2 ("Baby I'm A Fool") and NEVER cascade or clear activeCustomQueue!
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueue.count, 4)
+        XCTAssertTrue(PlaybackStateStore.shared.isCustomQueuePlayback)
+
+        // Lightweight pulse must invalidate when track database ID or track name changes
+        let seededMeta = StaticTrackMetadata(
+            dbId: 32602,
+            name: "Birds",
+            artist: "Dominique Fils-Aimé",
+            album: "Nameless",
+            duration: 195.0,
+            hasLoc: true,
+            kind: "Apple Music AAC audio file",
+            bitRate: 256,
+            sampleRate: 44100,
+            isFavorited: false,
+            currentPlaylistName: "Очередь AMR",
+            shuffle: false,
+            repeatMode: "off",
+            volume: 100
+        )
+        PlayerStatusEngine.shared.seedStaticMetadataForTesting(seededMeta)
+        XCTAssertTrue(PlayerStatusEngine.shared.shouldUseLightweightPulse(rawState: "playing", rawPosition: 2.0, rawDbId: 32602, rawTrackName: "Birds"))
+        XCTAssertFalse(PlayerStatusEngine.shared.shouldUseLightweightPulse(rawState: "playing", rawPosition: 2.0, rawDbId: 32605, rawTrackName: "Baby I'm A Fool"))
+    }
+
+    func testSameArtistTrackLaterInAMRQueueDoesNotSkipIntermediateQueueTracks() {
+        // Queue has Diana Krall at index 0 AND another Diana Krall song at index 3.
+        // When index 0 finishes in Music.app, library playlist 1 (sorted by artist) auto-advances to index 3's song.
+        // QueueManager MUST NOT teleport to index 3! It must intercept it and play index 1 (Dominique Fils-Aimé).
+        let track0 = TrackInfo(id: "100", numericId: 32587, name: "Temptation", artist: "Diana Krall", duration: 210.0, isLocal: true)
+        let track1 = TrackInfo(id: "101", numericId: 32602, name: "Birds", artist: "Dominique Fils-Aimé", duration: 195.0, isLocal: true)
+        let track2 = TrackInfo(id: "102", numericId: 32605, name: "Baby I'm A Fool", artist: "Melody Gardot", duration: 212.0, isLocal: true)
+        let track3 = TrackInfo(id: "103", numericId: 32590, name: "The Look of Love", artist: "Diana Krall", duration: 240.0, isLocal: true)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track0, track1, track2, track3]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-210.0)
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+        }
+
+        // Music.app auto-advances in library playlist 1 to "The Look of Love" by Diana Krall (which is also track3!)
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "The Look of Love",
+            "Artist": "Diana Krall"
+        ])
+
+        // Must advance strictly to index 1 ("Birds"), NOT jump to index 3!
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueue[PlaybackStateStore.shared.activeCustomQueueIndex].name, "Birds")
+        XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks.map(\.name), ["Baby I'm A Fool", "The Look of Love"])
+        XCTAssertEqual(PlaybackStateStore.shared.latestHistoryTracks.map(\.name), ["Temptation"])
+    }
+
+    func testAllQueueTransitionsAndHistoryNavigationAreExact() async {
+        let tracks = [
+            TrackInfo(id: "t0", numericId: 1000, name: "Track Zero", artist: "Artist A", duration: 180, isLocal: true, index: 1),
+            TrackInfo(id: "t1", numericId: 1001, name: "Track One", artist: "Artist B", duration: 180, isLocal: true, index: 2),
+            TrackInfo(id: "t2", numericId: 1002, name: "Track Two", artist: "Artist C", duration: 180, isLocal: true, index: 3),
+            TrackInfo(id: "t3", numericId: 1003, name: "Track Three", artist: "Artist D", duration: 180, isLocal: true, index: 4),
+            TrackInfo(id: "t4", numericId: 1004, name: "Track Four", artist: "Artist E", duration: 180, isLocal: true, index: 5)
+        ]
+
+        _ = PlaybackRouter.shared.playCustomTracks(tracks, startIndex: 0, shuffle: false, queueName: "AI Mix")
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+
+        // 1. Jump forward via playQueueIndex(1) -> upcoming[1] is "Track Two" (index 2)
+        let jumpedUpcoming = await QueueManager.shared.playQueueIndex(1)
+        XCTAssertTrue(jumpedUpcoming)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2)
+        XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks.map(\.id), ["t3", "t4"])
+        XCTAssertEqual(PlaybackStateStore.shared.latestHistoryTracks.map(\.id), ["t1", "t0"])
+
+        // 2. Jump backward via playHistoryIndex(0) -> history[0] is most recent past track "Track One" (index 1)
+        let jumpedHistory0 = await QueueManager.shared.playHistoryIndex(0)
+        XCTAssertTrue(jumpedHistory0)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+        XCTAssertEqual(PlaybackStateStore.shared.latestUpcomingTracks.map(\.id), ["t2", "t3", "t4"])
+        XCTAssertEqual(PlaybackStateStore.shared.latestHistoryTracks.map(\.id), ["t0"])
+
+        // 3. Enqueue Play Next while at index 1 -> inserts at index 2
+        let bonusTrack = TrackInfo(id: "bonus", numericId: 1999, name: "Bonus Track", artist: "Artist X", duration: 150, isLocal: true)
+        let enqOk = await QueueManager.shared.enqueueTrack(bonusTrack, playNext: true)
+        XCTAssertTrue(enqOk)
+        let qAfterEnq = await QueueManager.shared.getPlaybackQueue()
+        XCTAssertEqual(qAfterEnq.currentIndex, 1)
+        XCTAssertEqual(qAfterEnq.upcomingTracks.first?.id, "bonus")
+        XCTAssertEqual(qAfterEnq.totalTracks, 6)
+
+        // 4. Remove the newly inserted Play Next track (upcoming index 0 -> queue index 2)
+        let remOk = await QueueManager.shared.removeQueueTrack(at: 0)
+        XCTAssertTrue(remOk)
+        let qAfterRem = await QueueManager.shared.getPlaybackQueue()
+        XCTAssertEqual(qAfterRem.totalTracks, 5)
+        XCTAssertEqual(qAfterRem.upcomingTracks.map(\.id), ["t2", "t3", "t4"])
+
+        // 5. Clear upcoming queue while at index 1 -> keeps t0 and t1, removes t2..t4
+        let clearOk = await QueueManager.shared.clearUpcomingQueue()
+        XCTAssertTrue(clearOk)
+        let qAfterClear = await QueueManager.shared.getPlaybackQueue()
+        XCTAssertEqual(qAfterClear.totalTracks, 2)
+        XCTAssertEqual(qAfterClear.currentIndex, 1)
+        XCTAssertTrue(qAfterClear.upcomingTracks.isEmpty)
+        XCTAssertEqual(qAfterClear.historyTracks.map(\.id), ["t0"])
     }
 }

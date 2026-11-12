@@ -8,7 +8,8 @@ import Foundation
 extension MusicKitManager {
     // MARK: - Apple Music API Requests
 
-    public func searchAppleMusic(query: String, storefront: String = "us", limit: Int = 25, offset: Int = 0) async -> [String: Any]? {
+    public func searchAppleMusic(query: String, storefront: String = "us", limit: Int = 25, offset: Int = 0, timeout: TimeInterval = 5.0) async -> [String: Any]? {
+        guard !Task.isCancelled else { return nil }
         guard let token = getDeveloperToken() else { return nil }
         guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
 
@@ -20,12 +21,13 @@ extension MusicKitManager {
         let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encodedQuery)&types=songs,albums,artists,playlists&limit=\(effectiveLimit)\(offsetParam)\(langParam)"
         guard let url = URL(string: urlStr) else { return nil }
 
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(lang, forHTTPHeaderField: "Accept-Language")
 
         guard let (data, response) = try? await session.data(for: request),
+              !Task.isCancelled,
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let results = json["results"] as? [String: Any] else {
@@ -148,6 +150,38 @@ extension MusicKitManager {
         }
         if let cached = trackArtworkCache["\(cleanName)|\(cleanArtist)"] {
             return cached.isEmpty ? nil : cached
+        }
+        return nil
+    }
+
+    public func cacheTrackCatalogId(_ id: String, name: String, artist: String, album: String = "") {
+        let cleanId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleanId.isEmpty, cleanId != "0", !cleanName.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        if !cleanAlbum.isEmpty {
+            trackCatalogIdCache["\(cleanName)|\(cleanArtist)|\(cleanAlbum)"] = cleanId
+        }
+        trackCatalogIdCache["\(cleanName)|\(cleanArtist)"] = cleanId
+    }
+
+    public func getCachedTrackCatalogId(name: String, artist: String, album: String = "") -> String? {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleanName.isEmpty else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        if !cleanAlbum.isEmpty {
+            if let cached = trackCatalogIdCache["\(cleanName)|\(cleanArtist)|\(cleanAlbum)"], !cached.isEmpty {
+                return cached
+            }
+        }
+        if let cached = trackCatalogIdCache["\(cleanName)|\(cleanArtist)"], !cached.isEmpty {
+            return cached
         }
         return nil
     }
@@ -674,6 +708,9 @@ extension MusicKitManager {
                             .replacingOccurrences(of: "{h}", with: "600")
                             .replacingOccurrences(of: "{f}", with: "jpg")
                         foundArtUrl = artUrl
+                        if let catId = first["id"] as? String, !catId.isEmpty {
+                            cacheTrackCatalogId(catId, name: cleanName, artist: cleanArtist, album: cleanAlbum)
+                        }
                     }
                 }
             }
@@ -698,6 +735,9 @@ extension MusicKitManager {
                    let rawArt = first["artworkUrl100"] as? String, !rawArt.isEmpty {
                     let artUrl = rawArt.replacingOccurrences(of: "100x100bb", with: "600x600bb")
                     foundArtUrl = artUrl
+                    if let itunesTrackId = first["trackId"] as? Int, itunesTrackId > 0 {
+                        cacheTrackCatalogId("\(itunesTrackId)", name: cleanName, artist: cleanArtist, album: cleanAlbum)
+                    }
                 }
             }
         }
@@ -770,7 +810,7 @@ extension MusicKitManager {
             let name = attrs["name"] as? String ?? ""
             let trackArtist = attrs["artistName"] as? String ?? artist
             let durMs = attrs["durationInMillis"] as? Double ?? 0
-            let trackNumber = attrs["trackNumber"] as? Int ?? (i + 1)
+            let trackNumber = res.count + 1
             let idStr = item["id"] as? String ?? "\(i + 1)"
             let numericId = Int(idStr) ?? (i + 1)
             let playUrl = attrs["url"] as? String
@@ -781,6 +821,9 @@ extension MusicKitManager {
                 artUrl = tmpl.replacingOccurrences(of: "{w}x{h}", with: "600x600").replacingOccurrences(of: "{f}", with: "jpg")
             }
 
+            if !idStr.isEmpty {
+                cacheTrackCatalogId(idStr, name: name, artist: trackArtist, album: album)
+            }
             res.append(TrackInfo(
                 id: idStr,
                 numericId: numericId,
@@ -793,7 +836,8 @@ extension MusicKitManager {
                 favorited: false,
                 isLocal: false,
                 url: playUrl,
-                index: trackNumber
+                index: trackNumber,
+                catalogId: idStr
             ))
         }
 
@@ -845,7 +889,7 @@ extension MusicKitManager {
                 let tName = tAttrs["name"] as? String ?? ""
                 let tArtist = tAttrs["artistName"] as? String ?? aArtist
                 let durMs = tAttrs["durationInMillis"] as? Double ?? 0
-                let trackNumber = tAttrs["trackNumber"] as? Int ?? (i + 1)
+                let trackNumber = tracks.count + 1
                 let idStr = item["id"] as? String ?? "\(i + 1)"
                 let numericId = Int(idStr) ?? (i + 1)
                 let playUrl = tAttrs["url"] as? String
@@ -890,7 +934,7 @@ extension MusicKitManager {
                         let tName = tAttrs["name"] as? String ?? ""
                         let tArtist = tAttrs["artistName"] as? String ?? aArtist
                         let durMs = tAttrs["durationInMillis"] as? Double ?? 0
-                        let trackNumber = tAttrs["trackNumber"] as? Int ?? (i + 1)
+                        let trackNumber = tracks.count + 1
                         let idStr = item["id"] as? String ?? "\(i + 1)"
                         let numericId = Int(idStr) ?? (i + 1)
                         let playUrl = tAttrs["url"] as? String
@@ -987,6 +1031,9 @@ extension MusicKitManager {
         let durMs = attrs["durationInMillis"] as? Double ?? 0.0
         let isrc = attrs["isrc"] as? String ?? ""
         let url = attrs["url"] as? String ?? ""
+        if !id.isEmpty {
+            cacheTrackCatalogId(id, name: name, artist: artist, album: album)
+        }
 
         var artworkUrl = ""
         if let artObj = attrs["artwork"] as? [String: Any],
@@ -1237,7 +1284,7 @@ extension MusicKitManager {
             for m in matches {
                 if let r = Range(m.range, in: mText) {
                     let s = String(mText[r])
-                    if s.contains("1080x1080") {
+                    if s.contains("768x768") {
                         chosenVariant = s
                         break
                     } else if chosenVariant == nil {
@@ -1272,7 +1319,7 @@ extension MusicKitManager {
             let trackArtist = attrs["artistName"] as? String ?? ""
             let albumName = attrs["albumName"] as? String ?? ""
             let durMs = attrs["durationInMillis"] as? Double ?? 0
-            let trackNumber = attrs["trackNumber"] as? Int ?? (i + 1)
+            let trackNumber = res.count + 1
             let idStr = item["id"] as? String ?? "\(i + 1)"
             let numericId = Int(idStr) ?? (i + 1)
             let playUrl = attrs["url"] as? String

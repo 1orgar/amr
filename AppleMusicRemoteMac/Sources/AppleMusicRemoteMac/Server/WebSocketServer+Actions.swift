@@ -10,7 +10,7 @@ import CoreAudio
 extension WebSocketServer {
     // MARK: - Message Routing & Dispatcher
 
-    func processClientTextMessage(_ text: String, connection: NWConnection) async {
+    func processClientTextMessage(_ text: String, clientId: UUID, connection: NWConnection) async {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             sendError(action: "unknown", error: "Invalid JSON format", id: nil, to: connection)
@@ -24,8 +24,101 @@ extension WebSocketServer {
         let bridge = MusicBridge.shared
         let cloud = CloudCatalogService.shared
 
-        NSLog("[WebSocket] Processing action: %@, id: %@", action, id ?? "nil")
-        switch action.lowercased() {
+        let actionLower = action.lowercased()
+        if actionLower == "client_log" {
+            let msg = (params["message"] as? String) ?? ""
+            let level = (params["level"] as? String) ?? "info"
+            let devRecord = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId)
+            let devName = devRecord?.deviceName ?? (params["device_name"] as? String) ?? "PWA"
+            if !msg.isEmpty {
+                DiagnosticLogger.shared.logClientEvent(device: devName, level: level, message: msg)
+            }
+            return
+        }
+
+        if actionLower != "get_spectral_analysis" && actionLower != "spectral_analysis" && actionLower != "ping" {
+            NSLog("[WebSocket] Processing action: %@, id: %@", action, id ?? "nil")
+        }
+
+        // Handle Device Registration & Settings before authorization guard
+        if actionLower == "register_device" {
+            let rawDeviceId = (params["device_id"] as? String) ?? (params["deviceId"] as? String) ?? ""
+            let rawDeviceName = (params["device_name"] as? String) ?? (params["deviceName"] as? String) ?? ""
+            let rawDeviceType = (params["device_type"] as? String) ?? (params["deviceType"] as? String) ?? "mobile"
+            let prefLockScreen = (params["lock_screen_controls"] as? Bool) ?? (params["lockScreenControls"] as? Bool)
+            let inviteToken = (params["invite_token"] as? String) ?? (params["inviteToken"] as? String)
+            let remoteIP = extractRemoteIP(from: connection)
+
+            let record = ClientDeviceManager.shared.registerConnection(
+                connectionId: clientId,
+                deviceId: rawDeviceId,
+                deviceName: rawDeviceName,
+                deviceType: rawDeviceType,
+                preferredLockScreen: prefLockScreen,
+                remoteIP: remoteIP,
+                inviteToken: inviteToken
+            )
+            sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
+            sendSuccess(action: action, data: record.dictionary, id: id, to: connection)
+
+            if record.isAuthorized {
+                let status = bridge.getPlayerStatus()
+                sendEvent("player_state_changed", data: status, to: connection)
+                sendEvent(name: "ai_curator_settings", data: NativeMusicCuratorService.shared.getSettingsDictionary(), to: connection)
+                let queue = await bridge.getPlaybackQueue()
+                sendEvent("queue", data: queue, to: connection)
+            }
+            return
+        }
+
+        if actionLower == "update_device_settings" {
+            let currentRecord = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId)
+            let targetDeviceId = (params["device_id"] as? String) ?? currentRecord?.deviceId ?? ""
+            guard !targetDeviceId.isEmpty else {
+                sendError(action: action, error: "Device ID not registered", id: id, to: connection)
+                return
+            }
+            if let lockEnabled = (params["lock_screen_controls"] as? Bool) ?? (params["lockScreenControls"] as? Bool) {
+                ClientDeviceManager.shared.setLockScreenControls(deviceId: targetDeviceId, enabled: lockEnabled)
+            }
+            if let newName = (params["device_name"] as? String) ?? (params["deviceName"] as? String),
+               !newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ClientDeviceManager.shared.updateDeviceName(deviceId: targetDeviceId, name: newName)
+            }
+            if let updated = ClientDeviceManager.shared.getDevice(deviceId: targetDeviceId) {
+                sendSuccess(action: action, data: updated.dictionary, id: id, to: connection)
+            } else {
+                sendError(action: action, error: "Device not found", id: id, to: connection)
+            }
+            return
+        }
+
+        if actionLower == "get_device_status" {
+            if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
+                sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
+                sendSuccess(action: action, data: record.dictionary, id: id, to: connection)
+            } else {
+                sendError(action: action, error: "Device not registered", id: id, to: connection)
+            }
+            return
+        }
+
+        if actionLower != "ping" && !ClientDeviceManager.shared.isConnectionAuthorized(connectionId: clientId) {
+            if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
+                sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
+            }
+            sendError(action: action, error: "Device pending authorization on Mac", id: id, to: connection)
+            return
+        }
+
+        if actionLower == "get_share_access_qr" || actionLower == "generate_share_access_qr" {
+            let payload = ClientDeviceManager.shared.generateShareAccessPayload()
+            sendEvent(name: "share_access_qr", data: payload, to: connection)
+            sendSuccess(action: action, data: payload, id: id, to: connection)
+            return
+        }
+
+        switch actionLower {
         case "play", "start":
             let ok = bridge.play()
             var status = PlayerStatusEngine.shared.getPlayerStatus()
@@ -110,21 +203,36 @@ extension WebSocketServer {
             }
 
         case "set_volume", "volume":
-            var volInt = 50
+            var parsedVol: Int?
             if let num = params["volume"] as? NSNumber {
-                volInt = num.intValue
+                parsedVol = num.intValue
             } else if let num = params["vol"] as? NSNumber {
-                volInt = num.intValue
-            } else if let d = params["volume"] as? Double {
-                volInt = Int(d)
-            } else if let d = params["vol"] as? Double {
-                volInt = Int(d)
+                parsedVol = num.intValue
+            } else if let d = params["volume"] as? Double, d.isFinite {
+                parsedVol = Int(d)
+            } else if let d = params["vol"] as? Double, d.isFinite {
+                parsedVol = Int(d)
             } else if let s = params["volume"] as? String, let parsed = Int(s) {
-                volInt = parsed
+                parsedVol = parsed
             }
-            volInt = max(0, min(100, volInt))
+            guard var volInt = parsedVol else {
+                sendError(action: action, error: "Invalid volume value", id: id, to: connection)
+                return
+            }
+            let maxAllowed = ExternalAmpTCPController.shared.isActive ? ExternalAmpTCPController.shared.maxVolumeCap : 100
+            volInt = max(0, min(maxAllowed, volInt))
             let ok = bridge.setVolume(volInt)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "volume": volInt], id: id, to: connection)
+            broadcastStatus(includeQueue: false)
+
+        case "toggle_amp_mute", "set_amp_mute":
+            let explicitMute = (params["muted"] as? Bool) ?? (params["mute"] as? Bool)
+            ExternalAmpTCPController.shared.setMuted(explicitMute)
+            sendSuccess(action: action, data: [
+                "status": "ok",
+                "amp_muted": ExternalAmpTCPController.shared.isMuted,
+                "amp_volume": ExternalAmpTCPController.shared.currentVolume
+            ], id: id, to: connection)
             broadcastStatus(includeQueue: false)
 
         case "duck", "activate_ducking":
@@ -187,18 +295,63 @@ extension WebSocketServer {
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "repeat": mode], id: id, to: connection)
 
         case "favorite", "toggle_favorite":
-            let ok = bridge.toggleFavorite()
+            let ok: Bool
+            if let explicitFav = (params["favorited"] as? Bool) ?? (params["enabled"] as? Bool) {
+                ok = bridge.setFavorite(explicitFav)
+            } else {
+                ok = bridge.toggleFavorite()
+            }
+            let newFav = PlayerStatusEngine.shared.currentFavoritedState().isFavorited
             broadcastStatus(includeQueue: false)
-            sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
+            sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "favorited": newFav], id: id, to: connection)
 
         case "set_lock_volume_100", "lock_volume_100":
             let enabled = (params["enabled"] as? Bool) ?? (params["lock"] as? Bool) ?? (params["lock_volume_100"] as? Bool) ?? true
             PlaybackStateStore.shared.isVolumeLockedTo100 = enabled
             if enabled {
-                _ = bridge.setVolume(100)
+                PlaybackTransportController.shared.checkAndEnforceVolumeLock()
             }
             broadcastStatus(includeQueue: false)
             sendSuccess(action: action, data: ["status": "ok", "lock_volume_100": enabled], id: id, to: connection)
+
+        case "set_dac_muting_guard", "dac_muting_guard":
+            if let enabled = (params["enabled"] as? Bool) ?? (params["dac_muting_guard_enabled"] as? Bool) {
+                CoreAudioDeviceManager.shared.isMutingGuardEnabled = enabled
+            }
+            if let duration = (params["duration_ms"] as? Int) ?? (params["dac_muting_guard_ms"] as? Int) {
+                CoreAudioDeviceManager.shared.mutingGuardDurationMs = duration
+            }
+            broadcastStatus(includeQueue: false)
+            sendSuccess(action: action, data: [
+                "status": "ok",
+                "dac_muting_guard_enabled": CoreAudioDeviceManager.shared.isMutingGuardEnabled,
+                "dac_muting_guard_ms": CoreAudioDeviceManager.shared.mutingGuardDurationMs
+            ], id: id, to: connection)
+
+        case "get_dac_muting_guard":
+            sendSuccess(action: action, data: [
+                "status": "ok",
+                "dac_muting_guard_enabled": CoreAudioDeviceManager.shared.isMutingGuardEnabled,
+                "dac_muting_guard_ms": CoreAudioDeviceManager.shared.mutingGuardDurationMs
+            ], id: id, to: connection)
+
+        case "get_digital_booklet", "get_booklet":
+            let reqAlbum = params["album"] as? String
+            let reqArtist = params["artist"] as? String
+            let reqAlbumId = (params["album_id"] as? String) ?? (params["id"] as? String)
+            let reqTrack = (params["track"] as? String) ?? (params["name"] as? String)
+            let reqRefresh = (params["refresh"] as? Bool) ?? false
+            Task { [weak self] in
+                guard let self = self else { return }
+                let info = await DigitalBookletService.shared.resolveBooklet(
+                    album: reqAlbum,
+                    artist: reqArtist,
+                    albumId: reqAlbumId,
+                    trackName: reqTrack,
+                    forceRefresh: reqRefresh
+                )
+                self.sendSuccess(action: action, data: info, id: id, to: connection)
+            }
 
         case "search_and_play":
             let query = (params["query"] as? String) ?? (params["q"] as? String) ?? ""
@@ -422,6 +575,7 @@ extension WebSocketServer {
                     let tArt = (item["artwork_url"] as? String) ?? (item["artwork"] as? String) ?? ""
                     let isLoc = (item["is_local"] as? Bool) ?? (item["isLocal"] as? Bool) ?? false
                     let dur = (item["duration"] as? Double) ?? 0.0
+                    let catId = (item["catalog_id"] as? String) ?? (item["catalogId"] as? String) ?? (AppleSoundCheckService.isValidCatalogId(tid) ? tid : nil)
                     targetTracks.append(TrackInfo(
                         id: tid,
                         numericId: numId,
@@ -434,7 +588,8 @@ extension WebSocketServer {
                         favorited: false,
                         isLocal: isLoc,
                         url: tUrl,
-                        index: idx + 1
+                        index: idx + 1,
+                        catalogId: catId
                     ))
                 }
             }
@@ -774,6 +929,7 @@ extension WebSocketServer {
                     let tArt = (item["artwork_url"] as? String) ?? (item["artwork"] as? String) ?? ""
                     let isLoc = (item["is_local"] as? Bool) ?? (item["isLocal"] as? Bool) ?? false
                     let dur = (item["duration"] as? Double) ?? 0
+                    let catId = (item["catalog_id"] as? String) ?? (item["catalogId"] as? String) ?? (AppleSoundCheckService.isValidCatalogId(tid) ? tid : nil)
                     trackInfos.append(TrackInfo(
                         id: tid,
                         numericId: numId,
@@ -786,16 +942,23 @@ extension WebSocketServer {
                         favorited: false,
                         isLocal: isLoc,
                         url: tUrl,
-                        index: idx + 1
+                        index: idx + 1,
+                        catalogId: catId
                     ))
                 }
             }
             let startIndex = (params["startIndex"] as? Int) ?? (params["start_index"] as? Int) ?? (params["track_index"] as? Int).map { max(0, $0 - 1) } ?? 0
             let targetTracks = trackInfos
+            let queueName = (params["queue_name"] as? String) ?? (params["queueName"] as? String)
             let searchQuery = (params["query"] as? String) ?? (params["q"] as? String)
+            let curatorPrompt = (params["curator_prompt"] as? String) ?? (params["curatorPrompt"] as? String) ?? (params["ai_prompt"] as? String)
             Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
-                let ok = await bridge.playSearchResults(tracks: targetTracks, startIndex: startIndex, shuffle: shuffle, query: searchQuery)
+                let t0 = Date()
+                NSLog("[AICurator] play_search_results started (tracks=%d, startIndex=%d, queueName='%@', hasCuratorPrompt=%d)", targetTracks.count, startIndex, queueName ?? "", curatorPrompt != nil ? 1 : 0)
+                let ok = await bridge.playSearchResults(tracks: targetTracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName, query: searchQuery, curatorPrompt: curatorPrompt)
+                let elapsedMs = Int(Date().timeIntervalSince(t0) * 1000)
+                NSLog("[AICurator] play_search_results finished in %dms (ok=%d, tracks=%d)", elapsedMs, ok ? 1 : 0, targetTracks.count)
                 self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "count": targetTracks.count], id: id, to: connection)
                 self.broadcastStatus(includeQueue: true)
             }
@@ -812,6 +975,7 @@ extension WebSocketServer {
                     let tUrl = item["url"] as? String
                     let tArt = (item["artwork_url"] as? String) ?? (item["artwork"] as? String) ?? ""
                     let isLoc = (item["is_local"] as? Bool) ?? (item["isLocal"] as? Bool) ?? false
+                    let catId = (item["catalog_id"] as? String) ?? (item["catalogId"] as? String) ?? (AppleSoundCheckService.isValidCatalogId(tid) ? tid : nil)
                     trackInfos.append(TrackInfo(
                         id: tid,
                         numericId: numId,
@@ -824,7 +988,8 @@ extension WebSocketServer {
                         favorited: false,
                         isLocal: isLoc,
                         url: tUrl,
-                        index: idx + 1
+                        index: idx + 1,
+                        catalogId: catId
                     ))
                 }
             }
@@ -1048,9 +1213,34 @@ extension WebSocketServer {
                     if trks.isEmpty && country != "ru" {
                         trks = await MusicKitManager.shared.getAlbumTracks(album: name, artist: artist, storefront: "ru")
                     }
+                    if trks.isEmpty && !name.isEmpty {
+                        let targetAlbum = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let targetArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let localMatches = bridge.getLibrarySongs().filter { song in
+                            let sAlb = song.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard sAlb.localizedCaseInsensitiveCompare(targetAlbum) == .orderedSame else { return false }
+                            if !targetArtist.isEmpty {
+                                let sArt = song.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !sArt.isEmpty && !sArt.localizedCaseInsensitiveContains(targetArtist) && !targetArtist.localizedCaseInsensitiveContains(sArt) {
+                                    return false
+                                }
+                            }
+                            return true
+                        }
+                        if !localMatches.isEmpty {
+                            trks = localMatches
+                        }
+                    }
                     if !trks.isEmpty {
+                        var resolvedAlbumId = albumId
+                        if resolvedAlbumId.isEmpty, let firstUrl = trks.first?.url {
+                            let cleanPath = firstUrl.components(separatedBy: "?").first ?? firstUrl
+                            if let lastSeg = cleanPath.split(separator: "/").last, Int(lastSeg) != nil {
+                                resolvedAlbumId = String(lastSeg)
+                            }
+                        }
                         albumInfo = AlbumInfo(
-                            id: albumId,
+                            id: resolvedAlbumId,
                             name: name,
                             artist: artist,
                             artwork: trks.first?.artworkUrl ?? "",
@@ -1092,13 +1282,66 @@ extension WebSocketServer {
             let ok = bridge.addToLibrary(trackId: trackId, name: name, artist: artist, url: url)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
 
-        case "add_playlist_to_library":
-            let plId = (params["id"] as? String) ?? (params["playlist_id"] as? String) ?? ""
-            let plName = (params["name"] as? String) ?? ""
+        case "add_playlist_to_library", "add_album_to_library", "save_queue_to_playlist":
+            let isSaveQueue = (action == "save_queue_to_playlist")
+            let itemId = isSaveQueue ? "custom_queue" : ((params["id"] as? String) ?? (params["playlist_id"] as? String) ?? (params["album_id"] as? String) ?? "")
+            let rawName = (params["name"] as? String) ?? (params["title"] as? String) ?? ""
+            let itemArtist = (params["artist"] as? String) ?? ""
+            let isAlbum = !isSaveQueue && ((action == "add_album_to_library") || ((params["is_album"] as? Bool) ?? false))
+            let rawTracks = (params["tracks"] as? [[String: Any]]) ?? []
+            let passedTrackInfos = rawTracks.map { parseTrackInfo($0) }
             Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
-                let ok = await MusicBridge.shared.addPlaylistToLibrary(playlistId: plId)
-                self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "playlist": plName, "id": plId], id: id, to: connection)
+                var trackInfos = passedTrackInfos
+                var itemName = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if isSaveQueue || itemId == "custom_queue" || itemId == "ai_queue" {
+                    let (customQueue, customName, curatorPrompt) = PlaybackStateStore.shared.withLock {
+                        (
+                            PlaybackStateStore.shared.activeCustomQueue,
+                            PlaybackStateStore.shared.activeCustomQueueName,
+                            PlaybackStateStore.shared.activeCuratorPrompt
+                        )
+                    }
+                    if !customQueue.isEmpty && trackInfos.count < customQueue.count {
+                        trackInfos = customQueue
+                    } else if trackInfos.isEmpty {
+                        let qInfo = await MusicBridge.shared.getPlaybackQueue()
+                        trackInfos = qInfo.upcomingTracks
+                    }
+                    if itemName.isEmpty {
+                        if let cn = customName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !cn.isEmpty, cn != "Очередь AMR" {
+                            itemName = cn
+                        } else if let cp = curatorPrompt?.trimmingCharacters(in: .whitespacesAndNewlines), !cp.isEmpty {
+                            itemName = cp.hasPrefix("✨") ? cp : "✨ \(cp)"
+                        } else {
+                            let df = DateFormatter()
+                            df.dateFormat = "dd.MM"
+                            itemName = "✨ Очередь AMR (\(df.string(from: Date())))"
+                        }
+                    }
+                }
+
+                let ok: Bool
+                if isAlbum {
+                    ok = await MusicBridge.shared.addAlbumToLibrary(albumId: itemId, name: itemName, artist: itemArtist, tracks: trackInfos)
+                } else {
+                    ok = await MusicBridge.shared.addPlaylistToLibrary(playlistId: itemId, name: itemName, tracks: trackInfos)
+                }
+                self.sendSuccess(
+                    action: action,
+                    data: [
+                        "status": ok ? "ok" : "error",
+                        "playlist": itemName,
+                        "name": itemName,
+                        "id": itemId,
+                        "is_album": isAlbum,
+                        "track_count": trackInfos.count
+                    ],
+                    id: id,
+                    to: connection
+                )
                 if ok {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                     let freshPlaylists = MusicBridge.shared.getPlaylists()
@@ -1238,6 +1481,100 @@ extension WebSocketServer {
                 ], id: id, to: connection)
             }
 
+        case "get_spectral_analysis", "spectral_analysis":
+            if SpectralIntegrityAnalyzer.shared.isEnabled && !AudioProcessTapService.shared.isRealTapActive && !PlaybackRouter.shared.isTestingEnvironment {
+                _ = PlayerStatusEngine.shared.getPlayerStatus()
+            }
+            let analysis = SpectralIntegrityAnalyzer.shared.getCurrentAnalysis()
+            sendSuccess(action: action, data: analysis, id: id, to: connection)
+
+        case "ai_curate", "curate_music":
+            let prompt = (params["prompt"] as? String) ?? (params["query"] as? String) ?? ""
+            let storefront = (params["country"] as? String) ?? (params["storefront"] as? String) ?? MusicKitManager.shared.getUserStorefront()
+            let autoPlay = (params["auto_play"] as? Bool) ?? (params["autoPlay"] as? Bool) ?? false
+            let task = Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self, !Task.isCancelled else { return }
+                var curated = await NativeMusicCuratorService.shared.curateMusicSession(prompt: prompt, storefront: storefront)
+                guard !Task.isCancelled, (curated["status"] as? String) != "cancelled" else { return }
+                if autoPlay {
+                    curated["auto_play"] = true
+                }
+                self.sendSuccess(action: action, data: curated, id: id, to: connection)
+            }
+            curateTaskLock.withLock {
+                activeCurateTask?.cancel()
+                activeCurateTask = task
+            }
+
+        case "ai_curate_from_track", "play_ai_track_vibe":
+            let trackName = (params["name"] as? String) ?? (params["title"] as? String) ?? ""
+            let artist = (params["artist"] as? String) ?? ""
+            let album = (params["album"] as? String) ?? ""
+            let storefront = (params["country"] as? String) ?? (params["storefront"] as? String) ?? MusicKitManager.shared.getUserStorefront()
+            let autoPlay = (params["auto_play"] as? Bool) ?? (params["autoPlay"] as? Bool) ?? true
+            let task = Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self, !Task.isCancelled else { return }
+                var curated = await NativeMusicCuratorService.shared.curateSessionFromTrack(
+                    name: trackName,
+                    artist: artist,
+                    album: album,
+                    storefront: storefront
+                )
+                guard !Task.isCancelled else { return }
+                if autoPlay {
+                    curated["auto_play"] = true
+                }
+                self.sendSuccess(action: "ai_curate", data: curated, id: id, to: connection)
+            }
+            curateTaskLock.withLock {
+                activeCurateTask?.cancel()
+                activeCurateTask = task
+            }
+
+        case "toggle_ai_pin_prompt", "pin_ai_prompt":
+            let prompt = (params["prompt"] as? String) ?? ""
+            let label = (params["label"] as? String)
+            let labelRu = (params["label_ru"] as? String) ?? (params["labelRu"] as? String)
+            let promptRu = (params["prompt_ru"] as? String) ?? (params["promptRu"] as? String)
+            let labelEn = (params["label_en"] as? String) ?? (params["labelEn"] as? String)
+            let promptEn = (params["prompt_en"] as? String) ?? (params["promptEn"] as? String)
+            let isPinned = NativeMusicCuratorService.shared.togglePinPrompt(
+                prompt: prompt,
+                label: label,
+                labelRu: labelRu,
+                promptRu: promptRu,
+                labelEn: labelEn,
+                promptEn: promptEn
+            )
+            var settings = NativeMusicCuratorService.shared.getSettingsDictionary()
+            settings["toggled_prompt"] = prompt
+            settings["is_pinned"] = isPinned
+            broadcastEvent(name: "ai_curator_settings", data: settings)
+            sendSuccess(action: "ai_curator_settings", data: settings, id: id, to: connection)
+
+        case "get_artwork_palette", "artwork_palette":
+            let url = (params["url"] as? String) ?? (params["artwork_url"] as? String)
+            let trackId = (params["track_id"] as? Int) ?? (params["numeric_id"] as? Int) ?? (params["id"] as? Int)
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                guard let palette = await ArtworkService.shared.resolveArtworkPalette(url: url, trackId: trackId) else {
+                    self.sendSuccess(action: action, data: ["status": "empty"], id: id, to: connection)
+                    return
+                }
+                if NativeMusicCuratorService.shared.isEnabled,
+                   let wledZones = palette["wled_zones"] as? [[Int]],
+                   !wledZones.isEmpty {
+                    WLEDDDPController.shared.updatePalette(wledZones)
+                }
+                self.sendSuccess(action: action, data: palette, id: id, to: connection)
+            }
+
+        case "get_ai_curator_settings", "ai_curator_settings", "refresh_ai_prompts":
+            let exclude = (params["exclude_prompts"] as? [String]) ?? (params["excludePrompts"] as? [String]) ?? []
+            let settings = NativeMusicCuratorService.shared.getSettingsDictionary(excludePrompts: exclude)
+            sendEvent(name: "ai_curator_settings", data: settings, to: connection)
+            sendSuccess(action: action, data: settings, id: id, to: connection)
+
         case "get_info", "info":
             let ips = getLANIPAddresses()
             let primaryUrl = ips.first.map { "http://\($0):\(self.port)" } ?? "http://localhost:\(self.port)"
@@ -1245,7 +1582,11 @@ extension WebSocketServer {
                 "port": self.port,
                 "primary_url": primaryUrl,
                 "ips": ips,
-                "version": "2.4.0",
+                "version": "2.5.0",
+                "git_commit": ClientDeviceManager.shared.gitCommitShort,
+                "git_commit_date": ClientDeviceManager.shared.gitCommitDate,
+                "ai_curator_enabled": NativeMusicCuratorService.shared.isEnabled,
+                "is_apple_silicon": NativeMusicCuratorService.shared.isAppleSilicon,
                 "platform": "macOS"
             ], id: id, to: connection)
 
@@ -1268,7 +1609,8 @@ extension WebSocketServer {
         let art = (dict["artwork"] as? String) ?? (dict["artwork_url"] as? String) ?? ""
         let url = dict["url"] as? String
         let preview = dict["preview_url"] as? String
-        let isLocal = (dict["is_local"] as? Bool) ?? false
+        let isLocal = (dict["is_local"] as? Bool) ?? (dict["isLocal"] as? Bool) ?? false
+        let catId = (dict["catalog_id"] as? String) ?? (dict["catalogId"] as? String) ?? (AppleSoundCheckService.isValidCatalogId(tid) ? tid : nil)
 
         return TrackInfo(
             id: tid,
@@ -1282,7 +1624,8 @@ extension WebSocketServer {
             favorited: false,
             isLocal: isLocal,
             url: url,
-            previewUrl: preview
+            previewUrl: preview,
+            catalogId: catId
         )
     }
 }

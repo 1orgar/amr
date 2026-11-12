@@ -1000,19 +1000,23 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         }
 
         let musicStatus = MusicBridge.shared.getPlayerStatus()
-        if state == "pause" {
+        if state == "pause" || state == "stop" {
             if musicStatus.isPlaying {
-                NSLog("[DLNADiscovery] ⏸️ BluOS reported paused state. Pausing Apple Music.")
+                NSLog("[DLNADiscovery] ⏸️ BluOS reported %@ state. Pausing Apple Music.", state)
                 markLocalAction()
                 _ = MusicBridge.shared.pause()
+                UPnPMediaRendererServer.shared.notifySubscribers(force: true)
+                WebSocketServer.shared.broadcastStatus()
             }
         } else if state == "stream" || state == "play" {
-            // Only resume Apple Music if BluOS explicitly transitioned from 'pause' -> 'stream'/'play'
-            // (never auto-start playback when switching devices while paused or on initial poll).
-            if !musicStatus.isPlaying && prevState == "pause" {
-                NSLog("[DLNADiscovery] ▶️ BluOS transitioned from pause to playing state. Resuming Apple Music.")
+            // Resume Apple Music if BluOS transitioned from paused/stopped/connecting -> 'stream'/'play'
+            // (never auto-start playback on initial poll when prevState is empty).
+            if !musicStatus.isPlaying && !prevState.isEmpty && prevState != "stream" && prevState != "play" {
+                NSLog("[DLNADiscovery] ▶️ BluOS transitioned from '%@' to '%@'. Resuming Apple Music.", prevState, state)
                 markLocalAction()
                 _ = MusicBridge.shared.play()
+                UPnPMediaRendererServer.shared.notifySubscribers(force: true)
+                WebSocketServer.shared.broadcastStatus()
             }
         }
     }

@@ -7,6 +7,25 @@ import Foundation
 import ScriptingBridge
 
 extension QueueManager {
+    private func syncQueueSlicesAndReindexUnlocked() {
+        for i in 0..<PlaybackStateStore.shared.activeCustomQueue.count {
+            PlaybackStateStore.shared.activeCustomQueue[i].index = i + 1
+        }
+        let curIdx = PlaybackStateStore.shared.activeCustomQueueIndex
+        let q = PlaybackStateStore.shared.activeCustomQueue
+        if curIdx + 1 < q.count {
+            PlaybackStateStore.shared.latestUpcomingTracks = Array(q[(curIdx + 1)...])
+        } else {
+            PlaybackStateStore.shared.latestUpcomingTracks = []
+        }
+        if curIdx > 0 && curIdx <= q.count {
+            PlaybackStateStore.shared.latestHistoryTracks = Array(q[0..<curIdx].reversed())
+        } else {
+            PlaybackStateStore.shared.latestHistoryTracks = []
+        }
+        PlaybackStateStore.shared.playbackQueueCache = nil
+    }
+
     // MARK: - Enqueue Operations
 
     public func enqueueTrack(_ track: TrackInfo, playNext: Bool) async -> Bool {
@@ -18,7 +37,7 @@ extension QueueManager {
             let q = await getPlaybackQueue()
             let curTrack = PlayerStatusEngine.shared.getPlayerStatus().track
 
-            return PlaybackStateStore.shared.withLock {
+            let res = PlaybackStateStore.shared.withLock { () -> Bool in
                 var queue = [TrackInfo]()
                 if let cur = curTrack {
                     queue.append(cur)
@@ -34,6 +53,7 @@ extension QueueManager {
                     PlaybackStateStore.shared.activeCustomQueueIndex = 0
                     PlaybackStateStore.shared.isCustomQueuePlayback = true
                     PlaybackStateStore.shared.activeCustomQueueName = "Очередь"
+                    syncQueueSlicesAndReindexUnlocked()
                     return playQueueIndexUnlocked(0)
                 }
 
@@ -47,19 +67,25 @@ extension QueueManager {
                 } else {
                     PlaybackStateStore.shared.activeCustomQueue.append(track)
                 }
+                syncQueueSlicesAndReindexUnlocked()
                 return true
             }
+            PlaybackStateStore.shared.invalidateQueueCache()
+            return res
         }
 
-        return PlaybackStateStore.shared.withLock {
+        let res = PlaybackStateStore.shared.withLock { () -> Bool in
             if playNext {
                 let insertIdx = min(PlaybackStateStore.shared.activeCustomQueue.count, PlaybackStateStore.shared.activeCustomQueueIndex + 1)
                 PlaybackStateStore.shared.activeCustomQueue.insert(track, at: insertIdx)
             } else {
                 PlaybackStateStore.shared.activeCustomQueue.append(track)
             }
+            syncQueueSlicesAndReindexUnlocked()
             return true
         }
+        PlaybackStateStore.shared.invalidateQueueCache()
+        return res
     }
 
     public func enqueueTracks(_ tracks: [TrackInfo], playNext: Bool) async -> Bool {
@@ -72,7 +98,7 @@ extension QueueManager {
             let q = await getPlaybackQueue()
             let curTrack = PlayerStatusEngine.shared.getPlayerStatus().track
 
-            return PlaybackStateStore.shared.withLock {
+            let res = PlaybackStateStore.shared.withLock { () -> Bool in
                 var queue = [TrackInfo]()
                 if let cur = curTrack {
                     queue.append(cur)
@@ -97,19 +123,25 @@ extension QueueManager {
                 } else {
                     PlaybackStateStore.shared.activeCustomQueue.append(contentsOf: tracks)
                 }
+                syncQueueSlicesAndReindexUnlocked()
                 return true
             }
+            PlaybackStateStore.shared.invalidateQueueCache()
+            return res
         }
 
-        return PlaybackStateStore.shared.withLock {
+        let res = PlaybackStateStore.shared.withLock { () -> Bool in
             if playNext {
                 let insertIdx = min(PlaybackStateStore.shared.activeCustomQueue.count, PlaybackStateStore.shared.activeCustomQueueIndex + 1)
                 PlaybackStateStore.shared.activeCustomQueue.insert(contentsOf: tracks, at: insertIdx)
             } else {
                 PlaybackStateStore.shared.activeCustomQueue.append(contentsOf: tracks)
             }
+            syncQueueSlicesAndReindexUnlocked()
             return true
         }
+        PlaybackStateStore.shared.invalidateQueueCache()
+        return res
     }
 
     public func removeQueueTrack(at index: Int) async -> Bool {
@@ -118,54 +150,38 @@ extension QueueManager {
         }
 
         if hasCustom {
-            return PlaybackStateStore.shared.withLock {
+            let res = PlaybackStateStore.shared.withLock { () -> Bool in
                 let targetIdx = PlaybackStateStore.shared.activeCustomQueueIndex + 1 + index
-                guard targetIdx >= 0 && targetIdx < PlaybackStateStore.shared.activeCustomQueue.count else { return false }
-                PlaybackStateStore.shared.activeCustomQueue.remove(at: targetIdx)
+                guard targetIdx > PlaybackStateStore.shared.activeCustomQueueIndex && targetIdx < PlaybackStateStore.shared.activeCustomQueue.count else { return false }
+                let removed = PlaybackStateStore.shared.activeCustomQueue.remove(at: targetIdx)
+                if let origIdx = PlaybackStateStore.shared.originalCustomQueue.firstIndex(where: { $0.id == removed.id && $0.name == removed.name }) {
+                    PlaybackStateStore.shared.originalCustomQueue.remove(at: origIdx)
+                }
+                syncQueueSlicesAndReindexUnlocked()
                 return true
             }
-        }
-
-        if let app = MusicAppProvider.shared.getMusicApp(), let pName = app.currentPlaylist?.value(forKey: "name") as? String, pName == "Очередь AMR" {
-            let curIdx = (app.currentTrack?.value(forKey: "index") as? Int) ?? 1
-            let targetIdx = curIdx + 1 + index
-            let script = """
-            tell application "Music"
-                try
-                    set qPl to missing value
-                    repeat with p in (get every user playlist whose name is "Очередь AMR")
-                        if (count of tracks of p) > 0 then
-                            set qPl to p
-                            exit repeat
-                        end if
-                    end repeat
-                    if qPl is not missing value then
-                        delete (track \(targetIdx) of qPl)
-                    end if
-                end try
-            end tell
-            """
-            _ = AppleScriptExecutor.shared.execute(script)
-            LibraryService.shared.invalidatePlaylistCache(name: "Очередь AMR")
             PlaybackStateStore.shared.invalidateQueueCache()
-            return true
+            return res
         }
 
         let q = await getPlaybackQueue()
         guard index >= 0 && index < q.upcomingTracks.count else { return false }
 
-        return PlaybackStateStore.shared.withLock {
+        let res = PlaybackStateStore.shared.withLock { () -> Bool in
             PlaybackStateStore.shared.activeCustomQueue = q.tracks
             PlaybackStateStore.shared.activeCustomQueueIndex = q.currentIndex
             PlaybackStateStore.shared.isCustomQueuePlayback = true
             PlaybackStateStore.shared.activeCustomQueueName = q.playlist
             let targetIdx = PlaybackStateStore.shared.activeCustomQueueIndex + 1 + index
-            if targetIdx >= 0 && targetIdx < PlaybackStateStore.shared.activeCustomQueue.count {
+            if targetIdx > PlaybackStateStore.shared.activeCustomQueueIndex && targetIdx < PlaybackStateStore.shared.activeCustomQueue.count {
                 PlaybackStateStore.shared.activeCustomQueue.remove(at: targetIdx)
+                syncQueueSlicesAndReindexUnlocked()
                 return true
             }
             return false
         }
+        PlaybackStateStore.shared.invalidateQueueCache()
+        return res
     }
 
     public func clearUpcomingQueue() async -> Bool {
@@ -175,43 +191,20 @@ extension QueueManager {
         }
 
         if hasCustom {
-            return PlaybackStateStore.shared.withLock {
+            let res = PlaybackStateStore.shared.withLock { () -> Bool in
                 if PlaybackStateStore.shared.activeCustomQueueIndex + 1 < PlaybackStateStore.shared.activeCustomQueue.count {
                     PlaybackStateStore.shared.activeCustomQueue.removeSubrange((PlaybackStateStore.shared.activeCustomQueueIndex + 1)...)
                 }
+                syncQueueSlicesAndReindexUnlocked()
                 return true
             }
-        }
-
-        if let app = MusicAppProvider.shared.getMusicApp(), let pName = app.currentPlaylist?.value(forKey: "name") as? String, pName == "Очередь AMR" {
-            let curIdx = (app.currentTrack?.value(forKey: "index") as? Int) ?? 1
-            let script = """
-            tell application "Music"
-                try
-                    set qPl to missing value
-                    repeat with p in (get every user playlist whose name is "Очередь AMR")
-                        if (count of tracks of p) > 0 then
-                            set qPl to p
-                            exit repeat
-                        end if
-                    end repeat
-                    if qPl is not missing value then
-                        set c to count of tracks of qPl
-                        if c > \(curIdx) then
-                            delete (tracks \(curIdx + 1) thru c of qPl)
-                        end if
-                    end if
-                end try
-            end tell
-            """
-            _ = AppleScriptExecutor.shared.execute(script)
-            LibraryService.shared.invalidatePlaylistCache(name: "Очередь AMR")
-            return true
+            PlaybackStateStore.shared.invalidateQueueCache()
+            return res
         }
 
         let q = await getPlaybackQueue()
         let curTrack = PlayerStatusEngine.shared.getPlayerStatus().track
-        return PlaybackStateStore.shared.withLock {
+        let res = PlaybackStateStore.shared.withLock { () -> Bool in
             if let cur = curTrack {
                 PlaybackStateStore.shared.activeCustomQueue = [cur]
             } else if q.currentIndex < q.tracks.count {
@@ -222,7 +215,10 @@ extension QueueManager {
             PlaybackStateStore.shared.activeCustomQueueIndex = 0
             PlaybackStateStore.shared.isCustomQueuePlayback = true
             PlaybackStateStore.shared.activeCustomQueueName = "Очередь"
+            syncQueueSlicesAndReindexUnlocked()
             return true
         }
+        PlaybackStateStore.shared.invalidateQueueCache()
+        return res
     }
 }
