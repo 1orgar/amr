@@ -22,9 +22,19 @@ public final class AudioProcessTapService: @unchecked Sendable {
     private var ioProcID: AudioDeviceIOProcID?
     
     // Stream parameters
-    public private(set) var sampleRate: Int = 44100
+    private let formatLock = NSLock()
+    private var _sampleRate: Int = 44100
+    private var _bitDepth: Int = 16
+
+    public private(set) var sampleRate: Int {
+        get { formatLock.withLock { _sampleRate } }
+        set { formatLock.withLock { _sampleRate = newValue } }
+    }
     public let channels: Int = 2
-    public private(set) var bitDepth: Int = 16
+    public private(set) var bitDepth: Int {
+        get { formatLock.withLock { _bitDepth } }
+        set { formatLock.withLock { _bitDepth = newValue } }
+    }
     public var bitsPerSample: Int { bitDepth }
     public var bytesPerFrame: Int { channels * (bitDepth / 8) }
 
@@ -50,6 +60,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
     private var silenceTickCount: Int = 0
     private var autoHealCount: Int = 0
     private let silenceLock = NSLock()
+    private let isTestingEnv: Bool = PlaybackRouter.shared.isTestingEnvironment
 
     private init() {}
 
@@ -127,14 +138,11 @@ public final class AudioProcessTapService: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self = self else { return }
             self.isPassiveAnalysisActive = true
-            let shouldMute = DLNADiscoveryManager.shared.hasActiveRenderer
-            if self.isRealTapActive && self.isTapMuted != shouldMute {
-                NSLog("[AudioProcessTapService] 🔄 Recreating Process Tap to update muteBehavior (muted: \(shouldMute))")
-                self.stopCaptureInternal()
-            }
+            var formatChanged = false
             if sampleRate > 0 && sampleRate != self.sampleRate {
                 self.sampleRate = sampleRate
-                if self.aggregateDeviceID != 0 {
+                formatChanged = true
+                if !self.isTestingEnv && self.aggregateDeviceID != 0 {
                     if let procID = self.ioProcID {
                         AudioDeviceStop(self.aggregateDeviceID, procID)
                     }
@@ -151,8 +159,21 @@ public final class AudioProcessTapService: @unchecked Sendable {
                     }
                 }
             }
-            if (bitDepth == 16 || bitDepth == 24) && bitDepth != self.bitDepth {
-                self.bitDepth = bitDepth
+            if bitDepth == 16 || bitDepth == 20 || bitDepth == 24 || bitDepth == 32 {
+                let effectiveDepth = (bitDepth == 16) ? 16 : 24
+                if effectiveDepth != self.bitDepth {
+                    self.bitDepth = effectiveDepth
+                    formatChanged = true
+                }
+            }
+            if formatChanged {
+                self.chunkAccumulator.removeAll()
+            }
+            guard !self.isTestingEnv else { return }
+            let shouldMute = DLNADiscoveryManager.shared.hasActiveRenderer
+            if self.isRealTapActive && self.isTapMuted != shouldMute {
+                NSLog("[AudioProcessTapService] 🔄 Recreating Process Tap to update muteBehavior (muted: \(shouldMute))")
+                self.stopCaptureInternal()
             }
             if !self.isRealTapActive {
                 self.startCaptureInternal()
@@ -208,10 +229,13 @@ public final class AudioProcessTapService: @unchecked Sendable {
                     }
                 }
             }
-            if let b = bitDepth, (b == 16 || b == 24), b != self.bitDepth {
-                NSLog("[AudioProcessTapService] 🎛️ Switching tap bit depth to \(b)-bit (was \(self.bitDepth)-bit)")
-                self.bitDepth = b
-                formatChanged = true
+            if let b = bitDepth, (b == 16 || b == 20 || b == 24 || b == 32) {
+                let effectiveDepth = (b == 16) ? 16 : 24
+                if effectiveDepth != self.bitDepth {
+                    NSLog("[AudioProcessTapService] 🎛️ Switching tap bit depth to \(effectiveDepth)-bit (requested \(b)-bit, was \(self.bitDepth)-bit)")
+                    self.bitDepth = effectiveDepth
+                    formatChanged = true
+                }
             }
             if formatChanged {
                 self.chunkAccumulator.removeAll()
@@ -228,6 +252,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
     }
 
     private func startCaptureInternal() {
+        guard !isTestingEnv else { return }
         guard !isRealTapActive else { return }
 
         guard #available(macOS 14.2, *) else {
@@ -397,6 +422,13 @@ public final class AudioProcessTapService: @unchecked Sendable {
             NSLog("[AudioProcessTapService] 🚀 Audio capture started successfully at \(self.sampleRate) Hz 24-bit")
         } else {
             NSLog("[AudioProcessTapService] ❌ AudioDeviceStart failed: \(startStatus)")
+            AudioDeviceDestroyIOProcID(newAggID, procID)
+            AudioHardwareDestroyAggregateDevice(newAggID)
+            AudioHardwareDestroyProcessTap(newTapID)
+            self.ioProcID = nil
+            self.aggregateDeviceID = 0
+            self.tapObjectID = 0
+            return
         }
 
         startSilenceGenerator()
@@ -449,7 +481,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
 
         if bufferList.count >= 2, let leftData = bufferList[0].mData, let rightData = bufferList[1].mData {
             // Non-interleaved stereo (Buffer 0: Left, Buffer 1: Right)
-            let frameCount = Int(bufferList[0].mDataByteSize) / MemoryLayout<Float>.size
+            let frameCount = min(Int(bufferList[0].mDataByteSize), Int(bufferList[1].mDataByteSize)) / MemoryLayout<Float>.size
             guard frameCount > 0 else { return }
 
             let leftPtr = leftData.assumingMemoryBound(to: Float.self)
@@ -505,17 +537,18 @@ public final class AudioProcessTapService: @unchecked Sendable {
                 convertedData = pcmData
             }
         } else if let firstBuffer = bufferList.first, let rawData = firstBuffer.mData {
-            // Interleaved stereo (Buffer 0: L, R, L, R...)
+            // Interleaved audio (Buffer 0: L, R, ... or mono/multichannel)
             let floatCount = Int(firstBuffer.mDataByteSize) / MemoryLayout<Float>.size
-            guard floatCount > 0 else { return }
+            let srcChannels = max(1, Int(firstBuffer.mNumberChannels))
+            let frameCount = floatCount / srcChannels
+            guard frameCount > 0 else { return }
 
             let floatPtr = rawData.assumingMemoryBound(to: Float.self)
-            let frameCount = floatCount / channels
 
             SpectralIntegrityAnalyzer.shared.processInterleavedFloatFrames(
                 interleaved: floatPtr,
-                floatCount: floatCount,
-                channels: channels
+                floatCount: frameCount * srcChannels,
+                channels: srcChannels
             )
 
             if hasStreamSubscribers {
@@ -524,20 +557,31 @@ public final class AudioProcessTapService: @unchecked Sendable {
                     guard let dstPtr = rawBuf.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
                     var dstIdx = 0
                     if currentDepth == 16 {
-                        for i in 0..<floatCount {
-                            let sampleFloat = max(-1.0, min(1.0, floatPtr[i]))
-                            let sampleInt16 = Int16(round(sampleFloat * 32767.0))
-                            dstPtr[dstIdx] = UInt8(sampleInt16 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((sampleInt16 >> 8) & 0xFF)
+                        for f in 0..<frameCount {
+                            let left = max(-1.0, min(1.0, floatPtr[f * srcChannels]))
+                            let right = max(-1.0, min(1.0, srcChannels >= 2 ? floatPtr[f * srcChannels + 1] : left))
+                            let leftInt16 = Int16(round(left * 32767.0))
+                            dstPtr[dstIdx] = UInt8(leftInt16 & 0xFF)
+                            dstPtr[dstIdx + 1] = UInt8((leftInt16 >> 8) & 0xFF)
+                            dstIdx += 2
+                            let rightInt16 = Int16(round(right * 32767.0))
+                            dstPtr[dstIdx] = UInt8(rightInt16 & 0xFF)
+                            dstPtr[dstIdx + 1] = UInt8((rightInt16 >> 8) & 0xFF)
                             dstIdx += 2
                         }
                     } else {
-                        for i in 0..<floatCount {
-                            let sampleFloat = max(-1.0, min(1.0, floatPtr[i]))
-                            let sampleInt32 = Int32(round(sampleFloat * 8388607.0))
-                            dstPtr[dstIdx] = UInt8(sampleInt32 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((sampleInt32 >> 8) & 0xFF)
-                            dstPtr[dstIdx + 2] = UInt8((sampleInt32 >> 16) & 0xFF)
+                        for f in 0..<frameCount {
+                            let left = max(-1.0, min(1.0, floatPtr[f * srcChannels]))
+                            let right = max(-1.0, min(1.0, srcChannels >= 2 ? floatPtr[f * srcChannels + 1] : left))
+                            let leftInt32 = Int32(round(left * 8388607.0))
+                            dstPtr[dstIdx] = UInt8(leftInt32 & 0xFF)
+                            dstPtr[dstIdx + 1] = UInt8((leftInt32 >> 8) & 0xFF)
+                            dstPtr[dstIdx + 2] = UInt8((leftInt32 >> 16) & 0xFF)
+                            dstIdx += 3
+                            let rightInt32 = Int32(round(right * 8388607.0))
+                            dstPtr[dstIdx] = UInt8(rightInt32 & 0xFF)
+                            dstPtr[dstIdx + 1] = UInt8((rightInt32 >> 8) & 0xFF)
+                            dstPtr[dstIdx + 2] = UInt8((rightInt32 >> 16) & 0xFF)
                             dstIdx += 3
                         }
                     }
@@ -558,10 +602,10 @@ public final class AudioProcessTapService: @unchecked Sendable {
             pcmToDispatch = Data(repeating: 0, count: pcmToDispatch.count)
         }
 
-        dispatchAudioChunk(pcmToDispatch)
+        dispatchAudioChunk(pcmToDispatch, bytesPerFrame: currentBytesPerFrame)
     }
 
-    private func dispatchAudioChunk(_ data: Data) {
+    private func dispatchAudioChunk(_ data: Data, bytesPerFrame chunkBytesPerFrame: Int? = nil) {
         queue.async { [weak self] in
             guard let self = self else { return }
             guard !self.subscribers.isEmpty else {
@@ -570,15 +614,32 @@ public final class AudioProcessTapService: @unchecked Sendable {
                 }
                 return
             }
+            let bpf = max(1, self.bytesPerFrame)
+            let incomingBPF = chunkBytesPerFrame ?? bpf
+            if incomingBPF != bpf || data.count % bpf != 0 || self.chunkAccumulator.count % bpf != 0 {
+                self.chunkAccumulator.removeAll(keepingCapacity: true)
+                if incomingBPF != bpf || data.count % bpf != 0 {
+                    return
+                }
+            }
             self.chunkAccumulator.append(data)
 
             // When accumulated ~50ms of audio, dispatch to subscribers
-            let targetBytes = self.targetChunkFrameCount * self.bytesPerFrame
+            let targetBytes = self.targetChunkFrameCount * bpf
+            var extracted = false
             while self.chunkAccumulator.count >= targetBytes {
                 let chunk = self.chunkAccumulator.prefix(targetBytes)
                 self.chunkAccumulator.removeFirst(targetBytes)
+                extracted = true
                 for callback in self.subscribers.values {
                     callback(Data(chunk))
+                }
+            }
+            if extracted {
+                if self.chunkAccumulator.isEmpty {
+                    self.chunkAccumulator = Data()
+                } else {
+                    self.chunkAccumulator = Data(self.chunkAccumulator)
                 }
             }
         }
@@ -641,12 +702,15 @@ public final class AudioProcessTapService: @unchecked Sendable {
     // MARK: - WAV Header Helper
 
     public func makeWAVHeader(sampleRate: Int? = nil, bitDepth: Int? = nil, dataLength: UInt32 = 0x7FFFFFFF - 36) -> Data {
-        let effectiveRate = sampleRate ?? self.sampleRate
-        let effectiveBits = bitDepth ?? self.bitDepth
+        let rawRate = sampleRate ?? self.sampleRate
+        let effectiveRate = max(8_000, min(768_000, rawRate))
+        let rawBd = bitDepth ?? self.bitDepth
+        let bd: UInt16 = (rawBd == 24 || rawBd == 20 || rawBd == 32) ? 24 : 16
+        let effectiveBits = Int(bd)
         let effectiveBytesPerFrame = channels * (effectiveBits / 8)
         var header = Data()
         header.append(contentsOf: "RIFF".utf8)
-        var chunkSize: UInt32 = dataLength + 36
+        var chunkSize: UInt32 = dataLength > (UInt32.max - 36) ? UInt32.max : (dataLength + 36)
         header.append(Data(bytes: &chunkSize, count: 4))
         header.append(contentsOf: "WAVEfmt ".utf8)
         var subchunk1Size: UInt32 = 16
@@ -661,7 +725,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
         header.append(Data(bytes: &byteRate, count: 4))
         var blockAlign = UInt16(effectiveBytesPerFrame)
         header.append(Data(bytes: &blockAlign, count: 2))
-        var bits = UInt16(effectiveBits)
+        var bits = bd
         header.append(Data(bytes: &bits, count: 2))
         header.append(contentsOf: "data".utf8)
         var dSize = dataLength

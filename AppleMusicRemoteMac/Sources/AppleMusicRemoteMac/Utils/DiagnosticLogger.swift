@@ -159,8 +159,11 @@ public final class DiagnosticLogger: @unchecked Sendable {
             logFileFD = Darwin.open(
                 logFileURL.path,
                 O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
-                S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH
+                S_IRUSR | S_IWUSR
             )
+            if logFileFD >= 0 {
+                _ = Darwin.fchmod(logFileFD, S_IRUSR | S_IWUSR)
+            }
         }
     }
 
@@ -199,20 +202,32 @@ public final class DiagnosticLogger: @unchecked Sendable {
         _ = Darwin.fcntl(pipeReadFD, F_SETFD, FD_CLOEXEC)
         _ = Darwin.fcntl(pipeWriteFD, F_SETFD, FD_CLOEXEC)
 
-        let flags = Darwin.fcntl(pipeReadFD, F_GETFL, 0)
-        if flags >= 0 {
-            _ = Darwin.fcntl(pipeReadFD, F_SETFL, flags | O_NONBLOCK)
+        let readFlags = Darwin.fcntl(pipeReadFD, F_GETFL, 0)
+        if readFlags >= 0 {
+            _ = Darwin.fcntl(pipeReadFD, F_SETFL, readFlags | O_NONBLOCK)
+        }
+        let writeFlags = Darwin.fcntl(pipeWriteFD, F_GETFL, 0)
+        if writeFlags >= 0 {
+            _ = Darwin.fcntl(pipeWriteFD, F_SETFL, writeFlags | O_NONBLOCK)
         }
 
         origStdoutFD = Darwin.dup(STDOUT_FILENO)
         origStderrFD = Darwin.dup(STDERR_FILENO)
-        if origStdoutFD >= 0 { _ = Darwin.fcntl(origStdoutFD, F_SETFD, FD_CLOEXEC) }
-        if origStderrFD >= 0 { _ = Darwin.fcntl(origStderrFD, F_SETFD, FD_CLOEXEC) }
+        if origStdoutFD >= 0 {
+            _ = Darwin.fcntl(origStdoutFD, F_SETFD, FD_CLOEXEC)
+        }
+        if origStderrFD >= 0 {
+            _ = Darwin.fcntl(origStderrFD, F_SETFD, FD_CLOEXEC)
+        }
 
         Darwin.fflush(stdout)
         Darwin.fflush(stderr)
         _ = Darwin.dup2(pipeWriteFD, STDOUT_FILENO)
         _ = Darwin.dup2(pipeWriteFD, STDERR_FILENO)
+        if pipeWriteFD > STDERR_FILENO {
+            Darwin.close(pipeWriteFD)
+            pipeWriteFD = -1
+        }
 
         let source = DispatchSource.makeReadSource(fileDescriptor: pipeReadFD, queue: queue)
         source.setEventHandler { [weak self] in

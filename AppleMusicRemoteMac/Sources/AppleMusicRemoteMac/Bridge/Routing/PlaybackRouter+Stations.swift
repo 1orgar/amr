@@ -15,6 +15,11 @@ extension PlaybackRouter {
 
     public func playStation(url: String, name: String, type: String, trackTitle: String, artistName: String) async -> Bool {
         guard !url.isEmpty || !name.isEmpty || !trackTitle.isEmpty || !artistName.isEmpty else { return false }
+        let expectedGen: UInt64 = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.playbackGeneration &+= 1
+            PlaybackStateStore.shared.isStagingCloudTrack = false
+            return PlaybackStateStore.shared.playbackGeneration
+        }
         var targetUrl = url
         var stationDisplayName = name
         let lowName = name.lowercased()
@@ -27,18 +32,35 @@ extension PlaybackRouter {
             }
             return playPlaylist(name: "Сейчас на повторе", trackId: nil, trackIndex: nil, shuffle: true)
         }
-        if (targetUrl.isEmpty || targetUrl == "ra.u-personal") && (name.contains("Моя станция") || lowName.contains("моя станция")) {
+        let isPersonalStationRequest = targetUrl == "ra.u-personal"
+            || lowName.contains("моя станция")
+            || lowName.contains("my station")
+            || lowName.contains("персональная")
+            || lowName.contains("personal station")
+        let isDiscoveryStationRequest = targetUrl == "ra.u-discovery"
+            || lowName.contains("открытий")
+            || lowName.contains("discovery station")
+            || lowName.contains("в моем вкусе")
+            || lowName.contains("в моём вкусе")
+        let isGenericOrMissingStationUrl = targetUrl.isEmpty
+            || !targetUrl.contains("ra.")
+            || targetUrl == "ra.u-personal"
+            || targetUrl == "ra.u-discovery"
+            || targetUrl.contains("ra.985480047")
+            || targetUrl.contains("ra.985484943")
+
+        if isPersonalStationRequest && isGenericOrMissingStationUrl {
             if let personal = await MusicKitManager.shared.fetchPersonalStation(), !personal.url.isEmpty {
                 targetUrl = personal.url
             } else {
-                targetUrl = "https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
+                return false
             }
-        } else if (targetUrl.isEmpty || targetUrl == "ra.u-discovery") && (name.contains("открытий") || name.contains("В моем вкусе") || lowName.contains("станция открытий")) {
+        } else if isDiscoveryStationRequest && isGenericOrMissingStationUrl {
             let (_, discovery) = await MusicKitManager.shared.fetchPersonalStations()
             if let disc = discovery, !disc.url.isEmpty {
                 targetUrl = disc.url
             } else {
-                targetUrl = "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
+                return false
             }
         } else if !targetUrl.contains("ra.") {
             if type == "track" || (!trackTitle.isEmpty && targetUrl.isEmpty) {
@@ -64,6 +86,9 @@ extension PlaybackRouter {
                     }
                 }
             }
+        }
+        guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+            return false
         }
         var playUrl = targetUrl
         if playUrl.hasPrefix("https://") {
@@ -98,7 +123,7 @@ extension PlaybackRouter {
         QueueManager.shared.stopQueueMonitoring()
         let resolvedStationName = !stationDisplayName.isEmpty ? stationDisplayName : (!name.isEmpty ? name : "Apple Music Radio")
         PlaybackStateStore.shared.resetPlaybackState(isRadio: true, stationName: resolvedStationName)
-        PlaybackStateStore.shared.withLock {
+        let stationGen: UInt64 = PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isUserPaused = false
             PlaybackStateStore.shared.lastPlayerStatusCache = nil
             PlaybackStateStore.shared.latestUpcomingTracks.removeAll()
@@ -107,6 +132,7 @@ extension PlaybackRouter {
             PlaybackStateStore.shared.activeShuffledQueue.removeAll()
             PlaybackStateStore.shared.activeShuffledPlaylistName = nil
             PlaybackStateStore.shared.playbackQueueCache = nil
+            return PlaybackStateStore.shared.playbackGeneration
         }
         PlaybackStateStore.shared.invalidateStatusCache()
 
@@ -126,6 +152,14 @@ extension PlaybackRouter {
             Task.detached(priority: .userInitiated) {
                 for i in 0..<40 {
                     try? await Task.sleep(nanoseconds: 100_000_000)
+                    let shouldContinue = PlaybackStateStore.shared.withLock {
+                        PlaybackStateStore.shared.playbackGeneration == stationGen &&
+                        PlaybackStateStore.shared.isRadioPlayback &&
+                        !PlaybackStateStore.shared.isUserPaused
+                    }
+                    if !shouldContinue {
+                        break
+                    }
                     PlaybackStateStore.shared.invalidateStatusCache()
                     let status = PlayerStatusEngine.shared.getPlayerStatus()
                     if status.playerState == "playing" {
@@ -135,7 +169,16 @@ extension PlaybackRouter {
                         break
                     }
                     if i == 15 && status.playerState != "playing" {
-                        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                        let stillValid = PlaybackStateStore.shared.withLock {
+                            PlaybackStateStore.shared.playbackGeneration == stationGen &&
+                            PlaybackStateStore.shared.isRadioPlayback &&
+                            !PlaybackStateStore.shared.isUserPaused
+                        }
+                        if stillValid {
+                            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                        } else {
+                            break
+                        }
                     }
                 }
             }

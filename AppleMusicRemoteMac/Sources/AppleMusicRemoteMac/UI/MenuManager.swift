@@ -27,7 +27,7 @@ public final class MenuManager: NSObject {
     }
 
     private var isEnglishUI: Bool {
-        !MusicKitManager.shared.getPreferredLanguageTag().lowercased().hasPrefix("ru")
+        SettingsTab.isEn
     }
 
     public func setup() {
@@ -109,9 +109,14 @@ public final class MenuManager: NSObject {
             clientCountItem?.isEnabled = false
             clientCountItem?.action = nil
             if isEn {
-                clientCountItem?.title = "🟢 \(count) iOS \(count == 1 ? "client" : "clients") connected"
+                clientCountItem?.title = "🟢 \(count) Web/PWA \(count == 1 ? "client" : "clients") connected"
             } else {
-                clientCountItem?.title = "🟢 \(count) iOS \(count == 1 ? "клиент" : "клиентов") на связи"
+                let mod10 = count % 10
+                let mod100 = count % 100
+                let word = (mod10 == 1 && mod100 != 11)
+                    ? "клиент подключён"
+                    : ((mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) ? "клиента подключено" : "клиентов подключено")
+                clientCountItem?.title = "🟢 \(count) Web/PWA \(word)"
             }
         } else {
             clientCountItem?.isEnabled = false

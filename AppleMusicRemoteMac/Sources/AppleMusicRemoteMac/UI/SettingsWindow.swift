@@ -10,16 +10,20 @@
 import AppKit
 import CoreAudio
 
-private enum SettingsTab: Int, CaseIterable {
+internal enum SettingsTab: Int, CaseIterable {
     case general = 0
     case playback = 1
     case amplifier = 2
     case wled = 3
     case advanced = 4
 
-    private var isEn: Bool {
+    internal static var isEn: Bool {
         let lang = Locale.preferredLanguages.first?.lowercased() ?? "ru"
         return !lang.hasPrefix("ru")
+    }
+
+    private var isEn: Bool {
+        Self.isEn
     }
 
     var tabTitle: String {
@@ -196,6 +200,7 @@ private final class SettingsCardView: NSView {
 @MainActor
 public final class SettingsWindow: NSWindowController {
     public static let shared = SettingsWindow()
+    private var isEn: Bool { SettingsTab.isEn }
 
     // Tabs state
     private var currentTab: SettingsTab = .general
@@ -367,7 +372,7 @@ public final class SettingsWindow: NSWindowController {
         versionLabel.textColor = .tertiaryLabelColor
         versionLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let okButton = NSButton(title: "ОК", target: self, action: #selector(okButtonClicked))
+        let okButton = NSButton(title: isEn ? "OK" : "ОК", target: self, action: #selector(okButtonClicked))
         okButton.bezelStyle = .rounded
         okButton.controlSize = .regular
         okButton.keyEquivalent = "\r"
@@ -470,12 +475,13 @@ public final class SettingsWindow: NSWindowController {
     }
 
     private func buildGeneralTabView() -> NSView {
+        let isEn = SettingsTab.isEn
         let heroCard = buildHeroHeaderCard()
 
         wsUrlField = makeReadonlyMonospaceField("http://127.0.0.1:8080", width: 205)
-        let qrButton = NSButton(title: "QR-код", target: self, action: #selector(showQRClicked))
+        let qrButton = NSButton(title: isEn ? "QR Code" : "QR-код", target: self, action: #selector(showQRClicked))
         qrButton.bezelStyle = .rounded
-        let restartButton = NSButton(title: "Перезапустить", target: self, action: #selector(restartServerClicked))
+        let restartButton = NSButton(title: isEn ? "Restart" : "Перезапустить", target: self, action: #selector(restartServerClicked))
         restartButton.bezelStyle = .rounded
 
         let wsControls = NSStackView(views: [wsUrlField, qrButton, restartButton])
@@ -485,17 +491,25 @@ public final class SettingsWindow: NSWindowController {
 
         launchAtLoginSwitch = makeSwitch(action: #selector(launchAtLoginToggled(_:)))
         aiCuratorSwitch = makeSwitch(action: #selector(aiCuratorToggled(_:)))
-        clientsLabel = makeStatusCaption("Клиентов подключено: 0")
+        clientsLabel = makeStatusCaption(isEn ? "Connected clients: 0" : "Клиентов подключено: 0")
 
         var mainRows: [NSView] = [
-            makeControlRow(title: "Адрес сервера", subtitle: "Откройте в Safari на iPhone, iPad, Mac или Smart TV", control: wsControls),
-            makeToggleRow(title: "Запускать при входе в macOS", subtitle: "Автоматический старт фонового сервера в строке меню", toggle: launchAtLoginSwitch)
+            makeControlRow(
+                title: isEn ? "Server Address" : "Адрес сервера",
+                subtitle: isEn ? "Open in Safari on iPhone, iPad, Mac, or Smart TV" : "Откройте в Safari на iPhone, iPad, Mac или Smart TV",
+                control: wsControls
+            ),
+            makeToggleRow(
+                title: isEn ? "Launch at Login" : "Запускать при входе в macOS",
+                subtitle: isEn ? "Automatically start background server in menu bar" : "Автоматический старт фонового сервера в строке меню",
+                toggle: launchAtLoginSwitch
+            )
         ]
         if NativeMusicCuratorService.shared.isAppleSilicon {
             mainRows.append(
                 makeToggleRow(
-                    title: "Нативные функции ИИ (Apple Neural Engine)",
-                    subtitle: "Промпт-Куратор, семантический поток очереди (NLEmbedding) и палитра обложек Vision (ТВ / WLED)",
+                    title: isEn ? "Native AI Features (Apple Neural Engine)" : "Нативные функции ИИ (Apple Neural Engine)",
+                    subtitle: isEn ? "Prompt Curator, semantic queue flow (NLEmbedding), and Vision artwork palette (TV / WLED)" : "Промпт-Куратор, семантический поток очереди (NLEmbedding) и палитра обложек Vision (ТВ / WLED)",
                     toggle: aiCuratorSwitch
                 )
             )
@@ -505,7 +519,7 @@ public final class SettingsWindow: NSWindowController {
         let mainGroup = makeSectionGroup(
             symbol: "gearshape.fill",
             badgeColor: .systemIndigo,
-            title: "Основные параметры и Пульт управления (iOS / PWA / StandBy TV)",
+            title: isEn ? "General Settings & Remote Control (iOS / PWA / StandBy TV)" : "Основные параметры и Пульт управления (iOS / PWA / StandBy TV)",
             rows: mainRows
         )
 
@@ -549,7 +563,8 @@ public final class SettingsWindow: NSWindowController {
             ])
         }
 
-        let headerTitle = NSTextField(labelWithString: "Устройства и Авторизация клиентов (PWA)")
+        let isEn = SettingsTab.isEn
+        let headerTitle = NSTextField(labelWithString: isEn ? "Client Devices & Authorization (PWA)" : "Устройства и Авторизация клиентов (PWA)")
         headerTitle.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
         headerTitle.textColor = .labelColor
 
@@ -590,7 +605,9 @@ public final class SettingsWindow: NSWindowController {
 
         let allDevices = ClientDeviceManager.shared.getAllDevices()
         if allDevices.isEmpty {
-            let emptyLabel = makeStatusCaption("Нет подключенных устройств. Откройте веб-пульт на iPhone, iPad, Mac или ТВ — устройство появится здесь для авторизации.")
+            let emptyLabel = makeStatusCaption(isEn
+                ? "No connected devices. Open the Web Remote on iPhone, iPad, Mac, or TV — the device will appear here for authorization."
+                : "Нет подключенных устройств. Откройте веб-пульт на iPhone, iPad, Mac или ТВ — устройство появится здесь для авторизации.")
             emptyLabel.lineBreakMode = .byWordWrapping
             let emptyRow = makeFooterRow(view: emptyLabel)
             stack.addArrangedSubview(emptyRow)
@@ -682,11 +699,14 @@ public final class SettingsWindow: NSWindowController {
         let ipPart = dev.lastIPAddress.isEmpty ? "" : " • \(dev.lastIPAddress)"
         let statusText: String
         if !dev.isAuthorized {
-            statusText = "🟠 Ожидает подтверждения\(ipPart)"
+            statusText = isEn ? "🟠 Pending approval\(ipPart)" : "🟠 Ожидает подтверждения\(ipPart)"
         } else {
-            let onlineBadge = isOnline ? "🟢 Онлайн" : "⚪ Офлайн"
-            let lockBadge = dev.lockScreenControls ? "Экран блок.: Вкл" : "Экран блок.: Выкл"
-            statusText = "\(onlineBadge) • Авторизован • \(lockBadge)\(ipPart)"
+            let onlineBadge = isOnline ? (isEn ? "🟢 Online" : "🟢 Онлайн") : (isEn ? "⚪ Offline" : "⚪ Офлайн")
+            let lockBadge = dev.lockScreenControls
+                ? (isEn ? "Lock screen: On" : "Экран блок.: Вкл")
+                : (isEn ? "Lock screen: Off" : "Экран блок.: Выкл")
+            let authWord = isEn ? "Authorized" : "Авторизован"
+            statusText = "\(onlineBadge) • \(authWord) • \(lockBadge)\(ipPart)"
         }
 
         let subField = NSTextField(labelWithString: statusText)
@@ -709,7 +729,7 @@ public final class SettingsWindow: NSWindowController {
         let itemIdentifier = NSUserInterfaceItemIdentifier(dev.deviceId)
 
         if !dev.isAuthorized {
-            let authBtn = NSButton(title: "Авторизовать", target: self, action: #selector(authorizeClientDeviceClicked(_:)))
+            let authBtn = NSButton(title: isEn ? "Authorize" : "Авторизовать", target: self, action: #selector(authorizeClientDeviceClicked(_:)))
             authBtn.bezelStyle = .rounded
             authBtn.controlSize = .small
             authBtn.bezelColor = .systemPink
@@ -719,26 +739,26 @@ public final class SettingsWindow: NSWindowController {
             let removeBtn = NSButton(title: "✕", target: self, action: #selector(removeClientDeviceClicked(_:)))
             removeBtn.bezelStyle = .rounded
             removeBtn.controlSize = .small
-            removeBtn.toolTip = "Отклонить и удалить устройство"
+            removeBtn.toolTip = isEn ? "Reject and remove device" : "Отклонить и удалить устройство"
             removeBtn.identifier = itemIdentifier
 
             controlsStack.addArrangedSubview(authBtn)
             controlsStack.addArrangedSubview(removeBtn)
         } else {
-            let settingsBtn = NSButton(title: "Настройки...", target: self, action: #selector(openClientDeviceSettingsClicked(_:)))
+            let settingsBtn = NSButton(title: isEn ? "Settings..." : "Настройки...", target: self, action: #selector(openClientDeviceSettingsClicked(_:)))
             settingsBtn.bezelStyle = .rounded
             settingsBtn.controlSize = .small
-            if let gearImg = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: "Настройки") {
+            if let gearImg = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: isEn ? "Settings" : "Настройки") {
                 settingsBtn.image = gearImg
                 settingsBtn.imagePosition = .imageLeading
             }
-            settingsBtn.toolTip = "Индивидуальные настройки и функции этого устройства"
+            settingsBtn.toolTip = isEn ? "Individual settings and features for this device" : "Индивидуальные настройки и функции этого устройства"
             settingsBtn.identifier = itemIdentifier
 
             let removeBtn = NSButton(title: "✕", target: self, action: #selector(removeClientDeviceClicked(_:)))
             removeBtn.bezelStyle = .rounded
             removeBtn.controlSize = .small
-            removeBtn.toolTip = "Удалить устройство из списка"
+            removeBtn.toolTip = isEn ? "Remove device from list" : "Удалить устройство из списка"
             removeBtn.identifier = itemIdentifier
 
             controlsStack.addArrangedSubview(settingsBtn)
@@ -1153,7 +1173,8 @@ public final class SettingsWindow: NSWindowController {
         subLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .regular)
         subLabel.textColor = .secondaryLabelColor
 
-        musicAppStatusLabel = NSTextField(labelWithString: "🟢 Music.app активен")
+        let isEn = SettingsTab.isEn
+        musicAppStatusLabel = NSTextField(labelWithString: isEn ? "🟢 Music.app is active" : "🟢 Music.app активен")
         musicAppStatusLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .medium)
         musicAppStatusLabel.textColor = .secondaryLabelColor
 
@@ -1165,7 +1186,7 @@ public final class SettingsWindow: NSWindowController {
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        launchMusicButton = NSButton(title: "Запустить Music.app", target: self, action: #selector(launchMusicAppClicked))
+        launchMusicButton = NSButton(title: isEn ? "Launch Music.app" : "Запустить Music.app", target: self, action: #selector(launchMusicAppClicked))
         launchMusicButton.bezelStyle = .rounded
         launchMusicButton.controlSize = .small
 
@@ -1385,8 +1406,11 @@ public final class SettingsWindow: NSWindowController {
         launchAtLoginSwitch.state = LaunchAtLoginManager.shared.isEnabled ? .on : .off
         aiCuratorSwitch?.state = NativeMusicCuratorService.shared.isEnabled ? .on : .off
         aiCuratorSwitch?.isHidden = !NativeMusicCuratorService.shared.isAppleSilicon
+        let isEn = SettingsTab.isEn
         let isMusicRunning = MusicAppProvider.shared.isMusicAppRunning
-        musicAppStatusLabel.stringValue = isMusicRunning ? "🟢 Music.app запущен и готов к работе" : "⚪ Music.app не запущен"
+        musicAppStatusLabel.stringValue = isMusicRunning
+            ? (isEn ? "🟢 Music.app is running and ready" : "🟢 Music.app запущен и готов к работе")
+            : (isEn ? "⚪ Music.app is not running" : "⚪ Music.app не запущен")
         launchMusicButton.isHidden = isMusicRunning
 
         // 1. Audio Devices
@@ -1398,7 +1422,8 @@ public final class SettingsWindow: NSWindowController {
 
         for dev in devices {
             let isDef = !hasActiveDLNA && dev.isDefault
-            devicePopUp.addItem(withTitle: "\(dev.name)\(isDef ? " (По умолчанию)" : "")")
+            let defSuffix = isDef ? (isEn ? " (Default)" : " (По умолчанию)") : ""
+            devicePopUp.addItem(withTitle: "\(dev.name)\(defSuffix)")
             if let item = devicePopUp.lastItem {
                 item.tag = Int(dev.id)
                 item.representedObject = "coreaudio:\(dev.id)"
@@ -1410,7 +1435,8 @@ public final class SettingsWindow: NSWindowController {
             devicePopUp.menu?.addItem(NSMenuItem.separator())
             for dlna in dlnaDevices {
                 let isSelected = dlna.isSelected
-                let title = "🌐 \(dlna.friendlyName) (DLNA)\(isSelected ? " (Активен)" : "")"
+                let activeSuffix = isSelected ? (isEn ? " (Active)" : " (Активен)") : ""
+                let title = "🌐 \(dlna.friendlyName) (DLNA)\(activeSuffix)"
                 devicePopUp.addItem(withTitle: title)
                 if let item = devicePopUp.lastItem {
                     item.tag = dlna.numericId
@@ -1424,10 +1450,12 @@ public final class SettingsWindow: NSWindowController {
                 devicePopUp.select(item)
             }
             sampleRatePopUp.removeAllItems()
-            sampleRatePopUp.addItem(withTitle: "192 кГц (DLNA Stream)")
+            sampleRatePopUp.addItem(withTitle: isEn ? "192 kHz (DLNA Stream)" : "192 кГц (DLNA Stream)")
             sampleRatePopUp.isEnabled = false
             bitPerfectSwitch.isEnabled = false
-            streamQualityLabel.stringValue = "Текущий вывод: DLNA Сетевой стриминг (WAV 192 кГц / 24-бит)"
+            streamQualityLabel.stringValue = isEn
+                ? "Current output: DLNA Network Streaming (WAV 192 kHz / 24-bit)"
+                : "Текущий вывод: DLNA Сетевой стриминг (WAV 192 кГц / 24-бит)"
         } else if let defaultDev = devices.first(where: { $0.isDefault }) {
             if let item = devicePopUp.itemArray.first(where: { ($0.representedObject as? String) == "coreaudio:\(defaultDev.id)" }) {
                 devicePopUp.select(item)
@@ -1435,7 +1463,9 @@ public final class SettingsWindow: NSWindowController {
             populateSampleRates(for: defaultDev)
             bitPerfectSwitch.isEnabled = true
             sampleRatePopUp.isEnabled = !BitPerfectLogMonitor.shared.isEnabled
-            streamQualityLabel.stringValue = "Текущий поток: \(BitPerfectLogMonitor.shared.currentQualityDescription)"
+            streamQualityLabel.stringValue = isEn
+                ? "Current stream: \(BitPerfectLogMonitor.shared.currentQualityDescription)"
+                : "Текущий поток: \(BitPerfectLogMonitor.shared.currentQualityDescription)"
         }
 
         bitPerfectSwitch.state = BitPerfectLogMonitor.shared.isEnabled ? .on : .off
@@ -1467,9 +1497,15 @@ public final class SettingsWindow: NSWindowController {
         if let item = extAmpProfilePopUp.itemArray.first(where: { ($0.representedObject as? String) == ampCtrl.profile.rawValue }) {
             extAmpProfilePopUp.select(item)
         }
-        extAmpIPField.stringValue = ampCtrl.host
-        extAmpPortField.stringValue = "\(ampCtrl.port)"
-        extAmpMaxCapField.stringValue = "\(ampCtrl.maxVolumeCap)"
+        if extAmpIPField.currentEditor() == nil {
+            extAmpIPField.stringValue = ampCtrl.host
+        }
+        if extAmpPortField.currentEditor() == nil {
+            extAmpPortField.stringValue = "\(ampCtrl.port)"
+        }
+        if extAmpMaxCapField.currentEditor() == nil {
+            extAmpMaxCapField.stringValue = "\(ampCtrl.maxVolumeCap)"
+        }
         extAmpMaxCapStepper.integerValue = ampCtrl.maxVolumeCap
         extAmpProfilePopUp.isEnabled = ampEnabled
         extAmpIPField.isEnabled = ampEnabled
@@ -1483,7 +1519,9 @@ public final class SettingsWindow: NSWindowController {
         // 2. UPnP & DLNA
         let isDMREnabled = UPnPMediaRendererServer.shared.isEnabled
         enableLocalDMRSwitch.state = isDMREnabled ? .on : .off
-        upnpFriendlyNameField.stringValue = SSDPService.shared.friendlyName
+        if upnpFriendlyNameField.currentEditor() == nil {
+            upnpFriendlyNameField.stringValue = SSDPService.shared.friendlyName
+        }
         upnpFriendlyNameField.isEnabled = isDMREnabled
         saveNameButton.isEnabled = isDMREnabled
         copyUpnpButton.isEnabled = isDMREnabled
@@ -1493,10 +1531,14 @@ public final class SettingsWindow: NSWindowController {
         let primaryIP = lanIPs.first ?? "127.0.0.1"
         upnpUrlField.stringValue = "http://\(primaryIP):\(upnpPort)/description.xml"
         if isDMREnabled {
-            upnpStatusLabel.stringValue = "🟢 Порт \(upnpPort) • SSDP Discovery активен (UDN: \(SSDPService.shared.deviceUDN))"
+            upnpStatusLabel.stringValue = isEn
+                ? "🟢 Port \(upnpPort) • SSDP Discovery active (UDN: \(SSDPService.shared.deviceUDN))"
+                : "🟢 Порт \(upnpPort) • SSDP Discovery активен (UDN: \(SSDPService.shared.deviceUDN))"
             upnpStatusLabel.textColor = .systemGreen
         } else {
-            upnpStatusLabel.stringValue = "Статус: Локальный DMR отключен"
+            upnpStatusLabel.stringValue = isEn
+                ? "Status: Local DMR disabled"
+                : "Статус: Локальный DMR отключен"
             upnpStatusLabel.textColor = .secondaryLabelColor
         }
 
@@ -1505,10 +1547,14 @@ public final class SettingsWindow: NSWindowController {
         enableFileLoggingSwitch.state = isLogging ? .on : .off
         let logSizeStr = DiagnosticLogger.shared.logFileSizeDescription()
         if isLogging {
-            fileLoggingStatusLabel.stringValue = "🟢 Активно • Размер: \(logSizeStr) • ~/Library/Logs/AppleMusicRemoteMac/amr.log"
+            fileLoggingStatusLabel.stringValue = isEn
+                ? "🟢 Active • Size: \(logSizeStr) • ~/Library/Logs/AppleMusicRemoteMac/amr.log"
+                : "🟢 Активно • Размер: \(logSizeStr) • ~/Library/Logs/AppleMusicRemoteMac/amr.log"
             fileLoggingStatusLabel.textColor = .systemGreen
         } else {
-            fileLoggingStatusLabel.stringValue = "Статус: Журналирование в файл отключено (размер лога: \(logSizeStr))"
+            fileLoggingStatusLabel.stringValue = isEn
+                ? "Status: File logging disabled (log size: \(logSizeStr))"
+                : "Статус: Журналирование в файл отключено (размер лога: \(logSizeStr))"
             fileLoggingStatusLabel.textColor = .secondaryLabelColor
         }
 
@@ -1518,10 +1564,14 @@ public final class SettingsWindow: NSWindowController {
         let clientCount = WebSocketServer.shared.clientCount
         let pendingCount = ClientDeviceManager.shared.pendingCount
         if pendingCount > 0 {
-            clientsLabel.stringValue = "🟠 Активных подключений: \(clientCount) • Ожидают авторизации: \(pendingCount)"
+            clientsLabel.stringValue = isEn
+                ? "🟠 Active connections: \(clientCount) • Pending authorization: \(pendingCount)"
+                : "🟠 Активных подключений: \(clientCount) • Ожидают авторизации: \(pendingCount)"
             clientsLabel.textColor = .systemOrange
         } else {
-            clientsLabel.stringValue = "🟢 Активных подключений по WebSocket: \(clientCount)"
+            clientsLabel.stringValue = isEn
+                ? "🟢 Active WebSocket connections: \(clientCount)"
+                : "🟢 Активных подключений по WebSocket: \(clientCount)"
             clientsLabel.textColor = .secondaryLabelColor
         }
         refreshClientDevicesSection(updateWindowSize: true)
@@ -1533,8 +1583,12 @@ public final class SettingsWindow: NSWindowController {
         // 4. WLED DDP Ambilight
         let wled = WLEDDDPController.shared
         enableWLEDSwitch.state = wled.isEnabled ? .on : .off
-        wledIPField.stringValue = wled.ipAddress
-        wledLedCountField.stringValue = "\(wled.ledCount)"
+        if wledIPField.currentEditor() == nil {
+            wledIPField.stringValue = wled.ipAddress
+        }
+        if wledLedCountField.currentEditor() == nil {
+            wledLedCountField.stringValue = "\(wled.ledCount)"
+        }
         wledIPField.isEnabled = wled.isEnabled
         wledLedCountField.isEnabled = wled.isEnabled
         saveWLEDIPButton.isEnabled = wled.isEnabled
@@ -1543,19 +1597,29 @@ public final class SettingsWindow: NSWindowController {
             wledModePopUp.select(item)
         }
         if wled.isEnabled && !wled.ipAddress.isEmpty && wled.mode != "off" {
-            wledStatusLabel.stringValue = "🟢 Активен: UDP \(wled.ipAddress):4048 • \(wled.ledCount) LED • 16 зон (Gamma 2.4)"
+            wledStatusLabel.stringValue = isEn
+                ? "🟢 Active: UDP \(wled.ipAddress):4048 • \(wled.ledCount) LED • 16 zones (Gamma 2.4)"
+                : "🟢 Активен: UDP \(wled.ipAddress):4048 • \(wled.ledCount) LED • 16 зон (Gamma 2.4)"
             wledStatusLabel.textColor = .systemGreen
         } else if wled.isEnabled && wled.ipAddress.isEmpty {
-            wledStatusLabel.stringValue = "🟠 Укажите IP-адрес контроллера WLED и нажмите «Применить»"
+            wledStatusLabel.stringValue = isEn
+                ? "🟠 Enter WLED controller IP address and click 'Apply'"
+                : "🟠 Укажите IP-адрес контроллера WLED и нажмите «Применить»"
             wledStatusLabel.textColor = .systemOrange
         } else if wled.isEnabled && wled.mode == "off" {
-            wledStatusLabel.stringValue = "⚪ Подсветка выключена (режим «Без подсветки» • Heartbeat OFF активен)"
+            wledStatusLabel.stringValue = isEn
+                ? "⚪ Ambilight off ('Off' mode • Heartbeat OFF active)"
+                : "⚪ Подсветка выключена (режим «Без подсветки» • Heartbeat OFF активен)"
             wledStatusLabel.textColor = .secondaryLabelColor
         } else if !wled.ipAddress.isEmpty {
-            wledStatusLabel.stringValue = "Статус WLED: Отключено (Heartbeat OFF удерживает ленту \(wled.ipAddress) выключенной)"
+            wledStatusLabel.stringValue = isEn
+                ? "WLED Status: Disabled (Heartbeat OFF keeps strip \(wled.ipAddress) off)"
+                : "Статус WLED: Отключено (Heartbeat OFF удерживает ленту \(wled.ipAddress) выключенной)"
             wledStatusLabel.textColor = .secondaryLabelColor
         } else {
-            wledStatusLabel.stringValue = "Статус WLED: Отключено (кнопки WLED скрыты в веб-интерфейсе)"
+            wledStatusLabel.stringValue = isEn
+                ? "WLED Status: Disabled (WLED buttons hidden in Web UI)"
+                : "Статус WLED: Отключено (кнопки WLED скрыты в веб-интерфейсе)"
             wledStatusLabel.textColor = .secondaryLabelColor
         }
     }
@@ -1573,15 +1637,16 @@ public final class SettingsWindow: NSWindowController {
         }
 
         let sorted = rates.sorted()
+        let unit = isEn ? "kHz" : "кГц"
         for rate in sorted {
             let khz = rate / 1000.0
             let title: String
             if khz == 352.8 {
-                title = "352.8 кГц (DXD)"
+                title = "352.8 \(unit) (DXD)"
             } else if khz.truncatingRemainder(dividingBy: 1) == 0 {
-                title = String(format: "%.0f кГц", khz)
+                title = String(format: "%.0f %@", khz, unit)
             } else {
-                title = String(format: "%.1f кГц", khz)
+                title = String(format: "%.1f %@", khz, unit)
             }
             sampleRatePopUp.addItem(withTitle: title)
             sampleRatePopUp.lastItem?.tag = Int(rate)
@@ -1594,14 +1659,17 @@ public final class SettingsWindow: NSWindowController {
     }
 
     private func setupListeners() {
-        BitPerfectLogMonitor.shared.onFormatChanged = { [weak self] _, _, desc in
+        BitPerfectLogMonitor.shared.addFormatChangedObserver(id: "SettingsWindow") { [weak self] _, _, desc in
             DispatchQueue.main.async {
-                self?.streamQualityLabel.stringValue = "Текущий поток: \(desc)"
+                guard let self = self else { return }
+                self.streamQualityLabel.stringValue = self.isEn
+                    ? "Current stream: \(desc)"
+                    : "Текущий поток: \(desc)"
                 MenuManager.shared.updateMenuState()
             }
         }
 
-        CoreAudioDeviceManager.shared.onDevicesChanged = { [weak self] _ in
+        CoreAudioDeviceManager.shared.addDevicesChangedObserver(id: "SettingsWindow") { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
                 self?.refreshState()
             }
@@ -1619,7 +1687,7 @@ public final class SettingsWindow: NSWindowController {
             }
         }
 
-        DLNADiscoveryManager.shared.onDevicesChanged = { [weak self] _ in
+        DLNADiscoveryManager.shared.addDevicesChangedObserver(id: "SettingsWindow") { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
                 self?.updateDLNAStatusLabel()
                 self?.refreshState()
@@ -1637,6 +1705,32 @@ public final class SettingsWindow: NSWindowController {
 
     @objc private func okButtonClicked() {
         window?.makeFirstResponder(nil)
+        if UPnPMediaRendererServer.shared.isEnabled, let field = upnpFriendlyNameField {
+            let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = text.isEmpty ? "Apple Music Remote (Mac)" : text
+            if name != SSDPService.shared.friendlyName {
+                SSDPService.shared.friendlyName = name
+                SSDPService.shared.sendAliveNotifications()
+            }
+        }
+        if PlaybackStateStore.shared.isVolumeLockedTo100 && ExternalAmpTCPController.shared.isEnabled,
+           extAmpIPField != nil, extAmpPortField != nil, extAmpMaxCapField != nil {
+            let selectedProf = (extAmpProfilePopUp?.selectedItem?.representedObject as? String).flatMap(ExternalAmpProfile.init(rawValue:)) ?? ExternalAmpTCPController.shared.profile
+            let host = extAmpIPField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parsedPort = UInt16(extAmpPortField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)) ?? selectedProf.defaultPort
+            let parsedCap = Int(extAmpMaxCapField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)) ?? ExternalAmpTCPController.shared.maxVolumeCap
+            ExternalAmpTCPController.shared.updateConfiguration(
+                profile: selectedProf,
+                host: host,
+                port: parsedPort,
+                maxVolumeCap: parsedCap
+            )
+        }
+        if WLEDDDPController.shared.isEnabled, wledIPField != nil, wledLedCountField != nil {
+            let ip = wledIPField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parsedLeds = Int(wledLedCountField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+            _ = WLEDDDPController.shared.updateSettings(ip: ip, ledCount: parsedLeds)
+        }
         window?.close()
     }
 
@@ -1652,10 +1746,9 @@ public final class SettingsWindow: NSWindowController {
 
     @objc private func launchAtLoginToggled(_ sender: NSSwitch) {
         let enable = (sender.state == .on)
-        let success = LaunchAtLoginManager.shared.setEnabled(enable)
-        if !success {
-            sender.state = LaunchAtLoginManager.shared.isEnabled ? .on : .off
-        }
+        _ = LaunchAtLoginManager.shared.setEnabled(enable)
+        LaunchAtLoginManager.shared.refreshStatus()
+        sender.state = LaunchAtLoginManager.shared.isEnabled ? .on : .off
         MenuManager.shared.updateMenuState()
     }
 
@@ -1714,6 +1807,32 @@ public final class SettingsWindow: NSWindowController {
                     DLNADiscoveryManager.shared.stopPlayback()
                     DLNADiscoveryManager.shared.deselectRenderer()
                     AudioProcessTapService.shared.stopCapture()
+                }
+                let (wasMuted, restoreVol) = PlaybackStateStore.shared.withLock { () -> (Bool, Int) in
+                    let m = PlaybackStateStore.shared.isDLNAMuted
+                    let v = PlaybackStateStore.shared.preDLNAVolume > 0 ? PlaybackStateStore.shared.preDLNAVolume : 100
+                    PlaybackStateStore.shared.isDLNAMuted = false
+                    return (m, v)
+                }
+                if wasMuted {
+                    AudioProcessTapService.shared.setMutingGuardZeroFill(false)
+                    if AudioDuckingController.shared.isDucked {
+                        let duckedVol = AudioDuckingController.shared.currentDuckedVolume
+                        PlaybackStateStore.shared.withLock {
+                            PlaybackStateStore.shared.simulatedVolume = duckedVol
+                        }
+                        if let app = MusicAppProvider.shared.getMusicApp() {
+                            app.soundVolume = duckedVol
+                        }
+                        PlaybackStateStore.shared.invalidateStatusCache()
+                    } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                        if let app = MusicAppProvider.shared.getMusicApp() {
+                            app.soundVolume = 100
+                        }
+                        PlaybackStateStore.shared.invalidateStatusCache()
+                    } else {
+                        _ = MusicBridge.shared.setVolume(restoreVol)
+                    }
                 }
                 _ = CoreAudioDeviceManager.shared.setDefaultOutputDevice(id: devID)
                 WebSocketServer.shared.broadcastAudioDevices()
@@ -1841,13 +1960,17 @@ public final class SettingsWindow: NSWindowController {
             maxVolumeCap: parsedCap
         )
         guard !host.isEmpty else {
-            extAmpStatusLabel.stringValue = "🟠 Укажите IP-адрес усилителя для проверки соединения"
+            extAmpStatusLabel.stringValue = isEn
+                ? "🟠 Enter the amplifier IP address to test connection"
+                : "🟠 Укажите IP-адрес усилителя для проверки соединения"
             extAmpStatusLabel.textColor = .systemOrange
             return
         }
         testExtAmpConnectionButton.isEnabled = false
-        testExtAmpConnectionButton.title = "Проверка..."
-        extAmpStatusLabel.stringValue = "⏳ Проверка TCP-соединения с \(selectedProf.displayName) (\(host):\(parsedPort))..."
+        testExtAmpConnectionButton.title = isEn ? "Testing..." : "Проверка..."
+        extAmpStatusLabel.stringValue = isEn
+            ? "⏳ Testing TCP connection to \(selectedProf.displayName) (\(host):\(parsedPort))..."
+            : "⏳ Проверка TCP-соединения с \(selectedProf.displayName) (\(host):\(parsedPort))..."
         extAmpStatusLabel.textColor = .secondaryLabelColor
 
         ExternalAmpTCPController.shared.testConnection(
@@ -1857,7 +1980,7 @@ public final class SettingsWindow: NSWindowController {
         ) { [weak self] success, message in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.testExtAmpConnectionButton.title = "Проверить соединение"
+                self.testExtAmpConnectionButton.title = self.isEn ? "Test Connection" : "Проверить соединение"
                 self.testExtAmpConnectionButton.isEnabled = PlaybackStateStore.shared.isVolumeLockedTo100 && ExternalAmpTCPController.shared.isEnabled
                 self.extAmpStatusLabel.stringValue = message
                 self.extAmpStatusLabel.textColor = success ? .systemGreen : .systemRed
@@ -1896,17 +2019,23 @@ public final class SettingsWindow: NSWindowController {
         let isVolLocked = PlaybackStateStore.shared.isVolumeLockedTo100
         let ampCtrl = ExternalAmpTCPController.shared
         if !isVolLocked {
-            extAmpStatusLabel.stringValue = "⚪ Недоступно: включите «Фиксация громкости 100%» для управления громкостью усилителя"
+            extAmpStatusLabel.stringValue = isEn
+                ? "⚪ Unavailable: enable 'Lock Volume to 100%' to control amplifier volume"
+                : "⚪ Недоступно: включите «Фиксация громкости 100%» для управления громкостью усилителя"
             extAmpStatusLabel.textColor = .secondaryLabelColor
             return
         }
         if !ampCtrl.isEnabled {
-            extAmpStatusLabel.stringValue = "Статус: Управление громкостью внешнего усилителя отключено"
+            extAmpStatusLabel.stringValue = isEn
+                ? "Status: External amplifier volume control disabled"
+                : "Статус: Управление громкостью внешнего усилителя отключено"
             extAmpStatusLabel.textColor = .secondaryLabelColor
             return
         }
         if ampCtrl.host.isEmpty {
-            extAmpStatusLabel.stringValue = "🟠 Укажите IP-адрес усилителя (\(ampCtrl.profile.displayName)) и нажмите «Применить»"
+            extAmpStatusLabel.stringValue = isEn
+                ? "🟠 Enter amplifier IP address (\(ampCtrl.profile.displayName)) and click 'Apply'"
+                : "🟠 Укажите IP-адрес усилителя (\(ampCtrl.profile.displayName)) и нажмите «Применить»"
             extAmpStatusLabel.textColor = .systemOrange
             return
         }
@@ -1916,20 +2045,28 @@ public final class SettingsWindow: NSWindowController {
                 let offset = ampCtrl.currentTrackVolumeOffset
                 let offsetStr = offset >= 0 ? "+\(offset)%" : "\(offset)%"
                 let smartTag = (ampCtrl.isLowVolumeSmartNormEnabled && ampCtrl.baseListeningVolume > 0 && ampCtrl.baseListeningVolume < 40) ? " [Smart Low-Vol]" : ""
-                soundCheckSuffix = String(format: " • SoundCheck%@: %+.1f дБ (%@, база %d%%)", smartTag, gainDb, offsetStr, ampCtrl.baseListeningVolume)
+                soundCheckSuffix = isEn
+                    ? String(format: " • SoundCheck%@: %+.1f dB (%@, base %d%%)", smartTag, gainDb, offsetStr, ampCtrl.baseListeningVolume)
+                    : String(format: " • SoundCheck%@: %+.1f дБ (%@, база %d%%)", smartTag, gainDb, offsetStr, ampCtrl.baseListeningVolume)
             } else {
-                soundCheckSuffix = " • SoundCheck: ожидание трека"
+                soundCheckSuffix = isEn ? " • SoundCheck: awaiting track" : " • SoundCheck: ожидание трека"
             }
         }
         if ampCtrl.isConnected {
             let muteBadge = ampCtrl.isMuted ? " • MUTE" : ""
-            extAmpStatusLabel.stringValue = "🟢 Подключен: \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port)) • Громкость: \(ampCtrl.currentVolume)% / макс. \(ampCtrl.maxVolumeCap)%\(muteBadge)\(soundCheckSuffix)"
+            extAmpStatusLabel.stringValue = isEn
+                ? "🟢 Connected: \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port)) • Volume: \(ampCtrl.currentVolume)% / max \(ampCtrl.maxVolumeCap)%\(muteBadge)\(soundCheckSuffix)"
+                : "🟢 Подключен: \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port)) • Громкость: \(ampCtrl.currentVolume)% / макс. \(ampCtrl.maxVolumeCap)%\(muteBadge)\(soundCheckSuffix)"
             extAmpStatusLabel.textColor = .systemGreen
         } else if let err = ampCtrl.lastError, !err.isEmpty {
-            extAmpStatusLabel.stringValue = "🟠 Ожидание сокета \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port)): \(err)\(soundCheckSuffix)"
+            extAmpStatusLabel.stringValue = isEn
+                ? "🟠 Waiting for socket \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port)): \(err)\(soundCheckSuffix)"
+                : "🟠 Ожидание сокета \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port)): \(err)\(soundCheckSuffix)"
             extAmpStatusLabel.textColor = .systemOrange
         } else {
-            extAmpStatusLabel.stringValue = "🟠 Подключение к \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port))...\(soundCheckSuffix)"
+            extAmpStatusLabel.stringValue = isEn
+                ? "🟠 Connecting to \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port))...\(soundCheckSuffix)"
+                : "🟠 Подключение к \(ampCtrl.profile.displayName) (\(ampCtrl.host):\(ampCtrl.port))...\(soundCheckSuffix)"
             extAmpStatusLabel.textColor = .systemOrange
         }
     }
@@ -1982,28 +2119,56 @@ public final class SettingsWindow: NSWindowController {
 
     @objc private func discoverDLNAToggled(_ sender: NSSwitch) {
         let isEnabled = (sender.state == .on)
-        DLNADiscoveryManager.shared.setEnabled(isEnabled)
-        if !isEnabled && DLNADiscoveryManager.shared.hasActiveRenderer {
-            DLNADiscoveryManager.shared.stop()
+        let hadActiveRenderer = DLNADiscoveryManager.shared.hasActiveRenderer
+        if !isEnabled && hadActiveRenderer {
+            DLNADiscoveryManager.shared.stopPlayback()
             DLNADiscoveryManager.shared.deselectRenderer()
-            if PlaybackStateStore.shared.isDLNAMuted {
-                let restoreVol = PlaybackStateStore.shared.preDLNAVolume > 0 ? PlaybackStateStore.shared.preDLNAVolume : 100
-                _ = MusicBridge.shared.setVolume(restoreVol)
+            AudioProcessTapService.shared.stopCapture()
+            let (wasMuted, restoreVol) = PlaybackStateStore.shared.withLock { () -> (Bool, Int) in
+                let m = PlaybackStateStore.shared.isDLNAMuted
+                let v = PlaybackStateStore.shared.preDLNAVolume > 0 ? PlaybackStateStore.shared.preDLNAVolume : 100
                 PlaybackStateStore.shared.isDLNAMuted = false
+                return (m, v)
+            }
+            if wasMuted {
+                AudioProcessTapService.shared.setMutingGuardZeroFill(false)
+                if AudioDuckingController.shared.isDucked {
+                    let duckedVol = AudioDuckingController.shared.currentDuckedVolume
+                    PlaybackStateStore.shared.withLock {
+                        PlaybackStateStore.shared.simulatedVolume = duckedVol
+                    }
+                    if let app = MusicAppProvider.shared.getMusicApp() {
+                        app.soundVolume = duckedVol
+                    }
+                    PlaybackStateStore.shared.invalidateStatusCache()
+                } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                    if let app = MusicAppProvider.shared.getMusicApp() {
+                        app.soundVolume = 100
+                    }
+                    PlaybackStateStore.shared.invalidateStatusCache()
+                } else {
+                    _ = MusicBridge.shared.setVolume(restoreVol)
+                }
             }
         }
+        DLNADiscoveryManager.shared.setEnabled(isEnabled)
         updateDLNAStatusLabel()
         refreshState()
         WebSocketServer.shared.broadcastAudioDevices()
     }
 
     private func updateDLNAStatusLabel() {
+        let isEn = SettingsTab.isEn
         if DLNADiscoveryManager.shared.isEnabled {
             let count = DLNADiscoveryManager.shared.getDiscoveredCount()
-            dlnaStatusLabel.stringValue = "🟢 Поиск DLNA / BluOS активен (найдено устройств: \(count))"
+            dlnaStatusLabel.stringValue = isEn
+                ? "🟢 DLNA / BluOS discovery active (devices found: \(count))"
+                : "🟢 Поиск DLNA / BluOS активен (найдено устройств: \(count))"
             dlnaStatusLabel.textColor = .systemGreen
         } else {
-            dlnaStatusLabel.stringValue = "Статус DLNA: Поиск внешних рендереров отключен"
+            dlnaStatusLabel.stringValue = isEn
+                ? "DLNA Status: External renderer discovery disabled"
+                : "Статус DLNA: Поиск внешних рендереров отключен"
             dlnaStatusLabel.textColor = .secondaryLabelColor
         }
     }
@@ -2143,12 +2308,14 @@ public final class SettingsWindow: NSWindowController {
         }
 
         let isOnline = ClientDeviceManager.shared.isDeviceOnline(deviceId: dev.deviceId)
-        let titleLabel = NSTextField(labelWithString: "Настройки устройства: \(dev.deviceName)")
+        let titleLabel = NSTextField(labelWithString: isEn ? "Device Settings: \(dev.deviceName)" : "Настройки устройства: \(dev.deviceName)")
         titleLabel.font = NSFont.systemFont(ofSize: 14, weight: .bold)
         titleLabel.textColor = .labelColor
 
         let ipPart = dev.lastIPAddress.isEmpty ? "LAN" : dev.lastIPAddress
-        let subLabel = NSTextField(labelWithString: "\(isOnline ? "🟢 Онлайн" : "⚪ Офлайн") • Код: \(dev.shortId) • IP: \(ipPart)")
+        let onlineStr = isOnline ? (isEn ? "🟢 Online" : "🟢 Онлайн") : (isEn ? "⚪ Offline" : "⚪ Офлайн")
+        let codeWord = isEn ? "Code" : "Код"
+        let subLabel = NSTextField(labelWithString: "\(onlineStr) • \(codeWord): \(dev.shortId) • IP: \(ipPart)")
         subLabel.font = NSFont.systemFont(ofSize: 11.5, weight: .regular)
         subLabel.textColor = .secondaryLabelColor
 
@@ -2177,15 +2344,27 @@ public final class SettingsWindow: NSWindowController {
         lockSwitch.identifier = itemIdentifier
         self.activeDeviceLockSwitch = lockSwitch
 
-        let revokeBtn = NSButton(title: "Отозвать доступ", target: self, action: #selector(revokeClientDeviceClicked(_:)))
+        let revokeBtn = NSButton(title: isEn ? "Revoke Access" : "Отозвать доступ", target: self, action: #selector(revokeClientDeviceClicked(_:)))
         revokeBtn.bezelStyle = .rounded
         revokeBtn.controlSize = .small
         revokeBtn.identifier = itemIdentifier
 
         let rows: [NSView] = [
-            makeControlRow(title: "Имя устройства", subtitle: "Отображаемое имя в списке клиентов и в PWA", control: nameField),
-            makeToggleRow(title: "Экран блокировки и Dynamic Island", subtitle: "Управление воспроизведением на заблокированном экране и в Пункте управления", toggle: lockSwitch),
-            makeControlRow(title: "Авторизация устройства", subtitle: "UID: \(dev.deviceId)", control: revokeBtn)
+            makeControlRow(
+                title: isEn ? "Device Name" : "Имя устройства",
+                subtitle: isEn ? "Display name in client list and PWA" : "Отображаемое имя в списке клиентов и в PWA",
+                control: nameField
+            ),
+            makeToggleRow(
+                title: isEn ? "Lock Screen & Dynamic Island" : "Экран блокировки и Dynamic Island",
+                subtitle: isEn ? "Playback controls on Lock Screen and Control Center" : "Управление воспроизведением на заблокированном экране и в Пункте управления",
+                toggle: lockSwitch
+            ),
+            makeControlRow(
+                title: isEn ? "Device Authorization" : "Авторизация устройства",
+                subtitle: "UID: \(dev.deviceId)",
+                control: revokeBtn
+            )
         ]
 
         let card = SettingsCardView()
@@ -2231,7 +2410,7 @@ public final class SettingsWindow: NSWindowController {
         let footerSpacer = NSView()
         footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let doneBtn = NSButton(title: "Готово", target: self, action: #selector(saveAndCloseDeviceSettingsSheet))
+        let doneBtn = NSButton(title: isEn ? "Done" : "Готово", target: self, action: #selector(saveAndCloseDeviceSettingsSheet))
         doneBtn.bezelStyle = .rounded
         doneBtn.keyEquivalent = "\r"
         doneBtn.bezelColor = .systemPink

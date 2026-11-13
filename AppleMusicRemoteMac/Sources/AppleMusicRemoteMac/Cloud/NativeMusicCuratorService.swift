@@ -127,9 +127,6 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
     private func normalizedSentenceVector(for text: String) -> [Double]? {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return nil }
-        if hasPreloadedWeights, let permanent = preloadedSentenceVectors[clean] {
-            return permanent
-        }
         nlEngineLock.lock()
         defer { nlEngineLock.unlock() }
         if let permanent = preloadedSentenceVectors[clean] {
@@ -153,9 +150,6 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
     private func normalizedWordVector(for word: String) -> [Double]? {
         let clean = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard clean.count >= 2 else { return nil }
-        if hasPreloadedWeights, let permanent = preloadedWordVectors[clean] {
-            return permanent
-        }
         nlEngineLock.lock()
         defer { nlEngineLock.unlock() }
         if let permanent = preloadedWordVectors[clean] {
@@ -227,10 +221,10 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
                 }
             }
         }
-        nlEngineLock.unlock()
         lock.withLock {
             hasPreloadedWeights = true
         }
+        nlEngineLock.unlock()
 
         // 2. Warm NLTagger LinguisticData lemmatizer & NER weights
         _ = extractTokensAndEntities(from: "Late-night noir jazz with warm saxophone Miles Davis ночной джаз")
@@ -1166,12 +1160,14 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
             // 24 uncached CoreML sentence-embedding neural evaluations on arbitrary song titles.
             let sentVec = primaryArchDescriptorKey.isEmpty ? nil : normalizedSentenceVector(for: primaryArchDescriptorKey)
             var wVecs: [(String, [Double])] = []
+            nlEngineLock.lock()
             for tok in sortedTokens {
                 if let permanent = preloadedWordVectors[tok] {
                     wVecs.append((tok, permanent))
                     if wVecs.count >= 5 { break }
                 }
             }
+            nlEngineLock.unlock()
 
             return SongSemanticProfile(
                 normArtist: normArtist,
@@ -1502,7 +1498,30 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
         }
 
         queryBuckets.sort { $0.0 < $1.0 }
-        let curatedSongs = filterAndInterleaveWaveSongs(queryBuckets: queryBuckets, excluding: [], maxCount: 24)
+        var curatedSongs = filterAndInterleaveWaveSongs(queryBuckets: queryBuckets, excluding: [], maxCount: 24)
+
+        if curatedSongs.isEmpty && !Task.isCancelled && !PlaybackRouter.shared.isTestingEnvironment {
+            var localPool = LibraryService.shared.getCachedLibrarySongs()
+            if localPool.isEmpty {
+                localPool = LibraryService.shared.getLibrarySongs()
+            }
+            for ls in localPool.shuffled().prefix(20) {
+                curatedSongs.append([
+                    "id": ls.id,
+                    "numeric_id": ls.numericId ?? 0,
+                    "name": ls.name,
+                    "artist": ls.artist,
+                    "album": ls.album,
+                    "duration": ls.duration,
+                    "artwork_url": ls.artworkUrl,
+                    "is_local": true
+                ])
+            }
+            if !curatedSongs.isEmpty {
+                curatedSongs = orderSongsBySemanticFlow(curatedSongs)
+                NSLog("[AICurator] 💿 Catalog unreachable in curateSessionFromTrack; populated %d tracks from local Music.app library", curatedSongs.count)
+            }
+        }
 
         var curatedAlbums: [[String: Any]] = []
         var seenAlbumKeys = Set<String>()
@@ -1581,39 +1600,88 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
                 return true
             }
             guard canProceed else { return nil }
-            defer {
-                lock.withLock { isFoundationModelsInFlight = false }
-            }
 
             let instructions = preferEnglish
                 ? Self.curatorInstructionsEn
                 : Self.curatorInstructionsRu
 
             // Strict 2.2-second non-blocking timeout so M1 LLM cold-start or XPC stall never blocks curation
-            let rawContent: String? = await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
-                let gate = OnceResumeGate<String?>()
-                let llmTask = Task.detached(priority: .userInitiated) {
-                    do {
-                        let session = LanguageModelSession(instructions: instructions)
-                        let response = try await session.respond(to: prompt)
-                        _ = gate.tryResume(continuation, with: response.content)
-                    } catch {
-                        NSLog("[AICurator] FoundationModels error: %@", error.localizedDescription)
+            let gate = OnceResumeGate<String?>()
+            final class LLMTaskState: @unchecked Sendable {
+                private let lock = NSLock()
+                private var llmTask: Task<Void, Never>?
+                private var continuation: CheckedContinuation<String?, Never>?
+                private var timedOut = false
+
+                func setContinuation(_ c: CheckedContinuation<String?, Never>) {
+                    lock.withLock { continuation = c }
+                }
+                func setTask(_ t: Task<Void, Never>) {
+                    lock.withLock { llmTask = t }
+                }
+                func markTimedOut() {
+                    lock.withLock { timedOut = true }
+                }
+                var didTimeOut: Bool {
+                    lock.withLock { timedOut }
+                }
+                func takeForCancel() -> (Task<Void, Never>?, CheckedContinuation<String?, Never>?) {
+                    lock.withLock { (llmTask, continuation) }
+                }
+            }
+            let taskState = LLMTaskState()
+
+            let rawContent: String? = await withTaskCancellationHandler {
+                await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+                    taskState.setContinuation(continuation)
+                    if Task.isCancelled {
+                        self.lock.withLock { self.isFoundationModelsInFlight = false }
                         _ = gate.tryResume(continuation, with: nil)
+                        return
+                    }
+                    let llmTask = Task.detached(priority: .userInitiated) {
+                        defer {
+                            self.lock.withLock { self.isFoundationModelsInFlight = false }
+                        }
+                        do {
+                            let session = LanguageModelSession(instructions: instructions)
+                            let response = try await session.respond(to: prompt)
+                            _ = gate.tryResume(continuation, with: response.content)
+                        } catch {
+                            if !Task.isCancelled {
+                                NSLog("[AICurator] FoundationModels error: %@", error.localizedDescription)
+                            }
+                            _ = gate.tryResume(continuation, with: nil)
+                        }
+                    }
+                    taskState.setTask(llmTask)
+                    if Task.isCancelled {
+                        llmTask.cancel()
+                        _ = gate.tryResume(continuation, with: nil)
+                        return
+                    }
+                    Task.detached(priority: .utility) {
+                        try? await Task.sleep(nanoseconds: 2_200_000_000)
+                        taskState.markTimedOut()
+                        if gate.tryResume(continuation, with: nil) {
+                            llmTask.cancel()
+                            NSLog("[AICurator] ⏱ FoundationModels timed out (>2.2s on M1); engaging 10-min cooldown & falling back to NaturalLanguage 512-D")
+                        }
                     }
                 }
-                Task.detached(priority: .utility) {
-                    try? await Task.sleep(nanoseconds: 2_200_000_000)
-                    if gate.tryResume(continuation, with: nil) {
-                        llmTask.cancel()
-                        NSLog("[AICurator] ⏱ FoundationModels timed out (>2.2s on M1); engaging 10-min cooldown & falling back to NaturalLanguage 512-D")
-                    }
+            } onCancel: {
+                let (t, cont) = taskState.takeForCancel()
+                t?.cancel()
+                if let cont = cont {
+                    _ = gate.tryResume(cont, with: nil)
                 }
             }
 
             guard let content = rawContent else {
-                lock.withLock {
-                    foundationModelsCooldownUntil = Date().addingTimeInterval(600)
+                if (taskState.didTimeOut || !Task.isCancelled) && !Task.isCancelled {
+                    lock.withLock {
+                        foundationModelsCooldownUntil = Date().addingTimeInterval(600)
+                    }
                 }
                 return nil
             }

@@ -10,6 +10,68 @@ import CoreAudio
 extension WebSocketServer {
     // MARK: - Message Routing & Dispatcher
 
+    private static let curateTasksLock = NSLock()
+    private static var activeCurateTasks: [UUID: Task<Void, Never>] = [:]
+    private static let clientLogRateLock = NSLock()
+    private static var clientLogTimestamps: [UUID: [TimeInterval]] = [:]
+
+    internal func cancelCurateTask(for clientId: UUID) {
+        Self.curateTasksLock.withLock {
+            Self.activeCurateTasks.removeValue(forKey: clientId)?.cancel()
+        }
+        curateTaskLock.withLock {
+            activeCurateTasks.removeValue(forKey: clientId)?.cancel()
+        }
+        Self.clientLogRateLock.withLock {
+            _ = Self.clientLogTimestamps.removeValue(forKey: clientId)
+        }
+    }
+
+    internal func cancelAllCurateTasks() {
+        Self.curateTasksLock.withLock {
+            for (_, task) in Self.activeCurateTasks {
+                task.cancel()
+            }
+            Self.activeCurateTasks.removeAll()
+        }
+        curateTaskLock.withLock {
+            for (_, task) in activeCurateTasks {
+                task.cancel()
+            }
+            activeCurateTasks.removeAll()
+            activeCurateTask?.cancel()
+            activeCurateTask = nil
+        }
+        Self.clientLogRateLock.withLock {
+            Self.clientLogTimestamps.removeAll()
+        }
+    }
+
+    private func sendCancelledCurateResponse(action: String, id: String?, requestId: Int? = nil, to connection: NWConnection) {
+        var dataDict: [String: Any] = ["status": "cancelled"]
+        if let reqNum = requestId {
+            dataDict["request_id"] = reqNum
+        }
+        var payload: [String: Any] = [
+            "action": action,
+            "event": action,
+            "type": action,
+            "status": "cancelled",
+            "data": dataDict
+        ]
+        if let reqId = id {
+            payload["id"] = reqId
+        }
+        if let reqNum = requestId {
+            payload["request_id"] = reqNum
+        }
+        if JSONSerialization.isValidJSONObject(payload),
+           let jsonBytes = try? JSONSerialization.data(withJSONObject: payload),
+           let text = String(data: jsonBytes, encoding: .utf8) {
+            sendText(text, to: connection)
+        }
+    }
+
     func processClientTextMessage(_ text: String, clientId: UUID, connection: NWConnection) async {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -26,12 +88,44 @@ extension WebSocketServer {
 
         let actionLower = action.lowercased()
         if actionLower == "client_log" {
-            let msg = (params["message"] as? String) ?? ""
-            let level = (params["level"] as? String) ?? "info"
+            if !ClientDeviceManager.shared.isConnectionAuthorized(connectionId: clientId) {
+                let now = Date().timeIntervalSince1970
+                let allowed: Bool = Self.clientLogRateLock.withLock {
+                    var recent = (Self.clientLogTimestamps[clientId] ?? []).filter { now - $0 < 10.0 }
+                    guard recent.count < 10 else {
+                        Self.clientLogTimestamps[clientId] = recent
+                        return false
+                    }
+                    recent.append(now)
+                    Self.clientLogTimestamps[clientId] = recent
+                    return true
+                }
+                guard allowed else { return }
+            }
+            let rawMsg = (params["message"] as? String) ?? ""
+            let sanitizedMsg = String(
+                rawMsg
+                    .replacingOccurrences(of: "\r", with: " ")
+                    .replacingOccurrences(of: "\n", with: " ")
+                    .prefix(500)
+            )
+            let rawLevel = (params["level"] as? String) ?? "info"
+            let level = String(
+                rawLevel
+                    .replacingOccurrences(of: "\r", with: "")
+                    .replacingOccurrences(of: "\n", with: "")
+                    .prefix(32)
+            )
             let devRecord = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId)
-            let devName = devRecord?.deviceName ?? (params["device_name"] as? String) ?? "PWA"
-            if !msg.isEmpty {
-                DiagnosticLogger.shared.logClientEvent(device: devName, level: level, message: msg)
+            let rawDevName = devRecord?.deviceName ?? (params["device_name"] as? String) ?? "PWA"
+            let devName = String(
+                rawDevName
+                    .replacingOccurrences(of: "\r", with: "")
+                    .replacingOccurrences(of: "\n", with: "")
+                    .prefix(64)
+            )
+            if !sanitizedMsg.isEmpty {
+                DiagnosticLogger.shared.logClientEvent(device: devName, level: level, message: sanitizedMsg)
             }
             return
         }
@@ -73,9 +167,35 @@ extension WebSocketServer {
 
         if actionLower == "update_device_settings" {
             let currentRecord = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId)
-            let targetDeviceId = (params["device_id"] as? String) ?? currentRecord?.deviceId ?? ""
+            let boundDeviceId = ClientDeviceManager.shared.getDeviceId(forConnection: clientId)
+            let rawTargetId = (params["device_id"] as? String) ?? (params["deviceId"] as? String) ?? currentRecord?.deviceId ?? ""
+            let targetDeviceId = rawTargetId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard !targetDeviceId.isEmpty else {
                 sendError(action: action, error: "Device ID not registered", id: id, to: connection)
+                return
+            }
+            let isCallerOwnDevice = (boundDeviceId != nil && boundDeviceId == targetDeviceId)
+            let remoteIP = extractRemoteIP(from: connection).lowercased()
+            let isLoopback = (remoteIP == "127.0.0.1" || remoteIP == "::1" || remoteIP == "localhost" || remoteIP == "::ffff:127.0.0.1")
+            let isAuthorized = ClientDeviceManager.shared.isConnectionAuthorized(connectionId: clientId)
+            guard isCallerOwnDevice || (isLoopback && boundDeviceId == nil) else {
+                sendError(action: action, error: "Unauthorized to modify another device's settings", id: id, to: connection)
+                return
+            }
+            if !isAuthorized {
+                guard isCallerOwnDevice else {
+                    sendError(action: action, error: "Device not authorized to modify settings", id: id, to: connection)
+                    return
+                }
+                if let newName = (params["device_name"] as? String) ?? (params["deviceName"] as? String),
+                   !newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ClientDeviceManager.shared.updateDeviceName(deviceId: targetDeviceId, name: newName)
+                }
+                if let updated = ClientDeviceManager.shared.getDevice(deviceId: targetDeviceId) {
+                    sendSuccess(action: action, data: updated.dictionary, id: id, to: connection)
+                } else {
+                    sendError(action: action, error: "Device not found", id: id, to: connection)
+                }
                 return
             }
             if let lockEnabled = (params["lock_screen_controls"] as? Bool) ?? (params["lockScreenControls"] as? Bool) {
@@ -627,7 +747,7 @@ extension WebSocketServer {
                 // 1. Fast path for local library playlists (including added cloud playlists like "Мои любимые треки"):
                 let localPlaylists = LibraryService.shared.getPlaylists()
                 let lowerPl = plName.lowercased()
-                let isEssentials = lowerPl.contains("essentials") || plId.contains("20e9f373919da080c2f90eaf2e62e914")
+                let isEssentials = lowerPl.contains("essentials")
                 let isChill = lowerPl.contains("chill") || lowerPl.contains("чилл")
                 let isNewMusic = lowerPl.contains("new music") || lowerPl.contains("новинк")
                 let isFavorites = lowerPl.contains("favorites") || lowerPl.contains("избранн") || lowerPl.contains("в моём вкусе") || lowerPl.contains("в моем вкусе")
@@ -1010,7 +1130,16 @@ extension WebSocketServer {
             let source = (params["scope"] as? String) ?? (params["source"] as? String) ?? "all"
             let limit = (params["limit"] as? Int) ?? 50
             let offset = (params["offset"] as? Int) ?? 0
-            let results = await cloud.search(query: query, country: country, source: source, limit: limit, offset: offset)
+            let requestId = (json["request_id"] as? Int)
+                ?? (params["request_id"] as? Int)
+                ?? (json["requestId"] as? Int)
+                ?? (params["requestId"] as? Int)
+                ?? (json["request_id"] as? NSNumber)?.intValue
+                ?? (params["request_id"] as? NSNumber)?.intValue
+            var results = await cloud.search(query: query, country: country, source: source, limit: limit, offset: offset)
+            if let reqId = requestId {
+                results["request_id"] = AnyCodable(reqId)
+            }
             sendSuccess(action: action, data: results, id: id, to: connection)
 
         case "get_developer_token":
@@ -1060,8 +1189,47 @@ extension WebSocketServer {
 
         case "set_dlna_discovery":
             let enabled = (params["enabled"] as? Bool) ?? false
+            if !enabled {
+                let hadDLNA = DLNADiscoveryManager.shared.hasActiveRenderer
+                if hadDLNA {
+                    DLNADiscoveryManager.shared.stopPlayback()
+                    DLNADiscoveryManager.shared.deselectRenderer()
+                    AudioProcessTapService.shared.stopCapture()
+                    if AudioProcessTapService.shared.hasSubscribers {
+                        AudioProcessTapService.shared.startCapture()
+                    }
+                }
+                let (wasMuted, restoreVol) = PlaybackStateStore.shared.withLock { () -> (Bool, Int) in
+                    let m = PlaybackStateStore.shared.isDLNAMuted
+                    let v = PlaybackStateStore.shared.preDLNAVolume > 0
+                        ? PlaybackStateStore.shared.preDLNAVolume
+                        : PlaybackStateStore.shared.simulatedVolume
+                    PlaybackStateStore.shared.isDLNAMuted = false
+                    return (m, v > 0 ? v : 100)
+                }
+                if wasMuted || hadDLNA {
+                    AudioProcessTapService.shared.setMutingGuardZeroFill(false)
+                    if wasMuted {
+                        if AudioDuckingController.shared.isDucked {
+                            let duckVol = AudioDuckingController.shared.currentDuckedVolume
+                            _ = PlaybackTransportController.shared.setVolume(duckVol, isFromDuckingController: true)
+                        } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                            if let app = MusicAppProvider.shared.getMusicApp() {
+                                app.soundVolume = 100
+                            }
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.simulatedVolume = 100
+                            }
+                            PlaybackStateStore.shared.invalidateStatusCache()
+                        } else {
+                            _ = MusicBridge.shared.setVolume(restoreVol)
+                        }
+                    }
+                }
+            }
             DLNADiscoveryManager.shared.setEnabled(enabled)
             broadcastAudioDevices()
+            broadcastStatus(includeQueue: false)
             sendSuccess(action: action, data: ["enabled": enabled, "status": "ok"], id: id, to: connection)
 
         case "get_local_dmr_status":
@@ -1131,13 +1299,42 @@ extension WebSocketServer {
             }
 
             if let devId = targetId, CoreAudioDeviceManager.shared.setDefaultOutputDevice(id: devId) {
+                let hadDLNA = DLNADiscoveryManager.shared.hasActiveRenderer
                 // If DLNA was active, stop DLNA playback and deselect renderer
-                if DLNADiscoveryManager.shared.hasActiveRenderer {
+                if hadDLNA {
                     DLNADiscoveryManager.shared.stopPlayback()
                     DLNADiscoveryManager.shared.deselectRenderer()
                     AudioProcessTapService.shared.stopCapture()
                     if AudioProcessTapService.shared.hasSubscribers {
                         AudioProcessTapService.shared.startCapture()
+                    }
+                }
+
+                let (wasMuted, restoreVol) = PlaybackStateStore.shared.withLock { () -> (Bool, Int) in
+                    let m = PlaybackStateStore.shared.isDLNAMuted
+                    let v = PlaybackStateStore.shared.preDLNAVolume > 0
+                        ? PlaybackStateStore.shared.preDLNAVolume
+                        : PlaybackStateStore.shared.simulatedVolume
+                    PlaybackStateStore.shared.isDLNAMuted = false
+                    return (m, v > 0 ? v : 100)
+                }
+                if wasMuted || hadDLNA {
+                    AudioProcessTapService.shared.setMutingGuardZeroFill(false)
+                    if wasMuted {
+                        if AudioDuckingController.shared.isDucked {
+                            let duckVol = AudioDuckingController.shared.currentDuckedVolume
+                            _ = PlaybackTransportController.shared.setVolume(duckVol, isFromDuckingController: true)
+                        } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                            if let app = MusicAppProvider.shared.getMusicApp() {
+                                app.soundVolume = 100
+                            }
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.simulatedVolume = 100
+                            }
+                            PlaybackStateStore.shared.invalidateStatusCache()
+                        } else {
+                            _ = MusicBridge.shared.setVolume(restoreVol)
+                        }
                     }
                 }
 
@@ -1422,7 +1619,8 @@ extension WebSocketServer {
 
         case "get_account_status", "account_health":
             let force = (params["refresh"] as? Bool) ?? false
-            let health = await AccountHealthService.shared.checkAccountHealth(forceRefresh: force)
+            let rawHealth = await AccountHealthService.shared.checkAccountHealth(forceRefresh: force)
+            let health = Self.maskedAccountHealth(rawHealth)
             sendSuccess(action: action, data: health, id: id, to: connection)
 
         case "get_wled_settings", "wled_settings":
@@ -1492,18 +1690,38 @@ extension WebSocketServer {
             let prompt = (params["prompt"] as? String) ?? (params["query"] as? String) ?? ""
             let storefront = (params["country"] as? String) ?? (params["storefront"] as? String) ?? MusicKitManager.shared.getUserStorefront()
             let autoPlay = (params["auto_play"] as? Bool) ?? (params["autoPlay"] as? Bool) ?? false
+            let requestId = (json["request_id"] as? Int)
+                ?? (params["request_id"] as? Int)
+                ?? (json["requestId"] as? Int)
+                ?? (params["requestId"] as? Int)
+                ?? (json["request_id"] as? NSNumber)?.intValue
+                ?? (params["request_id"] as? NSNumber)?.intValue
             let task = Task.detached(priority: .userInitiated) { [weak self] in
-                guard let self = self, !Task.isCancelled else { return }
+                guard let self = self else { return }
+                if Task.isCancelled {
+                    self.sendCancelledCurateResponse(action: action, id: id, requestId: requestId, to: connection)
+                    return
+                }
                 var curated = await NativeMusicCuratorService.shared.curateMusicSession(prompt: prompt, storefront: storefront)
-                guard !Task.isCancelled, (curated["status"] as? String) != "cancelled" else { return }
+                if Task.isCancelled || (curated["status"] as? String) == "cancelled" {
+                    self.sendCancelledCurateResponse(action: action, id: id, requestId: requestId, to: connection)
+                    return
+                }
                 if autoPlay {
                     curated["auto_play"] = true
                 }
+                if let reqId = requestId {
+                    curated["request_id"] = reqId
+                }
                 self.sendSuccess(action: action, data: curated, id: id, to: connection)
             }
+            Self.curateTasksLock.withLock {
+                Self.activeCurateTasks[clientId]?.cancel()
+                Self.activeCurateTasks[clientId] = task
+            }
             curateTaskLock.withLock {
-                activeCurateTask?.cancel()
-                activeCurateTask = task
+                activeCurateTasks[clientId]?.cancel()
+                activeCurateTasks[clientId] = task
             }
 
         case "ai_curate_from_track", "play_ai_track_vibe":
@@ -1512,23 +1730,43 @@ extension WebSocketServer {
             let album = (params["album"] as? String) ?? ""
             let storefront = (params["country"] as? String) ?? (params["storefront"] as? String) ?? MusicKitManager.shared.getUserStorefront()
             let autoPlay = (params["auto_play"] as? Bool) ?? (params["autoPlay"] as? Bool) ?? true
+            let requestId = (json["request_id"] as? Int)
+                ?? (params["request_id"] as? Int)
+                ?? (json["requestId"] as? Int)
+                ?? (params["requestId"] as? Int)
+                ?? (json["request_id"] as? NSNumber)?.intValue
+                ?? (params["request_id"] as? NSNumber)?.intValue
             let task = Task.detached(priority: .userInitiated) { [weak self] in
-                guard let self = self, !Task.isCancelled else { return }
+                guard let self = self else { return }
+                if Task.isCancelled {
+                    self.sendCancelledCurateResponse(action: action, id: id, requestId: requestId, to: connection)
+                    return
+                }
                 var curated = await NativeMusicCuratorService.shared.curateSessionFromTrack(
                     name: trackName,
                     artist: artist,
                     album: album,
                     storefront: storefront
                 )
-                guard !Task.isCancelled else { return }
+                if Task.isCancelled || (curated["status"] as? String) == "cancelled" {
+                    self.sendCancelledCurateResponse(action: action, id: id, requestId: requestId, to: connection)
+                    return
+                }
                 if autoPlay {
                     curated["auto_play"] = true
                 }
-                self.sendSuccess(action: "ai_curate", data: curated, id: id, to: connection)
+                if let reqId = requestId {
+                    curated["request_id"] = reqId
+                }
+                self.sendSuccess(action: action, data: curated, id: id, to: connection)
+            }
+            Self.curateTasksLock.withLock {
+                Self.activeCurateTasks[clientId]?.cancel()
+                Self.activeCurateTasks[clientId] = task
             }
             curateTaskLock.withLock {
-                activeCurateTask?.cancel()
-                activeCurateTask = task
+                activeCurateTasks[clientId]?.cancel()
+                activeCurateTasks[clientId] = task
             }
 
         case "toggle_ai_pin_prompt", "pin_ai_prompt":
@@ -1550,7 +1788,7 @@ extension WebSocketServer {
             settings["toggled_prompt"] = prompt
             settings["is_pinned"] = isPinned
             broadcastEvent(name: "ai_curator_settings", data: settings)
-            sendSuccess(action: "ai_curator_settings", data: settings, id: id, to: connection)
+            sendSuccess(action: action, data: settings, id: id, to: connection)
 
         case "get_artwork_palette", "artwork_palette":
             let url = (params["url"] as? String) ?? (params["artwork_url"] as? String)
@@ -1595,7 +1833,11 @@ extension WebSocketServer {
         }
     }
 
-    func processClientBinaryMessage(_ data: Data, connection: NWConnection) async {
+    func processClientBinaryMessage(_ data: Data, clientId: UUID? = nil, connection: NWConnection) async {
+        if let cid = clientId, !ClientDeviceManager.shared.isConnectionAuthorized(connectionId: cid) {
+            sendError(action: "binary", error: "Device pending authorization on Mac", id: nil, to: connection)
+            return
+        }
         sendSuccess(action: "binary", data: ["received_bytes": data.count], id: nil, to: connection)
     }
 

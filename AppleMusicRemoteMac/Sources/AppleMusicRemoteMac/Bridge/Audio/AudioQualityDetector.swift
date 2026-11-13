@@ -24,12 +24,15 @@ public final class AudioQualityDetector: @unchecked Sendable {
             return "Dolby Atmos"
         }
 
+        let isExplicitLossyKind = lKind.contains("aac") || lKind.contains("mp3") || lKind.contains("mpeg")
+        let isExplicitLosslessKind = lKind.contains("lossless") || lKind.contains("alac") || lKind.contains("aiff") || lKind.contains("wav") || lKind.contains("flac")
+
         // Real-time authoritative format from BitPerfectLogMonitor
         let activeRate = (sampleRate > 0) ? Double(sampleRate) : BitPerfectLogMonitor.shared.currentDetectedSampleRate
         let activeDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth
 
-        // 2. Hi-Res Lossless (strictly > 48 kHz: 88.2, 96, 176.4, 192 kHz)
-        if let rate = activeRate, rate > 48000.0 {
+        // 2. Hi-Res Lossless (strictly > 48 kHz: 88.2, 96, 176.4, 192 kHz, and not an explicit lossy AAC/MP3 file)
+        if !isExplicitLossyKind, let rate = activeRate, rate > 48000.0 {
             let khz = rate / 1000.0
             let khzStr = (khz.truncatingRemainder(dividingBy: 1) == 0) ? String(format: "%.0f", khz) : String(format: "%.1f", khz)
             let depthStr = "\(activeDepth ?? 24)-bit"
@@ -37,7 +40,7 @@ public final class AudioQualityDetector: @unchecked Sendable {
         }
 
         // 3. Lossless (ALAC, AIFF, WAV, FLAC, or bitRate >= 700 kbps)
-        if lKind.contains("lossless") || lKind.contains("alac") || lKind.contains("aiff") || lKind.contains("wav") || lKind.contains("flac") || (bitRate >= 700 && !lKind.contains("aac")) {
+        if isExplicitLosslessKind || (bitRate >= 700 && !isExplicitLossyKind) {
             let khzStr: String
             if let rate = activeRate, rate > 0 {
                 let khz = rate / 1000.0

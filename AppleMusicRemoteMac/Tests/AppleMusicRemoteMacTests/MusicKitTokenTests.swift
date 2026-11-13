@@ -4,6 +4,11 @@ import CryptoKit
 
 final class MusicKitTokenTests: XCTestCase {
 
+    override func tearDown() {
+        MusicKitManager.shared.reloadKeyForTesting()
+        super.tearDown()
+    }
+
     func testDeveloperTokenGeneration() {
         if MusicKitManager.shared.getDeveloperToken() == nil {
             MusicKitManager.shared.setPrivateKeyForTesting(P256.Signing.PrivateKey())

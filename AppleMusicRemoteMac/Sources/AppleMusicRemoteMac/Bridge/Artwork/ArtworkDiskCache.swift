@@ -35,15 +35,21 @@ public final class ArtworkDiskCache: @unchecked Sendable {
     public func get(key: String) -> Data? {
         guard !key.isEmpty else { return nil }
         let path = filePath(for: key)
-        guard fileManager.fileExists(atPath: path.path) else { return nil }
+        let data: Data? = lock.withLock {
+            guard fileManager.fileExists(atPath: path.path) else { return nil }
+            return try? Data(contentsOf: path)
+        }
+        guard data != nil else { return nil }
 
         // Update modification time for LRU tracking
         queue.async { [weak self] in
             guard let self = self else { return }
-            try? self.fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: path.path)
+            self.lock.withLock {
+                try? self.fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: path.path)
+            }
         }
 
-        return try? Data(contentsOf: path)
+        return data
     }
 
     public func set(key: String, data: Data) {
@@ -52,15 +58,20 @@ public final class ArtworkDiskCache: @unchecked Sendable {
 
         queue.async { [weak self] in
             guard let self = self else { return }
-            try? data.write(to: path, options: .atomic)
-            self.cleanLRUIfNeeded()
+            self.lock.withLock {
+                try? self.fileManager.createDirectory(at: self.cacheDirectory, withIntermediateDirectories: true)
+                try? data.write(to: path, options: .atomic)
+                self.cleanLRUIfNeededLocked()
+            }
         }
     }
 
     public func remove(key: String) {
         guard !key.isEmpty else { return }
         let path = filePath(for: key)
-        try? fileManager.removeItem(at: path)
+        lock.withLock {
+            try? fileManager.removeItem(at: path)
+        }
     }
 
     public func clear() {
@@ -71,6 +82,12 @@ public final class ArtworkDiskCache: @unchecked Sendable {
     }
 
     public func totalCacheSize() -> Int64 {
+        lock.withLock {
+            totalCacheSizeLocked()
+        }
+    }
+
+    private func totalCacheSizeLocked() -> Int64 {
         guard let files = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey]) else {
             return 0
         }
@@ -83,8 +100,8 @@ public final class ArtworkDiskCache: @unchecked Sendable {
         return total
     }
 
-    private func cleanLRUIfNeeded() {
-        guard totalCacheSize() > maxCacheSizeBytes else { return }
+    private func cleanLRUIfNeededLocked() {
+        guard totalCacheSizeLocked() > maxCacheSizeBytes else { return }
 
         guard let files = try? fileManager.contentsOfDirectory(
             at: cacheDirectory,
@@ -134,7 +151,7 @@ public final class MotionArtworkDiskCache: @unchecked Sendable {
     private let lock = NSLock()
 
     private var urlIndex: [String: IndexEntry] = [:]
-    private var inFlightHashes: Set<String> = []
+    private var inFlightCompletions: [String: [@Sendable (String?) -> Void]] = [:]
 
     /// Positive entries live for 30 days; negative ("") entries expire after 12 hours
     private let positiveTTL: TimeInterval = 86400 * 30
@@ -264,11 +281,14 @@ public final class MotionArtworkDiskCache: @unchecked Sendable {
 
         let hash = videoHash(for: remoteUrl)
         lock.lock()
-        if inFlightHashes.contains(hash) {
+        if inFlightCompletions[hash] != nil {
+            if let completion {
+                inFlightCompletions[hash]?.append(completion)
+            }
             lock.unlock()
             return
         }
-        inFlightHashes.insert(hash)
+        inFlightCompletions[hash] = completion.map { [$0] } ?? []
         lock.unlock()
 
         var req = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 15.0)
@@ -276,16 +296,14 @@ public final class MotionArtworkDiskCache: @unchecked Sendable {
 
         URLSession.shared.dataTask(with: req) { [weak self] data, response, _ in
             guard let self = self else { return }
-            defer {
-                self.lock.lock()
-                self.inFlightHashes.remove(hash)
-                self.lock.unlock()
-            }
             guard let d = data,
                   d.count > 4096,
                   let http = response as? HTTPURLResponse,
                   (200...299).contains(http.statusCode) else {
-                completion?(nil)
+                let callbacks = self.lock.withLock { self.inFlightCompletions.removeValue(forKey: hash) ?? [] }
+                for cb in callbacks {
+                    cb(nil)
+                }
                 return
             }
             let dest = self.videoFileURL(forHash: hash)
@@ -294,9 +312,16 @@ public final class MotionArtworkDiskCache: @unchecked Sendable {
                     try d.write(to: dest, options: .atomic)
                     NSLog("[MotionArtworkDiskCache] 💾 Cached motion cover .mp4 on disk (\(d.count / 1024) KB) -> \(hash).mp4")
                     self.cleanLRUIfNeeded()
-                    completion?("/api/artwork/motion.mp4?hash=\(hash)")
+                    let endpoint = "/api/artwork/motion.mp4?hash=\(hash)"
+                    let callbacks = self.lock.withLock { self.inFlightCompletions.removeValue(forKey: hash) ?? [] }
+                    for cb in callbacks {
+                        cb(endpoint)
+                    }
                 } catch {
-                    completion?(nil)
+                    let callbacks = self.lock.withLock { self.inFlightCompletions.removeValue(forKey: hash) ?? [] }
+                    for cb in callbacks {
+                        cb(nil)
+                    }
                 }
             }
         }.resume()

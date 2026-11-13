@@ -52,8 +52,65 @@ public struct AudioOutputDevice: Identifiable, Hashable, Sendable {
 public final class CoreAudioDeviceManager: @unchecked Sendable {
     public static let shared = CoreAudioDeviceManager()
 
-    public var onDevicesChanged: (([AudioOutputDevice]) -> Void)?
-    public var onSampleRateChanged: ((AudioDeviceID, Double) -> Void)?
+    private let handlersLock = NSLock()
+    private var _onDevicesChanged: (([AudioOutputDevice]) -> Void)?
+    private var devicesChangedObservers: [String: ([AudioOutputDevice]) -> Void] = [:]
+    private var _onSampleRateChanged: ((AudioDeviceID, Double) -> Void)?
+    private var sampleRateChangedObservers: [String: (AudioDeviceID, Double) -> Void] = [:]
+
+    public func addDevicesChangedObserver(id: String, handler: @escaping ([AudioOutputDevice]) -> Void) {
+        handlersLock.lock()
+        devicesChangedObservers[id] = handler
+        handlersLock.unlock()
+    }
+
+    public func addSampleRateChangedObserver(id: String, handler: @escaping (AudioDeviceID, Double) -> Void) {
+        handlersLock.lock()
+        sampleRateChangedObservers[id] = handler
+        handlersLock.unlock()
+    }
+
+    public var onDevicesChanged: (([AudioOutputDevice]) -> Void)? {
+        get {
+            handlersLock.lock()
+            let primary = _onDevicesChanged
+            let observers = Array(devicesChangedObservers.values)
+            handlersLock.unlock()
+            guard primary != nil || !observers.isEmpty else { return nil }
+            return { devices in
+                primary?(devices)
+                for observer in observers {
+                    observer(devices)
+                }
+            }
+        }
+        set {
+            handlersLock.lock()
+            _onDevicesChanged = newValue
+            handlersLock.unlock()
+        }
+    }
+
+    public var onSampleRateChanged: ((AudioDeviceID, Double) -> Void)? {
+        get {
+            handlersLock.lock()
+            let primary = _onSampleRateChanged
+            let observers = Array(sampleRateChangedObservers.values)
+            handlersLock.unlock()
+            guard primary != nil || !observers.isEmpty else { return nil }
+            return { deviceID, rate in
+                primary?(deviceID, rate)
+                for observer in observers {
+                    observer(deviceID, rate)
+                }
+            }
+        }
+        set {
+            handlersLock.lock()
+            _onSampleRateChanged = newValue
+            handlersLock.unlock()
+        }
+    }
 
     // MARK: - DAC Muting Guard Configuration & Telemetry
 
@@ -69,6 +126,8 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
     private var isMutingGuardActiveInternal: Bool = false
     private var mutingGuardActivationCountInternal: Int = 0
     private var preGuardAppVolume: Int?
+    private var preGuardWasDucked: Bool = false
+    private var preGuardUnduckedVolume: Int?
     private var hardwareMutedDeviceID: AudioDeviceID?
 
     /// Whether DAC Muting Guard (click-free relay switching) is enabled in app configuration.
@@ -124,6 +183,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         return mutingGuardActivationCountInternal
     }
 
+    private let listenerLock = NSLock()
     private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var sampleRateListenerBlock: AudioObjectPropertyListenerBlock?
     private var devicesListListenerBlock: AudioObjectPropertyListenerBlock?
@@ -336,7 +396,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             NSLog("[CoreAudioDeviceManager] ✅ Switched device %u format: %.1f kHz%@ (was %.1f kHz)%@",
                   targetID, targetRate / 1000.0, bitDepthStr, currentRate / 1000.0, guardTag)
         }
-        return true
+        return (!needsRateSwitch || rateChanged) && (!needsBitDepthSwitch || bitsChanged)
     }
 
     // MARK: - DAC Muting Guard Implementation (Click-Free Relay Switching)
@@ -361,6 +421,20 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         scheduleMutingGuardPostSwitchRelease(deviceID: deviceID, durationMs: guardMs, targetRate: toRate, completion: completion)
     }
 
+    public func updateSavedGuardVolumeIfNeeded(_ newVol: Int, isDucked: Bool) {
+        mutingGuardLock.lock()
+        if isMutingGuardActiveInternal {
+            preGuardAppVolume = newVol
+            preGuardWasDucked = isDucked
+            if !isDucked {
+                preGuardUnduckedVolume = newVol
+            } else if preGuardUnduckedVolume == nil {
+                preGuardUnduckedVolume = AudioDuckingController.shared.originalVolume
+            }
+        }
+        mutingGuardLock.unlock()
+    }
+
     private func engageMutingGuardPreSwitch(deviceID: AudioDeviceID, durationMs: Int, fromRate: Double, toRate: Double) {
         mutingGuardLock.lock()
         unmuteWorkItem?.cancel()
@@ -370,9 +444,11 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         mutingGuardActivationCountInternal += 1
 
         if !wasAlreadyActive && !PlaybackRouter.shared.isTestingEnvironment {
+            preGuardWasDucked = AudioDuckingController.shared.isDucked
+            preGuardUnduckedVolume = preGuardWasDucked ? AudioDuckingController.shared.originalVolume : nil
             if let app = MusicAppProvider.shared.getMusicApp() {
                 let currentVol = app.soundVolume
-                if currentVol > 0 {
+                if currentVol >= 0 {
                     preGuardAppVolume = currentVol
                 }
                 app.soundVolume = 0
@@ -431,6 +507,10 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         hardwareMutedDeviceID = nil
         let savedVol = preGuardAppVolume
         preGuardAppVolume = nil
+        let wasDuckedAtEngage = preGuardWasDucked
+        preGuardWasDucked = false
+        let savedUnduckedVol = preGuardUnduckedVolume
+        preGuardUnduckedVolume = nil
         isMutingGuardActiveInternal = false
         unmuteWorkItem = nil
         mutingGuardLock.unlock()
@@ -439,10 +519,24 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             if let devID = mutedDev, devID != 0 {
                 _ = setHardwareMute(false, for: devID)
             }
-            if !PlaybackStateStore.shared.isDLNAMuted && !AudioDuckingController.shared.isDucked {
-                let restoreVol = PlaybackStateStore.shared.isVolumeLockedTo100 ? 100 : (savedVol ?? 100)
+            let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
+            if !isDLNAMuted {
+                let targetAppVol: Int
+                if AudioDuckingController.shared.isDucked {
+                    targetAppVol = wasDuckedAtEngage
+                        ? (savedVol ?? AudioDuckingController.shared.currentDuckedVolume)
+                        : AudioDuckingController.shared.currentDuckedVolume
+                } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                    targetAppVol = 100
+                } else if wasDuckedAtEngage {
+                    let simVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
+                    targetAppVol = savedUnduckedVol ?? simVol
+                } else {
+                    let simVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
+                    targetAppVol = savedVol ?? simVol
+                }
                 if let app = MusicAppProvider.shared.getMusicApp() {
-                    app.soundVolume = restoreVol
+                    app.soundVolume = targetAppVol
                 }
             }
         }
@@ -527,6 +621,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             var currentASBDSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
             if AudioObjectGetPropertyData(sID, &physAddress, 0, nil, &currentASBDSize, &currentASBD) == noErr {
                 if currentASBD.mBitsPerChannel == targetBits && abs(currentASBD.mSampleRate - sampleRate) < 0.5 {
+                    anyChanged = true
                     continue // Already configured
                 }
             }
@@ -759,21 +854,10 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
     }
 
     private func updateSampleRateMonitoring(for deviceID: AudioDeviceID) {
-        if let oldID = monitoredDeviceID, let oldBlock = sampleRateListenerBlock {
-            var oldAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyNominalSampleRate,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectRemovePropertyListenerBlock(oldID, &oldAddress, nil, oldBlock)
-        }
-
+        listenerLock.lock()
+        let oldID = monitoredDeviceID
+        let oldBlock = sampleRateListenerBlock
         monitoredDeviceID = deviceID
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
 
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             guard let self = self else { return }
@@ -783,6 +867,22 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             self.onDevicesChanged?(devices)
         }
         self.sampleRateListenerBlock = block
+        listenerLock.unlock()
+
+        if let oldID = oldID, let oldBlock = oldBlock {
+            var oldAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyNominalSampleRate,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectRemovePropertyListenerBlock(oldID, &oldAddress, nil, oldBlock)
+        }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
         AudioObjectAddPropertyListenerBlock(deviceID, &address, nil, block)
     }
 
@@ -805,7 +905,14 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &devicesListAddress, nil, listBlock)
         }
 
-        if let oldID = monitoredDeviceID, let oldBlock = sampleRateListenerBlock {
+        listenerLock.lock()
+        let oldID = monitoredDeviceID
+        let oldBlock = sampleRateListenerBlock
+        monitoredDeviceID = nil
+        sampleRateListenerBlock = nil
+        listenerLock.unlock()
+
+        if let oldID = oldID, let oldBlock = oldBlock {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyNominalSampleRate,
                 mScope: kAudioObjectPropertyScopeGlobal,

@@ -18,6 +18,7 @@ public final class AppleSoundCheckService: @unchecked Sendable {
     private var memoryCache: [String: Double] = [:]
     private var liveDspProvisionalKeys: Set<String> = []
     private var inFlightKeys: Set<String> = []
+    private var inFlightLocalKeys: Set<String> = []
     private var lastTrackKey: String = ""
     private var lastTrackId: String = ""
     private var lastTrackCatalogId: String?
@@ -25,6 +26,13 @@ public final class AppleSoundCheckService: @unchecked Sendable {
     private var lastTrackArtist: String = ""
     private var lastTrackAlbum: String = ""
     private var lastTrackIsLocal: Bool = false
+
+    private let urlSession: URLSession = {
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.timeoutIntervalForRequest = 4.0
+        sessionConfig.timeoutIntervalForResource = 5.0
+        return URLSession(configuration: sessionConfig)
+    }()
 
     private let cacheFileURL: URL = {
         let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
@@ -181,9 +189,15 @@ public final class AppleSoundCheckService: @unchecked Sendable {
             if let gain = self.lookupCachedGainLocked(canonicalKey: canonicalKey, trackId: cleanTrackId, catalogId: catalogId) {
                 return (isSameTrack, gain, false)
             }
-            let alreadyInFlight = self.inFlightKeys.contains(canonicalKey)
+            let alreadyInFlight = isLocal
+                ? self.inFlightLocalKeys.contains(canonicalKey)
+                : self.inFlightKeys.contains(canonicalKey)
             if !alreadyInFlight {
-                self.inFlightKeys.insert(canonicalKey)
+                if isLocal {
+                    self.inFlightLocalKeys.insert(canonicalKey)
+                } else {
+                    self.inFlightKeys.insert(canonicalKey)
+                }
             }
             return (isSameTrack, nil, !alreadyInFlight)
         }
@@ -211,7 +225,11 @@ public final class AppleSoundCheckService: @unchecked Sendable {
                 isLocal: isLocal
             )
             let isStillCurrent = self.lock.withLock { () -> Bool in
-                self.inFlightKeys.remove(canonicalKey)
+                if isLocal {
+                    self.inFlightLocalKeys.remove(canonicalKey)
+                } else {
+                    self.inFlightKeys.remove(canonicalKey)
+                }
                 return self.lastTrackKey == canonicalKey
             }
             if isStillCurrent {
@@ -272,13 +290,16 @@ public final class AppleSoundCheckService: @unchecked Sendable {
                 album: album,
                 isLocal: false
             )
-            let isNowCurrent = self.lock.withLock { () -> Bool in
+            let (isNowCurrent, effectiveGain, hasAuthoritativeCachedGain): (Bool, Double?, Bool) = self.lock.withLock {
                 _ = self.inFlightKeys.remove(canonicalKey)
-                return self.lastTrackKey == canonicalKey
+                let cached = self.lookupCachedGainLocked(canonicalKey: canonicalKey, trackId: cleanTrackId, catalogId: catalogId)
+                return (self.lastTrackKey == canonicalKey, resolvedGain ?? cached, cached != nil)
             }
             if isNowCurrent {
-                ExternalAmpTCPController.shared.applyTrackSoundCheck(trackKey: canonicalKey, gainDb: resolvedGain)
-                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                if effectiveGain != nil || (!hasAuthoritativeCachedGain && ExternalAmpTCPController.shared.currentTrackGainDb == nil) {
+                    ExternalAmpTCPController.shared.applyTrackSoundCheck(trackKey: canonicalKey, gainDb: effectiveGain)
+                    WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                }
             }
         }
     }
@@ -561,10 +582,7 @@ public final class AppleSoundCheckService: @unchecked Sendable {
         artist: String,
         album: String
     ) async -> URL? {
-        let sessionConfig = URLSessionConfiguration.ephemeral
-        sessionConfig.timeoutIntervalForRequest = 4.0
-        sessionConfig.timeoutIntervalForResource = 5.0
-        let session = URLSession(configuration: sessionConfig)
+        let session = self.urlSession
 
         var resolvedCid = Self.isValidCatalogId(catalogId) ? catalogId?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         if resolvedCid == nil {
@@ -586,7 +604,8 @@ public final class AppleSoundCheckService: @unchecked Sendable {
 
         // 2. Search by artist + track name across storefronts, preferring exact studio/album match
         let queryTerm = "\(artist) \(name)".trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let encodedTerm = queryTerm.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+        let encodedTerm = queryTerm.amrQueryValueEncoded
+        guard !encodedTerm.isEmpty else {
             return nil
         }
         var bestCandidate: (url: URL, score: Int)?
@@ -738,10 +757,7 @@ public final class AppleSoundCheckService: @unchecked Sendable {
     }
 
     private func fetchITunNormFromPreviewHeader(previewURL: URL) async -> Double? {
-        let sessionConfig = URLSessionConfiguration.ephemeral
-        sessionConfig.timeoutIntervalForRequest = 4.0
-        sessionConfig.timeoutIntervalForResource = 5.0
-        let session = URLSession(configuration: sessionConfig)
+        let session = self.urlSession
 
         var request = URLRequest(url: previewURL)
         request.setValue("bytes=0-98303", forHTTPHeaderField: "Range")

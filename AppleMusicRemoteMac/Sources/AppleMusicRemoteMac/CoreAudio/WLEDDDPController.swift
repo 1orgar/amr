@@ -76,6 +76,7 @@ public final class WLEDDDPController: @unchecked Sendable {
     private var targetZones: [(r: Double, g: Double, b: Double)]
 
     // Full-Rate 2-Pole Cascaded IIR Filter State & AGC Envelopes
+    private var lastAudioBitDepth: Int = 0
     private var lp115Stage1: Double = 0.0
     private var lp115Stage2: Double = 0.0
     private var lp2200Stage1: Double = 0.0
@@ -132,7 +133,7 @@ public final class WLEDDDPController: @unchecked Sendable {
             if isEnabled {
                 probeWledDeviceInfoIfNeeded(ip: ipAddress)
             }
-            reconfigureEngine()
+            reconfigureEngine(sendOffSignalIfInactive: false)
         }
     }
 
@@ -204,7 +205,7 @@ public final class WLEDDDPController: @unchecked Sendable {
         }
         let isNowActive = self.isEnabled && !self.ipAddress.isEmpty && self.mode != "off"
         currentIpSnapshot = self.ipAddress
-        if !isNowActive && !currentIpSnapshot.isEmpty {
+        if wasActive && !isNowActive && !currentIpSnapshot.isEmpty {
             shouldTurnOffStrip = true
         } else if !wasActive && isNowActive {
             shouldTurnOnStrip = true
@@ -224,7 +225,7 @@ public final class WLEDDDPController: @unchecked Sendable {
         } else if shouldTurnOnStrip {
             sendWledHttpPowerState(ip: currentIpSnapshot, on: true)
         }
-        reconfigureEngine()
+        reconfigureEngine(sendOffSignalIfInactive: shouldTurnOffStrip)
         notifyCallback?()
         return getSettingsDictionary()
     }
@@ -251,6 +252,10 @@ public final class WLEDDDPController: @unchecked Sendable {
     // MARK: - WLED HTTP Info Auto-Discovery & Power Control (/json/info & /json/state)
 
     private func probeWledDeviceInfoIfNeeded(ip: String) {
+        guard !PlaybackRouter.shared.isTestingEnvironment,
+              ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return
+        }
         let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanIp.isEmpty else { return }
         lock.withLock {
@@ -290,6 +295,7 @@ public final class WLEDDDPController: @unchecked Sendable {
     private func sendWledHttpPowerState(ip: String, on: Bool) {
         let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanIp.isEmpty,
+              !PlaybackRouter.shared.isTestingEnvironment,
               ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil,
               let url = URL(string: "http://\(cleanIp)/json/state") else {
             return
@@ -434,7 +440,7 @@ public final class WLEDDDPController: @unchecked Sendable {
 
     // MARK: - Engine Lifecycle & Off-State Heartbeat
 
-    private func reconfigureEngine() {
+    private func reconfigureEngine(sendOffSignalIfInactive: Bool = false) {
         ddpQueue.async { [weak self] in
             guard let self = self else { return }
             let (enabled, ip, currentMode) = self.lock.withLock {
@@ -454,7 +460,7 @@ public final class WLEDDDPController: @unchecked Sendable {
                 AudioProcessTapService.shared.removeSubscriber(id: self.tapSubscriberId)
             }
 
-            if ip.isEmpty {
+            if ip.isEmpty || (!active && !sendOffSignalIfInactive) {
                 self.stopTimerAndSocket()
                 return
             }
@@ -476,8 +482,8 @@ public final class WLEDDDPController: @unchecked Sendable {
                     self.sendWledHttpPowerState(ip: ip, on: true)
                     NSLog("[WLEDDDPController] 💡 Started 16-Zone DDP Ambilight stream -> %@:4048 (mode=%@)", ip, currentMode)
                 }
-            } else {
-                // WLED is disabled in AMR or mode == "off":
+            } else if sendOffSignalIfInactive {
+                // WLED was just disabled in AMR or mode switched to "off":
                 // Keep a 1500ms Off-State Heartbeat running so WLED controllers with auto-power-on or
                 // UDP realtime timeout stay turned OFF.
                 self.offHeartbeatTickCount = 0
@@ -505,20 +511,24 @@ public final class WLEDDDPController: @unchecked Sendable {
         let (enabled, ip, currentMode) = lock.withLock {
             (self.isEnabled, self.ipAddress, self.mode)
         }
-        guard !ip.isEmpty, !(enabled && currentMode != "off") else { return }
+        guard !ip.isEmpty, !(enabled && currentMode != "off") else {
+            stopTimerAndSocket()
+            return
+        }
         dispatchBlackoutPacketSync(ip: ip)
         offHeartbeatTickCount += 1
-        if offHeartbeatTickCount % 8 == 0 {
+        if offHeartbeatTickCount >= 2 {
             sendWledHttpPowerState(ip: ip, on: false)
+            stopTimerAndSocket()
         }
     }
 
     private func stopEngine() {
-        if isTapSubscribed {
-            isTapSubscribed = false
-            AudioProcessTapService.shared.removeSubscriber(id: tapSubscriberId)
-        }
         ddpQueue.sync {
+            if isTapSubscribed {
+                isTapSubscribed = false
+                AudioProcessTapService.shared.removeSubscriber(id: tapSubscriberId)
+            }
             stopTimerAndSocket()
         }
     }
@@ -565,6 +575,14 @@ public final class WLEDDDPController: @unchecked Sendable {
         guard count >= 4 else { return }
         let bitDepth = AudioProcessTapService.shared.bitDepth
         let sampleRate = Double(max(AudioProcessTapService.shared.sampleRate, 44100))
+
+        if bitDepth != lastAudioBitDepth {
+            lastAudioBitDepth = bitDepth
+            lp115Stage1 = 0.0
+            lp115Stage2 = 0.0
+            lp2200Stage1 = 0.0
+            lp2200Stage2 = 0.0
+        }
 
         // True per-frame dt (we process every stereo frame so IIR filter cutoff frequencies are exact!)
         let dt = 1.0 / sampleRate
@@ -614,12 +632,14 @@ public final class WLEDDDPController: @unchecked Sendable {
                 }
                 framesProcessed = frameCount
             } else {
-                let sampleCount = count / 2
-                let frameCount = sampleCount / 2
-                let ptr = base.assumingMemoryBound(to: Int16.self)
+                let bytesPerFrame = 4 // 2 channels * 2 bytes
+                let frameCount = count / bytesPerFrame
+                let ptr = base.assumingMemoryBound(to: UInt8.self)
                 for f in 0..<frameCount {
-                    let idx = f * 2
-                    let mono = (Double(ptr[idx]) + Double(ptr[idx + 1])) / (2.0 * 32768.0)
+                    let offset = f * bytesPerFrame
+                    let l0 = Int16(bitPattern: UInt16(ptr[offset]) | (UInt16(ptr[offset + 1]) << 8))
+                    let r0 = Int16(bitPattern: UInt16(ptr[offset + 2]) | (UInt16(ptr[offset + 3]) << 8))
+                    let mono = (Double(l0) + Double(r0)) / (2.0 * 32768.0)
 
                     b1 += alpha115 * (mono - b1)
                     b2 += alpha115 * (b1 - b2)
@@ -980,6 +1000,10 @@ public final class WLEDDDPController: @unchecked Sendable {
     }
 
     private func dispatchBlackoutPacketSync(ip: String) {
+        guard !PlaybackRouter.shared.isTestingEnvironment,
+              ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return
+        }
         let count = lock.withLock { self.ledCount }
         guard !ip.isEmpty, count > 0 else { return }
         ensureSocket(for: ip)

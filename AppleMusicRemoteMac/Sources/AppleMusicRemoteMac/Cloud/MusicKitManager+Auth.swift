@@ -125,15 +125,29 @@ extension MusicKitManager {
     }
 
     public func setUserToken(_ token: String) {
+        let hasTeamSig = Self.hasTeamCodeSignature()
+        let savedToKeychain = !isTestingProcess && writeKeychainString(token, account: "AppleMusicUserToken")
+        let shouldRemovePlaintext = savedToKeychain && hasTeamSig
+
         lock.lock()
         self.userToken = token
-        Self.storageDefaults.set(token, forKey: "AppleMusicUserToken")
-        UserDefaults.standard.set(token, forKey: "AppleMusicUserToken")
-        for suite in ["org.ksholokhov.amr.mac", "AppleMusicRemoteMac", "org.ksholokhov.AppleMusicRemoteMac"] {
-            UserDefaults(suiteName: suite)?.set(token, forKey: "AppleMusicUserToken")
+        if shouldRemovePlaintext {
+            Self.storageDefaults.removeObject(forKey: "AppleMusicUserToken")
+            UserDefaults.standard.removeObject(forKey: "AppleMusicUserToken")
+            for suite in ["org.ksholokhov.amr.mac", "AppleMusicRemoteMac", "org.ksholokhov.AppleMusicRemoteMac"] {
+                UserDefaults(suiteName: suite)?.removeObject(forKey: "AppleMusicUserToken")
+            }
+        } else {
+            Self.storageDefaults.set(token, forKey: "AppleMusicUserToken")
+            UserDefaults.standard.set(token, forKey: "AppleMusicUserToken")
+            for suite in ["org.ksholokhov.amr.mac", "AppleMusicRemoteMac", "org.ksholokhov.AppleMusicRemoteMac"] {
+                UserDefaults(suiteName: suite)?.set(token, forKey: "AppleMusicUserToken")
+            }
         }
         self.personalDataCache = nil
+        self.playlistTracksCache.removeAll()
         lock.unlock()
+        CloudCatalogService.shared.invalidateExploreFeedCache()
         NSLog("[MusicKitManager] ✅ Saved Apple Music User Token (len: %d)", token.count)
         Task.detached(priority: .userInitiated) { [weak self] in
             _ = await self?.fetchUserStorefront()
@@ -144,12 +158,19 @@ extension MusicKitManager {
         lock.lock()
         self.userToken = nil
         self.personalDataCache = nil
+        self.playlistTracksCache.removeAll()
+        self.trackArtworkCache.removeAll()
+        self.trackCatalogIdCache.removeAll()
+        self.artistStationCache.removeAll()
+        self.trackStationCache.removeAll()
         Self.storageDefaults.removeObject(forKey: "AppleMusicUserToken")
         UserDefaults.standard.removeObject(forKey: "AppleMusicUserToken")
         for suite in ["org.ksholokhov.amr.mac", "AppleMusicRemoteMac", "org.ksholokhov.AppleMusicRemoteMac"] {
             UserDefaults(suiteName: suite)?.removeObject(forKey: "AppleMusicUserToken")
         }
         lock.unlock()
+        deleteKeychainItem(account: "AppleMusicUserToken")
+        CloudCatalogService.shared.invalidateExploreFeedCache()
         NSLog("[MusicKitManager] Cleared Apple Music User Token")
     }
 }

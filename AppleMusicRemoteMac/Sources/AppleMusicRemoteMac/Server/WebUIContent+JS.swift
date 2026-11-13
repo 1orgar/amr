@@ -347,7 +347,52 @@ extension WebUIContent {
     'Сжатый поток AAC 256 kbps': 'Compressed AAC 256 kbps Stream',
     'Спектральный анализ потока...': 'Analyzing stream spectrum...',
     'Ожидание воспроизведения...': 'Waiting for playback...',
-    'Спектральный анализ отключен': 'Spectral analysis disabled'
+    'Спектральный анализ отключен': 'Spectral analysis disabled',
+    'Синхронизировано': 'Synced',
+    'Устройство не активно': 'Device Inactive',
+    'Перетащить трек': 'Drag track',
+    'Закрепить / открепить вайб': 'Pin / unpin vibe',
+    'Выйти': 'Sign Out',
+    'Не синхронизировано с Mac': 'Not synced with Mac',
+    'Не удалось авторизовать Apple Music (MusicKit JS недоступен). Проверьте блокировщики рекламы.': 'Could not authorize Apple Music (MusicKit JS unavailable). Check content blockers.',
+    'Воспроизведение не началось — проверьте авторизацию Apple Music на Mac': 'Playback did not start — check Apple Music authorization on Mac',
+    'Плейлисты в медиатеке не найдены': 'No playlists found in library',
+    'Станции временно недоступны': 'Stations temporarily unavailable',
+    'Альбомы временно недоступны': 'Albums temporarily unavailable',
+    'Станция недоступна для запуска': 'Station unavailable for playback',
+    'ИИ-подбор завершён, но треки не найдены. Попробуйте другой запрос': 'AI curation finished, but no tracks were found. Try another prompt',
+    'Не удалось сгенерировать ИИ-подборку': 'Failed to generate AI mix',
+    'Для этого трека нет синхронизированного текста в Apple Music': 'No synced lyrics available for this track in Apple Music',
+    'Синхронизация по времени недоступна — показан полный текст': 'Time-synced lyrics unavailable — showing full lyrics',
+    'Не удалось загрузить текст песни': 'Failed to load lyrics',
+    'Очередь обновлена': 'Queue updated',
+    '★ Вайб закреплён': '★ Vibe pinned',
+    '☆ Вайб откреплён': '☆ Vibe unpinned',
+    'Обновлены идеи ИИ-подбора': 'AI prompt ideas refreshed',
+    'Сгенерированы новые идеи': 'New prompt ideas generated',
+    'На репите': 'Heavy Rotation',
+    'Бесконечная волна 20+ треков по атмосфере': 'Endless wave of 20+ tracks matching the vibe',
+    'ИИ-волна по треку': 'AI Track Vibe',
+    'Сначала запустите трек для ИИ-подбора по вайбу': 'Start a track first to curate an AI vibe mix',
+    'Не удалось подобрать треки по запросу': 'No matching tracks found',
+    'AI-Подборка': 'AI Sonic Selection',
+    '★ В избранном': '★ Pinned',
+    '☆ Закрепить вайб': '☆ Pin Vibe',
+    'Очередь пуста': 'Queue is empty',
+    'История пуста': 'History is empty',
+    'История': 'History',
+    'Очередь AMR': 'AMR Queue',
+    '★ Очередь сохранена в плейлисты Apple Music': '★ Queue saved to Apple Music playlists',
+    'Не удалось сохранить очередь в плейлист': 'Could not save queue as playlist',
+    'Ошибка выполнения команды': 'Command execution failed',
+    'Не удалось загрузить треки': 'Failed to load tracks',
+    'Неизвестный исполнитель': 'Unknown Artist',
+    'Прямой эфир Apple Music': 'Apple Music Live Radio',
+    'Персональная станция': 'Personal Station',
+    'Еженедельный микс': 'Weekly Mix',
+    'Недавно прослушано': 'Recently Played',
+    'Нет элементов для отображения': 'No items to display',
+    'Поделиться': 'Share'
   };
 
   function translateTextToEn(raw) {
@@ -359,7 +404,28 @@ extension WebUIContent {
     }
     let out = raw;
     out = out
+      .replace(/^✨\s*ИИ-подбор по вайбу «(.+)»\.\.\.$/i, '✨ Curating AI vibe from "$1"...')
+      .replace(/^Запуск «Моей станции»\.\.\.$/i, 'Starting My Station...')
+      .replace(/^Запуск «Станции открытий»\.\.\.$/i, 'Starting Discovery Station...')
+      .replace(/^Запуск «В моём вкусе»\.\.\.$/i, 'Starting Favorites Mix...')
+      .replace(/^Запуск «Сейчас на повторе»\.\.\.$/i, 'Starting Heavy Rotation...')
+      .replace(/^Запуск радио по треку «(.+)»\.\.\.$/i, 'Starting track station "$1"...')
+      .replace(/^Запуск радио по артисту «(.+)»\.\.\.$/i, 'Starting artist station "$1"...')
+      .replace(/^Запуск станции «(.+)»\.\.\.$/i, 'Starting station "$1"...')
+      .replace(/^Запуск альбома «(.+)»\.\.\.$/i, 'Starting album "$1"...')
+      .replace(/^Запуск микса «(.+)»\.\.\.$/i, 'Starting mix "$1"...')
+      .replace(/^Запуск радио «(.+)»\.\.\.$/i, 'Starting radio "$1"...')
+      .replace(/^Запуск плейлиста «(.+)»\.\.\.$/i, 'Starting playlist "$1"...')
+      .replace(/^Запуск «(.+)»\.\.\.$/i, 'Starting "$1"...')
+      .replace(/^Станция «(.+)»$/i, '"$1" Station')
+      .replace(/^Перемешивание «(.+)»\.\.\.$/i, 'Shuffling "$1"...')
+      .replace(/^Подключение к (.+)\.\.\.$/i, 'Connecting to $1...')
+      .replace(/^Не удалось запустить станцию «(.+)»\. Проверьте подписку Apple Music на Mac\.$/i, 'Could not start station "$1". Check your Apple Music subscription on Mac.')
       .replace(/^Запуск\s+(.+)\.\.\.$/i, 'Starting $1...')
+      .replace(/^Очередь AMR\s*·\s*(\d+)\s*трек(?:ов|а)?$/i, 'AMR Queue · $1 tracks')
+      .replace(/^(\d+)\s*трек(?:ов|а)?\s+в очереди$/i, '$1 tracks in queue')
+      .replace(/Последний коммит:\s*([^\s(]+)\s*\(([^)]+)\)\s*•\s*(.+)/i, 'Latest commit: $1 ($2) • $3')
+      .replace(/UID:\s*([^\s•]+)\s*•\s*Авторизовано на Mac/i, 'UID: $1 • Authorized on Mac')
       .replace(/Попытка переподключения через (\d+)с\.\.\. \(попытка (\d+)\)/i, 'Reconnecting in $1s... (attempt $2)')
       .replace(/Apple Music:\s*подписка активна\s*•\s*Регион\s*([A-Z]+)\s*•\s*Медиатека синхронизирована/i, 'Apple Music: Active • Storefront $1 • Library Synced')
       .replace(/Апсемплинг CD \(срез\s*([\d.]+)\s*(?:кГц|kHz)\)/i, 'Upsampled CD ($1 kHz cut)')
@@ -455,6 +521,10 @@ extension WebUIContent {
   }
 
   if (IS_EN) {
+    const authDescEl = document.querySelector('#device-auth-overlay .overlay-desc');
+    if (authDescEl) {
+      authDescEl.innerHTML = 'Open <strong>Apple Music Remote Settings</strong> on your Mac ("General" tab) and click <strong>"Authorize"</strong> next to this device.';
+    }
     localizeDomNode(document.body);
     const i18nObserver = new MutationObserver((mutations) => {
       for (let i = 0; i < mutations.length; i++) {
@@ -542,10 +612,15 @@ extension WebUIContent {
     if (!uid) return;
     writePersistentCookie('amr_device_uid', uid);
     try { localStorage.setItem('amr_device_uid', uid); } catch (e) {}
-    if ('caches' in window) {
-      caches.open('amr-device-secure-store-v1').then((cache) => {
-        cache.put('/__amr_device_uid', new Response(uid, { headers: { 'Content-Type': 'text/plain' } }));
-      }).catch(() => {});
+    if (typeof window !== 'undefined' && 'caches' in window && window.caches && typeof window.caches.open === 'function') {
+      Promise.resolve()
+        .then(() => window.caches.open('amr-device-secure-store-v1'))
+        .then((cache) => {
+          if (cache && typeof cache.put === 'function' && typeof Response === 'function') {
+            return cache.put('/__amr_device_uid', new Response(uid, { headers: { 'Content-Type': 'text/plain' } }));
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -579,14 +654,19 @@ extension WebUIContent {
       defaultName = 'Windows PC';
     }
 
-    let uid = readCookieValue('amr_device_uid');
-    if (!uid) {
-      try { uid = localStorage.getItem('amr_device_uid') || ''; } catch (e) {}
-    }
+    const cookieUid = readCookieValue('amr_device_uid');
+    let lsUid = '';
+    try { lsUid = (localStorage.getItem('amr_device_uid') || '').trim(); } catch (_) {}
+    let uid = lsUid || cookieUid;
+    let uidWasFreshlyGenerated = false;
     if (!uid) {
       uid = generateUUIDv4();
+      uidWasFreshlyGenerated = true;
     }
-    persistUidToSecureStore(uid);
+    const hasCacheStorage = typeof window !== 'undefined' && 'caches' in window && Boolean(window.caches);
+    if (!uidWasFreshlyGenerated || !hasCacheStorage) {
+      persistUidToSecureStore(uid);
+    }
 
     let savedName = '';
     try { savedName = localStorage.getItem('amr_device_name') || ''; } catch (e) {}
@@ -629,6 +709,7 @@ extension WebUIContent {
     return {
       deviceId: uid,
       shortId: computeShortDeviceId(uid),
+      deviceIdWasFreshlyGenerated: uidWasFreshlyGenerated,
       deviceName,
       deviceType,
       lockScreenControls,
@@ -643,6 +724,8 @@ extension WebUIContent {
     connected: false,
     deviceId: initialDeviceProfile.deviceId,
     deviceShortId: initialDeviceProfile.shortId,
+    deviceIdWasFreshlyGenerated: Boolean(initialDeviceProfile.deviceIdWasFreshlyGenerated),
+    supersededFreshDeviceId: '',
     deviceName: initialDeviceProfile.deviceName,
     deviceType: initialDeviceProfile.deviceType,
     deviceAuthorized: false, // Updated by server on connect (false -> shows auth waiting screen first)
@@ -653,6 +736,19 @@ extension WebUIContent {
     aiCuratorEnabled: true,
     pinnedAiPrompts: [],
     activeAiCuratedPrompt: '',
+    activeAiCuratedTitle: '',
+    aiCurateReqSeq: 0,
+    aiCurateTimeoutId: null,
+    searchReqSeq: 0,
+    lastAiCurateSentAt: 0,
+    lastLibraryAddTarget: '',
+    isAddingDetailToLibrary: false,
+    lastDetailLibraryAddKey: '',
+    lastDetailLibraryAddId: '',
+    lastDetailLibraryAddName: '',
+    currentDetailPlaylistId: '',
+    currentDetailAlbumId: '',
+    currentDetailTitle: '',
     pendingStandbyAiAutoPlay: false,
     isAiCurating: false,
     gitCommit: '7278dab',
@@ -725,6 +821,56 @@ extension WebUIContent {
     lastEndOfTrackPollAt: 0
   };
   window.__amr_state = state;
+
+  function recoverOrPersistDeviceUidBeforeConnect() {
+    const hasCacheStorage = typeof window !== 'undefined' && 'caches' in window && Boolean(window.caches);
+    if (!state.deviceIdWasFreshlyGenerated) {
+      persistUidToSecureStore(state.deviceId);
+      return Promise.resolve();
+    }
+    if (!hasCacheStorage || typeof window.caches.open !== 'function') {
+      state.deviceIdWasFreshlyGenerated = false;
+      persistUidToSecureStore(state.deviceId);
+      return Promise.resolve();
+    }
+    const freshlyGeneratedUid = state.deviceId;
+    const cacheLookupPromise = Promise.resolve()
+      .then(() => window.caches.open('amr-device-secure-store-v1'))
+      .then((cache) => (cache && typeof cache.match === 'function' ? cache.match('/__amr_device_uid') : null))
+      .then((resp) => (resp && typeof resp.text === 'function' ? resp.text() : null))
+      .catch(() => null);
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(() => resolve(null), 250);
+    });
+    return Promise.race([cacheLookupPromise, timeoutPromise])
+      .then((rawCachedUid) => {
+        let candidate = String(rawCachedUid || '').trim();
+        if (candidate.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(candidate);
+            if (parsed && parsed.uid) candidate = String(parsed.uid).trim();
+          } catch (_) {}
+        }
+        const cachedUid = candidate.toLowerCase();
+        if (cachedUid && /^[A-Za-z0-9._-]{8,128}$/.test(cachedUid)) {
+          state.deviceId = cachedUid;
+          state.deviceShortId = computeShortDeviceId(cachedUid);
+          state.deviceIdWasFreshlyGenerated = false;
+          state.supersededFreshDeviceId = freshlyGeneratedUid;
+          persistUidToSecureStore(cachedUid);
+          if (typeof syncDeviceInfoUI === 'function') {
+            syncDeviceInfoUI();
+          }
+        } else {
+          state.deviceIdWasFreshlyGenerated = false;
+          persistUidToSecureStore(state.deviceId);
+        }
+      })
+      .catch(() => {
+        state.deviceIdWasFreshlyGenerated = false;
+        persistUidToSecureStore(state.deviceId);
+      });
+  }
 
   // --- DOM Elements Cache ---
   const dom = {
@@ -947,7 +1093,8 @@ extension WebUIContent {
     // Apple ID Auth Modal
     modalAppleAuth: document.getElementById('modal-apple-auth'),
     btnAuthModalLogin: document.getElementById('btn-auth-modal-login'),
-    authModalStatus: document.getElementById('auth-modal-status')
+    authModalStatus: document.getElementById('auth-modal-status'),
+    topSettingsPopover: document.getElementById('top-settings-popover')
   };
 
   // --- Busy Overlay & Action Loading Controller ---
@@ -1007,8 +1154,10 @@ extension WebUIContent {
       );
       const safetyMs = isLongOp ? 25000 : 10000;
       busyTimeout = setTimeout(() => {
-        state.isAiCurating = false;
-        state.pendingStandbyAiAutoPlay = false;
+        if (!state.aiCurateTimeoutId) {
+          state.isAiCurating = false;
+          state.pendingStandbyAiAutoPlay = false;
+        }
         state.waitingForPlayback = false;
         state.waitingTrackSignature = null;
         state.waitingExpectedTrackName = null;
@@ -1024,7 +1173,6 @@ extension WebUIContent {
         setUIBusy(false);
       }, safetyMs);
     } else {
-      state.isAiCurating = false;
       state.waitingForPlayback = false;
       state.waitingTrackSignature = null;
       state.waitingExpectedTrackName = null;
@@ -1073,6 +1221,8 @@ extension WebUIContent {
 
     if (socket) {
       try {
+        socket.onopen = null;
+        socket.onmessage = null;
         socket.onclose = null;
         socket.onerror = null;
         socket.close();
@@ -1093,6 +1243,7 @@ extension WebUIContent {
       state.initialAuthFetched = false;
       reconnectAttempt = 0;
       dom.overlay.classList.add('hidden');
+      ensureScrubberLoopRunning();
 
       // Step 1: Register this PWA device UID & verify device authorization FIRST.
       // Apple ID / MusicKit / catalog checks run ONLY after the device is authorized on Mac.
@@ -1150,6 +1301,49 @@ extension WebUIContent {
       return false;
     }
     const act = (msgObj && msgObj.action) ? msgObj.action.toLowerCase() : '';
+    if (act === 'ai_curate' || act === 'ai_curate_from_track' || act === 'play_ai_track_vibe') {
+      if (!msgObj.params || typeof msgObj.params !== 'object') {
+        msgObj.params = {};
+      }
+      if (!msgObj.request_id && !msgObj.params.request_id) {
+        state.aiCurateReqSeq = (state.aiCurateReqSeq || 0) + 1;
+      }
+      const reqId = msgObj.request_id || msgObj.params.request_id || state.aiCurateReqSeq;
+      msgObj.request_id = reqId;
+      msgObj.params.request_id = reqId;
+      state.lastAiCurateSentAt = Date.now();
+      if (state.aiCurateTimeoutId) {
+        clearTimeout(state.aiCurateTimeoutId);
+      }
+      state.aiCurateTimeoutId = setTimeout(() => {
+        if (state.aiCurateReqSeq === reqId) {
+          state.isAiCurating = false;
+          state.pendingStandbyAiAutoPlay = false;
+          state.aiCurateTimeoutId = null;
+        }
+      }, 25000);
+    } else if (act === 'search') {
+      if (!msgObj.params || typeof msgObj.params !== 'object') {
+        msgObj.params = {};
+      }
+      if (!msgObj.request_id && !msgObj.params.request_id) {
+        state.searchReqSeq = (state.searchReqSeq || 0) + 1;
+      }
+      const reqId = msgObj.request_id || msgObj.params.request_id || state.searchReqSeq;
+      msgObj.request_id = reqId;
+      msgObj.params.request_id = reqId;
+    }
+    if (
+      act === 'play_playlist' ||
+      act === 'play_album' ||
+      act === 'play_album_tracks' ||
+      act === 'play_station' ||
+      act === 'play_recent' ||
+      act === 'play_recent_tracks'
+    ) {
+      state.activeAiCuratedTitle = '';
+      state.activeAiCuratedPrompt = '';
+    }
     if (act === 'play' || act.startsWith('play_') || act.includes('play') || act === 'next' || act === 'previous') {
       syncSilentAudio(true);
     } else if (act === 'pause' || act === 'stop') {
@@ -1164,16 +1358,124 @@ extension WebUIContent {
     if (!msg || typeof msg !== 'object') return;
     state.lastServerMessageAt = Date.now();
     const type = (msg.event || msg.action || msg.type || '').toLowerCase();
-    if (msg.status === 'error' && type !== 'device_auth_status' && type !== 'register_device') {
-      if (state.isBusyAction || state.waitingForPlayback || state.isAiCurating) {
-        state.isAiCurating = false;
-        state.pendingStandbyAiAutoPlay = false;
-        state.waitingForPlayback = false;
-        setUIBusy(false);
+    const data = msg.data !== undefined ? msg.data : msg;
+
+    if (msg.status === 'cancelled' || (data && typeof data === 'object' && data.status === 'cancelled')) {
+      const respReqId = msg.request_id !== undefined ? msg.request_id : (data && data.request_id);
+      if (respReqId !== undefined && respReqId !== null && state.aiCurateReqSeq && Number(respReqId) !== Number(state.aiCurateReqSeq)) {
+        return;
       }
+      if ((respReqId === undefined || respReqId === null) && state.isAiCurating && state.lastAiCurateSentAt && (Date.now() - state.lastAiCurateSentAt < 100)) {
+        return;
+      }
+      if (state.aiCurateTimeoutId) {
+        clearTimeout(state.aiCurateTimeoutId);
+        state.aiCurateTimeoutId = null;
+      }
+      state.isAiCurating = false;
+      state.pendingStandbyAiAutoPlay = false;
+      setUIBusy(false);
       return;
     }
-    const data = msg.data !== undefined ? msg.data : msg;
+
+    const isSilentErrorType = (
+      type === 'device_auth_status' ||
+      type === 'register_device' ||
+      type === 'get_developer_token' ||
+      type === 'get_artwork' ||
+      type === 'get_lyrics' ||
+      type === 'get_booklet_info' ||
+      type === 'client_log'
+    );
+
+    if (msg.status === 'error') {
+      const isAiErrorType = (
+        type === 'ai_curate' ||
+        type === 'ai_curate_from_track' ||
+        type === 'play_ai_track_vibe' ||
+        type === 'curate_music' ||
+        type === 'ai_curate_result'
+      );
+      if (isAiErrorType) {
+        const errReqId = msg.request_id !== undefined ? msg.request_id : (data && data.request_id);
+        if (errReqId !== undefined && errReqId !== null && state.aiCurateReqSeq && Number(errReqId) !== Number(state.aiCurateReqSeq)) {
+          return;
+        }
+        if (state.aiCurateTimeoutId) {
+          clearTimeout(state.aiCurateTimeoutId);
+          state.aiCurateTimeoutId = null;
+        }
+        state.isAiCurating = false;
+        state.pendingStandbyAiAutoPlay = false;
+        setUIBusy(false);
+      }
+      if (!isSilentErrorType) {
+        state.waitingForPlayback = false;
+        state.activeLoadingStationId = null;
+        if (!state.isAiCurating) {
+          setUIBusy(false);
+        }
+        if (state.isLaunchingStation) {
+          state.isLaunchingStation = false;
+          if (state.stationLaunchTimeout) {
+            clearTimeout(state.stationLaunchTimeout);
+            state.stationLaunchTimeout = null;
+          }
+        }
+        const errText = translateTextToEn(msg.error || (msg.data && msg.data.message) || 'Ошибка выполнения команды');
+        if (type === 'get_album' || type === 'album' || type === 'get_playlist_tracks' || type === 'playlist_tracks') {
+          if (dom.playlistTracksList) {
+            dom.playlistTracksList.innerHTML = `<div class="empty-state">${escapeHtml(errText || translateTextToEn('Не удалось загрузить треки'))}</div>`;
+          }
+        } else if (isAiErrorType) {
+          isSearchLoadingMore = false;
+          if (dom.searchResults && dom.searchResults.querySelector('.loading-state')) {
+            dom.searchResults.innerHTML = `<div class="empty-state">${escapeHtml(errText)}</div>`;
+          }
+        } else if (type === 'search' || type === 'search_result') {
+          const errReqId = msg.request_id !== undefined ? msg.request_id : (data && data.request_id);
+          const isCurrentSearchErr = !errReqId || !state.searchReqSeq || Number(errReqId) === Number(state.searchReqSeq);
+          if (!state.isAiCurating && isCurrentSearchErr) {
+            isSearchLoadingMore = false;
+            if (dom.searchResults && dom.searchResults.querySelector('.loading-state')) {
+              dom.searchResults.innerHTML = `<div class="empty-state">${escapeHtml(errText)}</div>`;
+            }
+          }
+        } else if (type === 'add_playlist_to_library' || type === 'add_album_to_library') {
+          const targetSource = (state.lastLibraryAddTarget && typeof state.lastLibraryAddTarget === 'object')
+            ? state.lastLibraryAddTarget.source
+            : state.lastLibraryAddTarget;
+          if (!targetSource || targetSource === 'detail') {
+            state.isAddingDetailToLibrary = false;
+            if (dom.btnAddPlaylistLibrary && !dom.btnAddPlaylistLibrary.classList.contains('added')) {
+              dom.btnAddPlaylistLibrary.disabled = false;
+              if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+            }
+          }
+          if (!targetSource || targetSource === 'ai' || targetSource === 'hero') {
+            const aiSaveBtn = dom.btnAiCuratedSave || document.getElementById('btn-ai-curated-save');
+            const aiSaveText = dom.btnAiCuratedSaveText || document.getElementById('btn-ai-curated-save-text');
+            if (aiSaveBtn && !aiSaveBtn.classList.contains('added')) {
+              aiSaveBtn.disabled = false;
+              if (aiSaveText) aiSaveText.textContent = translateTextToEn('В медиатеку');
+            }
+          }
+        } else if (type === 'save_queue_to_playlist') {
+          if (dom.btnSaveQueuePlaylist) {
+            dom.btnSaveQueuePlaylist.disabled = false;
+            dom.btnSaveQueuePlaylist.classList.remove('saved');
+          }
+          if (dom.btnSaveQueueText) {
+            dom.btnSaveQueueText.textContent = translateTextToEn('В плейлист');
+          }
+        }
+        showToast(errText);
+        return;
+      }
+      if (type !== 'device_auth_status' && type !== 'register_device' && type !== 'get_device_status') {
+        return;
+      }
+    }
 
     switch (type) {
       case 'device_auth_status':
@@ -1189,9 +1491,14 @@ extension WebUIContent {
         break;
 
       case 'ai_curate':
+      case 'ai_curate_from_track':
+      case 'play_ai_track_vibe':
       case 'curate_music':
       case 'ai_curate_result':
-        updateAiCuratedResults(data);
+        if (data && typeof data === 'object' && data.request_id === undefined && msg.request_id !== undefined) {
+          data.request_id = msg.request_id;
+        }
+        updateAiCuratedResults(data, type);
         break;
 
       case 'ai_curator_settings':
@@ -1246,6 +1553,9 @@ extension WebUIContent {
 
       case 'search':
       case 'search_result':
+        if (data && typeof data === 'object' && data.request_id === undefined && msg.request_id !== undefined) {
+          data.request_id = msg.request_id;
+        }
         updateSearchResults(data);
         break;
 
@@ -1314,26 +1624,108 @@ extension WebUIContent {
         break;
 
       case 'add_playlist_to_library':
-      case 'add_album_to_library':
-        if (dom.btnAddPlaylistLibrary) {
-          const ok = (data && data.status === 'ok') || msg.status === 'ok';
-          const isAlb = Boolean((data && data.is_album) || (state.currentPlaylistDetail && state.currentPlaylistDetail.isAlbum));
-          if (ok) {
+      case 'add_album_to_library': {
+        const ok = (data && typeof data.status === 'string') ? (data.status === 'ok') : (msg.status === 'ok');
+        const targetSource = (state.lastLibraryAddTarget && typeof state.lastLibraryAddTarget === 'object')
+          ? state.lastLibraryAddTarget.source
+          : state.lastLibraryAddTarget;
+        const isAlb = (data && typeof data.is_album === 'boolean')
+          ? data.is_album
+          : (type === 'add_album_to_library' || Boolean(targetSource === 'detail' && state.currentPlaylistDetail && state.currentPlaylistDetail.isAlbum));
+        const aiSaveBtn = dom.btnAiCuratedSave || document.getElementById('btn-ai-curated-save');
+        const aiSaveText = dom.btnAiCuratedSaveText || document.getElementById('btn-ai-curated-save-text');
+        const isAiTarget = targetSource === 'ai' || Boolean(data && data.name && state.activeAiCuratedTitle && data.name === state.activeAiCuratedTitle);
+        const curDet = state.currentPlaylistDetail;
+        const curId = String(state.currentDetailPlaylistId || state.currentDetailAlbumId || (curDet && curDet.id) || '').trim().toLowerCase();
+        const curName = String(state.currentDetailTitle || (curDet && (curDet.name || curDet.title)) || '').trim().toLowerCase();
+        const curKey = String(state.currentDetailPlaylistId || state.currentDetailAlbumId || state.currentDetailTitle || (curDet && (curDet.id || curDet.name || curDet.title)) || '');
+        const respId = (data && data.id) ? String(data.id).trim().toLowerCase() : '';
+        const respName = (data && data.name) ? String(data.name).trim().toLowerCase() : '';
+        const matchesDetailTarget = Boolean(
+          curDet &&
+          (
+            (respId && curId)
+              ? (respId === curId)
+              : (
+                (respName && curName)
+                  ? (respName === curName)
+                  : (
+                    !respId && !respName && (
+                      (state.lastDetailLibraryAddId && curId)
+                        ? (curId === state.lastDetailLibraryAddId)
+                        : Boolean(
+                            (state.lastDetailLibraryAddKey && curKey === state.lastDetailLibraryAddKey) ||
+                            (state.lastDetailLibraryAddName && curName && curName === state.lastDetailLibraryAddName)
+                          )
+                    )
+                  )
+              )
+          )
+        );
+        if (matchesDetailTarget && targetSource !== 'ai') {
+          state.isAddingDetailToLibrary = false;
+        }
+        if (ok) {
+          if (targetSource !== 'ai' && matchesDetailTarget && dom.btnAddPlaylistLibrary && (!dom.playlistDetailPane || !dom.playlistDetailPane.classList.contains('hidden'))) {
             dom.btnAddPlaylistLibrary.disabled = true;
             if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
             dom.btnAddPlaylistLibrary.classList.add('added');
             if (state.currentPlaylistDetail) {
               state.currentPlaylistDetail.is_local = true;
             }
-            showToast(isAlb ? '★ Альбом добавлен в медиатеку Apple Music' : '★ Плейлист добавлен в медиатеку Apple Music');
-          } else {
+          }
+          if (isAiTarget && aiSaveBtn) {
+            aiSaveBtn.disabled = true;
+            aiSaveBtn.classList.add('added');
+            if (aiSaveText) aiSaveText.textContent = translateTextToEn('В медиатеке ✓');
+          }
+          showToast(isAlb ? '★ Альбом добавлен в медиатеку Apple Music' : '★ Плейлист добавлен в медиатеку Apple Music');
+        } else {
+          if ((!targetSource || targetSource === 'detail') && matchesDetailTarget && dom.btnAddPlaylistLibrary && !dom.btnAddPlaylistLibrary.classList.contains('added')) {
             dom.btnAddPlaylistLibrary.disabled = false;
             if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
-            dom.btnAddPlaylistLibrary.classList.remove('added');
-            showToast('Не удалось добавить в медиатеку');
           }
+          if ((!targetSource || targetSource === 'ai' || targetSource === 'hero') && aiSaveBtn && !aiSaveBtn.classList.contains('added')) {
+            aiSaveBtn.disabled = false;
+            if (aiSaveText) aiSaveText.textContent = translateTextToEn('В медиатеку');
+          }
+          showToast(translateTextToEn((data && data.message) || msg.error || 'Не удалось добавить в медиатеку'));
         }
         break;
+      }
+
+      case 'save_queue_to_playlist': {
+        const ok = (data && typeof data.status === 'string') ? (data.status === 'ok') : (msg.status === 'ok');
+        if (ok) {
+          if (dom.btnSaveQueuePlaylist) {
+            dom.btnSaveQueuePlaylist.disabled = true;
+            dom.btnSaveQueuePlaylist.classList.add('saved');
+          }
+          if (dom.btnSaveQueueText) {
+            dom.btnSaveQueueText.textContent = translateTextToEn('В медиатеке ✓');
+          }
+          showToast(translateTextToEn('★ Очередь сохранена в плейлисты Apple Music'));
+          setTimeout(() => {
+            if (dom.btnSaveQueuePlaylist) {
+              dom.btnSaveQueuePlaylist.disabled = false;
+              dom.btnSaveQueuePlaylist.classList.remove('saved');
+            }
+            if (dom.btnSaveQueueText) {
+              dom.btnSaveQueueText.textContent = translateTextToEn('В плейлист');
+            }
+          }, 3200);
+        } else {
+          if (dom.btnSaveQueuePlaylist) {
+            dom.btnSaveQueuePlaylist.disabled = false;
+            dom.btnSaveQueuePlaylist.classList.remove('saved');
+          }
+          if (dom.btnSaveQueueText) {
+            dom.btnSaveQueueText.textContent = translateTextToEn('В плейлист');
+          }
+          showToast(translateTextToEn((data && data.message) || msg.error || 'Не удалось сохранить очередь в плейлист'));
+        }
+        break;
+      }
 
       default:
         // Check if data has player properties
@@ -1350,11 +1742,14 @@ extension WebUIContent {
     const isPlaybackActionResponse = [
       'play_album', 'play_album_tracks', 'play_playlist',
       'play_station', 'play_hero_card', 'play_search_results',
-      'play_recent', 'play_queue_index', 'play_cloud'
+      'play_recent', 'play_queue_index', 'queue_play_index',
+      'play_history_index', 'play_cloud'
     ].includes(type);
 
-    if (msg.status === 'error') {
+    const isActionError = msg.status === 'error' || (data && typeof data === 'object' && data.status === 'error');
+    if (isActionError && !isSilentErrorType) {
       state.waitingForPlayback = false;
+      state.activeLoadingStationId = null;
       setUIBusy(false);
       if (state.isLaunchingStation) {
         state.isLaunchingStation = false;
@@ -1362,6 +1757,10 @@ extension WebUIContent {
           clearTimeout(state.stationLaunchTimeout);
           state.stationLaunchTimeout = null;
         }
+      }
+      if (isPlaybackActionResponse) {
+        const errText = (data && data.message) || msg.error || 'Ошибка выполнения команды';
+        showToast(translateTextToEn(errText));
       }
     } else if (isPlaybackActionResponse && msg.status === 'ok') {
       // If we are waiting for playback to actually start (Music.app buffering/syncing),
@@ -1399,6 +1798,10 @@ extension WebUIContent {
     const incomingSig = (incomingTrack && incomingTrack.name) ? `${incomingTrack.name}:${incomingTrack.artist || ''}` : '';
     const isRadioNow = Boolean(data.is_radio || data.isRadio || (data.playlist && data.playlist.includes('Станция')));
 
+    if (incomingState !== 'playing') {
+      state.pendingPauseUntil = 0;
+    }
+
     if (state.isAiCurating) {
       // Do not dismiss the busy spinner while the Mac is still generating the AI selection
     } else if (state.waitingForPlayback) {
@@ -1421,6 +1824,7 @@ extension WebUIContent {
       const hasWaitedEnough = state.waitingTrackSignature ? (elapsedWaitMs > 6000) : (elapsedWaitMs > 600);
       if ((incomingState === 'playing' && (hasTrackChanged || matchesExpectedTrack || isTargetPlaying || hasWaitedEnough)) || (isRadioNow && (state.isLaunchingStation || state.waitingIsStation))) {
         state.pendingPlayUntil = 0;
+        state.pendingPauseUntil = 0;
         state.playerState = 'playing';
         state.waitingForPlayback = false;
         state.waitingTrackSignature = null;
@@ -1433,6 +1837,8 @@ extension WebUIContent {
         }
         setUIBusy(false);
       }
+    } else if (state.pendingPauseUntil && Date.now() < state.pendingPauseUntil && incomingState === 'playing') {
+      state.playerState = 'paused';
     } else if (incomingState === 'playing' || (isRadioNow && (state.isLaunchingStation || state.waitingIsStation))) {
       state.pendingPlayUntil = 0;
       state.playerState = 'playing';
@@ -1467,7 +1873,9 @@ extension WebUIContent {
 
     if (isNewTrack) {
       state.lastSyncPos = reportedPos;
+      state.position = reportedPos;
       state.lastSyncTime = performance.now();
+      state.lastSyncPerf = state.lastSyncTime;
       if (!state.isScrubbing) {
         updateScrubberUI(reportedPos, state.duration);
       }
@@ -1475,7 +1883,9 @@ extension WebUIContent {
       const now = performance.now();
       if (state.playerState !== 'playing') {
         state.lastSyncPos = reportedPos;
+        state.position = reportedPos;
         state.lastSyncTime = now;
+        state.lastSyncPerf = now;
         updateScrubberUI(reportedPos, state.duration);
       } else {
         const predictedPos = Math.min(
@@ -1486,7 +1896,9 @@ extension WebUIContent {
         if (Math.abs(diff) > 4.0 || (reportedPos < 1.0 && predictedPos > 3.0)) {
           // Explicit seek or track skip/restart: sync immediately
           state.lastSyncPos = reportedPos;
+          state.position = reportedPos;
           state.lastSyncTime = now;
+          state.lastSyncPerf = now;
           updateScrubberUI(reportedPos, state.duration);
         } else {
           // Continuous smooth drift synchronization (Phase-Locked Loop):
@@ -1494,7 +1906,9 @@ extension WebUIContent {
           // By applying a 15% damping correction per broadcast, client clock matches
           // server clock within a fraction of a second without jitter.
           state.lastSyncPos = predictedPos + diff * 0.15;
+          state.position = state.lastSyncPos;
           state.lastSyncTime = now;
+          state.lastSyncPerf = now;
         }
       }
     }
@@ -1509,6 +1923,7 @@ extension WebUIContent {
       }
     }
     state.track = newTrack;
+    state.currentTrackId = (newTrack && (newTrack.id || newTrack.persistent_id || newTrack.numeric_id)) || 0;
 
     if (data.audio_device_name !== undefined || data.audioDeviceName !== undefined) {
       state.audioDeviceName = data.audio_device_name || data.audioDeviceName || '';
@@ -1589,9 +2004,9 @@ extension WebUIContent {
     }
 
     const maxVol = (state.lockVolume100 && state.ampVolumeControlEnabled) ? (state.ampMaxVolume || 80) : 100;
-    if (data.volume !== undefined) {
+    if (data.volume !== undefined && !state.isDraggingVolume) {
       state.volume = Math.max(0, Math.min(maxVol, Number(data.volume)));
-      if (state.volume > 0) {
+      if (state.volume >= 5) {
         state.previousVolume = state.volume;
       }
     }
@@ -2282,6 +2697,7 @@ extension WebUIContent {
     if (!state.isScrubbing && state.playerState !== 'playing') {
       updateScrubberUI(state.lastSyncPos, state.duration);
     }
+    ensureScrubberLoopRunning();
 
     renderVolumeUI();
     renderCurrentQueueTrack(dom.queueCurrentTrack);
@@ -2430,14 +2846,16 @@ extension WebUIContent {
           dom.volumeInput.value = String(vol);
         }
       }
-      if (dom.volumeTrackFill) {
-        dom.volumeTrackFill.style.width = `${pct}%`;
-      }
-      if (dom.volumeThumb) {
-        dom.volumeThumb.style.left = `${pct}%`;
-      }
-      if (dom.volumeLevelText) {
-        dom.volumeLevelText.textContent = labelStr;
+      if (!state.isDraggingVolume) {
+        if (dom.volumeTrackFill) {
+          dom.volumeTrackFill.style.width = `${pct}%`;
+        }
+        if (dom.volumeThumb) {
+          dom.volumeThumb.style.left = `${pct}%`;
+        }
+        if (dom.volumeLevelText) {
+          dom.volumeLevelText.textContent = labelStr;
+        }
       }
       if (dom.standbyVolumeInput) {
         dom.standbyVolumeInput.min = '0';
@@ -2446,14 +2864,16 @@ extension WebUIContent {
           dom.standbyVolumeInput.value = String(vol);
         }
       }
-      updateStandbyLoupePosition(vol, pct, Boolean(state.ampMuted));
-      if (dom.standbyVolumeText) {
-        dom.standbyVolumeText.textContent = labelStr;
+      if (!state.isDraggingVolume) {
+        updateStandbyLoupePosition(vol, pct, Boolean(state.ampMuted));
+        if (dom.standbyVolumeText) {
+          dom.standbyVolumeText.textContent = labelStr;
+        }
+        if (dom.standbyBtnVolumeMute) {
+          dom.standbyBtnVolumeMute.classList.toggle('muted', Boolean(state.ampMuted || vol === 0));
+        }
+        updateVolumeIcon(state.ampMuted ? 0 : Math.round(pct));
       }
-      if (dom.standbyBtnVolumeMute) {
-        dom.standbyBtnVolumeMute.classList.toggle('muted', Boolean(state.ampMuted || vol === 0));
-      }
-      updateVolumeIcon(state.ampMuted ? 0 : Math.round(pct));
     } else {
       const labelStr = `${state.volume}%`;
       if (dom.playerBottomNotice) {
@@ -2465,14 +2885,16 @@ extension WebUIContent {
           dom.volumeInput.value = String(state.volume);
         }
       }
-      if (dom.volumeTrackFill) {
-        dom.volumeTrackFill.style.width = `${state.volume}%`;
-      }
-      if (dom.volumeThumb) {
-        dom.volumeThumb.style.left = `${state.volume}%`;
-      }
-      if (dom.volumeLevelText) {
-        dom.volumeLevelText.textContent = labelStr;
+      if (!state.isDraggingVolume) {
+        if (dom.volumeTrackFill) {
+          dom.volumeTrackFill.style.width = `${state.volume}%`;
+        }
+        if (dom.volumeThumb) {
+          dom.volumeThumb.style.left = `${state.volume}%`;
+        }
+        if (dom.volumeLevelText) {
+          dom.volumeLevelText.textContent = labelStr;
+        }
       }
       if (dom.standbyVolumeInput) {
         dom.standbyVolumeInput.min = '0';
@@ -2481,14 +2903,16 @@ extension WebUIContent {
           dom.standbyVolumeInput.value = String(state.volume);
         }
       }
-      updateStandbyLoupePosition(state.volume, state.volume, state.volume === 0);
-      if (dom.standbyVolumeText) {
-        dom.standbyVolumeText.textContent = labelStr;
+      if (!state.isDraggingVolume) {
+        updateStandbyLoupePosition(state.volume, state.volume, state.volume === 0);
+        if (dom.standbyVolumeText) {
+          dom.standbyVolumeText.textContent = labelStr;
+        }
+        if (dom.standbyBtnVolumeMute) {
+          dom.standbyBtnVolumeMute.classList.toggle('muted', state.volume === 0);
+        }
+        updateVolumeIcon(state.volume);
       }
-      if (dom.standbyBtnVolumeMute) {
-        dom.standbyBtnVolumeMute.classList.toggle('muted', state.volume === 0);
-      }
-      updateVolumeIcon(state.volume);
     }
   }
 
@@ -2541,6 +2965,10 @@ extension WebUIContent {
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
+      osc.onended = () => {
+        try { osc.disconnect(); } catch (_) {}
+        try { gain.disconnect(); } catch (_) {}
+      };
 
       osc.type = 'sine';
       if (type === 'light') {
@@ -2576,6 +3004,10 @@ extension WebUIContent {
 
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
+        osc2.onended = () => {
+          try { osc2.disconnect(); } catch (_) {}
+          try { gain2.disconnect(); } catch (_) {}
+        };
         osc2.type = 'sine';
         osc2.frequency.setValueAtTime(110, now + 0.026);
         osc2.frequency.exponentialRampToValueAtTime(35, now + 0.046);
@@ -2605,6 +3037,26 @@ extension WebUIContent {
     ['play', 'playing', 'pause', 'canplay', 'loadedmetadata'].forEach((evt) => {
       el.addEventListener(evt, onAudioStateChange, { passive: true });
     });
+
+    const handleSilentAudioError = () => {
+      const curSrc = el.getAttribute('src') || '';
+      if (curSrc.includes('silence.m4a') && !el._amrWavFallbackTried) {
+        el._amrWavFallbackTried = true;
+        el.src = '/assets/silence.wav?v=2';
+        try { el.load(); } catch (_) {}
+        if (state.playerState === 'playing' && state.lockScreenControls && state.deviceAuthorized) {
+          try {
+            const p = el.play();
+            if (p !== undefined) p.catch(() => {});
+          } catch (_) {}
+        }
+      }
+    };
+
+    el.addEventListener('error', handleSilentAudioError, { passive: true });
+    if (el.error) {
+      handleSilentAudioError();
+    }
   }
 
   function initSilentAudio() {
@@ -2621,13 +3073,18 @@ extension WebUIContent {
       silentAudioEl.setAttribute('playsinline', '');
       silentAudioEl.setAttribute('webkit-playsinline', '');
       silentAudioEl.preload = 'auto';
-      silentAudioEl.src = '/assets/silence.m4a?v=2';
       silentAudioEl.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;';
-      document.body.appendChild(silentAudioEl);
-    } else if (!silentAudioEl.getAttribute('src')) {
+      attachSilentAudioListeners(silentAudioEl);
       silentAudioEl.src = '/assets/silence.m4a?v=2';
+      document.body.appendChild(silentAudioEl);
+    } else {
+      silentAudioEl.preload = 'auto';
+      attachSilentAudioListeners(silentAudioEl);
+      if (!silentAudioEl.getAttribute('src') && !silentAudioEl.querySelector('source')) {
+        silentAudioEl._amrWavFallbackTried = false;
+        silentAudioEl.src = '/assets/silence.m4a?v=2';
+      }
     }
-    attachSilentAudioListeners(silentAudioEl);
     return silentAudioEl;
   }
 
@@ -2637,12 +3094,15 @@ extension WebUIContent {
       try {
         el.pause();
         el.currentTime = 0;
-        el.removeAttribute('src');
-        el.load();
+        if (el.hasAttribute('src')) {
+          el.removeAttribute('src');
+          el.load();
+        }
       } catch (e) {}
     }
     silentAudioUnlocked = false;
     lastMediaSessionKey = '';
+    bindUnlockAudioGestureListeners();
 
     if ('mediaSession' in navigator) {
       try {
@@ -2686,7 +3146,26 @@ extension WebUIContent {
     }
   }
 
-  // Synchronously unlock audio & Web Audio on EVERY user gesture until unlocked
+  const UNLOCK_GESTURE_EVENTS = ['pointerdown', 'touchstart', 'touchend', 'click'];
+  let unlockGestureListenersBound = false;
+
+  function removeUnlockAudioGestureListeners() {
+    if (!unlockGestureListenersBound) return;
+    unlockGestureListenersBound = false;
+    UNLOCK_GESTURE_EVENTS.forEach(evt => {
+      window.removeEventListener(evt, unlockAudioOnUserGesture);
+    });
+  }
+
+  function bindUnlockAudioGestureListeners() {
+    if (unlockGestureListenersBound || silentAudioUnlocked) return;
+    unlockGestureListenersBound = true;
+    UNLOCK_GESTURE_EVENTS.forEach(evt => {
+      window.addEventListener(evt, unlockAudioOnUserGesture, { passive: true });
+    });
+  }
+
+  // Synchronously unlock audio & Web Audio on user gesture until unlocked
   function unlockAudioOnUserGesture() {
     const ctx = getHapticAudioContext();
     if (ctx && ctx.state === 'suspended') {
@@ -2697,12 +3176,18 @@ extension WebUIContent {
       return;
     }
 
+    if (silentAudioUnlocked) {
+      removeUnlockAudioGestureListeners();
+      return;
+    }
+
     const el = initSilentAudio();
     if (!silentAudioUnlocked && el) {
       const p = el.play();
       if (p !== undefined) {
         p.then(() => {
           silentAudioUnlocked = true;
+          removeUnlockAudioGestureListeners();
           if (state.playerState !== 'playing') {
             el.pause();
           }
@@ -2710,14 +3195,10 @@ extension WebUIContent {
           updateMediaSession();
         }).catch(() => {});
       }
-    } else {
-      setupMediaSession();
     }
   }
 
-  ['pointerdown', 'touchstart', 'touchend', 'click'].forEach(evt => {
-    window.addEventListener(evt, unlockAudioOnUserGesture, { passive: true });
-  });
+  bindUnlockAudioGestureListeners();
 
   // Re-bind MediaSession on app wake, unlock, or tab switch
   ['visibilitychange', 'pageshow', 'focus'].forEach((evt) => {
@@ -2741,6 +3222,38 @@ extension WebUIContent {
     }
   }, { passive: true });
 
+  // Track text-input keyboard focus so landscape TV Mode does not hide when buttons/sliders receive focus
+  const TEXT_ENTRY_SELECTOR = 'input[type="text"], input[type="search"], input[type="url"], input[type="number"], input:not([type]), textarea, [contenteditable="true"]';
+  function syncKeyboardFocusClass() {
+    const el = document.activeElement;
+    const isTextFocused = Boolean(
+      el &&
+      el !== document.body &&
+      typeof el.matches === 'function' &&
+      el.matches(TEXT_ENTRY_SELECTOR) &&
+      el.isConnected &&
+      !el.disabled &&
+      !el.readOnly &&
+      el.getClientRects().length > 0
+    );
+    const hadClass = document.body.classList.contains('keyboard-open');
+    document.body.classList.toggle('keyboard-open', isTextFocused);
+    if (hadClass !== isTextFocused) {
+      if (typeof syncActiveMotionVideoTarget === 'function') syncActiveMotionVideoTarget();
+      if (typeof syncSpectralPolling === 'function') syncSpectralPolling();
+    }
+  }
+  function blurFocusedInContainer(container) {
+    if (container && document.activeElement && container.contains(document.activeElement) && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    syncKeyboardFocusClass();
+  }
+  document.addEventListener('focusin', syncKeyboardFocusClass, { passive: true });
+  document.addEventListener('focusout', () => {
+    setTimeout(syncKeyboardFocusClass, 0);
+  }, { passive: true });
+
   // --- MediaSession (Lock Screen, Dynamic Island, AirPods, Control Center) ---
   let lastMediaSessionKey = '';
   function setupMediaSession() {
@@ -2754,8 +3267,7 @@ extension WebUIContent {
       navigator.mediaSession.setActionHandler('play', () => {
         triggerHaptic('medium');
         syncSilentAudio(true);
-        state.playerState = 'playing';
-        renderNowPlaying();
+        optimisticPlay();
         setupMediaSession();
         updateMediaSession();
         send({ action: 'play' });
@@ -2764,7 +3276,17 @@ extension WebUIContent {
       navigator.mediaSession.setActionHandler('pause', () => {
         triggerHaptic('medium');
         syncSilentAudio(false);
+        state.pendingPlayUntil = 0;
+        state.pendingPauseUntil = Date.now() + 2500;
+        const now = performance.now();
+        if (state.playerState === 'playing' && state.duration > 0) {
+          state.lastSyncPos = Math.min(state.duration, state.lastSyncPos + Math.max(0, (now - state.lastSyncTime) / 1000));
+          state.position = state.lastSyncPos;
+        }
+        state.lastSyncTime = now;
+        state.lastSyncPerf = now;
         state.playerState = 'paused';
+        state.playbackState = 'paused';
         renderNowPlaying();
         setupMediaSession();
         updateMediaSession();
@@ -2784,8 +3306,9 @@ extension WebUIContent {
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime != null && !isNaN(details.seekTime)) {
           triggerHaptic('light');
-          if (silentAudioEl && !isNaN(details.seekTime)) {
-            try { silentAudioEl.currentTime = details.seekTime; } catch(e){}
+          const curPos = Math.max(0, details.seekTime);
+          if (silentAudioEl && Number.isFinite(silentAudioEl.duration) && silentAudioEl.duration > 0) {
+            try { silentAudioEl.currentTime = curPos % silentAudioEl.duration; } catch (e) {}
           }
           sendSeek(details.seekTime);
         }
@@ -2799,6 +3322,14 @@ extension WebUIContent {
       navigator.mediaSession.setActionHandler('stop', () => {
         triggerHaptic('medium');
         syncSilentAudio(false);
+        state.pendingPlayUntil = 0;
+        state.playerState = 'stopped';
+        state.playbackState = 'stopped';
+        state.lastSyncPos = 0;
+        state.position = 0;
+        state.lastSyncTime = performance.now();
+        state.lastSyncPerf = state.lastSyncTime;
+        renderNowPlaying();
         setupMediaSession();
         updateMediaSession();
         send({ action: 'stop' });
@@ -2857,21 +3388,29 @@ extension WebUIContent {
       }
     }
 
-    if ('setPositionState' in navigator.mediaSession && state.duration > 0) {
-      try {
-        const curPos = Math.min(Math.max(0, state.position || state.lastSyncPos || 0), state.duration);
-        navigator.mediaSession.setPositionState({
-          duration: Math.max(state.duration, 0.1),
-          playbackRate: isPlaying ? 1.0 : 0.0,
-          position: curPos
-        });
-        if (silentAudioEl && !silentAudioEl.paused && curPos >= 0) {
-          const drift = Math.abs(silentAudioEl.currentTime - curPos);
-          if (drift > 3.0) {
-            try { silentAudioEl.currentTime = curPos; } catch(e){}
+    if ('setPositionState' in navigator.mediaSession) {
+      if (state.duration > 0) {
+        try {
+          const nowPerf = performance.now();
+          const syncBase = state.lastSyncPerf || state.lastSyncTime || nowPerf;
+          const livePos = (state.lastSyncPos || 0) + (isPlaying ? Math.max(0, (nowPerf - syncBase) / 1000) : 0);
+          const curPos = Math.min(Math.max(0, livePos), state.duration);
+          navigator.mediaSession.setPositionState({
+            duration: Math.max(state.duration, 0.1),
+            playbackRate: isPlaying ? 1.0 : 0.0,
+            position: curPos
+          });
+          if (silentAudioEl && !silentAudioEl.paused && curPos >= 0 && Number.isFinite(silentAudioEl.duration) && silentAudioEl.duration > 0) {
+            const targetLoopPos = curPos % silentAudioEl.duration;
+            const drift = Math.abs(silentAudioEl.currentTime - targetLoopPos);
+            if (drift > 3.0) {
+              try { silentAudioEl.currentTime = targetLoopPos; } catch (e) {}
+            }
           }
-        }
-      } catch (e) {}
+        } catch (e) {}
+      } else {
+        try { navigator.mediaSession.setPositionState(null); } catch (e) {}
+      }
     }
   }
 
@@ -2970,8 +3509,20 @@ extension WebUIContent {
   }
 
   // --- Optimistic Scrubber Loop (throttled to ~20fps normally, 4fps in TV Mode) ---
+  let scrubberRafId = 0;
+
+  function ensureScrubberLoopRunning() {
+    if (!scrubberRafId && state.connected && state.playerState === 'playing' && !document.hidden) {
+      scrubberRafId = requestAnimationFrame(scrubberAnimationLoop);
+    }
+  }
+
   function scrubberAnimationLoop(nowMs) {
-    if (state.playerState === 'playing' && !state.isScrubbing && state.duration > 0) {
+    scrubberRafId = 0;
+    if (!state.connected || state.playerState !== 'playing' || document.hidden) {
+      return;
+    }
+    if (!state.isScrubbing && state.duration > 0) {
       const ts = nowMs || performance.now();
       const intervalMs = isStandbyOrLandscapeVisible() ? 250 : 50;
       if (ts - lastScrubberFrameMs >= intervalMs) {
@@ -2979,6 +3530,7 @@ extension WebUIContent {
         const deltaSec = (ts - state.lastSyncTime) / 1000;
         const rawPos = state.lastSyncPos + deltaSec;
         const currentPos = Math.min(state.duration, rawPos);
+        state.position = currentPos;
         updateScrubberUI(currentPos, state.duration);
 
         // If spectral data went stale (>1.2s) while RTA bars are still raised above floor, wake up RTA decay loop
@@ -3011,9 +3563,16 @@ extension WebUIContent {
         }
       }
     }
-    requestAnimationFrame(scrubberAnimationLoop);
+    scrubberRafId = requestAnimationFrame(scrubberAnimationLoop);
   }
-  requestAnimationFrame(scrubberAnimationLoop);
+  ensureScrubberLoopRunning();
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      ensureScrubberLoopRunning();
+    }
+    syncSpectralPolling();
+  });
 
   // --- WebSocket Half-Open & Track Transition Watchdog ---
   setInterval(() => {
@@ -3055,6 +3614,7 @@ extension WebUIContent {
     const targetPos = Math.max(0, Math.min(state.duration || 0, position));
     state.lastSyncPos = targetPos;
     state.lastSyncTime = performance.now();
+    state.lastSyncPerf = state.lastSyncTime;
     state.position = targetPos;
     updateScrubberUI(targetPos, state.duration);
     send({
@@ -3067,11 +3627,15 @@ extension WebUIContent {
   dom.scrubberInput.addEventListener('change', commitScrub);
   dom.scrubberInput.addEventListener('pointerup', commitScrub);
   dom.scrubberInput.addEventListener('touchend', commitScrub);
+  dom.scrubberInput.addEventListener('pointercancel', commitScrub);
+  dom.scrubberInput.addEventListener('touchcancel', commitScrub);
 
   // --- Transport Event Listeners ---
   function optimisticPlay() {
+    state.pendingPauseUntil = 0;
     state.pendingPlayUntil = Date.now() + 3000;
     state.lastSyncTime = performance.now();
+    state.lastSyncPerf = state.lastSyncTime;
     state.playerState = 'playing';
     state.playbackState = 'playing';
     renderNowPlaying();
@@ -3089,7 +3653,9 @@ extension WebUIContent {
       state.pendingPlayUntil = 0;
       const now = performance.now();
       state.lastSyncPos = Math.min(state.duration, state.lastSyncPos + (now - state.lastSyncTime) / 1000);
+      state.position = state.lastSyncPos;
       state.lastSyncTime = now;
+      state.lastSyncPerf = now;
       state.playerState = 'paused';
       state.playbackState = 'paused';
       renderNowPlaying();
@@ -3147,10 +3713,14 @@ extension WebUIContent {
 
   // Desktop Spacebar shortcut for Play/Pause
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
-      e.preventDefault();
-      togglePlayPause();
-    }
+    if (e.code !== 'Space') return;
+    const tag = document.activeElement?.tagName;
+    if (['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(tag) || document.activeElement?.isContentEditable) return;
+    const authOverlay = document.getElementById('device-auth-overlay');
+    if (authOverlay && !authOverlay.classList.contains('hidden')) return;
+    if (dom.modalAppleAuth && !dom.modalAppleAuth.classList.contains('hidden')) return;
+    e.preventDefault();
+    togglePlayPause();
   });
 
   dom.btnNext.addEventListener('click', () => sendThrottledTransport('next'));
@@ -3752,34 +4322,47 @@ extension WebUIContent {
   function isStandbyOrLandscapeVisible() {
     const overlay = document.getElementById('standby-tv-overlay');
     const isExplicitOpen = Boolean(overlay && !overlay.classList.contains('hidden'));
-    const isMobileLandscape = window.innerHeight <= 540 && window.innerWidth > window.innerHeight;
+    const isTouchPhone = Boolean(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+    const isMobileLandscape = isTouchPhone && window.innerHeight <= 540 && window.innerWidth >= 568 && window.innerWidth > window.innerHeight && !document.body.classList.contains('keyboard-open');
     return isExplicitOpen || isMobileLandscape;
   }
 
   let spectralPollTickCount = 0;
   function syncSpectralPolling() {
+    if (document.hidden) {
+      stopSpectralPolling();
+      return;
+    }
     const sa = state.spectralAnalysis || {};
     const saEnabled = sa.is_enabled !== false && sa.isEnabled !== false && sa.verdict !== 'disabled';
     const isModalOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
-    const isPlayingAndEnabled = state.playerState === 'playing' && saEnabled;
+    const isTvActive = isStandbyOrLandscapeVisible();
+    const isCachedPass = Boolean(sa.is_cached || sa.isCached);
+    const stillAnalyzing = !isCachedPass && (!sa.verdict || sa.verdict === 'analyzing');
+    const needsSoundCheck = Boolean(state.ampSoundCheckEnabled && (state.ampSoundCheckGainDb === null || state.ampSoundCheckGainDb === undefined));
+    const isPlayingAndNeeded = state.playerState === 'playing' && saEnabled && (isTvActive || stillAnalyzing || needsSoundCheck);
 
-    if (isModalOpen || isPlayingAndEnabled) {
+    if (isModalOpen || isPlayingAndNeeded) {
       if (!spectralPollTimer) {
         spectralPollTickCount = 0;
         spectralPollTimer = setInterval(() => {
+          if (document.hidden) {
+            stopSpectralPolling();
+            return;
+          }
           spectralPollTickCount += 1;
           const curSa = state.spectralAnalysis || {};
           const curEnabled = curSa.is_enabled !== false && curSa.isEnabled !== false && curSa.verdict !== 'disabled';
           const modalStillOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
           const tvStillActive = isStandbyOrLandscapeVisible() && state.playerState === 'playing' && curEnabled;
-          const isCachedPass = Boolean(curSa.is_cached || curSa.isCached);
-          const stillAnalyzing = state.playerState === 'playing' && curEnabled && !isCachedPass && (!curSa.verdict || curSa.verdict === 'analyzing');
-          const playingActive = state.playerState === 'playing' && curEnabled;
-          if (!modalStillOpen && !playingActive) {
+          const curCachedPass = Boolean(curSa.is_cached || curSa.isCached);
+          const curStillAnalyzing = state.playerState === 'playing' && curEnabled && !curCachedPass && (!curSa.verdict || curSa.verdict === 'analyzing');
+          const curNeedsSoundCheck = state.playerState === 'playing' && Boolean(state.ampSoundCheckEnabled && (state.ampSoundCheckGainDb === null || state.ampSoundCheckGainDb === undefined));
+          if (!modalStillOpen && !tvStillActive && !curStillAnalyzing && !curNeedsSoundCheck) {
             stopSpectralPolling();
             return;
           }
-          if (modalStillOpen || tvStillActive || stillAnalyzing || (!isCachedPass && spectralPollTickCount % 2 === 0)) {
+          if (modalStillOpen || tvStillActive || curStillAnalyzing || curNeedsSoundCheck) {
             send({ action: 'get_spectral_analysis' });
           }
         }, 210);
@@ -3794,7 +4377,10 @@ extension WebUIContent {
   const openQualityModal = () => {
     triggerHaptic('light');
     updateSignalPathDetails();
-    if (dom.qualityModal) dom.qualityModal.classList.remove('hidden');
+    if (dom.qualityModal) {
+      dom.qualityModal.classList.remove('hidden');
+      dom.qualityModal.setAttribute('aria-hidden', 'false');
+    }
     send({ action: 'get_spectral_analysis' });
     syncSpectralPolling();
   };
@@ -3809,7 +4395,11 @@ extension WebUIContent {
 
   if (dom.btnCloseModal) {
     dom.btnCloseModal.addEventListener('click', () => {
-      if (dom.qualityModal) dom.qualityModal.classList.add('hidden');
+      if (dom.qualityModal) {
+        blurFocusedInContainer(dom.qualityModal);
+        dom.qualityModal.classList.add('hidden');
+        dom.qualityModal.setAttribute('aria-hidden', 'true');
+      }
       syncSpectralPolling();
     });
   }
@@ -3819,6 +4409,7 @@ extension WebUIContent {
     triggerHaptic('light');
     if (dom.devicesModal) {
       dom.devicesModal.classList.remove('hidden');
+      dom.devicesModal.setAttribute('aria-hidden', 'false');
       send({ action: 'get_audio_devices' });
     }
   };
@@ -3827,14 +4418,20 @@ extension WebUIContent {
 
   if (dom.btnCloseDevices) {
     dom.btnCloseDevices.addEventListener('click', () => {
-      if (dom.devicesModal) dom.devicesModal.classList.add('hidden');
+      if (dom.devicesModal) {
+        blurFocusedInContainer(dom.devicesModal);
+        dom.devicesModal.classList.add('hidden');
+        dom.devicesModal.setAttribute('aria-hidden', 'true');
+      }
     });
   }
 
   if (dom.devicesModal) {
     dom.devicesModal.addEventListener('click', (e) => {
       if (e.target === dom.devicesModal) {
+        blurFocusedInContainer(dom.devicesModal);
         dom.devicesModal.classList.add('hidden');
+        dom.devicesModal.setAttribute('aria-hidden', 'true');
       }
     });
   }
@@ -3887,7 +4484,7 @@ extension WebUIContent {
             <line x1="6" y1="18" x2="6.01" y2="18"/>
           </svg>
         `;
-        subtitle = `Сетевой стример • До 192 кГц Hi-Res • ${dev.manufacturer || 'DLNA'}`;
+        subtitle = `Сетевой стример • До 192 кГц Hi-Res • ${escapeHtml(dev.manufacturer || 'DLNA')}`;
       } else {
         iconSvg = `
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -3906,7 +4503,7 @@ extension WebUIContent {
         </div>
         <div class="audio-device-info">
           <div class="audio-device-name">
-            <span class="audio-device-title">${dev.name || (isDLNA ? 'DLNA Стример' : 'Аудиовыход')}</span>
+            <span class="audio-device-title">${escapeHtml(dev.name || (isDLNA ? 'DLNA Стример' : 'Аудиовыход'))}</span>
             ${isDLNA ? '<span class="badge-dlna">DLNA</span>' : ''}
           </div>
           <div class="audio-device-meta">${subtitle}</div>
@@ -3930,38 +4527,41 @@ extension WebUIContent {
 
   // --- Apple MusicKit & User Token Handlers ---
   let musicKitInstance = null;
+  let musicKitLoadedListenerBound = false;
+
+  function setupMusicKitFromState() {
+    const devToken = state.developerToken;
+    if (!devToken || !window.MusicKit) return;
+    try {
+      if (!musicKitInstance) {
+        window.MusicKit.configure({
+          developerToken: devToken,
+          app: {
+            name: 'Apple Music Remote',
+            build: '2.5.0'
+          }
+        });
+        musicKitInstance = window.MusicKit.getInstance();
+        if (musicKitInstance && musicKitInstance.isAuthorized) {
+          const uToken = musicKitInstance.musicUserToken;
+          if (uToken && !state.hasUserToken) {
+            send({ action: 'set_user_token', params: { user_token: uToken } });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('MusicKit configuration error:', e);
+    }
+  }
 
   function initMusicKit(devToken) {
     if (!devToken) return;
     state.developerToken = devToken;
-    const setup = () => {
-      if (window.MusicKit) {
-        try {
-          if (!musicKitInstance) {
-            window.MusicKit.configure({
-              developerToken: devToken,
-              app: {
-                name: 'Apple Music Remote',
-                build: '2.5.0'
-              }
-            });
-            musicKitInstance = window.MusicKit.getInstance();
-            if (musicKitInstance && musicKitInstance.isAuthorized) {
-              const uToken = musicKitInstance.musicUserToken;
-              if (uToken && !state.hasUserToken) {
-                send({ action: 'set_user_token', params: { user_token: uToken } });
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('MusicKit configuration error:', e);
-        }
-      }
-    };
     if (window.MusicKit) {
-      setup();
-    } else {
-      document.addEventListener('musickitloaded', setup);
+      setupMusicKitFromState();
+    } else if (!musicKitLoadedListenerBound) {
+      musicKitLoadedListenerBound = true;
+      document.addEventListener('musickitloaded', setupMusicKitFromState, { once: true });
     }
   }
 
@@ -4003,7 +4603,7 @@ extension WebUIContent {
     state.accountHealth = data;
     const isSynced = data.status === 'synchronized' || data.is_accounts_matched === true;
     state.isAccountSynced = isSynced;
-    const email = data.account_email || data.mac_apple_id || data.macos_account || 'tse.tds@gmail.com';
+    const email = data.account_email || data.mac_apple_id || data.macos_account || 'Apple Music';
     const storefront = (data.mac_country_code || data.storefront || data.web_storefront || state.userStorefront || 'us').toUpperCase();
     const hasSub = data.is_subscription_active !== false && data.has_active_subscription !== false;
     const details = data.details || (isSynced ? `Apple Music: подписка активна • Регион ${storefront} • Медиатека синхронизирована` : (data.message || 'Требуется вход'));
@@ -4128,6 +4728,7 @@ extension WebUIContent {
     dom.btnCloseAccountDiag.addEventListener('click', () => {
       triggerHaptic('light');
       if (dom.modalAccountDiag) {
+        blurFocusedInContainer(dom.modalAccountDiag);
         dom.modalAccountDiag.classList.add('hidden');
         dom.modalAccountDiag.setAttribute('aria-hidden', 'true');
       }
@@ -4137,6 +4738,7 @@ extension WebUIContent {
     dom.btnDoneAccountDiag.addEventListener('click', () => {
       triggerHaptic('light');
       if (dom.modalAccountDiag) {
+        blurFocusedInContainer(dom.modalAccountDiag);
         dom.modalAccountDiag.classList.add('hidden');
         dom.modalAccountDiag.setAttribute('aria-hidden', 'true');
       }
@@ -4174,7 +4776,11 @@ extension WebUIContent {
 
   if (dom.btnGoToAlbum) {
     dom.btnGoToAlbum.addEventListener('click', () => {
-      if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+      if (dom.stationPickerModal) {
+        blurFocusedInContainer(dom.stationPickerModal);
+        dom.stationPickerModal.classList.add('hidden');
+        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+      }
       openCurrentTrackAlbum();
     });
   }
@@ -4185,7 +4791,11 @@ extension WebUIContent {
 
   function triggerAiMixFromCurrentTrack() {
     triggerHaptic('medium');
-    if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+    if (dom.stationPickerModal) {
+      blurFocusedInContainer(dom.stationPickerModal);
+      dom.stationPickerModal.classList.add('hidden');
+      dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+    }
     const trackName = (state.track && state.track.name) ? state.track.name.trim() : '';
     const artistName = (state.track && state.track.artist) ? state.track.artist.trim() : '';
     const albumName = (state.track && state.track.album) ? state.track.album.trim() : '';
@@ -4201,15 +4811,20 @@ extension WebUIContent {
     });
     state.isAiCurating = true;
     state.pendingStandbyAiAutoPlay = true;
+    state.aiCurateReqSeq = (state.aiCurateReqSeq || 0) + 1;
+    state.lastAiCurateSentAt = Date.now();
+    const reqId = state.aiCurateReqSeq;
     setUIBusy(true, translateTextToEn(`✨ ИИ-подбор по вайбу «${trackName}»...`));
     send({
       action: 'ai_curate_from_track',
+      request_id: reqId,
       params: {
         name: trackName,
         artist: artistName,
         album: albumName,
         country: state.userStorefront || state.trends.country || 'ru',
-        auto_play: true
+        auto_play: true,
+        request_id: reqId
       }
     });
   }
@@ -4251,20 +4866,27 @@ extension WebUIContent {
       }
       if (dom.stationPickerModal) {
         dom.stationPickerModal.classList.remove('hidden');
+        dom.stationPickerModal.setAttribute('aria-hidden', 'false');
       }
     });
   }
 
   if (dom.btnCloseStationModal) {
     dom.btnCloseStationModal.addEventListener('click', () => {
-      if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+      if (dom.stationPickerModal) {
+        blurFocusedInContainer(dom.stationPickerModal);
+        dom.stationPickerModal.classList.add('hidden');
+        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+      }
     });
   }
 
   if (dom.stationPickerModal) {
     dom.stationPickerModal.addEventListener('click', (e) => {
       if (e.target === dom.stationPickerModal) {
+        blurFocusedInContainer(dom.stationPickerModal);
         dom.stationPickerModal.classList.add('hidden');
+        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
       }
     });
   }
@@ -4272,7 +4894,11 @@ extension WebUIContent {
   if (dom.btnStationByTrack) {
     dom.btnStationByTrack.addEventListener('click', () => {
       triggerHaptic('medium');
-      if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+      if (dom.stationPickerModal) {
+        blurFocusedInContainer(dom.stationPickerModal);
+        dom.stationPickerModal.classList.add('hidden');
+        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+      }
       const trackName = state.track ? state.track.name : '';
       const artistName = state.track ? state.track.artist : '';
       if (!trackName) return;
@@ -4293,7 +4919,11 @@ extension WebUIContent {
   if (dom.btnStationByArtist) {
     dom.btnStationByArtist.addEventListener('click', () => {
       triggerHaptic('medium');
-      if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+      if (dom.stationPickerModal) {
+        blurFocusedInContainer(dom.stationPickerModal);
+        dom.stationPickerModal.classList.add('hidden');
+        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+      }
       const artistName = state.track ? state.track.artist : '';
       if (!artistName) return;
       markWaitingForPlayback({ isStation: true, targetName: artistName });
@@ -4311,7 +4941,10 @@ extension WebUIContent {
 
   dom.qualityModal.addEventListener('click', (e) => {
     if (e.target === dom.qualityModal) {
+      blurFocusedInContainer(dom.qualityModal);
       dom.qualityModal.classList.add('hidden');
+      dom.qualityModal.setAttribute('aria-hidden', 'true');
+      syncSpectralPolling();
     }
   });
 
@@ -4324,9 +4957,11 @@ extension WebUIContent {
     const maxVol = isExtAmpMode ? Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80)) : 100;
     const vol = Math.max(0, Math.min(maxVol, Math.round(Number(val) || 0)));
     state.volume = vol;
-    if (vol > 0) {
+    if (vol >= 5) {
       state.previousVolume = vol;
-      if (isExtAmpMode) state.ampMuted = false;
+    }
+    if (vol > 0 && isExtAmpMode) {
+      state.ampMuted = false;
     }
 
     const pct = Math.max(0, Math.min(100, (vol / maxVol) * 100));
@@ -4381,11 +5016,20 @@ extension WebUIContent {
       sendThrottledVolume(e.target.value);
     });
 
-    dom.volumeInput.addEventListener('change', (e) => {
+    const finishVolScrub = (e) => {
       state.isDraggingVolume = false;
-      sendThrottledVolume(e.target.value);
+      if (e && e.target && e.target.value !== undefined) {
+        sendThrottledVolume(e.target.value);
+      }
+      renderVolumeUI();
       triggerHaptic('light');
-    });
+    };
+
+    dom.volumeInput.addEventListener('change', finishVolScrub);
+    dom.volumeInput.addEventListener('pointerup', () => { state.isDraggingVolume = false; renderVolumeUI(); });
+    dom.volumeInput.addEventListener('touchend', () => { state.isDraggingVolume = false; renderVolumeUI(); }, { passive: true });
+    dom.volumeInput.addEventListener('pointercancel', () => { state.isDraggingVolume = false; renderVolumeUI(); });
+    dom.volumeInput.addEventListener('touchcancel', () => { state.isDraggingVolume = false; renderVolumeUI(); }, { passive: true });
   }
 
   if (dom.standbyVolumeInput) {
@@ -4410,13 +5054,32 @@ extension WebUIContent {
       if (e && e.target && e.target.value !== undefined) {
         sendThrottledVolume(e.target.value);
       }
+      renderVolumeUI();
       showStandbyVolumeLoupe(750);
       triggerHaptic('light');
     };
 
     dom.standbyVolumeInput.addEventListener('change', finishStandbyVolScrub);
-    dom.standbyVolumeInput.addEventListener('pointerup', () => showStandbyVolumeLoupe(750));
-    dom.standbyVolumeInput.addEventListener('touchend', () => showStandbyVolumeLoupe(750), { passive: true });
+    dom.standbyVolumeInput.addEventListener('pointerup', () => {
+      state.isDraggingVolume = false;
+      renderVolumeUI();
+      showStandbyVolumeLoupe(750);
+    });
+    dom.standbyVolumeInput.addEventListener('touchend', () => {
+      state.isDraggingVolume = false;
+      renderVolumeUI();
+      showStandbyVolumeLoupe(750);
+    }, { passive: true });
+    dom.standbyVolumeInput.addEventListener('pointercancel', () => {
+      state.isDraggingVolume = false;
+      renderVolumeUI();
+      showStandbyVolumeLoupe(750);
+    });
+    dom.standbyVolumeInput.addEventListener('touchcancel', () => {
+      state.isDraggingVolume = false;
+      renderVolumeUI();
+      showStandbyVolumeLoupe(750);
+    }, { passive: true });
   }
 
   if (dom.btnVolumeMute) {
@@ -4479,7 +5142,7 @@ extension WebUIContent {
 
     container.innerHTML = `
       <div class="track-row now-playing-row">
-        <img class="track-thumb" src="${artSrc}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
+        <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
         <div class="track-details">
           <span class="track-row-title">${escapeHtml(cur.name || 'Без названия')}</span>
           <span class="track-row-artist">${escapeHtml(cur.artist || 'Неизвестный исполнитель')}</span>
@@ -4512,7 +5175,7 @@ extension WebUIContent {
       const dur = formatTime(t.duration || 0);
 
       row.innerHTML = `
-        <img class="track-thumb" src="${artSrc}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
+        <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
         <div class="track-details">
           <span class="track-row-title">${escapeHtml(t.name || 'Без названия')}</span>
           <span class="track-row-artist">${escapeHtml(t.artist || 'Неизвестный исполнитель')}</span>
@@ -4521,11 +5184,13 @@ extension WebUIContent {
       `;
 
       row.addEventListener('click', () => {
+        optimisticPlay();
+        markWaitingForPlayback({ targetName: t.name || '', expectedTrackName: t.name || '' });
         setUIBusy(true, 'Переход к треку...');
         if (type === 'upcoming') {
           send({ action: 'queue_play_index', params: { index: idx } });
         } else {
-          send({ action: 'play_history_index', params: { index: idx } });
+          send({ action: 'play_history_index', index: idx, params: { index: idx } });
         }
       });
 
@@ -4548,15 +5213,14 @@ extension WebUIContent {
       }
       triggerHaptic('medium');
       let plName = '';
-      if (state.activeAiCuratedTitle) {
+      if (state.activeAiCuratedTitle && (!state.queue.playlist || state.queue.playlist === 'Очередь AMR')) {
         plName = state.activeAiCuratedTitle;
       } else if (state.queue.playlist && state.queue.playlist !== 'Очередь AMR') {
         plName = state.queue.playlist;
       }
       dom.btnSaveQueuePlaylist.disabled = true;
-      dom.btnSaveQueuePlaylist.classList.add('saved');
       if (dom.btnSaveQueueText) {
-        dom.btnSaveQueueText.textContent = translateTextToEn('В медиатеке ✓');
+        dom.btnSaveQueueText.textContent = translateTextToEn('Добавление...');
       }
       send({
         action: 'save_queue_to_playlist',
@@ -4565,16 +5229,6 @@ extension WebUIContent {
           tracks: allQueueTracks
         }
       });
-      showToast(IS_EN ? '★ Queue saved to Apple Music playlists' : '★ Очередь сохранена в плейлисты Apple Music');
-      setTimeout(() => {
-        if (dom.btnSaveQueuePlaylist) {
-          dom.btnSaveQueuePlaylist.disabled = false;
-          dom.btnSaveQueuePlaylist.classList.remove('saved');
-        }
-        if (dom.btnSaveQueueText) {
-          dom.btnSaveQueueText.textContent = translateTextToEn('В плейлист');
-        }
-      }, 3200);
     });
   }
 
@@ -4600,7 +5254,7 @@ extension WebUIContent {
 
       card.innerHTML = `
         <div class="playlist-card-art-wrap">
-          <img class="playlist-card-art" src="${art}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
           <div class="playlist-card-art-fallback" style="display:none;">
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#6e6e73" stroke-width="1.8">
               <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
@@ -4619,13 +5273,12 @@ extension WebUIContent {
     });
   }
 
-  function isMobilePhoneViewport() {
-    return window.matchMedia('(hover: none) and (pointer: coarse)').matches &&
-      Math.min(window.innerWidth, window.innerHeight) < 600;
+  function isDesktopLayout() {
+    return window.innerWidth >= 768 && window.innerHeight >= 541;
   }
 
-  function isDesktopLayout() {
-    return window.innerWidth >= 768 && !isMobilePhoneViewport();
+  function isMobilePhoneViewport() {
+    return !isDesktopLayout();
   }
 
   function navigateToView(viewId, desktopTab, skipFetch = false) {
@@ -4639,8 +5292,7 @@ extension WebUIContent {
   function findMatchingLocalPlaylist(plName, plId = '') {
     if (!plName && !plId) return null;
     const lower = (plName || '').trim().toLowerCase();
-    const id = (plId || '').trim();
-    const isEssentials = lower === 'your essentials' || lower === 'мои любимые треки' || id.includes('20e9f373919da080c2f90eaf2e62e914');
+    const isEssentials = lower === 'your essentials' || lower === 'мои любимые треки';
     const isChillMix = lower === 'chill mix' || lower === 'чилл-микс';
     const isNewMusicMix = lower === 'new music mix' || lower === 'микс новинок';
     const isFavoritesMix = lower === 'favorites mix' || lower === 'в моём вкусе: микс' || lower === 'в моем вкусе: микс';
@@ -4675,8 +5327,22 @@ extension WebUIContent {
     state.albumOpenedFromHome = (origin === 'home' || origin === 'home-grid');
     state.detailOpenedFromHome = (origin === 'home' || origin === 'home-grid');
     state.currentPlaylistDetail = pl;
-    if (dom.detailBadge) dom.detailBadge.textContent = 'ПЛЕЙЛИСТ';
     const plName = pl.name || pl.title || '';
+    const nextPlId = String(pl.id || '').trim().toLowerCase();
+    const nextPlName = String(plName).trim().toLowerCase();
+    if (
+      state.isAddingDetailToLibrary &&
+      (
+        (state.lastDetailLibraryAddId && nextPlId && state.lastDetailLibraryAddId !== nextPlId) ||
+        (!state.lastDetailLibraryAddId && state.lastDetailLibraryAddName && nextPlName && state.lastDetailLibraryAddName !== nextPlName)
+      )
+    ) {
+      state.isAddingDetailToLibrary = false;
+    }
+    state.currentDetailPlaylistId = String(pl.id || '');
+    state.currentDetailAlbumId = '';
+    state.currentDetailTitle = String(plName);
+    if (dom.detailBadge) dom.detailBadge.textContent = 'ПЛЕЙЛИСТ';
     dom.detailTitle.textContent = plName;
     const count = pl.track_count || pl.trackCount || 0;
     dom.detailMeta.textContent = count > 0 ? `${count} треков` : (pl.curator_name || pl.curatorName || 'Apple Music');
@@ -4721,6 +5387,20 @@ extension WebUIContent {
     state.albumOpenedFromHome = (origin === 'home' || origin === 'home-grid');
     state.detailOpenedFromHome = (origin === 'home' || origin === 'home-grid');
     state.currentPlaylistDetail = { ...alb, isAlbum: true };
+    const nextAlbId = String(alb.id || '').trim().toLowerCase();
+    const nextAlbName = String(alb.name || alb.title || '').trim().toLowerCase();
+    if (
+      state.isAddingDetailToLibrary &&
+      (
+        (state.lastDetailLibraryAddId && nextAlbId && state.lastDetailLibraryAddId !== nextAlbId) ||
+        (!state.lastDetailLibraryAddId && state.lastDetailLibraryAddName && nextAlbName && state.lastDetailLibraryAddName !== nextAlbName)
+      )
+    ) {
+      state.isAddingDetailToLibrary = false;
+    }
+    state.currentDetailPlaylistId = '';
+    state.currentDetailAlbumId = String(alb.id || '');
+    state.currentDetailTitle = String(alb.name || alb.title || '');
     if (dom.detailTitle) dom.detailTitle.textContent = alb.name || alb.title || 'Альбом';
     if (dom.detailMeta) dom.detailMeta.textContent = alb.artist || alb.sub || alb.subtitle || '';
     if (dom.detailArtwork) dom.detailArtwork.src = alb.artwork || alb.artwork_url || 'apple-touch-icon.svg';
@@ -4905,6 +5585,11 @@ extension WebUIContent {
         ? ((state.currentAlbumDetail && state.currentAlbumDetail.tracks) || [])
         : (state.currentPlaylistTracks || []);
 
+      state.lastLibraryAddTarget = 'detail';
+      state.isAddingDetailToLibrary = true;
+      state.lastDetailLibraryAddKey = String(state.currentDetailPlaylistId || state.currentDetailAlbumId || state.currentDetailTitle || itemId || itemName || '');
+      state.lastDetailLibraryAddId = String(itemId || '').trim().toLowerCase();
+      state.lastDetailLibraryAddName = String(itemName || '').trim().toLowerCase();
       dom.btnAddPlaylistLibrary.disabled = true;
       if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'Добавление...';
       send({
@@ -4925,15 +5610,40 @@ extension WebUIContent {
     if (!alb) return;
     state.currentAlbumDetail = alb;
     state.currentPlaylistDetail = { ...alb, isAlbum: true };
+    const nextAlbId = String(alb.id || '').trim().toLowerCase();
+    const nextAlbName = String(alb.name || alb.title || '').trim().toLowerCase();
+    if (
+      state.isAddingDetailToLibrary &&
+      (
+        (state.lastDetailLibraryAddId && nextAlbId && state.lastDetailLibraryAddId !== nextAlbId) ||
+        (!state.lastDetailLibraryAddId && state.lastDetailLibraryAddName && nextAlbName && state.lastDetailLibraryAddName !== nextAlbName)
+      )
+    ) {
+      state.isAddingDetailToLibrary = false;
+    }
+    state.currentDetailPlaylistId = '';
+    state.currentDetailAlbumId = String(alb.id || state.currentDetailAlbumId || '');
+    state.currentDetailTitle = String(alb.name || alb.title || state.currentDetailTitle || '');
     if (dom.btnAddPlaylistLibrary) {
       dom.btnAddPlaylistLibrary.style.display = '';
       const tracksArr = alb.tracks || [];
       const allLocal = tracksArr.length > 0 && tracksArr.every(t => Boolean(t.is_local || t.isLocal));
+      const curIdLower = String(state.currentDetailAlbumId || '').trim().toLowerCase();
+      const curNameLower = String(state.currentDetailTitle || '').trim().toLowerCase();
+      const isSamePendingDetail = Boolean(
+        state.isAddingDetailToLibrary &&
+        (
+          (state.lastDetailLibraryAddId && curIdLower)
+            ? (state.lastDetailLibraryAddId === curIdLower)
+            : Boolean(state.lastDetailLibraryAddName && curNameLower && state.lastDetailLibraryAddName === curNameLower)
+        )
+      );
       if (alb.is_local || alb.in_library || allLocal) {
+        state.isAddingDetailToLibrary = false;
         dom.btnAddPlaylistLibrary.disabled = true;
         if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
         dom.btnAddPlaylistLibrary.classList.add('added');
-      } else if (!dom.btnAddPlaylistLibrary.classList.contains('added')) {
+      } else if (!dom.btnAddPlaylistLibrary.classList.contains('added') && !isSamePendingDetail) {
         dom.btnAddPlaylistLibrary.disabled = false;
         if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
       }
@@ -5022,7 +5732,7 @@ extension WebUIContent {
         const matchedLocal = findMatchingLocalPlaylist(plName, state.currentPlaylistDetail.id);
         const isLocalPlaylist = !state.currentPlaylistDetail.isAlbum && (Boolean(state.currentPlaylistDetail.is_local) || Boolean(matchedLocal));
         optimisticPlay();
-        state.waitingForPlayback = true;
+        markWaitingForPlayback({ targetName: t.name || '', expectedTrackName: t.name || '' });
         if (isLocalPlaylist) {
           setUIBusy(true, 'Запуск трека...');
         } else {
@@ -5657,18 +6367,30 @@ extension WebUIContent {
       currentSearchSongs = [];
       currentSearchOffset = 0;
       currentSearchHasMore = false;
+      state.isAiCurating = true;
+      state.aiCurateReqSeq = (state.aiCurateReqSeq || 0) + 1;
+      state.lastAiCurateSentAt = Date.now();
+      const reqId = state.aiCurateReqSeq;
       dom.searchResults.innerHTML = `<div class="loading-state">${translateTextToEn('Подбор нативным ИИ (Apple Neural Engine)...')}</div>`;
       send({
         action: 'ai_curate',
+        request_id: reqId,
         params: {
           prompt: query,
-          country: state.userStorefront || state.trends.country || 'ru'
+          country: state.userStorefront || state.trends.country || 'ru',
+          request_id: reqId
         }
       });
       return;
     }
 
     if (offset === 0) {
+      if (state.aiCurateTimeoutId) {
+        clearTimeout(state.aiCurateTimeoutId);
+        state.aiCurateTimeoutId = null;
+      }
+      state.isAiCurating = false;
+      state.aiCurateReqSeq = (state.aiCurateReqSeq || 0) + 1;
       currentSearchSongs = [];
       currentSearchOffset = 0;
       currentSearchHasMore = false;
@@ -5681,14 +6403,18 @@ extension WebUIContent {
         btn.textContent = 'Загрузка...';
       }
     }
+    state.searchReqSeq = (state.searchReqSeq || 0) + 1;
+    const searchReqId = state.searchReqSeq;
     send({
       action: 'search',
+      request_id: searchReqId,
       params: {
         query: query,
         country: state.userStorefront || state.trends.country || 'us',
         scope: scope,
         limit: 25,
-        offset: offset
+        offset: offset,
+        request_id: searchReqId
       }
     });
   }
@@ -5701,7 +6427,7 @@ extension WebUIContent {
     const localBadge = isLocal ? '<span class="badge-library">МЕДИАТЕКА</span>' : '';
 
     row.innerHTML = `
-      <img class="track-thumb" src="${artSrc}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
+      <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
       <div class="track-details">
         <div class="track-row-title-wrap">
           <span class="track-row-title">${escapeHtml(s.name || s.trackName || '')}</span>
@@ -5736,12 +6462,25 @@ extension WebUIContent {
     return row;
   }
 
-  function updateAiCuratedResults(data) {
+  function updateAiCuratedResults(data, type = '') {
+    const respReqId = data && data.request_id;
+    if (respReqId !== undefined && respReqId !== null && state.aiCurateReqSeq && Number(respReqId) !== Number(state.aiCurateReqSeq)) {
+      return;
+    }
+    if (state.aiCurateTimeoutId) {
+      clearTimeout(state.aiCurateTimeoutId);
+      state.aiCurateTimeoutId = null;
+    }
     state.isAiCurating = false;
+    const isSearchViewActive = isDesktopLayout()
+      ? (state.desktopActiveTab === 'search')
+      : (state.activeView === 'view-search' || state.activeMobileView === 'search');
     if (!data || typeof data !== 'object') {
       state.pendingStandbyAiAutoPlay = false;
       setUIBusy(false);
-      dom.searchResults.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+      if (isSearchViewActive && dom.searchResults) {
+        dom.searchResults.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+      }
       return;
     }
 
@@ -5764,10 +6503,6 @@ extension WebUIContent {
     state.activeAiCuratedTitle = `✨ ${title}`;
     state.activeAiCuratedPrompt = curatorPrompt;
 
-    currentSearchSongs = [...songs];
-    currentSearchOffset = songs.length;
-    currentSearchHasMore = false;
-
     if (shouldAutoPlay && songs.length > 0) {
       showToast(`✨ ${title}`);
       playSearchResultsList([...songs], false, 0, {
@@ -5779,6 +6514,19 @@ extension WebUIContent {
       setUIBusy(false);
       showToast(IS_EN ? 'No matching tracks found' : 'Не удалось подобрать треки по запросу');
     }
+
+    const hasOpenSearchResults = Boolean(
+      dom.searchResults &&
+      dom.searchResults.children.length > 0 &&
+      !dom.searchResults.querySelector('.search-placeholder')
+    );
+    if ((shouldAutoPlay || type === 'play_ai_track_vibe' || type === 'ai_curate_from_track') && (!isSearchViewActive || (state.searchScope !== 'ai' && hasOpenSearchResults))) {
+      return;
+    }
+
+    currentSearchSongs = [...songs];
+    currentSearchOffset = songs.length;
+    currentSearchHasMore = false;
 
     dom.searchResults.innerHTML = '';
 
@@ -5832,6 +6580,8 @@ extension WebUIContent {
     const btnPin = heroCard.querySelector('#btn-ai-curated-pin');
     const btnSave = heroCard.querySelector('#btn-ai-curated-save');
     const btnSaveText = heroCard.querySelector('#btn-ai-curated-save-text');
+    dom.btnAiCuratedSave = btnSave;
+    dom.btnAiCuratedSaveText = btnSaveText;
 
     if (btnPlay && songs.length > 0) {
       btnPlay.addEventListener('click', () => {
@@ -5858,8 +6608,9 @@ extension WebUIContent {
     }
     if (btnSave && songs.length > 0) {
       btnSave.addEventListener('click', () => {
+        state.lastLibraryAddTarget = 'ai';
         btnSave.disabled = true;
-        if (btnSaveText) btnSaveText.textContent = translateTextToEn('В медиатеке ✓');
+        if (btnSaveText) btnSaveText.textContent = translateTextToEn('Добавление...');
         send({
           action: 'add_playlist_to_library',
           params: {
@@ -5867,7 +6618,6 @@ extension WebUIContent {
             tracks: songs
           }
         });
-        showToast('★ Плейлист добавлен в медиатеку Apple Music');
       });
     }
 
@@ -5902,7 +6652,7 @@ extension WebUIContent {
         const art = alb.artwork_url || alb.artwork || 'apple-touch-icon.svg';
 
         card.innerHTML = `
-          <img class="playlist-card-art" src="${art}" alt="" loading="lazy">
+          <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy">
           <span class="playlist-card-title">${escapeHtml(alb.name || alb.collectionName || '')}</span>
           <span class="playlist-card-count">${escapeHtml(alb.artist || alb.artistName || '')}</span>
         `;
@@ -5924,6 +6674,13 @@ extension WebUIContent {
   }
 
   function updateSearchResults(data) {
+    const respReqId = data && data.request_id;
+    if (respReqId !== undefined && respReqId !== null && state.searchReqSeq && Number(respReqId) !== Number(state.searchReqSeq)) {
+      return;
+    }
+    if (state.isAiCurating || state.searchScope === 'ai') {
+      return;
+    }
     if (!data) {
       dom.searchResults.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
       return;
@@ -6093,7 +6850,7 @@ extension WebUIContent {
         const art = alb.artwork_url || alb.artwork || 'apple-touch-icon.svg';
 
         card.innerHTML = `
-          <img class="playlist-card-art" src="${art}" alt="" loading="lazy">
+          <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy">
           <span class="playlist-card-title">${escapeHtml(alb.name || alb.collectionName || '')}</span>
           <span class="playlist-card-count">${escapeHtml(alb.artist || alb.artistName || '')}</span>
         `;
@@ -6131,7 +6888,7 @@ extension WebUIContent {
 
         card.innerHTML = `
           <div class="media-card-art-wrap">
-            <img class="playlist-card-art" src="${art}" alt="" loading="lazy" onerror="this.src='apple-touch-icon.svg'">
+            <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" onerror="this.src='apple-touch-icon.svg'">
           </div>
           <span class="playlist-card-title">${escapeHtml(plName)}</span>
           <span class="playlist-card-count">${escapeHtml(plSub)}</span>
@@ -6260,10 +7017,10 @@ extension WebUIContent {
     {
       id: 'station_personal',
       name: 'Моя станция',
-      subtitle: 'Кирилл Шолохов',
+      subtitle: 'Персональная станция',
       color: 'linear-gradient(145deg, #fa233b 0%, #fb5c74 45%, #ff8a65 100%)',
-      artwork: 'https://is1-ssl.mzstatic.com/image/thumb/Features/v4/e9/31/64/e93164c8-bff1-a5d9-1ad9-99ff0042a5c1/412b88f3-3259-4c12-8d9c-98b28c6371d4.png/600x600sr.jpg',
-      url: 'https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f',
+      artwork: '/assets/stations/CoverPersonal.png',
+      url: '',
       isLive: false
     },
     {
@@ -6272,7 +7029,7 @@ extension WebUIContent {
       subtitle: 'Станция открытий',
       color: 'linear-gradient(135deg, #7928ca, #ff0080)',
       artwork: '/assets/stations/CoverDiscovery.png',
-      url: 'https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm',
+      url: '',
       isLive: false
     },
     {
@@ -6289,7 +7046,7 @@ extension WebUIContent {
       name: 'Apple Music Hits',
       subtitle: 'Культовые хиты',
       color: 'linear-gradient(135deg, #ff0844, #ffb199)',
-      artwork: '/assets/stations/CoverPersonal.png',
+      artwork: '/assets/stations/CoverHits.png',
       url: 'https://music.apple.com/us/station/apple-music-hits/ra.1498155548',
       isLive: true
     },
@@ -6298,7 +7055,7 @@ extension WebUIContent {
       name: 'Apple Music Country',
       subtitle: 'Современное кантри',
       color: 'linear-gradient(135deg, #f7971e, #ffd200)',
-      artwork: '/assets/stations/CoverDiscovery.png',
+      artwork: '/assets/stations/CoverCountry.png',
       url: 'https://music.apple.com/us/station/apple-music-country/ra.1498157166',
       isLive: true
     },
@@ -6805,6 +7562,7 @@ extension WebUIContent {
           id: c.id || '',
           type: c.type || 'station',
           url: c.url || '',
+          color: c.color || '',
           artwork: art
         });
       });
@@ -6816,19 +7574,19 @@ extension WebUIContent {
           title: 'Моя станция',
           sub: 'Персональная радиостанция',
           tag: 'Специально для вас',
-          id: 'ra.u-96b95a031a2fb0aa1abb70ff757aa95f',
+          id: '',
           type: 'station',
-          url: 'https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f',
-          artwork: 'https://is1-ssl.mzstatic.com/image/thumb/Features/v4/e9/31/64/e93164c8-bff1-a5d9-1ad9-99ff0042a5c1/412b88f3-3259-4c12-8d9c-98b28c6371d4.png/600x600sr.jpg'
+          url: '',
+          artwork: '/assets/stations/CoverPersonal.png'
         },
         {
           index: 2,
           title: 'Станция открытий',
           sub: 'Новые треки под ваш вкус',
           tag: 'Радиостанция',
-          id: 'ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm',
+          id: '',
           type: 'station',
-          url: 'https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm',
+          url: '',
           artwork: '/assets/stations/CoverDiscovery.png'
         },
         {
@@ -6843,13 +7601,13 @@ extension WebUIContent {
         },
         {
           index: 4,
-          title: 'Ностальгия по ню-металу',
-          sub: 'Плейлист медиатеки',
-          tag: 'Медиатека',
-          id: 'Ностальгия по ню-металу',
+          title: 'Сейчас на повторе',
+          sub: 'Еженедельный микс',
+          tag: 'Для вас',
+          id: 'Сейчас на повторе',
           type: 'playlist',
           url: '',
-          artwork: '/api/artwork/playlist?name=%D0%9D%D0%BE%D1%81%D1%82%D0%B0%D0%BB%D1%8C%D0%B3%D0%B8%D1%8F%20%D0%BF%D0%BE%20%D0%BD%D1%8E-%D0%BC%D0%B5%D1%82%D0%B0%D0%BB%D1%83'
+          artwork: '/assets/stations/CoverHeavyRotation.svg'
         },
         {
           index: 5,
@@ -6889,11 +7647,12 @@ extension WebUIContent {
       el.className = 'hero-card';
       el.setAttribute('data-index', c.index);
 
-      const cardColor = c.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
+      const rawCardColor = c.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
+      const cardColor = escapeHtml(String(rawCardColor).replace(/[;"<>]/g, ''));
       const animatedPlaque = getAnimatedPlaqueHtml(c);
       const hasArt = c.artwork && c.artwork.trim().length > 0;
       const mediaHtml = animatedPlaque ? animatedPlaque : (hasArt ? `
-        <img class="hero-art-img" src="${c.artwork}" alt="${escapeHtml(c.title)}" loading="eager" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <img class="hero-art-img" src="${escapeHtml(c.artwork)}" alt="${escapeHtml(c.title)}" loading="eager" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
         <div class="hero-art-fallback" style="display:none; background: ${cardColor};">
           <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
@@ -6983,7 +7742,7 @@ extension WebUIContent {
       const art = t.artwork || 'apple-touch-icon.svg';
       card.innerHTML = `
           <div class="media-card-art-wrap">
-            <img class="media-card-art" src="${art}" loading="lazy" alt="Cover">
+            <img class="media-card-art" src="${escapeHtml(art)}" loading="lazy" alt="Cover">
             <div class="media-play-overlay">
               <div class="media-play-pill">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="#000000"><polygon points="8 5 19 12 8 19 8 5"/></svg>
@@ -7030,7 +7789,7 @@ extension WebUIContent {
       const animatedPlaque = getAnimatedPlaqueHtml({ ...mix, title: mName, subtitle: curator });
       const artContent = animatedPlaque
         ? animatedPlaque
-        : `<img class="media-card-art" src="${art}" loading="lazy" alt="Cover" onerror="this.src='apple-touch-icon.svg'">`;
+        : `<img class="media-card-art" src="${escapeHtml(art)}" loading="lazy" alt="Cover" onerror="this.src='apple-touch-icon.svg'">`;
       card.innerHTML = `
         <div class="media-card-art-wrap">
           ${artContent}
@@ -7088,7 +7847,7 @@ extension WebUIContent {
         const animatedPlaque = getAnimatedPlaqueHtml({ ...item, title: iName, subtitle: iSub });
         const artContent = animatedPlaque
           ? animatedPlaque
-          : `<img class="media-card-art" src="${art}" loading="lazy" alt="Cover" onerror="this.src='apple-touch-icon.svg'">`;
+          : `<img class="media-card-art" src="${escapeHtml(art)}" loading="lazy" alt="Cover" onerror="this.src='apple-touch-icon.svg'">`;
 
         card.innerHTML = `
           <div class="media-card-art-wrap">
@@ -7175,7 +7934,7 @@ extension WebUIContent {
         const art = a.artwork || 'apple-touch-icon.svg';
         card.innerHTML = `
           <div class="media-card-art-wrap">
-            <img class="media-card-art" src="${art}" loading="lazy" alt="Cover">
+            <img class="media-card-art" src="${escapeHtml(art)}" loading="lazy" alt="Cover">
             <div class="media-play-overlay">
               <div class="media-play-pill">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="#000000"><polygon points="8 5 19 12 8 19 8 5"/></svg>
@@ -7238,7 +7997,7 @@ extension WebUIContent {
 
       card.innerHTML = `
         <div class="media-card-art-wrap">
-          <img class="media-card-art" src="${art}" alt="" loading="lazy" onerror="this.style.display='none'; this.parentElement.classList.add('has-fallback');">
+          <img class="media-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" onerror="this.style.display='none'; this.parentElement.classList.add('has-fallback');">
           <div class="media-card-art-fallback" style="background: linear-gradient(135deg, #1c1c1e, #2c2c2e);">
             <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#6e6e73" stroke-width="1.8">
               <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
@@ -7288,15 +8047,18 @@ extension WebUIContent {
       const card = document.createElement('div');
       card.className = 'media-card station-card';
       const isLive = Boolean(st.isLive || st.is_live);
-      const gradient = st.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
-      const iconSvg = st.icon || '<svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><circle cx="12" cy="12" r="3.2"/><path d="M12 6c-2.76 0-5 2.24-5 5 0 1.63.79 3.08 2 3.99V22l3-2 3 2v-7.01c1.21-.91 2-2.36 2-3.99 0-2.76-2.24-5-5-5z"/></svg>';
+      const rawGradient = st.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
+      const gradient = escapeHtml(String(rawGradient).replace(/[;"<>]/g, ''));
+      const defaultIconSvg = '<svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><circle cx="12" cy="12" r="3.2"/><path d="M12 6c-2.76 0-5 2.24-5 5 0 1.63.79 3.08 2 3.99V22l3-2 3 2v-7.01c1.21-.91 2-2.36 2-3.99 0-2.76-2.24-5-5-5z"/></svg>';
+      const rawIcon = typeof st.icon === 'string' ? st.icon.trim() : '';
+      const iconSvg = (rawIcon.startsWith('<svg') && !/on\w+\s*=|<script|javascript:/i.test(rawIcon)) ? rawIcon : defaultIconSvg;
       const animatedPlaque = getAnimatedPlaqueHtml({ ...st, type: 'station' });
       const hasImage = Boolean(st.artwork && st.artwork.trim().length > 0 && !st.artwork.includes('apple-touch-icon'));
 
       const artHtml = animatedPlaque
         ? animatedPlaque
         : (hasImage
-          ? `<img class="media-card-art" src="${st.artwork}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          ? `<img class="media-card-art" src="${escapeHtml(st.artwork)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
              <div class="media-card-art-fallback" style="display:none; background: ${gradient};">
                ${iconSvg}
                <span class="station-art-fallback-title">${escapeHtml(st.name || 'Радио')}</span>
@@ -7427,7 +8189,8 @@ extension WebUIContent {
       tile.className = 'collection-tile' + (key === 'stations' ? ' is-station' : '');
 
       const isLive = Boolean(item.isLive || item.is_live);
-      const gradient = item.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
+      const rawGradient = item.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
+      const gradient = escapeHtml(String(rawGradient).replace(/[;"<>]/g, ''));
       const artUrl = item.artwork || item.artworkUrl || item.artwork_url || '';
       const hasImage = Boolean(artUrl && artUrl.trim().length > 0 && !artUrl.includes('apple-touch-icon'));
       const itemName = item.name || item.title || 'Apple Music';
@@ -7437,7 +8200,7 @@ extension WebUIContent {
       const artHtml = animatedPlaque
         ? animatedPlaque
         : (hasImage
-          ? `<img class="collection-tile-art" src="${artUrl}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          ? `<img class="collection-tile-art" src="${escapeHtml(artUrl)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
              <div class="collection-tile-fallback station-animated-bg" style="display:none; background: ${gradient};">
                <svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><circle cx="12" cy="12" r="3.2"/><path d="M12 6c-2.76 0-5 2.24-5 5 0 1.63.79 3.08 2 3.99V22l3-2 3 2v-7.01c1.21-.91 2-2.36 2-3.99 0-2.76-2.24-5-5-5z"/></svg>
                <span class="collection-tile-fallback-title">${escapeHtml(itemName)}</span>
@@ -7592,7 +8355,7 @@ extension WebUIContent {
 
       row.innerHTML = `
         <span class="track-index-num">${idx + 1}</span>
-        <img class="track-thumb" src="${art}" alt="" loading="lazy" onerror="this.src='apple-touch-icon.svg'">
+        <img class="track-thumb" src="${escapeHtml(art)}" alt="" loading="lazy" onerror="this.src='apple-touch-icon.svg'">
         <div class="track-details">
           <span class="track-row-title">${escapeHtml(t.name || 'Без названия')}</span>
           <span class="track-row-artist">${escapeHtml(t.artist || '')}${t.album ? ' &bull; ' + escapeHtml(t.album) : ''}</span>
@@ -7641,7 +8404,7 @@ extension WebUIContent {
 
       card.innerHTML = `
         <div class="media-card-art-wrap">
-          <img class="media-card-art" src="${art}" alt="" loading="lazy">
+          <img class="media-card-art" src="${escapeHtml(art)}" alt="" loading="lazy">
           <div class="media-play-overlay">
             <div class="media-play-pill">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
@@ -7704,6 +8467,10 @@ extension WebUIContent {
     const cleanQ = genreQuery.replace(/^[^\w\sа-яА-ЯёЁ]+/, '').trim();
     dom.searchInput.value = cleanQ;
     state.searchQuery = cleanQ;
+    state.searchScope = 'all';
+    if (dom.filterChips) {
+      dom.filterChips.forEach(c => c.classList.toggle('active', c.dataset.scope === 'all'));
+    }
     dom.btnClearSearch.classList.remove('hidden');
 
     if (isDesktopLayout()) {
@@ -7712,7 +8479,7 @@ extension WebUIContent {
       switchMobileView('view-search');
     }
 
-    executeSearch(cleanQ, state.searchScope);
+    executeSearch(cleanQ, 'all');
   }
 
   // --- Navigation & View Switching ---
@@ -7727,6 +8494,9 @@ extension WebUIContent {
   });
 
   function switchMobileView(viewId, skipFetch = false) {
+    if (viewId !== 'view-search' && dom.searchInput && document.activeElement === dom.searchInput) {
+      dom.searchInput.blur();
+    }
     if (viewId !== 'view-now-playing') {
       state.lastNonPlayerView = viewId;
     }
@@ -7757,6 +8527,7 @@ extension WebUIContent {
     if (target) {
       target.classList.add('active');
     }
+    syncKeyboardFocusClass();
 
     // Manage Mini-Player visibility on mobile
     if (viewId === 'view-now-playing') {
@@ -7985,7 +8756,10 @@ extension WebUIContent {
     });
   });
 
-  function switchDesktopTab(tabName, skipFetch = false) {
+  function switchDesktopTab(tabName, keepDetailOpen = false, opts = {}) {
+    if (tabName !== 'search' && dom.searchInput && document.activeElement === dom.searchInput) {
+      dom.searchInput.blur();
+    }
     state.desktopActiveTab = tabName;
 
     dom.desktopNavButtons.forEach(b => {
@@ -8009,21 +8783,24 @@ extension WebUIContent {
     if (tabName === 'home' || tabName === 'trends') {
       if (dom.viewHome) dom.viewHome.classList.add('active');
       else if (dom.viewTrends) dom.viewTrends.classList.add('active');
-      if (!skipFetch) loadTrends();
+      if (!keepDetailOpen) loadTrends();
     } else if (tabName === 'queue') {
       dom.viewQueue.classList.add('active');
-      if (!skipFetch) send({ action: 'get_queue' });
+      if (!keepDetailOpen) send({ action: 'get_queue' });
     } else if (tabName === 'library') {
       dom.viewLibrary.classList.add('active');
-      if (!skipFetch) {
+      if (!keepDetailOpen) {
         if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.remove('hidden');
         if (dom.playlistDetailPane) dom.playlistDetailPane.classList.add('hidden');
         send({ action: 'get_playlists' });
       }
     } else if (tabName === 'search') {
       dom.viewSearch.classList.add('active');
-      dom.searchInput.focus();
+      if (!(opts && opts.fromResize) && dom.searchInput) {
+        dom.searchInput.focus();
+      }
     }
+    syncKeyboardFocusClass();
   }
 
   // HTML escaping utility
@@ -8040,16 +8817,18 @@ extension WebUIContent {
   // Handle responsive layout changes on resize
   function handleResize() {
     syncStandbyAndMotionCoverUI();
+    syncActiveMotionVideoTarget();
     const detailOpen = Boolean(dom.playlistDetailPane && !dom.playlistDetailPane.classList.contains('hidden'));
     if (isDesktopLayout()) {
       // On desktop, ensure right column displays active desktop tab
-      switchDesktopTab(state.desktopActiveTab, detailOpen);
+      switchDesktopTab(state.desktopActiveTab, detailOpen, { fromResize: true });
     } else {
       // On mobile, ensure active mobile view is respected
       switchMobileView(state.activeView, detailOpen);
     }
   }
   window.addEventListener('resize', handleResize);
+  window.addEventListener('orientationchange', handleResize);
 
   // ==========================================================================
   // StandBy / TV Mode (Motion Covers) & WLED DDP Ambilight Controller
@@ -8130,6 +8909,8 @@ extension WebUIContent {
     };
     vid.onerror = () => {
       unloadVideoElement(vid);
+      const sbBadge = document.getElementById('standby-motion-badge');
+      if (sbBadge) sbBadge.classList.add('hidden');
       if (ScreenWakeLockManager.isActive) {
         ScreenWakeLockManager.syncFallbackVideoState();
       }
@@ -8184,6 +8965,19 @@ extension WebUIContent {
     syncActiveMotionVideoTarget();
   }
 
+  function setBoundedMapValue(map, key, val, maxSize = 200) {
+    if (!key) return;
+    if (map.has(key)) {
+      map.delete(key);
+    }
+    map.set(key, val);
+    while (map.size > maxSize) {
+      const oldestKey = map.keys().next().value;
+      if (oldestKey === undefined) break;
+      map.delete(oldestKey);
+    }
+  }
+
   function applyMotionArtwork(data) {
     if (!data) return;
     const url = (data.motion_url || '').trim();
@@ -8193,8 +8987,8 @@ extension WebUIContent {
 
     const albKey = buildMotionAlbumKey(respArtist, respAlbum);
     const trkKey = buildMotionTrackKey(respTrack, respArtist, respAlbum);
-    if (albKey) motionArtworkClientCache.set(albKey, url);
-    if (trkKey) motionArtworkClientCache.set(trkKey, url);
+    if (albKey) setBoundedMapValue(motionArtworkClientCache, albKey, url, 200);
+    if (trkKey) setBoundedMapValue(motionArtworkClientCache, trkKey, url, 200);
 
     const t = state.track;
     if (!t) {
@@ -8322,12 +9116,17 @@ extension WebUIContent {
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
     const p = document.getElementById('top-settings-popover');
-    if (p) p.classList.add('hidden');
+    if (p) {
+      blurFocusedInContainer(p);
+      p.classList.add('hidden');
+      p.setAttribute('aria-hidden', 'true');
+    }
   }
 
   function closeStandbyLibraryModal() {
     const modal = document.getElementById('standby-library-modal');
     if (!modal) return;
+    blurFocusedInContainer(modal);
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
   }
@@ -8363,13 +9162,18 @@ extension WebUIContent {
     state.isAiCurating = true;
     state.pendingStandbyAiAutoPlay = true;
     state.searchQuery = prompt;
+    state.aiCurateReqSeq = (state.aiCurateReqSeq || 0) + 1;
+    state.lastAiCurateSentAt = Date.now();
+    const reqId = state.aiCurateReqSeq;
     setUIBusy(true, (IS_EN ? 'AI Curating: ' : 'ИИ-подбор: ') + label.replace(/^[^\w\sа-яА-ЯёЁ]+\s*/, '') + '...');
     send({
       action: 'ai_curate',
+      request_id: reqId,
       params: {
         prompt: prompt,
         country: state.userStorefront || state.trends.country || 'ru',
-        auto_play: true
+        auto_play: true,
+        request_id: reqId
       }
     });
   }
@@ -8502,7 +9306,11 @@ extension WebUIContent {
     if (!modal) return;
     closeStandbyLibraryModal();
     const p = document.getElementById('top-settings-popover');
-    if (p) p.classList.add('hidden');
+    if (p) {
+      blurFocusedInContainer(p);
+      p.classList.add('hidden');
+      p.setAttribute('aria-hidden', 'true');
+    }
 
     resetAndGenerateStandbyAiTagCloud();
     ensureStandbyAiScrollBinding();
@@ -8514,6 +9322,7 @@ extension WebUIContent {
   function closeStandbyAiModal() {
     const modal = document.getElementById('standby-ai-modal');
     if (!modal) return;
+    blurFocusedInContainer(modal);
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
   }
@@ -8579,8 +9388,8 @@ extension WebUIContent {
               index: 1,
               name: 'Моя станция',
               artist: 'Персональная радиостанция',
-              id: 'ra.u-96b95a031a2fb0aa1abb70ff757aa95f',
-              url: 'https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f',
+              id: '',
+              url: '',
               type: 'station'
             }
           });
@@ -8603,8 +9412,8 @@ extension WebUIContent {
               index: 2,
               name: 'Станция открытий',
               artist: 'Новые треки под ваш вкус',
-              id: 'ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm',
-              url: 'https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm',
+              id: '',
+              url: '',
               type: 'station'
             }
           });
@@ -8657,7 +9466,7 @@ extension WebUIContent {
             action: 'play_playlist',
             params: {
               playlist: hrMix ? hrMix.name : 'Сейчас на повторе',
-              id: hrMix ? (hrMix.id || 'pl.pm-20e9f373919da080ba0f21cc6adb1672') : 'pl.pm-20e9f373919da080ba0f21cc6adb1672',
+              id: hrMix ? (hrMix.id || '') : '',
               url: hrMix ? (hrMix.url || '') : '',
               shuffle: false
             }
@@ -8697,7 +9506,7 @@ extension WebUIContent {
       const countText = count > 0 ? `<span class="standby-tile-meta">${count} треков</span>` : '';
       const artUrl = pl.artwork_url || pl.artworkUrl || `/api/artwork/playlist?name=${encodeURIComponent(plName)}`;
       btn.innerHTML = `
-        <img class="standby-tile-cover" src="${artUrl}" alt="${escapeHtml(plName)}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <img class="standby-tile-cover" src="${escapeHtml(artUrl)}" alt="${escapeHtml(plName)}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
         <div class="standby-tile-fallback" style="display:none;">
           <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.6">
             <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
@@ -8767,7 +9576,9 @@ extension WebUIContent {
     });
 
     if (!enabled && popover) {
+      blurFocusedInContainer(popover);
       popover.classList.add('hidden');
+      popover.setAttribute('aria-hidden', 'true');
     }
   }
 
@@ -8837,7 +9648,12 @@ extension WebUIContent {
       if ('wakeLock' in navigator && navigator.wakeLock && typeof navigator.wakeLock.request === 'function') {
         try {
           if (!this.sentinel || this.sentinel.released) {
-            this.sentinel = await navigator.wakeLock.request('screen');
+            const sentinel = await navigator.wakeLock.request('screen');
+            if (!this.isActive) {
+              try { await sentinel.release(); } catch (_) {}
+              return;
+            }
+            this.sentinel = sentinel;
             this.sentinel.addEventListener('release', () => {
               if (this.isActive && document.visibilityState === 'visible') {
                 setTimeout(() => {
@@ -8986,6 +9802,10 @@ extension WebUIContent {
     if (isMobilePhoneViewport() || window.innerWidth < 768) return;
     const overlay = document.getElementById('standby-tv-overlay');
     if (!overlay) return;
+    if (dom.searchInput && document.activeElement === dom.searchInput) {
+      dom.searchInput.blur();
+    }
+    syncKeyboardFocusClass();
     document.body.classList.add('tv-mode-open');
     overlay.classList.remove('hidden');
     overlay.setAttribute('aria-hidden', 'false');
@@ -8999,13 +9819,18 @@ extension WebUIContent {
     }
     syncStandbyAndMotionCoverUI();
     syncActiveMotionVideoTarget();
+    syncBookletViewerLayoutMode();
     updateScrubberUI(state.lastSyncPos, state.duration);
     updateStandbyClock();
     refreshAllTitleMarquees(true);
     send({ action: 'get_spectral_analysis' });
     syncSpectralPolling();
     const p = document.getElementById('top-settings-popover');
-    if (p) p.classList.add('hidden');
+    if (p) {
+      blurFocusedInContainer(p);
+      p.classList.add('hidden');
+      p.setAttribute('aria-hidden', 'true');
+    }
   }
 
   function closeStandbyMode() {
@@ -9022,6 +9847,7 @@ extension WebUIContent {
     overlay.classList.add('hidden');
     overlay.setAttribute('aria-hidden', 'true');
     syncActiveMotionVideoTarget();
+    syncBookletViewerLayoutMode();
     syncSpectralPolling();
     updateScrubberUI(state.lastSyncPos, state.duration);
     refreshAllTitleMarquees(true);
@@ -9030,7 +9856,11 @@ extension WebUIContent {
       localStorage.removeItem('amr_default_tv_mode');
     } catch (_) {}
     const p = document.getElementById('top-settings-popover');
-    if (p) p.classList.add('hidden');
+    if (p) {
+      blurFocusedInContainer(p);
+      p.classList.add('hidden');
+      p.setAttribute('aria-hidden', 'true');
+    }
   }
 
   function updateStandbyClock() {
@@ -9074,11 +9904,14 @@ extension WebUIContent {
         lastSettingsTriggerBtn = triggerBtn;
         send({ action: 'get_wled_settings' });
         popover.classList.remove('hidden');
+        popover.setAttribute('aria-hidden', 'false');
         if (triggerBtn) {
           positionSettingsPopoverNearButton(popover, triggerBtn);
         }
       } else {
+        blurFocusedInContainer(popover);
         popover.classList.add('hidden');
+        popover.setAttribute('aria-hidden', 'true');
       }
     };
 
@@ -9090,7 +9923,11 @@ extension WebUIContent {
     const btnClosePopover = document.getElementById('btn-close-top-settings');
     if (btnClosePopover) {
       btnClosePopover.addEventListener('click', () => {
-        if (popover) popover.classList.add('hidden');
+        if (popover) {
+          blurFocusedInContainer(popover);
+          popover.classList.add('hidden');
+          popover.setAttribute('aria-hidden', 'true');
+        }
       });
     }
 
@@ -9099,7 +9936,9 @@ extension WebUIContent {
       const insidePopover = popover.contains(e.target);
       const isTrigger = Boolean(e.target.closest('#btn-top-settings, #mobile-btn-settings, #player-btn-settings, #standby-btn-wled-toggle'));
       if (!insidePopover && !isTrigger) {
+        blurFocusedInContainer(popover);
         popover.classList.add('hidden');
+        popover.setAttribute('aria-hidden', 'true');
       }
     });
 
@@ -9170,7 +10009,9 @@ extension WebUIContent {
       });
       sbProgressInput.addEventListener('change', commitScrub);
       sbProgressInput.addEventListener('pointerup', commitScrub);
+      sbProgressInput.addEventListener('pointercancel', commitScrub);
       sbProgressInput.addEventListener('touchend', commitScrub);
+      sbProgressInput.addEventListener('touchcancel', commitScrub);
     } else if (sbTrack) {
       sbTrack.addEventListener('click', (e) => {
         if (!state.duration || state.duration <= 0) return;
@@ -9184,27 +10025,72 @@ extension WebUIContent {
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        const amrInfoModal = document.getElementById('amr-info-popover');
+        if (amrInfoModal && !amrInfoModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
+          blurFocusedInContainer(amrInfoModal);
+          amrInfoModal.classList.add('hidden');
+          amrInfoModal.setAttribute('aria-hidden', 'true');
+          syncKeyboardFocusClass();
+          return;
+        }
+        if (dom.devicesModal && !dom.devicesModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
+          blurFocusedInContainer(dom.devicesModal);
+          dom.devicesModal.classList.add('hidden');
+          dom.devicesModal.setAttribute('aria-hidden', 'true');
+          return;
+        }
+        if (dom.qualityModal && !dom.qualityModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
+          blurFocusedInContainer(dom.qualityModal);
+          dom.qualityModal.classList.add('hidden');
+          dom.qualityModal.setAttribute('aria-hidden', 'true');
+          syncSpectralPolling();
+          return;
+        }
+        if (dom.stationPickerModal && !dom.stationPickerModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
+          blurFocusedInContainer(dom.stationPickerModal);
+          dom.stationPickerModal.classList.add('hidden');
+          dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+          return;
+        }
+        if (dom.modalAccountDiag && !dom.modalAccountDiag.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
+          blurFocusedInContainer(dom.modalAccountDiag);
+          dom.modalAccountDiag.classList.add('hidden');
+          dom.modalAccountDiag.setAttribute('aria-hidden', 'true');
+          return;
+        }
         const bookletModal = document.getElementById('booklet-viewer-modal');
         if (bookletModal && !bookletModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
           closeBookletViewer();
           return;
         }
         if (popover && !popover.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
+          blurFocusedInContainer(popover);
           popover.classList.add('hidden');
+          popover.setAttribute('aria-hidden', 'true');
           return;
         }
         const aiModal = document.getElementById('standby-ai-modal');
         if (aiModal && !aiModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
           closeStandbyAiModal();
           return;
         }
         const libModal = document.getElementById('standby-library-modal');
         if (libModal && !libModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
           closeStandbyLibraryModal();
           return;
         }
         const overlay = document.getElementById('standby-tv-overlay');
         if (overlay && !overlay.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
           closeStandbyMode();
         }
       }
@@ -9279,12 +10165,18 @@ extension WebUIContent {
       artist: cleanArtist,
       album_id: albumId || '',
       track: trackName || '',
-      refresh: refresh ? '1' : '0'
+      refresh: refresh ? '1' : '0',
+      device_id: state.deviceId || ''
     });
-    const resp = await fetch(`/api/booklet/info?${qs.toString()}`, { cache: 'no-store' });
+    const resp = await fetch(`/api/booklet/info?${qs.toString()}`, {
+      cache: 'no-store',
+      headers: {
+        'X-AMR-Device-ID': state.deviceId || ''
+      }
+    });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const info = await resp.json();
-    bookletAvailabilityCache.set(cacheKey, info);
+    setBoundedMapValue(bookletAvailabilityCache, cacheKey, info, 200);
     return info;
   }
 
@@ -9302,6 +10194,9 @@ extension WebUIContent {
       if (btnOpenNowPlaying) btnOpenNowPlaying.classList.add('hidden');
       if (btnOpenStandby) btnOpenStandby.classList.add('hidden');
       if (moreDot) moreDot.classList.add('hidden');
+      if (bookletState.isOpen && !bookletState.targetAlbumId) {
+        closeBookletViewer();
+      }
       return;
     }
 
@@ -9314,6 +10209,15 @@ extension WebUIContent {
       if (moreDot) moreDot.classList.toggle('hidden', !isAvail);
       if (bookletSub && isAvail) {
         bookletSub.textContent = `${album} • ${cached.page_count} стр.`;
+      }
+      if (bookletState.isOpen && !bookletState.targetAlbumId && bookletState.targetAlbum !== album) {
+        if (isAvail) {
+          bookletState.targetAlbum = album;
+          bookletState.targetArtist = artist;
+          fetchAndRenderBooklet({ album, artist, trackName: (t && t.name) || '' });
+        } else {
+          closeBookletViewer();
+        }
       }
       return;
     }
@@ -9337,10 +10241,22 @@ extension WebUIContent {
       if (bookletSub && isAvail) {
         bookletSub.textContent = `${album} • ${info.page_count} стр.`;
       }
+      if (bookletState.isOpen && !bookletState.targetAlbumId && bookletState.targetAlbum !== album) {
+        if (isAvail) {
+          bookletState.targetAlbum = album;
+          bookletState.targetArtist = artist;
+          fetchAndRenderBooklet({ album, artist, trackName: (t && t.name) || '' });
+        } else {
+          closeBookletViewer();
+        }
+      }
     } catch (err) {
       if (btnOpenNowPlaying) btnOpenNowPlaying.classList.add('hidden');
       if (btnOpenStandby) btnOpenStandby.classList.add('hidden');
       if (moreDot) moreDot.classList.add('hidden');
+      if (bookletState.isOpen && !bookletState.targetAlbumId && bookletState.targetAlbum !== album) {
+        closeBookletViewer();
+      }
     }
   }
 
@@ -9413,6 +10329,7 @@ extension WebUIContent {
   function closeBookletViewer() {
     const modal = document.getElementById('booklet-viewer-modal');
     if (!modal) return;
+    blurFocusedInContainer(modal);
     bookletState.isOpen = false;
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
@@ -9441,9 +10358,23 @@ extension WebUIContent {
     }
   }
 
+  function appendDeviceIdToUrl(url) {
+    if (!url || typeof url !== 'string') return url || '';
+    const trimmed = url.trim();
+    if (!trimmed.startsWith('/api/') || /[?&]device_id=/.test(trimmed)) return trimmed;
+    const hashIdx = trimmed.indexOf('#');
+    const base = hashIdx >= 0 ? trimmed.slice(0, hashIdx) : trimmed;
+    const hash = hashIdx >= 0 ? trimmed.slice(hashIdx) : '';
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}device_id=${encodeURIComponent(state.deviceId || '')}${hash}`;
+  }
+
   function applyBookletInfo(info) {
     if (!info || !info.available || !info.pages || info.pages.length === 0) return;
-    bookletState.info = info;
+    bookletState.info = {
+      ...info,
+      pdf_url: info.pdf_url ? appendDeviceIdToUrl(info.pdf_url) : info.pdf_url
+    };
     renderBookletSequentialPages();
   }
 
@@ -9467,7 +10398,7 @@ extension WebUIContent {
 
       const img = document.createElement('img');
       img.className = 'booklet-seq-page-img';
-      img.src = p.image_url;
+      img.src = appendDeviceIdToUrl(p.image_url);
       img.alt = p.title || `Страница ${idx + 1}`;
       img.loading = idx < 2 ? 'eager' : 'lazy';
 
@@ -9487,7 +10418,7 @@ extension WebUIContent {
     const traits = Array.isArray(ed.audio_traits) ? ed.audio_traits : [];
     const tracks = Array.isArray(ed.tracks) ? ed.tracks : [];
     const paras = Array.isArray(ed.editorial_paragraphs) ? ed.editorial_paragraphs : [];
-    const coverSrc = ed.artwork_url || (state.track ? getArtworkSrc(state.track) : 'apple-touch-icon.svg');
+    const coverSrc = appendDeviceIdToUrl(ed.artwork_url || (state.track ? getArtworkSrc(state.track) : 'apple-touch-icon.svg'));
     const totalSections = 2 + (tracks.length > 0 ? 1 : 0);
 
     // 1. Cover Section
@@ -9670,7 +10601,11 @@ extension WebUIContent {
 
     if (btnOpenNowPlaying) {
       btnOpenNowPlaying.addEventListener('click', () => {
-        if (dom.stationPickerModal) dom.stationPickerModal.classList.add('hidden');
+        if (dom.stationPickerModal) {
+          blurFocusedInContainer(dom.stationPickerModal);
+          dom.stationPickerModal.classList.add('hidden');
+          dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+        }
         openBookletViewer();
       });
     }
@@ -9807,12 +10742,18 @@ extension WebUIContent {
         authOverlay.classList.remove('hidden');
         authOverlay.setAttribute('aria-hidden', 'false');
         if (dom.modalAppleAuth) {
+          blurFocusedInContainer(dom.modalAppleAuth);
           dom.modalAppleAuth.classList.add('hidden');
           dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
         }
       } else {
+        if (authNameInput && document.activeElement === authNameInput) {
+          authNameInput.blur();
+        }
+        blurFocusedInContainer(authOverlay);
         authOverlay.classList.add('hidden');
         authOverlay.setAttribute('aria-hidden', 'true');
+        syncKeyboardFocusClass();
       }
     }
   }
@@ -9827,8 +10768,14 @@ extension WebUIContent {
       state.gitCommitDate = String(data.git_commit_date);
     }
     if (data.device_id) {
-      state.deviceId = String(data.device_id).toLowerCase();
-      persistUidToSecureStore(state.deviceId);
+      const incomingId = String(data.device_id).toLowerCase();
+      if (state.supersededFreshDeviceId && incomingId === state.supersededFreshDeviceId.toLowerCase() && state.deviceId !== incomingId) {
+        return;
+      }
+      state.deviceId = incomingId;
+      if (!state.deviceIdWasFreshlyGenerated) {
+        persistUidToSecureStore(state.deviceId);
+      }
     }
     state.deviceShortId = data.short_id || computeShortDeviceId(state.deviceId);
 
@@ -9909,55 +10856,44 @@ extension WebUIContent {
     const btnCopyShareLink = document.getElementById('btn-copy-share-link');
     const btnNativeShareLink = document.getElementById('btn-native-share-link');
 
-    // Attempt recovery from CacheStorage if cookie/localStorage had been wiped
-    if ('caches' in window) {
-      caches.open('amr-device-secure-store-v1').then((cache) => cache.match('/__amr_device_uid')).then((resp) => {
-        if (!resp) return null;
-        return resp.text();
-      }).then((cachedUid) => {
-        const clean = (cachedUid || '').trim().toLowerCase();
-        if (clean && clean !== state.deviceId) {
-          state.deviceId = clean;
-          state.deviceShortId = computeShortDeviceId(clean);
-          persistUidToSecureStore(clean);
-          syncDeviceInfoUI();
-          if (state.connected) {
-            send({
-              action: 'register_device',
-              params: {
-                device_id: state.deviceId,
-                device_name: state.deviceName,
-                device_type: state.deviceType,
-                lock_screen_controls: state.lockScreenControls,
-                invite_token: state.inviteToken || ''
-              }
-            });
-          }
-        }
-      }).catch(() => {});
-    }
-
     syncDeviceInfoUI();
 
     const togglePopover = (e) => {
       if (e) e.stopPropagation();
       if (!popover) return;
       const topSettings = document.getElementById('top-settings-popover');
-      if (topSettings) topSettings.classList.add('hidden');
+      if (topSettings) {
+        blurFocusedInContainer(topSettings);
+        topSettings.classList.add('hidden');
+        topSettings.setAttribute('aria-hidden', 'true');
+      }
       syncDeviceInfoUI();
+      if (!popover.classList.contains('hidden')) {
+        blurFocusedInContainer(popover);
+      }
       popover.classList.toggle('hidden');
+      popover.setAttribute('aria-hidden', popover.classList.contains('hidden') ? 'true' : 'false');
+      syncKeyboardFocusClass();
     };
 
     if (btnBrand) btnBrand.addEventListener('click', togglePopover);
     if (mobileBtnBrand) mobileBtnBrand.addEventListener('click', togglePopover);
     if (btnClose && popover) {
-      btnClose.addEventListener('click', () => popover.classList.add('hidden'));
+      btnClose.addEventListener('click', () => {
+        blurFocusedInContainer(popover);
+        popover.classList.add('hidden');
+        popover.setAttribute('aria-hidden', 'true');
+        syncKeyboardFocusClass();
+      });
     }
 
     if (popover) {
       popover.addEventListener('click', (e) => {
         if (e.target === popover) {
+          blurFocusedInContainer(popover);
           popover.classList.add('hidden');
+          popover.setAttribute('aria-hidden', 'true');
+          syncKeyboardFocusClass();
         }
       });
     }
@@ -9991,24 +10927,30 @@ extension WebUIContent {
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
           navigator.clipboard.writeText(urlToCopy).then(onCopied).catch(() => {
             const ta = document.createElement('textarea');
+            ta.setAttribute('readonly', '');
             ta.value = urlToCopy;
             ta.style.position = 'fixed';
             ta.style.opacity = '0';
             document.body.appendChild(ta);
             ta.select();
             try { document.execCommand('copy'); } catch (err) {}
+            ta.blur();
             document.body.removeChild(ta);
+            syncKeyboardFocusClass();
             onCopied();
           });
         } else {
           const ta = document.createElement('textarea');
+          ta.setAttribute('readonly', '');
           ta.value = urlToCopy;
           ta.style.position = 'fixed';
           ta.style.opacity = '0';
           document.body.appendChild(ta);
           ta.select();
           try { document.execCommand('copy'); } catch (err) {}
+          ta.blur();
           document.body.removeChild(ta);
+          syncKeyboardFocusClass();
           onCopied();
         }
       });
@@ -10065,6 +11007,31 @@ extension WebUIContent {
     });
   }
 
+  function bindGenreCards() {
+    document.querySelectorAll('#search-landing .genre-card[data-genre]').forEach(card => {
+      card.addEventListener('click', () => {
+        const genre = card.getAttribute('data-genre');
+        if (genre) {
+          dom.searchInput.value = genre;
+          state.searchQuery = genre;
+          state.searchScope = 'all';
+          if (dom.filterChips) {
+            dom.filterChips.forEach(c => c.classList.toggle('active', c.dataset.scope === 'all'));
+          }
+          dom.btnClearSearch.classList.remove('hidden');
+          executeSearch(genre, 'all');
+        }
+      });
+    });
+
+    const homeGenresHeader = document.querySelector('#home-genres-section .home-section-header-link');
+    if (homeGenresHeader && dom.homeGenresGrid) {
+      homeGenresHeader.addEventListener('click', () => {
+        dom.homeGenresGrid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }
+
   // Initialize
   setupAmrInfoAndDeviceAuthControls();
   setupMediaSession();
@@ -10075,24 +11042,12 @@ extension WebUIContent {
   renderHeroCarousel({});
   renderHomeStations(DEFAULT_STATIONS);
   renderHomeGenres(DEFAULT_GENRES);
+  bindGenreCards();
   handleResize();
-  connectWebSocket();
+  recoverOrPersistDeviceUidBeforeConnect().finally(() => {
+    connectWebSocket();
+  });
 
 })();
-
-function bindGenreCards() {
-  document.querySelectorAll('.genre-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const genre = card.getAttribute('data-genre');
-      if (genre) {
-        dom.searchInput.value = genre;
-        state.searchQuery = genre;
-        dom.btnClearSearch.classList.remove('hidden');
-        executeSearch(genre, state.searchScope);
-      }
-    });
-  });
-}
-bindGenreCards();
 """#
 }

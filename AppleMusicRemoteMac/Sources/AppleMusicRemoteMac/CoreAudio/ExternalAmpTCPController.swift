@@ -289,12 +289,23 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
     /// Callback invoked on a background queue whenever connection state, volume, or mute state changes.
     public var onStateChanged: (() -> Void)?
 
-    private var _isEnabled: Bool
+    /// Lock-free cached flag for CoreAudio real-time IOProc thread inspection.
+    public private(set) var rtIsSoundCheckEnabledFlag: Bool = false
+
+    private var _isEnabled: Bool {
+        didSet {
+            rtIsSoundCheckEnabledFlag = _isSoundCheckEnabled && _isEnabled && PlaybackStateStore.shared.isVolumeLockedTo100
+        }
+    }
     private var _profile: ExternalAmpProfile
     private var _host: String
     private var _port: UInt16
     private var _maxVolumeCap: Int
-    private var _isSoundCheckEnabled: Bool
+    private var _isSoundCheckEnabled: Bool {
+        didSet {
+            rtIsSoundCheckEnabledFlag = _isSoundCheckEnabled && _isEnabled && PlaybackStateStore.shared.isVolumeLockedTo100
+        }
+    }
     private var _isLowVolumeSmartNormEnabled: Bool
     private var _currentVolume: Int = 20
     private var _baseListeningVolume: Int = 20
@@ -323,6 +334,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
         lastPersistedAmpVolume = savedSent > 0 ? max(0, min(capVal, savedSent)) : 0
         _currentVolume = initialBase
         _isSoundCheckEnabled = _isEnabled ? defaults.bool(forKey: kSoundCheckKey) : false
+        rtIsSoundCheckEnabledFlag = _isSoundCheckEnabled && _isEnabled && PlaybackStateStore.shared.isVolumeLockedTo100
         _isLowVolumeSmartNormEnabled = defaults.object(forKey: kLowVolumeSmartNormKey) == nil
             ? true
             : defaults.bool(forKey: kLowVolumeSmartNormKey)
@@ -518,7 +530,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
 
                 let active = _isEnabled && PlaybackStateStore.shared.isVolumeLockedTo100 && !_host.isEmpty
                 if _isSoundCheckEnabled {
-                    let effectiveMax = max(1, min(100, _maxVolumeCap))
+                    let effectiveMax = max(1, min(100, min(_maxVolumeCap, _profile.nativeMaxVolume)))
                     let newOffset = Self.computeVolumeOffset(
                         forGainDb: _currentTrackGainDb,
                         baseVolume: _baseListeningVolume,
@@ -664,6 +676,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                 let prev = _isEnabled
                 _isEnabled = false
                 _isSoundCheckEnabled = false
+                rtIsSoundCheckEnabledFlag = false
                 _currentTrackVolumeOffset = 0
                 appliedVolumeOffset = 0
                 pendingVolumeCommand = nil
@@ -677,6 +690,10 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                 NSLog("[ExternalAmpTCP] Volume Lock 100%% disabled -> automatically disabling External Amp TCP control.")
                 reconfigureConnection()
                 notifyStateChanged()
+            }
+        } else {
+            lock.withLock {
+                rtIsSoundCheckEnabledFlag = _isSoundCheckEnabled && _isEnabled && isVolumeLockedTo100
             }
         }
     }
@@ -697,8 +714,11 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
         }
         guard active else { return }
 
-        let effectiveMax = max(1, min(100, cap))
-        let clamped = max(0, min(effectiveMax, newVolume))
+        let effectiveMax = max(1, min(100, min(cap, prof.nativeMaxVolume)))
+        var clamped = max(0, min(effectiveMax, newVolume))
+        if prof == .lyngdorf {
+            clamped = prof.parseToken(prof.buildSetVolumeCommand(clamped)).volume ?? clamped
+        }
 
         let stateChanged: Bool = lock.withLock {
             let prevVol = _currentVolume
@@ -731,6 +751,10 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
             return prevVol != clamped || (clamped > 0 && prevMute)
         }
 
+        if !preserveBaseVolume {
+            AudioDuckingController.shared.notifyManualVolumeChange(clamped)
+        }
+
         let cmd = prof.buildSetVolumeCommand(clamped)
         sendRawCommand(cmd)
 
@@ -745,7 +769,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
         var commandToSend: String?
         let shouldNotify: Bool = lock.withLock {
             let active = _isEnabled && PlaybackStateStore.shared.isVolumeLockedTo100 && !_host.isEmpty
-            let effectiveMax = max(1, min(100, _maxVolumeCap))
+            let effectiveMax = max(1, min(100, min(_maxVolumeCap, _profile.nativeMaxVolume)))
             let newOffset = _isSoundCheckEnabled
                 ? Self.computeVolumeOffset(
                     forGainDb: gainDb,
@@ -810,7 +834,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                 _isMuted = nextMute
                 lastUserCommandTime = Date()
                 if !nextMute && _isSoundCheckEnabled && hasSyncedVolumeWithAmp && (_baseListeningVolume > 0 || _currentVolume > 0) && appliedVolumeOffset != _currentTrackVolumeOffset {
-                    let effectiveMax = max(1, min(100, _maxVolumeCap))
+                    let effectiveMax = max(1, min(100, min(_maxVolumeCap, _profile.nativeMaxVolume)))
                     let minAutoVol = _baseListeningVolume > 0 ? 1 : 0
                     let targetVol = max(minAutoVol, min(effectiveMax, _baseListeningVolume + _currentTrackVolumeOffset))
                     appliedVolumeOffset = _currentTrackVolumeOffset
@@ -890,14 +914,20 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
             probeConn.stateUpdateHandler = nil
             probeConn.cancel()
             if ok, let self {
-                self.lock.withLock {
+                let matchesActiveConfig = self.lock.withLock { () -> Bool in
+                    let isMatching = self._isEnabled &&
+                        self._profile == profile &&
+                        self._host == trimmedHost &&
+                        self._port == validPort &&
+                        PlaybackStateStore.shared.isVolumeLockedTo100
+                    guard isMatching else { return false }
                     if let v = state.detectedVolume {
                         if v == 0 && self._baseListeningVolume > 0 {
                             NSLog("[ExternalAmpTCP] testConnection zero-jump guard: ignoring detectedVolume=0 while base=%d", self._baseListeningVolume)
                         } else {
                             self.hasSyncedVolumeWithAmp = true
                             self._currentVolume = v
-                            let effectiveMax = max(1, min(100, self._maxVolumeCap))
+                            let effectiveMax = max(1, min(100, min(self._maxVolumeCap, profile.nativeMaxVolume)))
                             if self._isSoundCheckEnabled && self.lastPersistedAmpVolume > 0 && v == self.lastPersistedAmpVolume {
                                 self.appliedVolumeOffset = v - self._baseListeningVolume
                             } else {
@@ -914,12 +944,42 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                         self._isMuted = m
                     }
                     self._lastError = nil
+                    return true
                 }
-                self.reconfigureConnection()
-                self.notifyStateChanged()
+                if matchesActiveConfig {
+                    self.reconfigureConnection()
+                    self.notifyStateChanged()
+                }
             }
             DispatchQueue.main.async {
                 completion(ok, msg)
+            }
+        }
+
+        @Sendable func receiveNextProbeChunk() {
+            probeConn.receive(minimumIncompleteLength: 1, maximumLength: 1024) { data, _, isComplete, error in
+                guard !state.completed else { return }
+                if let data, !data.isEmpty,
+                   let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) {
+                    state.responseBuffer.append(str)
+                    let delimiters: Set<Character> = profile == .rotel
+                        ? ["$", "!", "\r", "\n"]
+                        : ["\r", "\n", "$"]
+                    let tokens = state.responseBuffer.split(whereSeparator: { delimiters.contains($0) }).map(String.init)
+                    for tok in tokens {
+                        let parsed = profile.parseToken(tok)
+                        if let v = parsed.volume { state.detectedVolume = v }
+                        if let m = parsed.muted { state.detectedMute = m }
+                    }
+                }
+                if let vol = state.detectedVolume {
+                    let muteStr = (state.detectedMute == true) ? " • MUTE" : ""
+                    finish(true, "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) ответил • Громкость: \(vol)%\(muteStr)")
+                } else if isComplete || error != nil {
+                    finish(true, "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) доступен по TCP")
+                } else {
+                    receiveNextProbeChunk()
+                }
             }
         }
 
@@ -940,28 +1000,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                 if let data = query.data(using: .utf8) {
                     probeConn.send(content: data, completion: .contentProcessed { _ in })
                 }
-                probeConn.receive(minimumIncompleteLength: 1, maximumLength: 1024) { data, _, _, _ in
-                    guard !state.completed else { return }
-                    if let data, !data.isEmpty,
-                       let str = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .ascii) {
-                        state.responseBuffer.append(str)
-                        let delimiters: Set<Character> = profile == .rotel
-                            ? ["$", "!", "\r", "\n"]
-                            : ["\r", "\n", "$"]
-                        let tokens = state.responseBuffer.split(whereSeparator: { delimiters.contains($0) }).map(String.init)
-                        for tok in tokens {
-                            let parsed = profile.parseToken(tok)
-                            if let v = parsed.volume { state.detectedVolume = v }
-                            if let m = parsed.muted { state.detectedMute = m }
-                        }
-                    }
-                    if let vol = state.detectedVolume {
-                        let muteStr = (state.detectedMute == true) ? " • MUTE" : ""
-                        finish(true, "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) ответил • Громкость: \(vol)%\(muteStr)")
-                    } else {
-                        finish(true, "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) доступен по TCP")
-                    }
-                }
+                receiveNextProbeChunk()
                 probeQueue.asyncAfter(deadline: .now() + 1.1) {
                     guard !state.completed else { return }
                     if let vol = state.detectedVolume {
@@ -1159,7 +1198,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                     let sinceAutoCmd = Date().timeIntervalSince(self.lastAutoNormCommandTime)
                     var modified = false
                     if let newVol = parsed.volume {
-                        let effectiveMax = max(1, min(100, self._maxVolumeCap))
+                        let effectiveMax = max(1, min(100, min(self._maxVolumeCap, self._profile.nativeMaxVolume)))
                         if !self.hasSyncedVolumeWithAmp {
                             if newVol == 0 && self._baseListeningVolume > 0 {
                                 // Zero-jump guard on initial connect: amplifier in Standby / relay mute reports volume=00; preserve saved _baseListeningVolume
@@ -1215,7 +1254,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                             // Zero-jump guard: physical rotary encoder / IR remote steps through low values (5,4,3,2,1,0).
                             // An instantaneous jump from >= 6 straight to 0 is a standby / input-relay transient; preserve _currentVolume and _baseListeningVolume.
                             NSLog("[ExternalAmpTCP] Zero-jump guard: ignoring sudden uncommanded drop from %d to 0", self._currentVolume)
-                        } else if sinceUserCmd > 0.45 && self._currentVolume != newVol {
+                        } else if sinceUserCmd > 0.45 && self._currentVolume != newVol && !AudioDuckingController.shared.isDucked {
                             // Genuine physical knob / IR remote adjustment on the amplifier itself
                             self._currentVolume = newVol
                             self.lastAutoNormTargetVolume = nil
@@ -1310,7 +1349,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
 
     internal func resetSyncStateForTesting(baseVolume: Int = 20, lastPersistedAmpVolume: Int = 0) {
         lock.withLock {
-            let effectiveMax = max(1, min(100, _maxVolumeCap))
+            let effectiveMax = max(1, min(100, min(_maxVolumeCap, _profile.nativeMaxVolume)))
             let clampedBase = max(1, min(effectiveMax, baseVolume))
             _baseListeningVolume = clampedBase
             _currentVolume = clampedBase

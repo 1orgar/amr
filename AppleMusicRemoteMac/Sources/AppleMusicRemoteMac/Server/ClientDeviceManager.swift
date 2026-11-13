@@ -56,7 +56,8 @@ public final class ClientDeviceManager: @unchecked Sendable {
 
     private var devicesById: [String: ClientDeviceRecord] = [:]
     private var connectionToDeviceId: [UUID: String] = [:]
-    private var inviteTokens: [String: TimeInterval] = [:]
+    private var pendingBrowserConnections: Set<UUID> = []
+    private var inviteTokens: [String: TimeInterval] = [ : ]
     private var activeShareToken: String?
     private var activeShareTokenExpiry: TimeInterval = 0
 
@@ -139,7 +140,7 @@ public final class ClientDeviceManager: @unchecked Sendable {
         inviteToken: String? = nil
     ) -> ClientDeviceRecord {
         let trimmedId = deviceId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let safeId = trimmedId.isEmpty ? UUID().uuidString.lowercased() : trimmedId
+        let cleanId = trimmedId.count >= 8 ? trimmedId : UUID().uuidString.lowercased()
         let safeType = deviceType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let normalizedType = ["mobile", "tablet", "tv", "desktop"].contains(safeType) ? safeType : "mobile"
         let trimmedName = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -147,23 +148,36 @@ public final class ClientDeviceManager: @unchecked Sendable {
         let hasValidInvite = validateInviteToken(inviteToken)
 
         lock.lock()
-        connectionToDeviceId[connectionId] = safeId
+        let wasAlreadyBound = (connectionToDeviceId[connectionId] == cleanId)
+        pendingBrowserConnections.remove(connectionId)
+        connectionToDeviceId[connectionId] = cleanId
 
         var record: ClientDeviceRecord
-        if var existing = devicesById[safeId] {
-            if !trimmedName.isEmpty {
+        if var existing = devicesById[cleanId] {
+            let isSameIP = existing.lastIPAddress.isEmpty || remoteIP.isEmpty || existing.lastIPAddress == remoteIP
+            let canOverwriteMetadata = !existing.isAuthorized || wasAlreadyBound || isSameIP || hasValidInvite
+            if !trimmedName.isEmpty && canOverwriteMetadata {
                 existing.deviceName = trimmedName
             }
-            existing.deviceType = normalizedType
+            if canOverwriteMetadata {
+                if !existing.isAuthorized || (wasAlreadyBound && existing.deviceType != normalizedType) {
+                    if let prefLock = preferredLockScreen {
+                        existing.lockScreenControls = prefLock
+                    } else if existing.deviceType != normalizedType {
+                        existing.lockScreenControls = Self.defaultLockScreenControls(for: normalizedType)
+                    }
+                }
+                existing.deviceType = normalizedType
+            }
             existing.lastSeenAt = now
-            if !remoteIP.isEmpty {
+            if !remoteIP.isEmpty && canOverwriteMetadata {
                 existing.lastIPAddress = remoteIP
             }
             if hasValidInvite && !existing.isAuthorized {
                 existing.isAuthorized = true
                 NSLog("[ClientDeviceManager] 🎟️ Existing device auto-authorized via QR invite token: %@ (%@)", existing.deviceName, existing.shortId)
             }
-            devicesById[safeId] = existing
+            devicesById[cleanId] = existing
             record = existing
         } else {
             let defaultLock = preferredLockScreen ?? Self.defaultLockScreenControls(for: normalizedType)
@@ -175,7 +189,7 @@ public final class ClientDeviceManager: @unchecked Sendable {
             default: fallbackName = "Mac / Desktop"
             }
             record = ClientDeviceRecord(
-                deviceId: safeId,
+                deviceId: cleanId,
                 deviceName: trimmedName.isEmpty ? fallbackName : trimmedName,
                 deviceType: normalizedType,
                 isAuthorized: hasValidInvite,
@@ -184,7 +198,17 @@ public final class ClientDeviceManager: @unchecked Sendable {
                 lastSeenAt: now,
                 lastIPAddress: remoteIP
             )
-            devicesById[safeId] = record
+            if !record.isAuthorized {
+                let unauthorizedRecords = devicesById.values.filter { !$0.isAuthorized }
+                if unauthorizedRecords.count >= 64 {
+                    let toEvictCount = unauthorizedRecords.count - 63
+                    let oldestUnauthorized = unauthorizedRecords.sorted { $0.lastSeenAt < $1.lastSeenAt }.prefix(toEvictCount)
+                    for old in oldestUnauthorized {
+                        devicesById.removeValue(forKey: old.deviceId)
+                    }
+                }
+            }
+            devicesById[cleanId] = record
             if hasValidInvite {
                 NSLog("[ClientDeviceManager] 🎟️ New client device registered & auto-authorized via QR invite: %@ (%@) [%@]", record.deviceName, record.shortId, remoteIP)
             } else {
@@ -274,8 +298,15 @@ public final class ClientDeviceManager: @unchecked Sendable {
         ]
     }
 
+    public func markBrowserConnectionPending(connectionId: UUID) {
+        lock.lock()
+        pendingBrowserConnections.insert(connectionId)
+        lock.unlock()
+    }
+
     public func unregisterConnection(connectionId: UUID) {
         lock.lock()
+        pendingBrowserConnections.remove(connectionId)
         let removed = connectionToDeviceId.removeValue(forKey: connectionId)
         if let devId = removed, var existing = devicesById[devId] {
             existing.lastSeenAt = Date().timeIntervalSince1970
@@ -291,9 +322,22 @@ public final class ClientDeviceManager: @unchecked Sendable {
 
     // MARK: - Queries
 
+    public func getDeviceId(for connectionId: UUID) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return connectionToDeviceId[connectionId]
+    }
+
+    public func getDeviceId(forConnection connectionId: UUID) -> String? {
+        return getDeviceId(for: connectionId)
+    }
+
     public func isConnectionAuthorized(connectionId: UUID) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        if pendingBrowserConnections.contains(connectionId) {
+            return false
+        }
         // If this connection registered as a PWA client device (via Cookie or register_device),
         // enforce its per-device authorization state.
         // Headless API / Node.js / automation WebSocket connections (no PWA deviceId) remain allowed.
@@ -306,7 +350,7 @@ public final class ClientDeviceManager: @unchecked Sendable {
     public func getUnauthorizedConnectionIds() -> Set<UUID> {
         lock.lock()
         defer { lock.unlock() }
-        var result = Set<UUID>()
+        var result = pendingBrowserConnections
         for (connId, devId) in connectionToDeviceId {
             if devicesById[devId]?.isAuthorized != true {
                 result.insert(connId)
@@ -327,6 +371,20 @@ public final class ClientDeviceManager: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return devicesById[key]
+    }
+
+    public func device(for deviceId: String) -> ClientDeviceRecord? {
+        return getDevice(deviceId: deviceId)
+    }
+
+    public func isDeviceAuthorized(deviceId: String?) -> Bool {
+        guard let raw = deviceId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              raw.count >= 8 else {
+            return false
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        return devicesById[raw]?.isAuthorized == true
     }
 
     public func isDeviceOnline(deviceId: String) -> Bool {

@@ -66,21 +66,30 @@ public struct StaticTrackMetadata: Sendable {
 public final class PlayerStatusEngine: @unchecked Sendable {
     public static let shared = PlayerStatusEngine()
 
-    private let statusLock = NSLock()
+    private let statusLock = NSRecursiveLock()
     private var lastCanonicalTrackKey: String?
     private var cachedStaticMetadata: StaticTrackMetadata?
     private var favoritedOverrides: [String: Bool] = [:]
     private var lastPulsePosition: Double = 0.0
-    public private(set) var lastPollUsedLightweightPulse: Bool = false
+    private var _lastPollUsedLightweightPulse: Bool = false
+    public var lastPollUsedLightweightPulse: Bool {
+        statusLock.lock()
+        defer { statusLock.unlock() }
+        return _lastPollUsedLightweightPulse
+    }
 
     public var cachedCurrentPlaylistName: String? {
-        PlaybackStateStore.shared.withLock {
+        statusLock.lock()
+        defer { statusLock.unlock() }
+        return PlaybackStateStore.shared.withLock {
             cachedStaticMetadata?.currentPlaylistName
         }
     }
 
     public func currentFavoritedState() -> (isFavorited: Bool, name: String, artist: String) {
-        PlaybackStateStore.shared.withLock {
+        statusLock.lock()
+        defer { statusLock.unlock() }
+        return PlaybackStateStore.shared.withLock {
             let name = cachedStaticMetadata?.name ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.name ?? ""
             let artist = cachedStaticMetadata?.artist ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.artist ?? ""
             let key = "\(artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()):\(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
@@ -93,6 +102,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
     }
 
     public func updateFavoritedState(_ isFav: Bool, name: String? = nil, artist: String? = nil) {
+        statusLock.lock()
+        defer { statusLock.unlock() }
         PlaybackStateStore.shared.withLock {
             let resolvedName = (name ?? cachedStaticMetadata?.name ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let resolvedArtist = (artist ?? cachedStaticMetadata?.artist ?? PlaybackStateStore.shared.lastPlayerStatusCache?.status.track?.artist ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -114,6 +125,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
     private init() {}
 
     public func seedStaticMetadataForTesting(_ meta: StaticTrackMetadata) {
+        statusLock.lock()
+        defer { statusLock.unlock() }
         PlaybackStateStore.shared.withLock {
             cachedStaticMetadata = meta
             lastPulsePosition = 0.0
@@ -122,6 +135,8 @@ public final class PlayerStatusEngine: @unchecked Sendable {
     }
 
     public func shouldUseLightweightPulse(rawState: String, rawPosition: Double, rawDbId: Int? = nil, rawTrackName: String? = nil) -> Bool {
+        statusLock.lock()
+        defer { statusLock.unlock() }
         return PlaybackStateStore.shared.withLock {
             guard !PlaybackStateStore.shared.needsStaticMetadataRefresh,
                   let meta = cachedStaticMetadata else {
@@ -536,7 +551,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                         sRate = staticMeta.sampleRate
                         isFavorited = staticMeta.isFavorited
                         lastPulsePosition = candidatePos
-                        lastPollUsedLightweightPulse = true
+                        _lastPollUsedLightweightPulse = true
                         usedLightweightPulse = true
                     }
                 }
@@ -676,9 +691,18 @@ public final class PlayerStatusEngine: @unchecked Sendable {
             isFavorited = parts.count > 15 ? (parts[15].lowercased() == "true") : false
             persistentId = parts.count > 16 ? parts[16].trimmingCharacters(in: .whitespacesAndNewlines) : ""
 
+            let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
             if CoreAudioDeviceManager.shared.isMutingGuardActive {
-                vol = PlaybackStateStore.shared.isVolumeLockedTo100 ? 100 : PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
-            } else if PlaybackStateStore.shared.isVolumeLockedTo100 && vol != 100 && !AudioDuckingController.shared.isDucked {
+                if isDLNAMuted {
+                    vol = 0
+                } else if AudioDuckingController.shared.isDucked {
+                    vol = AudioDuckingController.shared.currentDuckedVolume
+                } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                    vol = 100
+                } else {
+                    vol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
+                }
+            } else if PlaybackStateStore.shared.isVolumeLockedTo100 && !isDLNAMuted && vol != 100 && !AudioDuckingController.shared.isDucked {
                 PlaybackTransportController.shared.checkAndEnforceVolumeLock()
                 vol = 100
             }
@@ -707,7 +731,7 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                 PlaybackStateStore.shared.needsStaticMetadataRefresh = false
             }
             lastPulsePosition = rawPos
-            lastPollUsedLightweightPulse = false
+            _lastPollUsedLightweightPulse = false
         }
 
         let isUserPaused = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused }
@@ -816,9 +840,9 @@ public final class PlayerStatusEngine: @unchecked Sendable {
                     artUrl = local
                     hasArt = true
                 } else {
-                    let encName = radName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                    let encArtist = radArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                    let encAlbum = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    let encName = radName.amrQueryValueEncoded
+                    let encArtist = radArtist.amrQueryValueEncoded
+                    let encAlbum = tAlbum.amrQueryValueEncoded
                     artUrl = "/api/artwork/search?name=\(encName)&artist=\(encArtist)&album=\(encAlbum)"
                     hasArt = true
                     let searchAlbum = tAlbum
@@ -1003,9 +1027,9 @@ public final class PlayerStatusEngine: @unchecked Sendable {
         }
 
         if !tName.isEmpty {
-            let encName = tName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            let encArtist = tArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            let encAlbum = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let encName = tName.amrQueryValueEncoded
+            let encArtist = tArtist.amrQueryValueEncoded
+            let encAlbum = tAlbum.amrQueryValueEncoded
             var artUrl = ""
 
             if hasLoc && dbId > 0 {

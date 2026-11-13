@@ -114,7 +114,13 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
         }
     }
 
-    private var isEnabledInternal: Bool
+    private var isEnabledInternal: Bool {
+        didSet {
+            rtIsEnabledFlag = isEnabledInternal
+        }
+    }
+    private var rtIsEnabledFlag: Bool = true
+    private var rtIsValidationCachedFlag: Bool = false
 
     private let fftSetup: FFTSetup?
     private let hannWindow: [Float]
@@ -133,7 +139,11 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
 
     // Persistent + in-memory cache of passed spectral validations (local & cloud tracks)
     private var validationCache: [String: CachedSpectralValidation] = [:]
-    private var activeCachedValidation: CachedSpectralValidation? = nil
+    private var activeCachedValidation: CachedSpectralValidation? = nil {
+        didSet {
+            rtIsValidationCachedFlag = (activeCachedValidation != nil)
+        }
+    }
 
     // Bit-depth / Zero-padding telemetry
     private var totalNonSilentSamples: Int = 0
@@ -152,8 +162,10 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
     private var smoothedRtaBands: [Double]
     private var dynamicRangeCrestDb: Double = 14.0
     private var latestResult: SpectralAnalysisInfo
+    private let isTestingEnv: Bool
 
     private init() {
+        self.isTestingEnv = PlaybackRouter.shared.isTestingEnvironment
         let baseCache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let cacheDir = baseCache.appendingPathComponent("com.kirill.AppleMusicRemoteMac", isDirectory: true)
@@ -165,6 +177,7 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
         } else {
             self.isEnabledInternal = UserDefaults.standard.bool(forKey: Self.keyEnabled)
         }
+        self.rtIsEnabledFlag = self.isEnabledInternal
         self.fftSetup = vDSP_create_fftsetup(Self.log2N, FFTRadix(kFFTRadix2))
         var window = [Float](repeating: 0, count: Self.fftSize)
         vDSP_hann_window(&window, vDSP_Length(Self.fftSize), Int32(vDSP_HANN_NORM))
@@ -407,7 +420,7 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
         recomputeResultLocked()
         lock.unlock()
 
-        if (enabled || ExternalAmpTCPController.shared.isSoundCheckEnabled) && isPlaying && !PlaybackRouter.shared.isTestingEnvironment {
+        if (enabled || ExternalAmpTCPController.shared.isSoundCheckEnabled) && isPlaying && !isTestingEnv {
             AudioProcessTapService.shared.ensurePassiveAnalysisTapActive(sampleRate: validRate, bitDepth: validDepth)
         }
     }
@@ -486,14 +499,14 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
         right: UnsafePointer<Float>,
         frameCount: Int
     ) {
-        guard !PlaybackRouter.shared.isTestingEnvironment,
-              (isEnabled || ExternalAmpTCPController.shared.isSoundCheckEnabled),
+        guard !isTestingEnv,
+              (rtIsEnabledFlag || ExternalAmpTCPController.shared.rtIsSoundCheckEnabledFlag),
               frameCount > 0 else { return }
         var mono = [Float](repeating: 0, count: frameCount)
         var nonSilent = 0
         var lsb24 = 0
 
-        if isCurrentTrackValidationCached {
+        if rtIsValidationCachedFlag {
             // Fast visualization-only path: skip 24-bit LSB bit-depth scanning and use SIMD stereo-to-mono mixdown
             var half: Float = 0.5
             vDSP_vasm(left, 1, right, 1, &half, &mono, 1, vDSP_Length(frameCount))
@@ -528,8 +541,8 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
         floatCount: Int,
         channels: Int
     ) {
-        guard !PlaybackRouter.shared.isTestingEnvironment,
-              (isEnabled || ExternalAmpTCPController.shared.isSoundCheckEnabled) else { return }
+        guard !isTestingEnv,
+              (rtIsEnabledFlag || ExternalAmpTCPController.shared.rtIsSoundCheckEnabledFlag) else { return }
         let ch = max(1, channels)
         let frameCount = floatCount / ch
         guard frameCount > 0 else { return }
@@ -538,7 +551,7 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
         var nonSilent = 0
         var lsb24 = 0
 
-        if isCurrentTrackValidationCached {
+        if rtIsValidationCachedFlag {
             // Fast visualization-only path: extract mono for RTA visualization without 24-bit LSB scanning
             for f in 0..<frameCount {
                 let idx = f * ch

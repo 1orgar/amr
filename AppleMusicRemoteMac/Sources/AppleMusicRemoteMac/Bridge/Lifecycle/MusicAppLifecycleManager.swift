@@ -83,11 +83,13 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
     public var processChecker: (@Sendable () -> [pid_t])?
     public var nowProvider: (@Sendable () -> Date) = { Date() }
 
-    // Background Watchdog Timer
+    // Background Watchdog Timer & Probe Queue
     private var watchdogTimer: DispatchSourceTimer?
     private let watchdogQueue = DispatchQueue(label: "com.amr.musicapp.watchdog", qos: .utility)
+    private let probeQueue = DispatchQueue(label: "com.amr.lifecycle.probe", qos: .utility)
     private var isWatchdogRunning: Bool = false
     private var isRecoveringInProgress: Bool = false
+    private var isApplescriptProbeRunning: Bool = false
 
     // MARK: - Public Properties
 
@@ -170,42 +172,49 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         let pids = getRunningPids()
 
         stateLock.lock()
+        var cooldownNotify: (() -> Void)? = nil
         if let until = cooldownUntil {
             if nowProvider() >= until {
-                // Cooldown period expired
+                // Cooldown period expired — reset circuit breaker window so recovery can proceed
                 cooldownUntil = nil
+                restartTimestamps.removeAll()
                 NSLog("[MusicAppLifecycleManager] ❄️ Cooldown period expired. Re-evaluating health...")
-                if pids.isEmpty {
-                    transitionToStateLocked(.terminated, reason: "Cooldown expired, Music.app not running")
-                } else {
-                    transitionToStateLocked(.running, reason: "Cooldown expired, re-enabling monitoring")
+                if !pids.isEmpty {
+                    cooldownNotify = transitionToStateLocked(.running, reason: "Cooldown expired, re-enabling monitoring")
                 }
-                stateLock.unlock()
-                return
             } else {
                 stateLock.unlock()
                 return
             }
         }
 
-        if currentState == .recovering {
+        if isRecoveringInProgress {
             stateLock.unlock()
+            cooldownNotify?()
             return
         }
 
         if pids.isEmpty {
+            let notify: (() -> Void)?
             if currentState != .terminated {
-                transitionToStateLocked(.terminated, reason: "Music.app process not detected")
-                if autoRestartEnabled {
-                    stateLock.unlock()
-                    triggerRecovery(reason: "Music.app exited, auto-restart triggered")
-                    return
-                }
+                notify = transitionToStateLocked(.terminated, reason: "Music.app process not detected")
+            } else {
+                notify = cooldownNotify
             }
+            let shouldRecover = autoRestartEnabled && !isRecoveringInProgress && (!PlaybackRouter.shared.isTestingEnvironment || processLauncher != nil || processTerminator != nil)
             stateLock.unlock()
+            notify?()
+            if shouldRecover {
+                triggerRecovery(reason: "Music.app exited, auto-restart triggered")
+            }
             return
         }
         stateLock.unlock()
+        cooldownNotify?()
+
+        if PlaybackRouter.shared.isTestingEnvironment && probeHandler == nil {
+            return
+        }
 
         // Probe responsiveness asynchronously with timeout
         Task { [weak self] in
@@ -215,30 +224,63 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         }
     }
 
+    private final class ProbeOnceGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Bool, Never>?
+
+        init(_ continuation: CheckedContinuation<Bool, Never>) {
+            self.continuation = continuation
+        }
+
+        func resume(returning value: Bool) {
+            lock.lock()
+            let cont = continuation
+            continuation = nil
+            lock.unlock()
+            cont?.resume(returning: value)
+        }
+    }
+
     private func probeResponsiveness() async -> Bool {
         if let customProbe = probeHandler {
             return await customProbe()
         }
 
-        // Lightweight ScriptingBridge / AppleScript probe with strict timeout
-        return await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
+        // Single-flight guard: never stack multiple ScriptingBridge probes if Music.app is hung
+        let canStart: Bool = stateLock.withLock {
+            if isApplescriptProbeRunning {
+                return false
+            }
+            isApplescriptProbeRunning = true
+            return true
+        }
+        guard canStart else {
+            return false
+        }
+
+        let timeout = self.probeTimeout
+        return await withCheckedContinuation { continuation in
+            let gate = ProbeOnceGate(continuation)
+            probeQueue.async { [weak self] in
+                var ok = false
                 if let app = MusicAppProvider.shared.getMusicApp() {
-                    // Accessing a lightweight property tests the Apple Events event queue
-                    _ = app.playerState
-                    return true
+                    let state = app.playerState
+                    if let sbApp = app as? SBApplication {
+                        ok = sbApp.lastError() == nil && state.rawValue != 0
+                    } else {
+                        ok = true
+                    }
                 }
-                return false
+                if let self = self {
+                    self.stateLock.lock()
+                    self.isApplescriptProbeRunning = false
+                    self.stateLock.unlock()
+                }
+                gate.resume(returning: ok)
             }
-
-            group.addTask { [timeout = self.probeTimeout] in
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                return false
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                gate.resume(returning: false)
             }
-
-            guard let firstResult = await group.next() else { return false }
-            group.cancelAll()
-            return firstResult
         }
     }
 
@@ -249,20 +291,24 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
                 NSLog("[MusicAppLifecycleManager] 🟢 Music.app recovered responsiveness")
             }
             consecutiveFailures = 0
-            if currentState != .running && currentState != .recovering {
-                transitionToStateLocked(.running, reason: "Watchdog probe succeeded")
+            var notify: (() -> Void)? = nil
+            if currentState != .running && !isRecoveringInProgress {
+                notify = transitionToStateLocked(.running, reason: "Watchdog probe succeeded")
             }
             stateLock.unlock()
+            notify?()
         } else {
             consecutiveFailures += 1
             NSLog("[MusicAppLifecycleManager] ⚠️ Watchdog probe failed (%d/%d)", consecutiveFailures, failureThreshold)
 
             if consecutiveFailures >= failureThreshold {
-                if currentState != .unresponsive && currentState != .recovering && currentState != .cooldown {
-                    transitionToStateLocked(.unresponsive, reason: "Watchdog probe timed out \(consecutiveFailures) consecutive times (hang/beachball detected)")
+                if currentState != .unresponsive && !isRecoveringInProgress && currentState != .cooldown {
+                    let notify = transitionToStateLocked(.unresponsive, reason: "Watchdog probe timed out \(consecutiveFailures) consecutive times (hang/beachball detected)")
+                    let shouldRecover = autoRestartEnabled && (!PlaybackRouter.shared.isTestingEnvironment || processLauncher != nil || processTerminator != nil)
                     stateLock.unlock()
+                    notify?()
 
-                    if autoRestartEnabled {
+                    if shouldRecover {
                         triggerRecovery(reason: "Music.app is unresponsive, auto-recovering")
                     }
                     return
@@ -278,9 +324,11 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         consecutiveFailures += 1
         NSLog("[MusicAppLifecycleManager] ⚠️ IPC timeout reported (%d/%d)", consecutiveFailures, failureThreshold)
         if consecutiveFailures >= failureThreshold && currentState == .running {
-            transitionToStateLocked(.unresponsive, reason: "AppleScript IPC timed out (Apple Event deadlock)")
+            let notify = transitionToStateLocked(.unresponsive, reason: "AppleScript IPC timed out (Apple Event deadlock)")
+            let shouldRecover = autoRestartEnabled && (!PlaybackRouter.shared.isTestingEnvironment || processLauncher != nil || processTerminator != nil)
             stateLock.unlock()
-            if autoRestartEnabled {
+            notify?()
+            if shouldRecover {
                 triggerRecovery(reason: "IPC deadlock, auto-recovering")
             }
             return
@@ -292,17 +340,24 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
 
     public func handleAppLaunched(pid: pid_t) {
         stateLock.lock()
+        guard !isRecoveringInProgress else {
+            stateLock.unlock()
+            return
+        }
         consecutiveFailures = 0
-        transitionToStateLocked(.running, reason: "Music.app launched (PID: \(pid))")
+        let notify = transitionToStateLocked(.running, reason: "Music.app launched (PID: \(pid))")
         stateLock.unlock()
+        notify?()
     }
 
     public func handleAppTerminated(pid: pid_t) {
         stateLock.lock()
-        if currentState != .recovering {
-            transitionToStateLocked(.terminated, reason: "Music.app terminated (PID: \(pid))")
+        if !isRecoveringInProgress {
+            let notify = transitionToStateLocked(.terminated, reason: "Music.app terminated (PID: \(pid))")
+            let shouldRecover = autoRestartEnabled && (!PlaybackRouter.shared.isTestingEnvironment || processLauncher != nil || processTerminator != nil)
             stateLock.unlock()
-            if autoRestartEnabled {
+            notify?()
+            if shouldRecover {
                 triggerRecovery(reason: "Music.app terminated, auto-restarting")
             }
         } else {
@@ -326,16 +381,18 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         if restartTimestamps.count >= circuitBreakerMaxRestarts {
             // Trip Circuit Breaker
             cooldownUntil = now.addingTimeInterval(cooldownDuration)
-            transitionToStateLocked(.cooldown, reason: "Circuit breaker tripped: \(restartTimestamps.count) restarts in \(Int(circuitBreakerWindow))s. Cooldown for \(Int(cooldownDuration))s")
+            let notify = transitionToStateLocked(.cooldown, reason: "Circuit breaker tripped: \(restartTimestamps.count) restarts in \(Int(circuitBreakerWindow))s. Cooldown for \(Int(cooldownDuration))s")
             stateLock.unlock()
+            notify?()
             return
         }
 
         // Record restart attempt
         restartTimestamps.append(now)
         isRecoveringInProgress = true
-        transitionToStateLocked(.recovering, reason: reason)
+        let notify = transitionToStateLocked(.recovering, reason: reason)
         stateLock.unlock()
+        notify?()
 
         if PlaybackRouter.shared.isTestingEnvironment {
             if processLauncher == nil && processTerminator == nil {
@@ -381,8 +438,9 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
             NSLog("[MusicAppLifecycleManager] ❌ Failed to launch Music.app during recovery")
             stateLock.lock()
             isRecoveringInProgress = false
-            transitionToStateLocked(.unresponsive, reason: "Failed to launch Music.app")
+            let notify = transitionToStateLocked(.unresponsive, reason: "Failed to launch Music.app")
             stateLock.unlock()
+            notify?()
             return
         }
 
@@ -396,9 +454,13 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
                 Thread.sleep(forTimeInterval: 0.2)
                 let pidsNow = getRunningPids()
                 if !pidsNow.isEmpty {
-                    if let app = MusicAppProvider.shared.getMusicApp(), app.playerState != .stopped || true {
-                        isReady = true
-                        break
+                    if let app = MusicAppProvider.shared.getMusicApp() {
+                        let state = app.playerState
+                        let sbError = (app as? SBApplication)?.lastError()
+                        if sbError == nil && (app as? SBApplication == nil || state.rawValue != 0) {
+                            isReady = true
+                            break
+                        }
                     }
                 }
             }
@@ -409,8 +471,9 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
 
         if isReady {
             consecutiveFailures = 0
-            transitionToStateLocked(.running, reason: "Recovery successful: fresh Music.app running and responding")
+            let notify = transitionToStateLocked(.running, reason: "Recovery successful: fresh Music.app running and responding")
             stateLock.unlock()
+            notify?()
 
             // Reset state store & volume lock
             PlaybackStateStore.shared.invalidateStatusCache()
@@ -422,8 +485,9 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
                 }
             }
         } else {
-            transitionToStateLocked(.unresponsive, reason: "Launched Music.app did not become responsive within timeout")
+            let notify = transitionToStateLocked(.unresponsive, reason: "Launched Music.app did not become responsive within timeout")
             stateLock.unlock()
+            notify?()
         }
     }
 
@@ -466,7 +530,7 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         return MusicAppProvider.shared.launchMusicApp()
     }
 
-    private func transitionToStateLocked(_ newState: MusicAppLifecycleState, reason: String) {
+    private func transitionToStateLocked(_ newState: MusicAppLifecycleState, reason: String) -> (() -> Void)? {
         currentState = newState
         let event = MusicAppLifecycleEvent(
             state: newState,
@@ -477,8 +541,8 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         )
         NSLog("[MusicAppLifecycleManager] 🔔 State -> %@: %@", newState.rawValue, reason)
 
-        let callback = onStateChanged
-        callback?(event)
+        guard let callback = onStateChanged else { return nil }
+        return { callback(event) }
     }
 
     // MARK: - Test Reset Support
@@ -492,6 +556,7 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
             cooldownUntil = nil
         }
         isRecoveringInProgress = false
+        isApplescriptProbeRunning = false
         stateLock.unlock()
     }
 }

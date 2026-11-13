@@ -455,6 +455,33 @@ final class QueueManagerTests: XCTestCase {
         let expectedCyr = TrackInfo(id: "2", numericId: 2, name: "Swan Lake", artist: "Tchaikovsky")
         let matchesCyr = QueueManager.shared.isTrackMatching(expected: expectedCyr, candidateName: "Лебединое озеро", candidateArtist: "Tchaikovsky")
         XCTAssertTrue(matchesCyr, "Track matching must recognize Cyrillic localization when artist matches")
+
+        // Two different Cyrillic songs by the same artist must NOT match
+        let cyrSong1 = TrackInfo(id: "3", numericId: 3, name: "Группа крови", artist: "Кино")
+        XCTAssertFalse(
+            QueueManager.shared.isTrackMatching(expected: cyrSong1, candidateName: "Звезда по имени Солнце", candidateArtist: "Кино"),
+            "Two different Cyrillic titles by the same artist must not false-positive match"
+        )
+
+        // Two different CJK songs by the same artist must NOT match
+        let cjkSong1 = TrackInfo(id: "4", numericId: 4, name: "青のすみか", artist: "Tatsuya Kitani")
+        XCTAssertFalse(
+            QueueManager.shared.isTrackMatching(expected: cjkSong1, candidateName: "呪術廻戦", candidateArtist: "Tatsuya Kitani"),
+            "Two different CJK titles by the same artist must not false-positive match"
+        )
+
+        // Two different Latin songs with curly apostrophes or umlauts by the same artist must NOT match
+        let queenSong = TrackInfo(id: "5", numericId: 5, name: "Don’t Stop Me Now", artist: "Queen")
+        XCTAssertFalse(
+            QueueManager.shared.isTrackMatching(expected: queenSong, candidateName: "Bohemian Rhapsody", candidateArtist: "Queen"),
+            "Curly apostrophe in Latin title must not cause false-positive match with another song by the same artist"
+        )
+
+        let rammsteinSong = TrackInfo(id: "6", numericId: 6, name: "Bück Dich", artist: "Rammstein")
+        XCTAssertFalse(
+            QueueManager.shared.isTrackMatching(expected: rammsteinSong, candidateName: "Sonne", candidateArtist: "Rammstein"),
+            "Umlaut in Latin title must not cause false-positive match with another song by the same artist"
+        )
     }
 
     func testPollerNeverStopsAMRPlaylistPlayback() {

@@ -27,19 +27,90 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
     }
 
-    public private(set) var currentDetectedSampleRate: Double?
-    public private(set) var currentDetectedBitDepth: Int?
-    public private(set) var currentDetectedBitRate: Int?
-    public private(set) var currentIsLossless: Bool = true
-    public private(set) var currentQualityDescription: String = "44.1 кГц (Lossless)"
-    public private(set) var isFormatLockedForCurrentTrack: Bool = false
-    public private(set) var isAuthoritativelyLocked: Bool = false
-    public private(set) var currentLockedTrackKey: String?
-    public private(set) var pendingNextTrackFormat: (sampleRate: Double, bitDepth: Int, timestamp: Date)?
-    public private(set) var formatSwitchCountForCurrentTrack: Int = 0
+    private let stateLock = NSLock()
+    private var _currentDetectedSampleRate: Double?
+    private var _currentDetectedBitDepth: Int?
+    private var _currentDetectedBitRate: Int?
+    private var _currentIsLossless: Bool = true
+    private var _currentQualityDescription: String = "44.1 кГц (Lossless)"
+    private var _isFormatLockedForCurrentTrack: Bool = false
+    private var _isAuthoritativelyLocked: Bool = false
+    private var _currentLockedTrackKey: String?
+    private var _pendingNextTrackFormat: (sampleRate: Double, bitDepth: Int, timestamp: Date)?
+    private var _formatSwitchCountForCurrentTrack: Int = 0
     private var lockTimestamp: Date = .distantPast
 
-    public var onFormatChanged: ((Double, Int?, String) -> Void)?
+    public private(set) var currentDetectedSampleRate: Double? {
+        get { stateLock.withLock { _currentDetectedSampleRate } }
+        set { stateLock.withLock { _currentDetectedSampleRate = newValue } }
+    }
+    public private(set) var currentDetectedBitDepth: Int? {
+        get { stateLock.withLock { _currentDetectedBitDepth } }
+        set { stateLock.withLock { _currentDetectedBitDepth = newValue } }
+    }
+    public private(set) var currentDetectedBitRate: Int? {
+        get { stateLock.withLock { _currentDetectedBitRate } }
+        set { stateLock.withLock { _currentDetectedBitRate = newValue } }
+    }
+    public private(set) var currentIsLossless: Bool {
+        get { stateLock.withLock { _currentIsLossless } }
+        set { stateLock.withLock { _currentIsLossless = newValue } }
+    }
+    public private(set) var currentQualityDescription: String {
+        get { stateLock.withLock { _currentQualityDescription } }
+        set { stateLock.withLock { _currentQualityDescription = newValue } }
+    }
+    public private(set) var isFormatLockedForCurrentTrack: Bool {
+        get { stateLock.withLock { _isFormatLockedForCurrentTrack } }
+        set { stateLock.withLock { _isFormatLockedForCurrentTrack = newValue } }
+    }
+    public private(set) var isAuthoritativelyLocked: Bool {
+        get { stateLock.withLock { _isAuthoritativelyLocked } }
+        set { stateLock.withLock { _isAuthoritativelyLocked = newValue } }
+    }
+    public private(set) var currentLockedTrackKey: String? {
+        get { stateLock.withLock { _currentLockedTrackKey } }
+        set { stateLock.withLock { _currentLockedTrackKey = newValue } }
+    }
+    public private(set) var pendingNextTrackFormat: (sampleRate: Double, bitDepth: Int, timestamp: Date)? {
+        get { stateLock.withLock { _pendingNextTrackFormat } }
+        set { stateLock.withLock { _pendingNextTrackFormat = newValue } }
+    }
+    public private(set) var formatSwitchCountForCurrentTrack: Int {
+        get { stateLock.withLock { _formatSwitchCountForCurrentTrack } }
+        set { stateLock.withLock { _formatSwitchCountForCurrentTrack = newValue } }
+    }
+
+    private let handlersLock = NSLock()
+    private var _onFormatChanged: ((Double, Int?, String) -> Void)?
+    private var formatChangedObservers: [String: (Double, Int?, String) -> Void] = [:]
+
+    public func addFormatChangedObserver(id: String, handler: @escaping (Double, Int?, String) -> Void) {
+        handlersLock.lock()
+        formatChangedObservers[id] = handler
+        handlersLock.unlock()
+    }
+
+    public var onFormatChanged: ((Double, Int?, String) -> Void)? {
+        get {
+            handlersLock.lock()
+            let primary = _onFormatChanged
+            let observers = Array(formatChangedObservers.values)
+            handlersLock.unlock()
+            guard primary != nil || !observers.isEmpty else { return nil }
+            return { rate, bitDepth, desc in
+                primary?(rate, bitDepth, desc)
+                for observer in observers {
+                    observer(rate, bitDepth, desc)
+                }
+            }
+        }
+        set {
+            handlersLock.lock()
+            _onFormatChanged = newValue
+            handlersLock.unlock()
+        }
+    }
 
     private var process: Process?
     private var outputHandle: FileHandle?
@@ -574,22 +645,26 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         NSLog("[BitPerfectLogMonitor] 🎯 Locked track format: %.1f kHz, %d-бит (%@) [Trigger: %@]", rate / 1000.0, validDepth, desc, reason)
 
         formatSwitchCountForCurrentTrack += 1
-        if isEnabled {
+        let enabled = self.isEnabled
+        if enabled {
             applyFormat(rate: rate, bitDepth: validDepth)
         }
 
         let callback = self.onFormatChanged
         DispatchQueue.main.async {
             callback?(rate, validDepth, desc)
-            NotificationCenter.default.post(
-                name: .bitPerfectFormatDidChange,
-                object: nil,
-                userInfo: [
-                    "sampleRate": rate,
-                    "bitDepth": validDepth,
-                    "description": desc
-                ]
-            )
+            if enabled {
+                NotificationCenter.default.post(
+                    name: .bitPerfectFormatDidChange,
+                    object: nil,
+                    userInfo: [
+                        "sampleRate": rate,
+                        "bitDepth": validDepth,
+                        "description": desc,
+                        "isEnabled": enabled
+                    ]
+                )
+            }
             MenuManager.shared.updateMenuState()
             UPnPMediaRendererServer.shared.notifySubscribers(force: true)
         }
@@ -598,9 +673,6 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     private func applyFormat(rate: Double, bitDepth: Int) {
         CoreAudioDeviceManager.shared.setFormat(sampleRate: rate, bitDepth: bitDepth)
         AudioProcessTapService.shared.setFormat(sampleRate: Int(rate), bitDepth: bitDepth)
-        if DLNADiscoveryManager.shared.hasActiveRenderer {
-            DLNADiscoveryManager.shared.handleTrackFormatChanged(sampleRate: Int(rate), bitDepth: bitDepth)
-        }
     }
 
     public func formatQualityString(rate: Double, bitDepth: Int, isLossless: Bool = true) -> String {

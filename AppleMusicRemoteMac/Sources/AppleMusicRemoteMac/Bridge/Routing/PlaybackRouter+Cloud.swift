@@ -19,10 +19,13 @@ extension PlaybackRouter {
     public func playAlbum(id: String, name: String, artist: String, startIndex: Int = 0, shuffle: Bool = false) async -> Bool {
         _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
         BitPerfectLogMonitor.shared.resetTrackState()
-        PlaybackStateStore.shared.withLock {
+        let expectedGen: UInt64 = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.playbackGeneration &+= 1
+            PlaybackStateStore.shared.isStagingCloudTrack = false
             PlaybackStateStore.shared.isRadioPlayback = false
             PlaybackStateStore.shared.activeStationName = nil
             PlaybackStateStore.shared.isCustomQueuePlayback = false
+            return PlaybackStateStore.shared.playbackGeneration
         }
         PlaybackStateStore.shared.invalidateQueueCache()
         PlaybackStateStore.shared.invalidateStatusCache()
@@ -42,11 +45,15 @@ extension PlaybackRouter {
             }
         }
 
+        guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+            return false
+        }
+
         let qName = !name.isEmpty ? name : (album?.name ?? "Альбом")
         let validIdx = (startIndex >= 0 && startIndex < albumTracks.count) ? startIndex : 0
 
         if !albumTracks.isEmpty && MusicKitManager.shared.hasUserToken {
-            return await playSearchResults(tracks: albumTracks, startIndex: validIdx, shuffle: shuffle, queueName: qName)
+            return await playSearchResults(tracks: albumTracks, startIndex: validIdx, shuffle: shuffle, queueName: qName, incrementGeneration: false)
         }
 
         var targetUrl = !id.isEmpty ? "music://music.apple.com/album/\(id)" : ""
@@ -60,15 +67,49 @@ extension PlaybackRouter {
 
         if !targetUrl.isEmpty, openMusicUrl(targetUrl) {
             try? await Task.sleep(nanoseconds: 600_000_000)
+            guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+                return false
+            }
             _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
             if !albumTracks.isEmpty {
                 PlaybackStateStore.shared.withLock {
-                    PlaybackStateStore.shared.activeCustomQueue = albumTracks
-                    PlaybackStateStore.shared.activeCustomQueueIndex = validIdx
-                    PlaybackStateStore.shared.activeCustomQueueName = qName
-                    PlaybackStateStore.shared.isCustomQueuePlayback = false
-                    PlaybackStateStore.shared.currentOriginalPlaylistName = qName
+                    if PlaybackStateStore.shared.playbackGeneration == expectedGen {
+                        var formattedTracks = [TrackInfo]()
+                        for (idx, var t) in albumTracks.enumerated() {
+                            t.index = idx + 1
+                            formattedTracks.append(t)
+                        }
+                        PlaybackStateStore.shared.originalCustomQueue = formattedTracks
+                        PlaybackStateStore.shared.activeCustomQueue = formattedTracks
+                        PlaybackStateStore.shared.activeCustomQueueIndex = validIdx
+                        PlaybackStateStore.shared.activeCustomQueueName = qName
+                        PlaybackStateStore.shared.isCustomQueuePlayback = true
+                        PlaybackStateStore.shared.currentOriginalPlaylistName = qName
+                        PlaybackStateStore.shared.activeSearchQuery = nil
+                        PlaybackStateStore.shared.activeSearchOffset = 0
+                        PlaybackStateStore.shared.isFetchingNextSearchPage = false
+                        PlaybackStateStore.shared.activeCuratorPrompt = nil
+                        PlaybackStateStore.shared.isFetchingNextCuratorPage = false
+                        PlaybackStateStore.shared.isShuffleQueueActive = false
+                        PlaybackStateStore.shared.activeShuffledQueue.removeAll()
+                        PlaybackStateStore.shared.lastCloudPlayTime = Date()
+                        PlaybackStateStore.shared.lastSkipTime = Date()
+                        PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
+                        PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+                        PlaybackStateStore.shared.lastKnownPosition = 0.0
+                        if validIdx + 1 < formattedTracks.count {
+                            PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedTracks[(validIdx + 1)...])
+                        } else {
+                            PlaybackStateStore.shared.latestUpcomingTracks = []
+                        }
+                        if validIdx > 0 {
+                            PlaybackStateStore.shared.latestHistoryTracks = Array(formattedTracks[0..<validIdx].reversed())
+                        } else {
+                            PlaybackStateStore.shared.latestHistoryTracks = []
+                        }
+                    }
                 }
+                QueueManager.shared.startQueueMonitoring()
             }
             PlaybackStateStore.shared.invalidateQueueCache()
             PlaybackStateStore.shared.invalidateStatusCache()
@@ -78,15 +119,46 @@ extension PlaybackRouter {
 
         if !albumTracks.isEmpty {
             let startTrack = albumTracks[validIdx]
-            let cloudOk = await playCloud(url: startTrack.url, id: startTrack.id, name: startTrack.name, artist: startTrack.artist, numericId: startTrack.numericId)
+            let cloudOk = await playCloud(url: startTrack.url, id: startTrack.id, name: startTrack.name, artist: startTrack.artist, numericId: startTrack.numericId, incrementGeneration: false)
             if cloudOk {
                 PlaybackStateStore.shared.withLock {
-                    PlaybackStateStore.shared.activeCustomQueue = albumTracks
-                    PlaybackStateStore.shared.activeCustomQueueIndex = validIdx
-                    PlaybackStateStore.shared.activeCustomQueueName = qName
-                    PlaybackStateStore.shared.isCustomQueuePlayback = false
-                    PlaybackStateStore.shared.currentOriginalPlaylistName = qName
+                    if PlaybackStateStore.shared.playbackGeneration == expectedGen {
+                        var formattedTracks = [TrackInfo]()
+                        for (idx, var t) in albumTracks.enumerated() {
+                            t.index = idx + 1
+                            formattedTracks.append(t)
+                        }
+                        PlaybackStateStore.shared.originalCustomQueue = formattedTracks
+                        PlaybackStateStore.shared.activeCustomQueue = formattedTracks
+                        PlaybackStateStore.shared.activeCustomQueueIndex = validIdx
+                        PlaybackStateStore.shared.activeCustomQueueName = qName
+                        PlaybackStateStore.shared.isCustomQueuePlayback = true
+                        PlaybackStateStore.shared.currentOriginalPlaylistName = qName
+                        PlaybackStateStore.shared.activeSearchQuery = nil
+                        PlaybackStateStore.shared.activeSearchOffset = 0
+                        PlaybackStateStore.shared.isFetchingNextSearchPage = false
+                        PlaybackStateStore.shared.activeCuratorPrompt = nil
+                        PlaybackStateStore.shared.isFetchingNextCuratorPage = false
+                        PlaybackStateStore.shared.isShuffleQueueActive = false
+                        PlaybackStateStore.shared.activeShuffledQueue.removeAll()
+                        PlaybackStateStore.shared.lastCloudPlayTime = Date()
+                        PlaybackStateStore.shared.lastSkipTime = Date()
+                        PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
+                        PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+                        PlaybackStateStore.shared.lastKnownPosition = 0.0
+                        if validIdx + 1 < formattedTracks.count {
+                            PlaybackStateStore.shared.latestUpcomingTracks = Array(formattedTracks[(validIdx + 1)...])
+                        } else {
+                            PlaybackStateStore.shared.latestUpcomingTracks = []
+                        }
+                        if validIdx > 0 {
+                            PlaybackStateStore.shared.latestHistoryTracks = Array(formattedTracks[0..<validIdx].reversed())
+                        } else {
+                            PlaybackStateStore.shared.latestHistoryTracks = []
+                        }
+                    }
                 }
+                QueueManager.shared.startQueueMonitoring()
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
@@ -101,35 +173,63 @@ extension PlaybackRouter {
 
     public func playHeroCard(index: Int, name: String, artist: String? = nil, cardId: String?, url: String?, type: String? = nil) async -> Bool {
         BitPerfectLogMonitor.shared.resetTrackState()
+        var expectedGen: UInt64 = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.playbackGeneration
+        }
 
         let isStation = (type == "station") || (cardId?.hasPrefix("ra.") == true) || name.lowercased().contains("станция")
         var targetUrl = url ?? ""
         var actualCardId = cardId ?? ""
         let art = artist ?? ""
 
-        if targetUrl.contains("ra.u-personal") || actualCardId == "station_personal" || (targetUrl.isEmpty && name.contains("Моя станция")) {
+        let lowName = name.lowercased()
+        let isPersonalCard = targetUrl.contains("ra.u-personal")
+            || actualCardId == "station_personal"
+            || lowName.contains("моя станция")
+            || lowName.contains("my station")
+            || lowName.contains("персональная")
+            || lowName.contains("personal station")
+        let isDiscoveryCard = targetUrl.contains("ra.u-discovery")
+            || actualCardId == "station_discovery"
+            || lowName.contains("открытий")
+            || lowName.contains("discovery station")
+            || lowName.contains("в моем вкусе")
+            || lowName.contains("в моём вкусе")
+        let isGenericOrMissingUrl = targetUrl.isEmpty
+            || !targetUrl.contains("ra.")
+            || targetUrl.contains("ra.u-personal")
+            || targetUrl.contains("ra.u-discovery")
+            || targetUrl.contains("ra.985480047")
+            || targetUrl.contains("ra.985484943")
+
+        if isPersonalCard && isGenericOrMissingUrl {
             if let personal = await MusicKitManager.shared.fetchPersonalStation(), !personal.url.isEmpty {
                 actualCardId = personal.id
                 targetUrl = personal.url
-            } else if targetUrl.isEmpty || targetUrl.contains("ra.u-personal") {
-                actualCardId = "ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
-                targetUrl = "https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
+            } else {
+                targetUrl = ""
             }
-        } else if targetUrl.contains("ra.u-discovery") || actualCardId == "station_discovery" || (targetUrl.isEmpty && (name.contains("открытий") || name.contains("В моем вкусе"))) {
+        } else if isDiscoveryCard && isGenericOrMissingUrl {
             let (_, discovery) = await MusicKitManager.shared.fetchPersonalStations()
             if let disc = discovery, !disc.url.isEmpty {
                 actualCardId = disc.id
                 targetUrl = disc.url
-            } else if targetUrl.isEmpty || targetUrl.contains("ra.u-discovery") {
-                actualCardId = "ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
-                targetUrl = "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
+            } else {
+                targetUrl = ""
             }
         } else if targetUrl.isEmpty && actualCardId.hasPrefix("ra.") {
             targetUrl = "music://music.apple.com/station/\(actualCardId)"
         }
 
-        if isStation {
-            let stationName = !art.isEmpty ? art : name
+        guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+            return false
+        }
+
+        if isStation || isPersonalCard || isDiscoveryCard {
+            let isGenericName = name.isEmpty || lowName == "apple music"
+            let lowArt = art.lowercased()
+            let isSubtitleGeneric = lowArt.contains("персональная радиостанция") || lowArt.contains("personal station")
+            let stationName = (!isGenericName || isSubtitleGeneric || art.isEmpty) ? (!name.isEmpty ? name : art) : art
             return await playStation(url: targetUrl, name: stationName)
         }
 
@@ -141,7 +241,7 @@ extension PlaybackRouter {
             let localPlaylists = LibraryService.shared.getPlaylists()
 
             // 1. Try local playlist in Music.app (matches exact name or localized alias like "Мои любимые треки" for Essentials)
-            let isEssentials = lowerPl.contains("essentials") || actualCardId.contains("20e9f373919da080c2f90eaf2e62e914")
+            let isEssentials = lowerPl.contains("essentials") || lowerPl.contains("любимые") || lowerPl.contains("favorites") || actualCardId == "favorites_mix"
             if let matched = localPlaylists.first(where: {
                 let n = $0.name.lowercased()
                 if n == lowerPl { return true }
@@ -154,6 +254,9 @@ extension PlaybackRouter {
                     PlaybackStateStore.shared.invalidateStatusCache()
                     WebSocketServer.shared.broadcastStatus(includeQueue: true)
                     return true
+                }
+                expectedGen = PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.playbackGeneration
                 }
             }
 
@@ -195,6 +298,9 @@ extension PlaybackRouter {
                 }), let mid = m.id, !mid.isEmpty {
                     plTracks = await MusicKitManager.shared.getPlaylistTracksById(playlistId: mid)
                 }
+            }
+            guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+                return false
             }
             // Fallback for Heavy Rotation / В моем вкусе if API unauthenticated or offline
             if plTracks.isEmpty && (lowerPl.contains("повторе") || lowerPl.contains("heavy rotation")) {
@@ -238,12 +344,17 @@ extension PlaybackRouter {
         }
 
         if type == "album" || (!actualCardId.isEmpty && !actualCardId.hasPrefix("ra.") && !actualCardId.hasPrefix("pl.")) {
+            let genBeforeAlbum = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.playbackGeneration }
             if await playAlbum(id: actualCardId, name: name, artist: art, shuffle: false) {
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
                 return true
             }
+            guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == genBeforeAlbum &+ 1 }) else {
+                return false
+            }
+            expectedGen = genBeforeAlbum &+ 1
         }
 
         let cleanQuery = name
@@ -251,23 +362,45 @@ extension PlaybackRouter {
             .replacingOccurrences(of: " - EP", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if await searchAndPlay(query: cleanQuery) {
+        guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+            return false
+        }
+
+        let primarySearch = await searchAndPlayDetailed(query: cleanQuery)
+        expectedGen = primarySearch.expectedGeneration
+        if primarySearch.success {
+            let genAfterSearch = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.playbackGeneration }
             try? await Task.sleep(nanoseconds: 800_000_000)
+            guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == genAfterSearch }) else {
+                return false
+            }
             _ = syncCurrentTrackToAMRQueue(clearQueue: true)
             PlaybackStateStore.shared.invalidateQueueCache()
             PlaybackStateStore.shared.invalidateStatusCache()
             WebSocketServer.shared.broadcastStatus(includeQueue: true)
             return true
         }
+        guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+            return false
+        }
         if cleanQuery.hasSuffix("s") || cleanQuery.hasSuffix("S") {
             let singular = String(cleanQuery.dropLast())
-            if await searchAndPlay(query: singular) {
+            let singularSearch = await searchAndPlayDetailed(query: singular)
+            expectedGen = singularSearch.expectedGeneration
+            if singularSearch.success {
+                let genAfterSearch = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.playbackGeneration }
                 try? await Task.sleep(nanoseconds: 800_000_000)
+                guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == genAfterSearch }) else {
+                    return false
+                }
                 _ = syncCurrentTrackToAMRQueue(clearQueue: true)
                 PlaybackStateStore.shared.invalidateQueueCache()
                 PlaybackStateStore.shared.invalidateStatusCache()
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
                 return true
+            }
+            guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+                return false
             }
         }
 
@@ -281,17 +414,21 @@ extension PlaybackRouter {
             }
         }
 
-        PlaybackStateStore.shared.withLock {
+        let launchGen: UInt64 = PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isRadioPlayback = false
             PlaybackStateStore.shared.activeStationName = nil
             PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
             PlaybackStateStore.shared.activeCustomQueueName = "Очередь AMR"
+            return PlaybackStateStore.shared.playbackGeneration
         }
 
         var launched = false
         if !targetUrl.isEmpty {
             if openMusicUrl(targetUrl) {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == launchGen }) else {
+                    return false
+                }
                 _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
                 launched = true
             }
@@ -300,6 +437,9 @@ extension PlaybackRouter {
         guard launched else { return false }
 
         try? await Task.sleep(nanoseconds: 1_200_000_000)
+        guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == launchGen }) else {
+            return false
+        }
         _ = syncCurrentTrackToAMRQueue(clearQueue: true)
         PlaybackStateStore.shared.invalidateQueueCache()
         PlaybackStateStore.shared.invalidateStatusCache()
@@ -309,10 +449,14 @@ extension PlaybackRouter {
 
     // MARK: - Cloud Track Playback
 
-    public func playCloud(url: String?, id: String?, name: String?, artist: String?, numericId: Int? = nil, isLocal: Bool? = nil) async -> Bool {
+    public func playCloud(url: String?, id: String?, name: String?, artist: String?, numericId: Int? = nil, isLocal: Bool? = nil, incrementGeneration: Bool = true) async -> Bool {
         _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
         BitPerfectLogMonitor.shared.resetTrackState()
         PlaybackStateStore.shared.withLock {
+            if incrementGeneration {
+                PlaybackStateStore.shared.playbackGeneration &+= 1
+            }
+            PlaybackStateStore.shared.isStagingCloudTrack = false
             PlaybackStateStore.shared.isRadioPlayback = false
             PlaybackStateStore.shared.activeStationName = nil
         }
@@ -468,7 +612,7 @@ extension PlaybackRouter {
                     url: url,
                     index: 1
                 )
-                return await playSearchResults(tracks: [singleTrack], startIndex: 0, shuffle: false, queueName: name ?? "Очередь AMR")
+                return await playSearchResults(tracks: [singleTrack], startIndex: 0, shuffle: false, queueName: name ?? "Очередь AMR", incrementGeneration: false)
             }
             targetUrl = "music://music.apple.com/station/item/ra.\(sId)"
         } else if !isTestingEnvironment && MusicKitManager.shared.hasUserToken, let n = name, !n.isEmpty {
@@ -486,7 +630,7 @@ extension PlaybackRouter {
                 url: url,
                 index: 1
             )
-            return await playSearchResults(tracks: [singleTrack], startIndex: 0, shuffle: false, queueName: n)
+            return await playSearchResults(tracks: [singleTrack], startIndex: 0, shuffle: false, queueName: n, incrementGeneration: false)
         } else if let u = url, !u.isEmpty {
             targetUrl = u
             if targetUrl.hasPrefix("https://music.apple.com") {

@@ -228,7 +228,7 @@ extension QueueManager {
             return true
         }
 
-        if queueTimer == nil {
+        if timerLock.withLock({ queueTimer == nil }) {
             startQueueMonitoring()
         }
 

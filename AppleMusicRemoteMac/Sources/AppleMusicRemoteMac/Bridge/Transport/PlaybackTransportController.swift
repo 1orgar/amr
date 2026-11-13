@@ -46,7 +46,10 @@ public final class PlaybackTransportController: @unchecked Sendable {
                     }
                 }
                 app.playOnce(false)
+            } else {
+                app.playOnce(false)
             }
+            return true
         }
         _ = AppleScriptExecutor.shared.run("tell application \"Music\" to play")
         return true
@@ -60,6 +63,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
         }
         if let app = MusicAppProvider.shared.getMusicApp() {
             app.pause()
+            return true
         }
         _ = AppleScriptExecutor.shared.run("tell application \"Music\" to pause")
         return true
@@ -73,27 +77,33 @@ public final class PlaybackTransportController: @unchecked Sendable {
             return true
         }
         if let app = MusicAppProvider.shared.getMusicApp() {
-            app.pause()
-            app.playerPosition = 0
+            if let stopFn = app.stop {
+                stopFn()
+            } else {
+                app.pause()
+                app.playerPosition = 0
+            }
             return true
         }
-        let (ok, _) = AppleScriptExecutor.shared.run("""
-        tell application "Music" to pause
-        tell application "Music" to set player position to 0
-        """)
+        let (ok, _) = AppleScriptExecutor.shared.run("tell application \"Music\" to stop")
         return ok
     }
 
     public func playPause() -> Bool {
-        let isPlaying = PlaybackStateStore.shared.withLock {
+        let cachedPlaying: Bool? = PlaybackStateStore.shared.withLock {
             if let cache = PlaybackStateStore.shared.lastPlayerStatusCache,
                Date().timeIntervalSince(cache.timestamp) < 1.5 {
                 return cache.status.playerState == "playing"
             }
-            if let app = MusicAppProvider.shared.getMusicApp() {
-                return app.playerState == .playing
-            }
-            return !PlaybackStateStore.shared.isUserPaused
+            return nil
+        }
+        let isPlaying: Bool
+        if let cachedPlaying {
+            isPlaying = cachedPlaying
+        } else if let app = MusicAppProvider.shared.getMusicApp() {
+            isPlaying = app.playerState == .playing
+        } else {
+            isPlaying = PlaybackStateStore.shared.withLock { !PlaybackStateStore.shared.isUserPaused }
         }
         if isPlaying {
             return pause()
@@ -139,9 +149,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
             if nextIdx < count {
                 _ = QueueManager.shared.playQueueIndexUnlocked(nextIdx)
             } else if repMode == "all" && count > 0 {
-                PlaybackStateStore.shared.withLock {
-                    QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "manual-next")
-                }
+                QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "manual-next")
             }
             return true
         }
@@ -239,28 +247,40 @@ public final class PlaybackTransportController: @unchecked Sendable {
         return true
     }
 
-    public func setVolume(_ volume: Int) -> Bool {
-        if PlaybackStateStore.shared.isVolumeLockedTo100 && !PlaybackStateStore.shared.isDLNAMuted {
+    public func setVolume(_ volume: Int, isFromDuckingController: Bool = false) -> Bool {
+        if PlaybackStateStore.shared.isVolumeLockedTo100 {
             if ExternalAmpTCPController.shared.isActive {
-                ExternalAmpTCPController.shared.setVolume(volume)
+                if !isFromDuckingController {
+                    AudioDuckingController.shared.notifyManualVolumeChange(max(0, min(100, volume)))
+                }
+                ExternalAmpTCPController.shared.setVolume(volume, preserveBaseVolume: isFromDuckingController)
                 return true
             }
-            if !AudioDuckingController.shared.isDucked && volume != 100 {
+            if !isFromDuckingController && volume != 100 {
                 NSLog("[PlaybackTransportController] 🔒 Volume is locked to 100%% (Bit-Perfect). Rejecting volume change to %d%%", volume)
                 return false
             }
         }
         let clamped = max(0, min(100, volume))
-        PlaybackStateStore.shared.withLock {
+        if !isFromDuckingController {
+            AudioDuckingController.shared.notifyManualVolumeChange(clamped)
+        }
+        let isDLNAMuted = PlaybackStateStore.shared.withLock { () -> Bool in
             PlaybackStateStore.shared.simulatedVolume = clamped
+            if PlaybackStateStore.shared.isDLNAMuted && !isFromDuckingController && clamped > 0 {
+                PlaybackStateStore.shared.preDLNAVolume = clamped
+            }
+            return PlaybackStateStore.shared.isDLNAMuted
         }
+        CoreAudioDeviceManager.shared.updateSavedGuardVolumeIfNeeded(clamped, isDucked: AudioDuckingController.shared.isDucked)
         PlaybackStateStore.shared.invalidateStatusCache()
-        if let app = MusicAppProvider.shared.getMusicApp() {
-            app.soundVolume = clamped
-        }
-        if MusicAppProvider.shared.isMusicAppRunning {
-            let script = "tell application \"Music\" to set sound volume to \(clamped)"
-            _ = AppleScriptExecutor.shared.execute(script)
+        if !CoreAudioDeviceManager.shared.isMutingGuardActive && !isDLNAMuted {
+            if let app = MusicAppProvider.shared.getMusicApp() {
+                app.soundVolume = clamped
+            } else if MusicAppProvider.shared.isMusicAppRunning {
+                let script = "tell application \"Music\" to set sound volume to \(clamped)"
+                _ = AppleScriptExecutor.shared.execute(script)
+            }
         }
         PlaybackStateStore.shared.invalidateStatusCache()
         return true
@@ -268,8 +288,10 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
     @discardableResult
     public func checkAndEnforceVolumeLock() -> Bool {
+        let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
         guard PlaybackStateStore.shared.isVolumeLockedTo100
-              && !PlaybackStateStore.shared.isDLNAMuted
+              && !isDLNAMuted
+              && !AudioDuckingController.shared.isDucked
               && !CoreAudioDeviceManager.shared.isMutingGuardActive else { return false }
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.simulatedVolume = 100
@@ -280,23 +302,26 @@ public final class PlaybackTransportController: @unchecked Sendable {
         guard MusicAppProvider.shared.isMusicAppRunning else {
             return true
         }
-        if let app = MusicAppProvider.shared.getMusicApp(), app.soundVolume != 100 {
-            NSLog("[PlaybackTransportController] 🔊 Enforcing 100%% volume lock in Music.app (was %d%%)", app.soundVolume)
-            app.soundVolume = 100
+        if let app = MusicAppProvider.shared.getMusicApp() {
+            if app.soundVolume != 100 {
+                NSLog("[PlaybackTransportController] 🔊 Enforcing 100%% volume lock in Music.app (was %d%%)", app.soundVolume)
+                app.soundVolume = 100
+            }
+        } else {
+            let script = """
+            tell application "Music"
+                try
+                    if sound volume is not 100 then
+                        set sound volume to 100
+                    end if
+                    return "ok"
+                on error
+                    return "error"
+                end try
+            end tell
+            """
+            _ = AppleScriptExecutor.shared.execute(script)
         }
-        let script = """
-        tell application "Music"
-            try
-                if sound volume is not 100 then
-                    set sound volume to 100
-                end if
-                return "ok"
-            on error
-                return "error"
-            end try
-        end tell
-        """
-        _ = AppleScriptExecutor.shared.execute(script)
         PlaybackStateStore.shared.invalidateStatusCache()
         return true
     }
@@ -364,15 +389,16 @@ public final class PlaybackTransportController: @unchecked Sendable {
         if PlaybackRouter.shared.isTestingEnvironment {
             return true
         }
-        guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
-
         let isCustomQueue = PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty
         }
         if !isCustomQueue {
-            app.shuffleEnabled = enabled
-            let script = enabled ? "tell application \"Music\"\nset shuffle mode to songs\nset shuffle enabled to true\nend tell" : "tell application \"Music\" to set shuffle enabled to false"
-            _ = AppleScriptExecutor.shared.execute(script)
+            if let app = MusicAppProvider.shared.getMusicApp() {
+                app.shuffleEnabled = enabled
+            } else {
+                let script = enabled ? "tell application \"Music\"\nset shuffle mode to songs\nset shuffle enabled to true\nend tell" : "tell application \"Music\" to set shuffle enabled to false"
+                _ = AppleScriptExecutor.shared.execute(script)
+            }
         }
         PlaybackStateStore.shared.invalidateStatusCache()
         WebSocketServer.shared.broadcastStatus(includeQueue: true)
@@ -390,14 +416,16 @@ public final class PlaybackTransportController: @unchecked Sendable {
         if PlaybackRouter.shared.isTestingEnvironment {
             return true
         }
-        guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
         let musicAppMode = (isCustomQueue && validMode == "all") ? "off" : validMode
-        var rMode: MusicERpt = .off
-        if musicAppMode == "all" { rMode = .all }
-        else if musicAppMode == "one" { rMode = .one }
-        app.songRepeat = rMode
-        let script = "tell application \"Music\" to set song repeat to \(musicAppMode)"
-        _ = AppleScriptExecutor.shared.execute(script)
+        if let app = MusicAppProvider.shared.getMusicApp() {
+            var rMode: MusicERpt = .off
+            if musicAppMode == "all" { rMode = .all }
+            else if musicAppMode == "one" { rMode = .one }
+            app.songRepeat = rMode
+        } else {
+            let script = "tell application \"Music\" to set song repeat to \(musicAppMode)"
+            _ = AppleScriptExecutor.shared.execute(script)
+        }
         WebSocketServer.shared.broadcastStatus(includeQueue: false)
         return true
     }
@@ -438,15 +466,30 @@ public final class PlaybackTransportController: @unchecked Sendable {
             }
             return true
         } else {
-            let (ok, _) = AppleScriptExecutor.shared.execute("tell application \"Music\" to try\nset favorited of current track to \(fav)\nend try")
+            let (ok, _) = AppleScriptExecutor.shared.execute("tell application \"Music\"\ntry\nset favorited of current track to \(fav)\nend try\nend tell")
             return ok
         }
     }
 
     public func addCurrentTrackToLibrary() -> Bool {
-        let (name, artist, _) = PlaybackStateStore.shared.withLock { () -> (String, String, Int) in
-            guard let cur = MusicAppProvider.shared.getMusicApp()?.currentTrack else { return ("", "", 0) }
-            return (cur.sbName, cur.sbArtist, cur.sbDatabaseID)
+        var (name, artist, _) = PlaybackStateStore.shared.withLock { () -> (String, String, Int) in
+            if PlaybackStateStore.shared.isCustomQueuePlayback,
+               PlaybackStateStore.shared.activeCustomQueueIndex >= 0,
+               PlaybackStateStore.shared.activeCustomQueueIndex < PlaybackStateStore.shared.activeCustomQueue.count {
+                let cur = PlaybackStateStore.shared.activeCustomQueue[PlaybackStateStore.shared.activeCustomQueueIndex]
+                if !cur.name.isEmpty && !cur.artist.isEmpty {
+                    return (cur.name, cur.artist, cur.numericId ?? 0)
+                }
+            }
+            if let cached = PlaybackStateStore.shared.lastPlayerStatusCache?.status.track,
+               !cached.name.isEmpty && !cached.artist.isEmpty {
+                return (cached.name, cached.artist, cached.numericId ?? 0)
+            }
+            return ("", "", 0)
+        }
+        if (name.isEmpty || artist.isEmpty), let cur = MusicAppProvider.shared.getMusicApp()?.currentTrack {
+            name = cur.sbName
+            artist = cur.sbArtist
         }
 
         if !name.isEmpty && !artist.isEmpty {

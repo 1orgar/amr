@@ -98,35 +98,63 @@ private final class BluOSNetServiceDelegate: NSObject, NetServiceBrowserDelegate
         lock.unlock()
     }
 
+    func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
+        lock.lock()
+        pendingServices.removeAll(where: { $0 === sender || $0.name == sender.name })
+        lock.unlock()
+    }
+
     func netServiceDidResolveAddress(_ sender: NetService) {
+        lock.lock()
+        pendingServices.removeAll(where: { $0 === sender || $0.name == sender.name })
+        lock.unlock()
         guard let manager = manager else { return }
 
         var resolvedIP: String?
+        var resolvedIPv6: String?
         for data in sender.addresses ?? [] {
             data.withUnsafeBytes { raw in
-                let addr = raw.bindMemory(to: sockaddr.self).baseAddress!
-                if addr.pointee.sa_family == sa_family_t(AF_INET) {
+                guard let addr = raw.bindMemory(to: sockaddr.self).baseAddress else { return }
+                let family = addr.pointee.sa_family
+                if family == sa_family_t(AF_INET) {
                     let addr4 = raw.bindMemory(to: sockaddr_in.self).baseAddress!
                     var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
                     var sinAddr = addr4.pointee.sin_addr
-                    inet_ntop(AF_INET, &sinAddr, &buf, socklen_t(INET_ADDRSTRLEN))
-                    resolvedIP = String(cString: buf)
+                    if inet_ntop(AF_INET, &sinAddr, &buf, socklen_t(INET_ADDRSTRLEN)) != nil {
+                        resolvedIP = String(cString: buf)
+                    }
+                } else if family == sa_family_t(AF_INET6) {
+                    let addr6 = raw.bindMemory(to: sockaddr_in6.self).baseAddress!
+                    var buf = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+                    var sin6Addr = addr6.pointee.sin6_addr
+                    if inet_ntop(AF_INET6, &sin6Addr, &buf, socklen_t(INET6_ADDRSTRLEN)) != nil {
+                        let ip6 = String(cString: buf)
+                        if resolvedIPv6 == nil || !ip6.lowercased().hasPrefix("fe80:") {
+                            resolvedIPv6 = ip6
+                        }
+                    }
                 }
             }
             if resolvedIP != nil { break }
         }
 
-        guard let ip = resolvedIP ?? sender.hostName?.trimmingCharacters(in: CharacterSet(charactersIn: ".")) else {
+        guard let rawHost = resolvedIP ?? resolvedIPv6 ?? sender.hostName?.trimmingCharacters(in: CharacterSet(charactersIn: ".")) else {
             return
         }
+        let ip = (rawHost.contains(":") && !rawHost.hasPrefix("[")) ? "[\(rawHost)]" : rawHost
 
         let port = sender.port > 0 ? sender.port : 11000
         guard let syncURL = URL(string: "http://\(ip):\(port)/SyncStatus") else { return }
 
         var request = URLRequest(url: syncURL)
         request.timeoutInterval = 3.0
-        URLSession.shared.dataTask(with: request) { [weak manager] data, _, error in
-            guard let manager = manager, let data = data, let xml = String(data: data, encoding: .utf8) else {
+        URLSession.shared.dataTask(with: request) { [weak manager] data, response, error in
+            guard let manager = manager,
+                  error == nil,
+                  (response as? HTTPURLResponse)?.statusCode == 200,
+                  let data = data,
+                  let xml = String(data: data, encoding: .utf8),
+                  (xml.contains("<SyncStatus") || xml.contains("<status")) else {
                 return
             }
 
@@ -173,8 +201,38 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     private var netServiceDelegate: BluOSNetServiceDelegate?
 
     private var discoveredRenderers: [String: DiscoveredDLNARenderer] = [:]
+    private var resolvedHostIPs: [String: Set<String>] = [:]
 
-    public var onDevicesChanged: (([DiscoveredDLNARenderer]) -> Void)?
+    private let handlersLock = NSLock()
+    private var _onDevicesChanged: (([DiscoveredDLNARenderer]) -> Void)?
+    private var devicesChangedObservers: [String: ([DiscoveredDLNARenderer]) -> Void] = [:]
+
+    public func addDevicesChangedObserver(id: String, handler: @escaping ([DiscoveredDLNARenderer]) -> Void) {
+        handlersLock.lock()
+        devicesChangedObservers[id] = handler
+        handlersLock.unlock()
+    }
+
+    public var onDevicesChanged: (([DiscoveredDLNARenderer]) -> Void)? {
+        get {
+            handlersLock.lock()
+            let primary = _onDevicesChanged
+            let observers = Array(devicesChangedObservers.values)
+            handlersLock.unlock()
+            guard primary != nil || !observers.isEmpty else { return nil }
+            return { devices in
+                primary?(devices)
+                for observer in observers {
+                    observer(devices)
+                }
+            }
+        }
+        set {
+            handlersLock.lock()
+            _onDevicesChanged = newValue
+            handlersLock.unlock()
+        }
+    }
 
     public static let activeRendererDefaultsKey = "ActiveDLNARendererUID"
 
@@ -233,10 +291,113 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         UserDefaults.standard.set("dlna:\(renderer.id)", forKey: Self.activeRendererDefaultsKey)
         lock.unlock()
 
+        resolveAndCacheHostIfNeeded(renderer.locationURL.host)
+        resolveAndCacheHostIfNeeded(renderer.bluOSBaseURL?.host)
+
         if renderer.isBluOS {
             startBluOSStatusMonitoring(renderer: renderer)
         }
         return renderer
+    }
+
+    internal static func normalizeHost(_ raw: String) -> String {
+        var h = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "[", with: "")
+            .replacingOccurrences(of: "]", with: "")
+        if let pct = h.firstIndex(of: "%") {
+            h = String(h[..<pct])
+        }
+        if h.hasPrefix("::ffff:") {
+            h = String(h.dropFirst("::ffff:".count))
+        }
+        return h
+    }
+
+    private static func isNumericIP(_ host: String) -> Bool {
+        var addr4 = in_addr()
+        if inet_pton(AF_INET, host, &addr4) == 1 { return true }
+        var addr6 = in6_addr()
+        if inet_pton(AF_INET6, host, &addr6) == 1 { return true }
+        return false
+    }
+
+    private func resolveAndCacheHostIfNeeded(_ rawHost: String?) {
+        guard let rawHost = rawHost else { return }
+        let host = Self.normalizeHost(rawHost)
+        guard !host.isEmpty, !Self.isNumericIP(host) else { return }
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            var hints = addrinfo()
+            hints.ai_family = AF_UNSPEC
+            hints.ai_socktype = SOCK_STREAM
+            var res: UnsafeMutablePointer<addrinfo>?
+            guard getaddrinfo(host, nil, &hints, &res) == 0, let first = res else { return }
+            defer { freeaddrinfo(first) }
+            var resolved = Set<String>()
+            var ptr: UnsafeMutablePointer<addrinfo>? = first
+            while let info = ptr {
+                if info.pointee.ai_family == AF_INET, let sa = info.pointee.ai_addr {
+                    sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { sin in
+                        var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                        var addr = sin.pointee.sin_addr
+                        if inet_ntop(AF_INET, &addr, &buf, socklen_t(INET_ADDRSTRLEN)) != nil {
+                            resolved.insert(Self.normalizeHost(String(cString: buf)))
+                        }
+                    }
+                } else if info.pointee.ai_family == AF_INET6, let sa = info.pointee.ai_addr {
+                    sa.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { sin6 in
+                        var buf = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+                        var addr = sin6.pointee.sin6_addr
+                        if inet_ntop(AF_INET6, &addr, &buf, socklen_t(INET6_ADDRSTRLEN)) != nil {
+                            resolved.insert(Self.normalizeHost(String(cString: buf)))
+                        }
+                    }
+                }
+                ptr = info.pointee.ai_next
+            }
+            if !resolved.isEmpty {
+                self.lock.lock()
+                self.resolvedHostIPs[host] = resolved
+                self.lock.unlock()
+            }
+        }
+    }
+
+    public func matchesSelectedRendererIP(_ remoteIP: String) -> Bool {
+        let cleanRemote = Self.normalizeHost(remoteIP)
+        guard !cleanRemote.isEmpty else { return false }
+        guard let selected = getActiveRenderer() else { return false }
+
+        var candidateHosts: [String] = []
+        if let locHost = selected.locationURL.host {
+            let norm = Self.normalizeHost(locHost)
+            if !norm.isEmpty {
+                candidateHosts.append(norm)
+            }
+        }
+        if let bluHost = selected.bluOSBaseURL?.host {
+            let norm = Self.normalizeHost(bluHost)
+            if !norm.isEmpty && !candidateHosts.contains(norm) {
+                candidateHosts.append(norm)
+            }
+        }
+        guard !candidateHosts.isEmpty else { return false }
+
+        for host in candidateHosts {
+            if cleanRemote == host {
+                return true
+            }
+            let cached: Set<String>? = lock.withLock { resolvedHostIPs[host] }
+            if let ips = cached, ips.contains(cleanRemote) {
+                return true
+            }
+            if cached == nil && !Self.isNumericIP(host) {
+                resolveAndCacheHostIfNeeded(host)
+            }
+        }
+        return false
     }
 
     public func deselectRenderer() {
@@ -244,6 +405,10 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         UserDefaults.standard.removeObject(forKey: Self.activeRendererDefaultsKey)
         lock.unlock()
         stopBluOSStatusMonitoring()
+    }
+
+    public var selectedDevice: DiscoveredDLNARenderer? {
+        return getActiveRenderer()
     }
 
     public func getActiveRenderer() -> DiscoveredDLNARenderer? {
@@ -368,11 +533,10 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         cleanupTimer = nil
 
         if let source = readSource {
-            source.cancel()
+            udpSocketFD = -1
             readSource = nil
-        }
-
-        if udpSocketFD >= 0 {
+            source.cancel()
+        } else if udpSocketFD >= 0 {
             close(udpSocketFD)
             udpSocketFD = -1
         }
@@ -430,6 +594,11 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         var loop: u_char = 1
         setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, socklen_t(MemoryLayout<u_char>.size))
 
+        let flags = fcntl(fd, F_GETFL, 0)
+        if flags >= 0 {
+            _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+        }
+
         self.udpSocketFD = fd
 
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
@@ -437,7 +606,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
             self?.readIncomingDatagram()
         }
         source.setCancelHandler {
-            // Socket closure handled in stopInternal
+            close(fd)
         }
         source.resume()
         self.readSource = source
@@ -478,11 +647,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     }
 
     public func probeKnownBluOSHosts() {
-        var hosts = UserDefaults.standard.stringArray(forKey: "BluOSKnownHosts") ?? []
-        let defaultKnown = ["10.10.30.9"]
-        for def in defaultKnown {
-            if !hosts.contains(def) { hosts.append(def) }
-        }
+        let hosts = UserDefaults.standard.stringArray(forKey: "BluOSKnownHosts") ?? []
         for host in hosts {
             probeBluOS(host: host)
         }
@@ -492,8 +657,13 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         guard let syncURL = URL(string: "http://\(host):\(port)/SyncStatus") else { return }
         var request = URLRequest(url: syncURL)
         request.timeoutInterval = 3.0
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
-            guard let self = self, let data = data, let xml = String(data: data, encoding: .utf8) else {
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self,
+                  error == nil,
+                  (response as? HTTPURLResponse)?.statusCode == 200,
+                  let data = data,
+                  let xml = String(data: data, encoding: .utf8),
+                  (xml.contains("<SyncStatus") || xml.contains("<status")) else {
                 return
             }
 
@@ -533,20 +703,21 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
 
     private func readIncomingDatagram() {
         var buffer = [UInt8](repeating: 0, count: 4096)
-        var srcAddr = sockaddr_storage()
-        var addrLen = socklen_t(MemoryLayout<sockaddr_storage>.size)
+        while udpSocketFD >= 0 {
+            var srcAddr = sockaddr_storage()
+            var addrLen = socklen_t(MemoryLayout<sockaddr_storage>.size)
 
-        let bytesRead = withUnsafeMutablePointer(to: &srcAddr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                recvfrom(udpSocketFD, &buffer, buffer.count, 0, $0, &addrLen)
+            let bytesRead = withUnsafeMutablePointer(to: &srcAddr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    recvfrom(udpSocketFD, &buffer, buffer.count, 0, $0, &addrLen)
+                }
+            }
+
+            guard bytesRead > 0 else { break }
+            if let text = String(bytes: buffer[0..<bytesRead], encoding: .utf8) {
+                processSSDPMessage(text)
             }
         }
-
-        guard bytesRead > 0, let text = String(bytes: buffer[0..<bytesRead], encoding: .utf8) else {
-            return
-        }
-
-        processSSDPMessage(text)
     }
 
     public func processSSDPMessage(_ text: String) {
@@ -626,6 +797,9 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         let currentList = Array(discoveredRenderers.values)
         lock.unlock()
 
+        resolveAndCacheHostIfNeeded(renderer.locationURL.host)
+        resolveAndCacheHostIfNeeded(renderer.bluOSBaseURL?.host)
+
         if isNew {
             NSLog("[DLNADiscovery] 🎵 Discovered DLNA MediaRenderer: '%@' (%@ - %@) at %@",
                   renderer.friendlyName, renderer.manufacturer, renderer.modelName, renderer.locationURL.absoluteString)
@@ -650,11 +824,14 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
             return true
         }
 
-        // 2. Check location URL port 8090 (AMR's UPnP server port)
-        if let loc = location {
+        // 2. Check location URL port 8090 (AMR's UPnP server port) on local host/LAN IP
+        if let loc = location, let host = loc.host?.lowercased() {
             let port = loc.port ?? 80
             if port == SSDPService.shared.httpPort || port == 8090 {
-                return true
+                let localIPs = Set(WebSocketServer.shared.getLANIPAddresses().map { $0.lowercased() })
+                if host == "127.0.0.1" || host == "localhost" || host == "::1" || localIPs.contains(host) {
+                    return true
+                }
             }
         }
 
@@ -791,6 +968,13 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
                 return
             }
             let respStr = data != nil ? (String(data: data!, encoding: .utf8) ?? "") : ""
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+            let hasSoapFault = respStr.contains(":Fault>") || respStr.contains("<Fault>")
+            guard (200..<300).contains(statusCode) && !hasSoapFault else {
+                NSLog("[DLNADiscovery] ❌ SOAP %@ rejected on %@ (HTTP %d): %@", action, renderer.friendlyName, statusCode, respStr)
+                completion?(false, respStr.isEmpty ? "HTTP \(statusCode)" : respStr)
+                return
+            }
             NSLog("[DLNADiscovery] ✅ SOAP %@ succeeded on %@", action, renderer.friendlyName)
             completion?(true, respStr)
         }.resume()
@@ -865,6 +1049,53 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         play(completion: completion)
     }
 
+    public func setMute(_ mute: Bool, completion: ((Bool, String) -> Void)? = nil) {
+        markLocalAction()
+        guard let renderer = getActiveRenderer() else {
+            completion?(false, "No active renderer")
+            return
+        }
+        if renderer.isBluOS, let base = renderer.bluOSBaseURL {
+            sendBluOSCommand(endpoint: "Volume?mute=\(mute ? 1 : 0)", base: base, completion: completion)
+        } else if let controlURL = renderer.renderingControlURL {
+            var request = URLRequest(url: controlURL)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 4.0
+            request.setValue("text/xml; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
+            request.setValue("\"urn:schemas-upnp-org:service:RenderingControl:1#SetMute\"", forHTTPHeaderField: "SOAPACTION")
+            let desiredMute = mute ? "1" : "0"
+            let envelope = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+              <s:Body>
+                <u:SetMute xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1">
+                  <InstanceID>0</InstanceID>
+                  <Channel>Master</Channel>
+                  <DesiredMute>\(desiredMute)</DesiredMute>
+                </u:SetMute>
+              </s:Body>
+            </s:Envelope>
+            """
+            request.httpBody = Data(envelope.utf8)
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    completion?(false, error.localizedDescription)
+                    return
+                }
+                let respStr = data != nil ? (String(data: data!, encoding: .utf8) ?? "") : ""
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+                let hasSoapFault = respStr.contains(":Fault>") || respStr.contains("<Fault>")
+                guard (200..<300).contains(statusCode) && !hasSoapFault else {
+                    completion?(false, respStr.isEmpty ? "HTTP \(statusCode)" : respStr)
+                    return
+                }
+                completion?(true, respStr)
+            }.resume()
+        } else {
+            completion?(false, "No RenderingControl URL")
+        }
+    }
+
     public func setAVTransportURI(
         uri: String,
         metadata: String = "",
@@ -913,13 +1144,29 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
                     return
                 }
                 let respStr = data != nil ? (String(data: data!, encoding: .utf8) ?? "") : ""
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                guard (200...299).contains(statusCode) else {
+                    NSLog("[DLNADiscovery] ❌ BluOS Play rejected (HTTP %d): %@", statusCode, respStr)
+                    completion?(false, respStr.isEmpty ? "HTTP \(statusCode)" : respStr)
+                    return
+                }
                 NSLog("[DLNADiscovery] ✅ BluOS Play succeeded: %@", url.absoluteString)
                 completion?(true, respStr)
             }.resume()
         } else {
-            let body = "<CurrentURI>\(uri)</CurrentURI><CurrentURIMetaData>\(metadata)</CurrentURIMetaData>"
+            let escapedURI = Self.escapeXMLText(uri)
+            let escapedMeta = Self.escapeXMLText(metadata)
+            let body = "<CurrentURI>\(escapedURI)</CurrentURI><CurrentURIMetaData>\(escapedMeta)</CurrentURIMetaData>"
             sendAVTransportAction(action: "SetAVTransportURI", bodyContent: body, completion: completion)
         }
+    }
+
+    private static func escapeXMLText(_ raw: String) -> String {
+        return raw
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
     }
 
     public func sendBluOSCommand(endpoint: String, base: URL, completion: ((Bool, String) -> Void)? = nil) {
@@ -937,6 +1184,12 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
                 return
             }
             let respStr = data != nil ? (String(data: data!, encoding: .utf8) ?? "") : ""
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200...299).contains(statusCode) else {
+                NSLog("[DLNADiscovery] ❌ BluOS %@ rejected (HTTP %d): %@", endpoint, statusCode, respStr)
+                completion?(false, respStr.isEmpty ? "HTTP \(statusCode)" : respStr)
+                return
+            }
             NSLog("[DLNADiscovery] ✅ BluOS %@ succeeded", endpoint)
             completion?(true, respStr)
         }.resume()
@@ -946,7 +1199,9 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
 
     public func startBluOSStatusMonitoring(renderer: DiscoveredDLNARenderer) {
         stopBluOSStatusMonitoring()
-        lastKnownBluOSState = ""
+        lock.withLock {
+            lastKnownBluOSState = ""
+        }
         guard renderer.isBluOS, let baseURL = renderer.bluOSBaseURL else { return }
 
         bluOSPollingTask = Task { [weak self] in
@@ -972,7 +1227,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
                             lastEtag = etag
                         }
                         if let state = self.extractXMLTagValue(tag: "state", from: xml) {
-                            await self.handleBluOSStateUpdate(state: state)
+                            self.handleBluOSStateUpdate(state: state)
                         }
                     }
                 } catch {
@@ -985,13 +1240,17 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     public func stopBluOSStatusMonitoring() {
         bluOSPollingTask?.cancel()
         bluOSPollingTask = nil
-        lastKnownBluOSState = ""
+        lock.withLock {
+            lastKnownBluOSState = ""
+        }
     }
 
-    @MainActor
     private func handleBluOSStateUpdate(state: String) {
-        let prevState = lastKnownBluOSState
-        lastKnownBluOSState = state
+        let prevState: String = lock.withLock {
+            let prev = lastKnownBluOSState
+            lastKnownBluOSState = state
+            return prev
+        }
 
         let elapsed = timeSinceLastLocalAction()
         if elapsed < 4.0 {
@@ -1024,6 +1283,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     // MARK: - Sample Rate Change & Stream Recreation
 
     @objc private func handleFormatChangedNotification(_ notification: Notification) {
+        guard BitPerfectLogMonitor.shared.isEnabled else { return }
         guard let userInfo = notification.userInfo,
               let rate = userInfo["sampleRate"] as? Double else { return }
         let bitDepth = (userInfo["bitDepth"] as? Int) ?? (rate >= 48000.0 ? 24 : 16)
@@ -1070,9 +1330,9 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
             imageURL = "http://\(lanIP):\(port)/api/artwork.jpg?t=\(timestamp)"
         }
 
-        let escapedTitle = trackName.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
-        let escapedArtist = trackArtist.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
-        let escapedArt = imageURL.replacingOccurrences(of: "&", with: "&amp;")
+        let escapedTitle = Self.escapeXMLText(trackName)
+        let escapedArtist = Self.escapeXMLText(trackArtist)
+        let escapedArt = Self.escapeXMLText(imageURL)
 
         let metadata = """
         <DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="0" parentID="-1" restricted="1"><dc:title>\(escapedTitle)</dc:title><dc:creator>\(escapedArtist)</dc:creator><upnp:albumArtURI>\(escapedArt)</upnp:albumArtURI><upnp:class>object.item.audioItem.musicTrack</upnp:class></item></DIDL-Lite>

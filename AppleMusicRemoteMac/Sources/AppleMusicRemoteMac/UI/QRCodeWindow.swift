@@ -45,7 +45,8 @@ public final class QRCodeWindow: NSWindowController {
         container.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         container.autoresizingMask = [.width, .height]
 
-        let titleLabel = NSTextField(labelWithString: "Подключение с iPhone / iPad")
+        let isEn = SettingsTab.isEn
+        let titleLabel = NSTextField(labelWithString: isEn ? "Connect from iPhone / iPad" : "Подключение с iPhone / iPad")
         titleLabel.font = NSFont.systemFont(ofSize: 15, weight: .bold)
         titleLabel.alignment = .center
 
@@ -64,13 +65,13 @@ public final class QRCodeWindow: NSWindowController {
         urlLabel.alignment = .center
         urlLabel.isSelectable = true
 
-        let hintLabel = NSTextField(labelWithString: "Откройте камеру или приложение Apple Music Remote на iOS в той же сети Wi-Fi")
+        let hintLabel = NSTextField(labelWithString: isEn ? "Open the Camera or Apple Music Remote app on iOS on the same Wi-Fi network" : "Откройте камеру или приложение Apple Music Remote на iOS в той же сети Wi-Fi")
         hintLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
         hintLabel.textColor = .tertiaryLabelColor
         hintLabel.alignment = .center
         hintLabel.cell?.wraps = true
 
-        let copyButton = NSButton(title: "Скопировать адрес", target: self, action: #selector(copyUrlClicked))
+        let copyButton = NSButton(title: isEn ? "Copy Address" : "Скопировать адрес", target: self, action: #selector(copyUrlClicked))
         copyButton.bezelStyle = .rounded
 
         container.addArrangedSubview(titleLabel)

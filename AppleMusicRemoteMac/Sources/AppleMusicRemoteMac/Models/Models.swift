@@ -605,12 +605,16 @@ public enum AnyCodable: Codable, Sendable {
         }
         if let string = value as? String {
             self = .string(string)
+        } else if let num = value as? NSNumber, CFGetTypeID(num) == CFBooleanGetTypeID() {
+            self = .bool(num.boolValue)
+        } else if let bool = value as? Bool {
+            self = .bool(bool)
         } else if let int = value as? Int {
             self = .int(int)
         } else if let double = value as? Double {
-            self = .double(double)
-        } else if let bool = value as? Bool {
-            self = .bool(bool)
+            self = .double(double.isFinite ? double : 0.0)
+        } else if let float = value as? Float {
+            self = .double(float.isFinite ? Double(float) : 0.0)
         } else if let dict = value as? [String: Any] {
             var converted = [String: AnyCodable]()
             for (k, v) in dict {
@@ -650,7 +654,7 @@ public enum AnyCodable: Codable, Sendable {
         switch self {
         case .string(let s): try container.encode(s)
         case .int(let i): try container.encode(i)
-        case .double(let d): try container.encode(d)
+        case .double(let d): try container.encode(d.isFinite ? d : 0.0)
         case .bool(let b): try container.encode(b)
         case .dictionary(let d): try container.encode(d)
         case .array(let a): try container.encode(a)

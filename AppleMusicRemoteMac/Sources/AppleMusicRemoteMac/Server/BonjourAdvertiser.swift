@@ -50,7 +50,7 @@ public final class BonjourAdvertiser: NSObject, NetServiceDelegate, @unchecked S
         txtDict["name"] = serviceName.data(using: .utf8)
 
         service.setTXTRecord(NetService.data(fromTXTRecord: txtDict))
-        service.publish(options: [.listenForConnections])
+        service.publish(options: [])
 
         self.netService = service
         self.isAdvertising = true

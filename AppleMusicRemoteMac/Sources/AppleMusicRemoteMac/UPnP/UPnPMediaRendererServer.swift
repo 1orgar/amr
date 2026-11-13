@@ -15,6 +15,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
     public private(set) var port: UInt16 = 8090
     private var listener: NWListener?
+    private let listenerLock = NSLock()
     private let queue = DispatchQueue(label: "org.ksholokhov.amr.upnp.http", qos: .utility)
     private var activeConnections: [NWConnection] = []
     private let connectionsLock = NSLock()
@@ -32,7 +33,10 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     private var lastNotifiedTrackId: String?
     private var lastNotifiedArtworkUrl: String?
     private var lastNotifiedTrackTitle: String?
+    private var lastNotifiedVolume: Int?
+    private var lastNotifiedMute: Bool?
     private var lastNotifiedTime: Date = .distantPast
+    private var preMuteVolume: Int = 50
 
     // Cache for downloaded remote CDN artwork data so UPnP doesn't repeatedly download from Apple CDN
     private var cachedArtworkData: (key: String, data: Data, contentType: String)?
@@ -79,12 +83,19 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     }
 
     public func start(port: UInt16 = 8090) -> Bool {
+        listenerLock.lock()
         self.port = port
+        if let existing = self.listener {
+            existing.stateUpdateHandler = nil
+            existing.cancel()
+            self.listener = nil
+        }
         do {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
             let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
             self.listener = listener
+            listenerLock.unlock()
 
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
@@ -105,6 +116,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             listener.start(queue: queue)
             return true
         } catch {
+            listenerLock.unlock()
             NSLog("[UPnPMediaRendererServer] ❌ Failed to create NWListener: %@", error.localizedDescription)
             return false
         }
@@ -114,21 +126,31 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self = self, !self.isRestarting else { return }
             self.isRestarting = true
+            self.listenerLock.lock()
             self.listener?.cancel()
             self.listener = nil
+            let currentPort = self.port
+            self.listenerLock.unlock()
             self.queue.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 guard let self = self else { return }
                 self.isRestarting = false
-                _ = self.start(port: self.port)
+                _ = self.start(port: currentPort)
             }
         }
     }
 
     public func stop() {
+        listenerLock.lock()
+        self.listener?.stateUpdateHandler = nil
+        self.listener?.cancel()
+        self.listener = nil
+        listenerLock.unlock()
         queue.async { [weak self] in
             guard let self = self else { return }
+            self.listenerLock.lock()
             self.listener?.cancel()
             self.listener = nil
+            self.listenerLock.unlock()
             self.connectionsLock.lock()
             for conn in self.activeConnections {
                 conn.cancel()
@@ -181,6 +203,10 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
             // Check if full HTTP header received
             if let headerEndRange = current.range(of: Data("\r\n\r\n".utf8)) {
+                guard headerEndRange.lowerBound <= 32 * 1024 else {
+                    self.send400(connection)
+                    return
+                }
                 let headerData = current.subdata(in: 0..<headerEndRange.lowerBound)
                 let bodyData = current.subdata(in: headerEndRange.upperBound..<current.count)
 
@@ -194,7 +220,11 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 for line in headerString.components(separatedBy: "\r\n") {
                     if line.lowercased().hasPrefix("content-length:") {
                         let valStr = line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)
-                        contentLength = Int(valStr) ?? 0
+                        guard let parsed = Int(valStr), parsed >= 0, parsed <= 1024 * 1024 else {
+                            self.send400(connection)
+                            return
+                        }
+                        contentLength = parsed
                         break
                     }
                 }
@@ -204,10 +234,14 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                     DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                         self?.processHTTPRequest(headerString: headerString, bodyData: bodyData, connection: connection)
                     }
+                } else if isComplete || error != nil {
+                    connection.cancel()
                 } else {
                     // Need more body data
                     self.receiveRequest(connection, accumulatedData: current)
                 }
+            } else if current.count > 32 * 1024 {
+                self.send400(connection)
             } else if isComplete || error != nil {
                 connection.cancel()
             } else {
@@ -306,10 +340,22 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         let cleanPath = path.components(separatedBy: "?").first ?? path
 
         if method == "SUBSCRIBE" {
-            let requestedSid = headers["SID"]
+            let sidHeader = headers["SID"]?
+                .replacingOccurrences(of: "\r", with: "")
+                .replacingOccurrences(of: "\n", with: "")
+                .trimmingCharacters(in: .whitespaces) ?? ""
+            let callbackHeader = headers["CALLBACK"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let ntHeader = headers["NT"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-            // Check if this is a renewal request (UPnP spec: MUST NOT contain CALLBACK)
-            if let renewSid = requestedSid, headers["CALLBACK"] == nil {
+            // UPnP DA §4.1.1: SUBSCRIBE with both SID and CALLBACK/NT is incompatible -> 400 Bad Request
+            if !sidHeader.isEmpty && (!callbackHeader.isEmpty || !ntHeader.isEmpty) {
+                send400(connection)
+                return
+            }
+
+            // Check if this is a renewal request (SID present, no CALLBACK/NT)
+            if !sidHeader.isEmpty {
+                let renewSid = sidHeader
                 subQueue.async { [weak self] in
                     guard let self = self else { return }
                     if let idx = self.subscriptions.firstIndex(where: { $0.sid == renewSid }) {
@@ -342,7 +388,25 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 return
             }
 
-            let sid = requestedSid ?? "uuid:\(UUID().uuidString.lowercased())"
+            let sid = "uuid:\(UUID().uuidString.lowercased())"
+
+            // Parse and validate CALLBACK header: e.g. <http://10.10.20.15:8123/api/dlna/callback>
+            guard !callbackHeader.isEmpty, let rawCallback = headers["CALLBACK"] else {
+                send400(connection)
+                return
+            }
+            let clean = rawCallback.trimmingCharacters(in: CharacterSet(charactersIn: "<> \t\r\n"))
+            let firstUrlStr = clean.components(separatedBy: CharacterSet(charactersIn: "<> ")).first { !$0.isEmpty } ?? clean
+            let remoteIP = WebSocketServer.shared.extractRemoteIP(from: connection)
+            guard let url = URL(string: firstUrlStr),
+                  let scheme = url.scheme?.lowercased(),
+                  (scheme == "http" || scheme == "https"),
+                  let host = url.host,
+                  isAllowedCallbackHost(host, remoteIP: remoteIP) else {
+                NSLog("[UPnPMediaRendererServer] ❌ Rejected GENA SUBSCRIBE callback URL: %@", firstUrlStr)
+                send400(connection)
+                return
+            }
 
             let response = """
             HTTP/1.1 200 OK\r
@@ -355,31 +419,31 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             """
             sendRaw(connection, string: response)
 
-            // Parse CALLBACK header: e.g. <http://10.10.20.15:8123/api/dlna/callback>
-            if let rawCallback = headers["CALLBACK"] {
-                let clean = rawCallback.trimmingCharacters(in: CharacterSet(charactersIn: "<> \t\r\n"))
-                let firstUrlStr = clean.components(separatedBy: CharacterSet(charactersIn: "<> ")).first { !$0.isEmpty } ?? clean
-                if let url = URL(string: firstUrlStr) {
-                    let sub = EventSubscription(
-                        sid: sid,
-                        callbackURL: url,
-                        path: cleanPath,
-                        seq: 0,
-                        expiryDate: Date().addingTimeInterval(1800),
-                        failureCount: 0
-                    )
-                    subQueue.async { [weak self] in
-                        guard let self = self else { return }
-                        // Remove previous subscription for this specific service path or matching SID
-                        self.subscriptions.removeAll { $0.sid == sid || ($0.callbackURL == url && $0.path == cleanPath) }
-                        self.subscriptions.append(sub)
-                        NSLog("[UPnPMediaRendererServer] 📝 Subscribed to %@ (SID: %@, Total subs: %d)", cleanPath, sid, self.subscriptions.count)
-                        if cleanPath.contains("avtransport") {
-                            self.sendNotification(for: sub)
-                        } else if cleanPath.contains("connectionmanager") {
-                            self.sendConnectionManagerNotification(for: sub)
-                        }
-                    }
+            let sub = EventSubscription(
+                sid: sid,
+                callbackURL: url,
+                path: cleanPath,
+                seq: 0,
+                expiryDate: Date().addingTimeInterval(1800),
+                failureCount: 0
+            )
+            subQueue.async { [weak self] in
+                guard let self = self else { return }
+                let now = Date()
+                self.subscriptions.removeAll { now > $0.expiryDate }
+                // Remove previous subscription for this specific service path or matching SID
+                self.subscriptions.removeAll { $0.sid == sid || ($0.callbackURL == url && $0.path == cleanPath) }
+                if self.subscriptions.count >= 32 {
+                    self.subscriptions.removeFirst(self.subscriptions.count - 31)
+                }
+                self.subscriptions.append(sub)
+                NSLog("[UPnPMediaRendererServer] 📝 Subscribed to %@ (SID: %@, Total subs: %d)", cleanPath, sid, self.subscriptions.count)
+                if cleanPath.contains("avtransport") {
+                    self.sendNotification(for: sub)
+                } else if cleanPath.contains("renderingcontrol") {
+                    self.sendRenderingControlNotification(for: sub)
+                } else if cleanPath.contains("connectionmanager") {
+                    self.sendConnectionManagerNotification(for: sub)
                 }
             }
         } else {
@@ -401,6 +465,49 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         }
     }
 
+    internal func isAllowedCallbackHost(_ host: String, remoteIP: String = "") -> Bool {
+        var cleanHost = host.trimmingCharacters(in: CharacterSet(charactersIn: "[] \t\r\n")).lowercased()
+        if let pct = cleanHost.firstIndex(of: "%") {
+            cleanHost = String(cleanHost[..<pct])
+        }
+        guard !cleanHost.isEmpty else { return false }
+        var cleanRemote = remoteIP.trimmingCharacters(in: CharacterSet(charactersIn: "[] \t\r\n")).lowercased()
+        if let pct = cleanRemote.firstIndex(of: "%") {
+            cleanRemote = String(cleanRemote[..<pct])
+        }
+        if !cleanRemote.isEmpty && cleanHost == cleanRemote {
+            return true
+        }
+        if cleanHost == "::1"
+            || cleanHost.hasPrefix("fe80:")
+            || ((cleanHost.hasPrefix("fc") || cleanHost.hasPrefix("fd")) && cleanHost.contains(":")) {
+            return true
+        }
+        let ipv4Candidate = cleanHost.hasPrefix("::ffff:") ? String(cleanHost.dropFirst("::ffff:".count)) : cleanHost
+        let parts = ipv4Candidate.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        var octets: [Int] = []
+        for p in parts {
+            guard let val = Int(p), (0...255).contains(val), String(val) == p else {
+                return false
+            }
+            octets.append(val)
+        }
+        if octets[0] == 10 || octets[0] == 127 {
+            return true
+        }
+        if octets[0] == 192 && octets[1] == 168 {
+            return true
+        }
+        if octets[0] == 172 && (16...31).contains(octets[1]) {
+            return true
+        }
+        if octets[0] == 169 && octets[1] == 254 {
+            return true
+        }
+        return false
+    }
+
     public func notifySubscribers(status: PlayerStatus? = nil, force: Bool = false, completion: (() -> Void)? = nil) {
         let currentStatus = status ?? MusicBridge.shared.getPlayerStatus()
         let stateStr: String = stateLock.withLock {
@@ -416,6 +523,11 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         let trackId = currentStatus.track?.id ?? "0"
         let artUrl = currentStatus.track?.artworkUrl ?? ""
         let trackTitle = currentStatus.track?.name ?? ""
+        let curVol = currentStatus.volume
+        let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
+        let curMute = ExternalAmpTCPController.shared.isActive
+            ? ExternalAmpTCPController.shared.isMuted
+            : (isDLNAMuted || curVol == 0)
 
         subQueue.async { [weak self] in
             guard let self = self, self.isEnabled else {
@@ -432,12 +544,14 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 return
             }
 
-            // Deduplicate: Don't spam notifications if state, track, artwork, and title haven't changed and not forced
+            // Deduplicate: Don't spam notifications if state, track, artwork, title, volume, and mute haven't changed and not forced
             if !force,
                stateStr == self.lastNotifiedState,
                trackId == self.lastNotifiedTrackId,
                artUrl == self.lastNotifiedArtworkUrl,
                trackTitle == self.lastNotifiedTrackTitle,
+               curVol == self.lastNotifiedVolume,
+               curMute == self.lastNotifiedMute,
                now.timeIntervalSince(self.lastNotifiedTime) < 30.0 {
                 completion?()
                 return
@@ -447,6 +561,8 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             self.lastNotifiedTrackId = trackId
             self.lastNotifiedArtworkUrl = artUrl
             self.lastNotifiedTrackTitle = trackTitle
+            self.lastNotifiedVolume = curVol
+            self.lastNotifiedMute = curMute
             self.lastNotifiedTime = now
 
             let group = DispatchGroup()
@@ -455,6 +571,12 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                     self.subscriptions[i].seq &+= 1
                     group.enter()
                     self.sendNotification(for: self.subscriptions[i], status: currentStatus, overrideState: stateStr) {
+                        group.leave()
+                    }
+                } else if self.subscriptions[i].path.contains("renderingcontrol") {
+                    self.subscriptions[i].seq &+= 1
+                    group.enter()
+                    self.sendRenderingControlNotification(for: self.subscriptions[i], status: currentStatus) {
                         group.leave()
                     }
                 }
@@ -466,6 +588,32 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    private func sendRenderingControlNotification(for subscription: EventSubscription, status: PlayerStatus? = nil, completion: (() -> Void)? = nil) {
+        let currentStatus = status ?? MusicBridge.shared.getPlayerStatus()
+        let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
+        let isMutedBool = ExternalAmpTCPController.shared.isActive
+            ? ExternalAmpTCPController.shared.isMuted
+            : (isDLNAMuted || currentStatus.volume == 0)
+        let muteVal = isMutedBool ? "1" : "0"
+        let lastChange = """
+        <Event xmlns="urn:schemas-upnp-org:metadata-1-0/RCS/">
+          <InstanceID val="0">
+            <Volume channel="Master" val="\(currentStatus.volume)"/>
+            <Mute channel="Master" val="\(muteVal)"/>
+          </InstanceID>
+        </Event>
+        """
+        let escapedLastChange = escapeXMLText(lastChange)
+        let body = """
+        <e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">
+          <e:property>
+            <LastChange>\(escapedLastChange)</LastChange>
+          </e:property>
+        </e:propertyset>
+        """
+        sendRawNotify(to: subscription.callbackURL, sid: subscription.sid, seq: subscription.seq, body: body, completion: completion)
     }
 
     private func sendConnectionManagerNotification(for subscription: EventSubscription) {
@@ -498,7 +646,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
         // 2. If it's a relative URL to AMR Web/API server (e.g. /api/artwork/track?id=... or /assets/stations/...)
         if rawArtUrl.hasPrefix("/") {
-            return "http://\(lanIP):8080\(rawArtUrl)"
+            return "http://\(lanIP):\(WebSocketServer.shared.port)\(rawArtUrl)"
         }
 
         // 3. Fallback to UPnP server current artwork endpoint on port 8090
@@ -807,6 +955,15 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     // MARK: - AVTransport SOAP Actions
 
     private func handleAVTransportControl(bodyData: Data, headers: [String: String], connection: NWConnection) {
+        if headers["ORIGIN"] != nil {
+            send400(connection)
+            return
+        }
+        let ct = (headers["CONTENT-TYPE"] ?? "").lowercased()
+        if headers["SOAPACTION"] == nil && !ct.contains("xml") {
+            send400(connection)
+            return
+        }
         guard let bodyString = String(data: bodyData, encoding: .utf8) else {
             send400(connection)
             return
@@ -1080,6 +1237,15 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     // MARK: - RenderingControl SOAP Actions
 
     private func handleRenderingControl(bodyData: Data, headers: [String: String], connection: NWConnection) {
+        if headers["ORIGIN"] != nil {
+            send400(connection)
+            return
+        }
+        let ct = (headers["CONTENT-TYPE"] ?? "").lowercased()
+        if headers["SOAPACTION"] == nil && !ct.contains("xml") {
+            send400(connection)
+            return
+        }
         guard let bodyString = String(data: bodyData, encoding: .utf8) else {
             send400(connection)
             return
@@ -1113,15 +1279,17 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
             }
             sendSOAPResponse(connection, response: "<u:SetVolumeResponse xmlns:u=\"urn:schemas-upnp-org:service:RenderingControl:1\"/>")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
                 self?.notifySubscribers()
                 WebSocketServer.shared.broadcastStatus()
             }
 
         case "GetMute":
             let status = getStatus()
+            let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
             let isMutedBool = ExternalAmpTCPController.shared.isActive
                 ? ExternalAmpTCPController.shared.isMuted
-                : (status.volume == 0)
+                : (isDLNAMuted || status.volume == 0)
             let isMuted = isMutedBool ? "1" : "0"
             let response = """
             <u:GetMuteResponse xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1">
@@ -1133,16 +1301,64 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         case "SetMute":
             if let muteStr = extractTagValue(tag: "DesiredMute", from: bodyString) {
                 let mute = (muteStr == "1" || muteStr.lowercased() == "true")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
+                    if DLNADiscoveryManager.shared.hasActiveRenderer {
+                        DLNADiscoveryManager.shared.setMute(mute)
+                    }
                     if ExternalAmpTCPController.shared.isActive {
                         ExternalAmpTCPController.shared.setMuted(mute)
+                    } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                        PlaybackStateStore.shared.withLock {
+                            PlaybackStateStore.shared.isDLNAMuted = mute
+                        }
+                        AudioProcessTapService.shared.setMutingGuardZeroFill(mute)
+                        if mute {
+                            if let app = MusicAppProvider.shared.getMusicApp() {
+                                app.soundVolume = 0
+                            }
+                        } else if AudioDuckingController.shared.isDucked {
+                            let orig = AudioDuckingController.shared.originalVolume ?? 100
+                            let duckVol = max(1, Int((Double(orig) * 0.2).rounded()))
+                            _ = PlaybackTransportController.shared.setVolume(duckVol, isFromDuckingController: true)
+                        } else {
+                            if let app = MusicAppProvider.shared.getMusicApp() {
+                                app.soundVolume = 100
+                            }
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.simulatedVolume = 100
+                            }
+                        }
+                        PlaybackStateStore.shared.invalidateStatusCache()
                     } else {
-                        _ = MusicBridge.shared.setVolume(mute ? 0 : 50)
+                        if mute {
+                            let curVol = MusicBridge.shared.getPlayerStatus().volume
+                            if curVol > 0 {
+                                self?.stateLock.withLock {
+                                    self?.preMuteVolume = curVol
+                                }
+                                PlaybackStateStore.shared.withLock {
+                                    PlaybackStateStore.shared.preDLNAVolume = curVol
+                                }
+                            }
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.isDLNAMuted = true
+                            }
+                            _ = MusicBridge.shared.setVolume(0)
+                        } else {
+                            let savedPreDLNA = PlaybackStateStore.shared.withLock { () -> Int in
+                                PlaybackStateStore.shared.isDLNAMuted = false
+                                return PlaybackStateStore.shared.preDLNAVolume
+                            }
+                            AudioProcessTapService.shared.setMutingGuardZeroFill(false)
+                            let restoreVol = self?.stateLock.withLock { self?.preMuteVolume } ?? savedPreDLNA
+                            _ = MusicBridge.shared.setVolume(restoreVol > 0 ? restoreVol : 50)
+                        }
                     }
                 }
             }
             sendSOAPResponse(connection, response: "<u:SetMuteResponse xmlns:u=\"urn:schemas-upnp-org:service:RenderingControl:1\"/>")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                MusicBridge.shared.invalidateStatusCache()
                 self?.notifySubscribers()
                 WebSocketServer.shared.broadcastStatus()
             }
@@ -1155,6 +1371,15 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     // MARK: - ConnectionManager SOAP Actions
 
     private func handleConnectionManagerControl(bodyData: Data, headers: [String: String], connection: NWConnection) {
+        if headers["ORIGIN"] != nil {
+            send400(connection)
+            return
+        }
+        let ct = (headers["CONTENT-TYPE"] ?? "").lowercased()
+        if headers["SOAPACTION"] == nil && !ct.contains("xml") {
+            send400(connection)
+            return
+        }
         guard let bodyString = String(data: bodyData, encoding: .utf8) else {
             send400(connection)
             return

@@ -9,7 +9,7 @@
 import Foundation
 
 public enum WebUIContent {
-    public static let manifestJSON: String = """
+    public static let manifestJSON: String = #"""
 {
   "name": "Apple Music Remote",
   "short_name": "AMR",
@@ -23,7 +23,7 @@ public enum WebUIContent {
     "fullscreen",
     "window-controls-overlay"
   ],
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "background_color": "#000000",
   "theme_color": "#000000",
   "categories": [
@@ -42,34 +42,45 @@ public enum WebUIContent {
       "src": "/apple-touch-icon-180.png",
       "sizes": "180x180",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/apple-touch-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/apple-touch-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/apple-touch-icon.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
+"""#
 
-"""
-
-    public static let swJS: String = """
+    public static let swJS: String = #"""
 // Apple Music Remote (AMR) - Service Worker for PWA
-const CACHE_NAME = 'amr-shell-v6';
+const CACHE_NAME = 'amr-shell-v18';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -81,20 +92,25 @@ const STATIC_ASSETS = [
   '/apple-touch-icon-180.png',
   '/apple-touch-icon-192.png',
   '/apple-touch-icon-512.png',
-  '/assets/silence.m4a',
-  '/assets/silence.wav',
   '/assets/stations/CoverPersonal.png',
   '/assets/stations/CoverDiscovery.png',
   '/assets/stations/CoverAppleMusic1.png',
+  '/assets/stations/CoverHits.png',
+  '/assets/stations/CoverCountry.png',
   '/assets/stations/CoverHeavyRotation.svg',
+  '/assets/stations/CoverChill.png',
+  '/assets/stations/CoverPop.png',
   '/assets/stations/CoverElectronic.png',
-  '/assets/stations/CoverRock.png'
+  '/assets/stations/CoverDeepHouse.png',
+  '/assets/stations/CoverRock.png',
+  '/assets/stations/CoverHipHop.png',
+  '/assets/stations/CoverJazz.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
+      return Promise.allSettled(STATIC_ASSETS.map((u) => cache.add(u))).catch((err) => {
         console.warn('AMR ServiceWorker pre-cache notice:', err);
       });
     })
@@ -107,7 +123,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
+          if (key !== CACHE_NAME && key.startsWith('amr-shell-')) {
             return caches.delete(key);
           }
         })
@@ -120,10 +136,15 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Always bypass cache for API endpoints, WebSocket, and dynamic search
+  if (url.origin !== self.location.origin) return;
+  if (event.request.headers.has('range')) return;
+
+  // Always bypass cache for API endpoints, WebSocket, audio streams, live artwork, and non-GET requests
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/ws') ||
+    url.pathname.startsWith('/stream/') ||
+    url.pathname === '/artwork.jpg' ||
     event.request.method !== 'GET'
   ) {
     return;
@@ -145,38 +166,45 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(event.request))
+        .catch(() =>
+          caches.match(event.request)
+            .then((cached) => cached || caches.match(event.request, { ignoreSearch: true }))
+            .then((cached) => cached || new Response('Offline', { status: 503, statusText: 'Offline' }))
+        )
     );
     return;
   }
 
   // Cache-first with background revalidation for static assets
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) {
-        fetch(event.request)
+    caches.match(event.request)
+      .then((exact) => exact || caches.match(event.request, { ignoreSearch: true }))
+      .then((cached) => {
+        if (cached) {
+          fetch(event.request)
+            .then((networkRes) => {
+              if (networkRes && networkRes.status === 200) {
+                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkRes));
+              }
+            })
+            .catch(() => {});
+          return cached;
+        }
+        return fetch(event.request)
           .then((networkRes) => {
             if (networkRes && networkRes.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkRes));
+              const copy = networkRes.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
             }
+            return networkRes;
           })
-          .catch(() => {});
-        return cached;
-      }
-      return fetch(event.request).then((networkRes) => {
-        if (networkRes && networkRes.status === 200) {
-          const copy = networkRes.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        }
-        return networkRes;
-      });
-    })
+          .catch(() => new Response('Offline', { status: 503, statusText: 'Offline' }));
+      })
   );
 });
+"""#
 
-"""
-
-    public static let appleTouchIconSVG: String = """
+    public static let appleTouchIconSVG: String = #"""
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -219,6 +247,5 @@ self.addEventListener('fetch', (event) => {
   <!-- Bit-perfect badge text indicator at bottom center -->
   <text x="256" y="455" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="22" font-weight="700" letter-spacing="5" fill="#8e8e93">BIT-PERFECT</text>
 </svg>
-
-"""
+"""#
 }

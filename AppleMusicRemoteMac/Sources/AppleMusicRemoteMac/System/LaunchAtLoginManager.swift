@@ -21,7 +21,7 @@ public final class LaunchAtLoginManager: ObservableObject {
     public func refreshStatus() {
         if #available(macOS 13.0, *) {
             let status = SMAppService.mainApp.status
-            isEnabled = (status == .enabled)
+            isEnabled = (status == .enabled || status == .requiresApproval)
         } else {
             isEnabled = false
         }
@@ -37,8 +37,12 @@ public final class LaunchAtLoginManager: ObservableObject {
                         return true
                     }
                     try SMAppService.mainApp.register()
-                    isEnabled = (SMAppService.mainApp.status == .enabled)
-                    NSLog("[LaunchAtLoginManager] Registered mainApp for launch at login. Status: \(SMAppService.mainApp.status.rawValue)")
+                    let newStatus = SMAppService.mainApp.status
+                    if newStatus == .requiresApproval {
+                        SMAppService.openSystemSettingsLoginItems()
+                    }
+                    isEnabled = (newStatus == .enabled || newStatus == .requiresApproval)
+                    NSLog("[LaunchAtLoginManager] Registered mainApp for launch at login. Status: \(newStatus.rawValue)")
                     return isEnabled
                 } else {
                     try SMAppService.mainApp.unregister()

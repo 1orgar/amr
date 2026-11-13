@@ -21,14 +21,7 @@ public final class SSDPService: @unchecked Sendable {
 
     public var httpPort: UInt16 = 8090
 
-    public private(set) lazy var deviceUUID: String = {
-        if let existing = UserDefaults.standard.string(forKey: "AMRUPnPDeviceUUID") {
-            return existing
-        }
-        let generated = UUID().uuidString.lowercased()
-        UserDefaults.standard.set(generated, forKey: "AMRUPnPDeviceUUID")
-        return generated
-    }()
+    public let deviceUUID: String
 
     public var deviceUDN: String {
         return "uuid:\(deviceUUID)"
@@ -49,7 +42,15 @@ public final class SSDPService: @unchecked Sendable {
         }
     }
 
-    private init() {}
+    private init() {
+        if let existing = UserDefaults.standard.string(forKey: "AMRUPnPDeviceUUID"), !existing.isEmpty {
+            self.deviceUUID = existing
+        } else {
+            let generated = UUID().uuidString.lowercased()
+            UserDefaults.standard.set(generated, forKey: "AMRUPnPDeviceUUID")
+            self.deviceUUID = generated
+        }
+    }
 
     deinit {
         stop()
@@ -158,20 +159,20 @@ public final class SSDPService: @unchecked Sendable {
         NSLog("[SSDPService] 📡 SSDP Multicast Listener active on 239.255.255.250:1900 (UDN: %@)", deviceUDN)
 
         // Broadcast initial alive notification
-        sendAliveNotifications()
+        sendNotifications(subType: "ssdp:alive")
 
         // Setup repeating announcement every 60 seconds for reliable discovery without LAN noise (CACHE-CONTROL: max-age=1800)
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 2.0, repeating: 60.0)
         timer.setEventHandler { [weak self] in
-            self?.sendAliveNotifications()
+            self?.sendNotifications(subType: "ssdp:alive")
         }
         timer.resume()
         self.announceTimer = timer
     }
 
     private func stopInternal() {
-        sendByebyeNotifications()
+        sendNotifications(subType: "ssdp:byebye")
 
         announceTimer?.cancel()
         announceTimer = nil
@@ -304,11 +305,15 @@ public final class SSDPService: @unchecked Sendable {
     // MARK: - SSDP NOTIFY (alive / byebye)
 
     public func sendAliveNotifications() {
-        sendNotifications(subType: "ssdp:alive")
+        queue.async { [weak self] in
+            self?.sendNotifications(subType: "ssdp:alive")
+        }
     }
 
     public func sendByebyeNotifications() {
-        sendNotifications(subType: "ssdp:byebye")
+        queue.async { [weak self] in
+            self?.sendNotifications(subType: "ssdp:byebye")
+        }
     }
 
     private func sendNotifications(subType: String) {

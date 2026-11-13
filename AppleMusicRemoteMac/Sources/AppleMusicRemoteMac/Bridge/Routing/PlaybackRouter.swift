@@ -69,6 +69,10 @@ public final class PlaybackRouter: @unchecked Sendable {
 
     public func playPlaylist(name: String, trackId: Int?, trackIndex: Int?, shuffle: Bool) -> Bool {
         BitPerfectLogMonitor.shared.resetTrackState()
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.playbackGeneration &+= 1
+            PlaybackStateStore.shared.isStagingCloudTrack = false
+        }
         let pl = name.isEmpty ? "Музыка" : name
 
         // SPECIAL CASE: "Сейчас на повторе" (Heavy Rotation) is a dynamic mix from recent history / library.
@@ -85,7 +89,9 @@ public final class PlaybackRouter: @unchecked Sendable {
                     startIdx = found
                 }
             }
-            PlaybackStateStore.shared.activeStationName = "Сейчас на повторе"
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.activeStationName = "Сейчас на повторе"
+            }
             return playCustomTracks(hrTracks, startIndex: startIdx, shuffle: shuffle, queueName: "Сейчас на повторе")
         }
 

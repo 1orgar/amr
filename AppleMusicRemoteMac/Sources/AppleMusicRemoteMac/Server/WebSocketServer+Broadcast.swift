@@ -27,7 +27,8 @@ extension WebSocketServer {
             baseObj["data"] = "\(data)"
         }
 
-        if let jsonBytes = try? JSONSerialization.data(withJSONObject: baseObj),
+        if JSONSerialization.isValidJSONObject(baseObj),
+           let jsonBytes = try? JSONSerialization.data(withJSONObject: baseObj),
            let text = String(data: jsonBytes, encoding: .utf8) {
             sendText(text, to: connection)
         }
@@ -48,7 +49,8 @@ extension WebSocketServer {
         let sanitizedData = sanitizeForJSON(data)
         payload["data"] = sanitizedData
 
-        if let jsonBytes = try? JSONSerialization.data(withJSONObject: payload),
+        if JSONSerialization.isValidJSONObject(payload),
+           let jsonBytes = try? JSONSerialization.data(withJSONObject: payload),
            let text = String(data: jsonBytes, encoding: .utf8) {
             sendText(text, to: connection)
         }
@@ -68,13 +70,22 @@ extension WebSocketServer {
         } else if let str = value as? String {
             return str
         } else if let num = value as? NSNumber {
+            if CFGetTypeID(num) == CFBooleanGetTypeID() {
+                return num.boolValue
+            }
+            let d = num.doubleValue
+            if !d.isFinite {
+                return 0.0
+            }
             return num
         } else if let b = value as? Bool {
             return b
         } else if let i = value as? Int {
             return i
         } else if let d = value as? Double {
-            return d
+            return d.isFinite ? d : 0.0
+        } else if let f = value as? Float {
+            return f.isFinite ? Double(f) : 0.0
         } else if let s = value as? StationInfo {
             if let data = try? JSONEncoder().encode(s),
                let obj = try? JSONSerialization.jsonObject(with: data) {
@@ -104,7 +115,8 @@ extension WebSocketServer {
             payload["id"] = reqId
         }
 
-        if let jsonBytes = try? JSONSerialization.data(withJSONObject: payload),
+        if JSONSerialization.isValidJSONObject(payload),
+           let jsonBytes = try? JSONSerialization.data(withJSONObject: payload),
            let text = String(data: jsonBytes, encoding: .utf8) {
             sendText(text, to: connection)
         }
@@ -130,7 +142,8 @@ extension WebSocketServer {
             "type": name,
             "data": sanitizeForJSON(data)
         ]
-        if let json = try? JSONSerialization.data(withJSONObject: envelope),
+        if JSONSerialization.isValidJSONObject(envelope),
+           let json = try? JSONSerialization.data(withJSONObject: envelope),
            let text = String(data: json, encoding: .utf8) {
             sendText(text, to: connection)
         }
@@ -193,7 +206,8 @@ extension WebSocketServer {
             "type": name,
             "data": sanitizeForJSON(data)
         ]
-        if let json = try? JSONSerialization.data(withJSONObject: envelope),
+        if JSONSerialization.isValidJSONObject(envelope),
+           let json = try? JSONSerialization.data(withJSONObject: envelope),
            let text = String(data: json, encoding: .utf8) {
             broadcastText(text)
         }

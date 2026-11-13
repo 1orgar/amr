@@ -20,11 +20,14 @@ extension WebUIContent {
   --bg-pure: #000000;
   --surface-base: #0e0e0e;
   --surface-card: #161616;
+  --surface-card-subtle: rgba(255, 255, 255, 0.04);
   --surface-hover: #1f1f21;
   --surface-active: #2a2a2d;
 
   --border-subtle: #262628;
   --border-bright: #38383a;
+  --border-hover: rgba(255, 255, 255, 0.22);
+  --border-focus: rgba(250, 36, 60, 0.55);
 
   --text-primary: #ffffff;
   --text-secondary: #9e9ea3;
@@ -89,12 +92,15 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
-input {
+input,
+textarea {
   border: none;
   background: none;
   color: var(--text-primary);
   font: inherit;
   outline: none;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Scrollbar Stylings */
@@ -271,8 +277,8 @@ input {
   z-index: 1;
 }
 
-/* Desktop Dual Column: >= 768px */
-@media (min-width: 768px) {
+/* Desktop Dual Column: >= 768px and min-height 541px */
+@media (min-width: 768px) and (min-height: 541px) {
   .app-layout {
     flex-direction: row;
   }
@@ -282,6 +288,7 @@ input {
     width: 420px;
     min-width: 380px;
     max-width: 460px;
+    flex-shrink: 0;
     height: 100%;
     border-right: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(0, 0, 0, 0.35);
@@ -378,8 +385,8 @@ input {
   }
 }
 
-/* Mobile Single Column: < 768px */
-@media (max-width: 767px) {
+/* Mobile Single Column: < 768px or mobile landscape <= 540px height */
+@media (max-width: 767px), (max-height: 540px) {
   .app-layout {
     flex-direction: column;
   }
@@ -856,6 +863,9 @@ input {
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.22s ease, transform 0.24s cubic-bezier(0.2, 0.9, 0.4, 1);
@@ -1171,7 +1181,7 @@ input {
 }
 
 /* Ensure mobile scroll content has clearance for docked mini-player + bottom tab bar */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .scroll-pane {
     padding-bottom: calc(var(--safe-bottom) + 140px);
   }
@@ -1363,7 +1373,7 @@ input {
 }
 
 /* Desktop Playlists Grid: min 170px auto-fill */
-@media (min-width: 768px) {
+@media (min-width: 768px) and (min-height: 541px) {
   .playlists-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
@@ -1373,7 +1383,7 @@ input {
 }
 
 /* Mobile Playlists Grid: Crisp 2-Column on 375px - 430px screens */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .playlists-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2122,7 +2132,7 @@ input {
   padding: 0;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .hero-card {
     width: 240px;
     min-width: 240px;
@@ -2262,7 +2272,7 @@ input {
   transform: scale(1);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .hero-play-btn {
     opacity: 0.9;
     transform: scale(0.9);
@@ -2298,7 +2308,7 @@ input {
   min-width: 0;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .home-stations-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
@@ -2402,7 +2412,7 @@ input {
   padding: 0;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .media-card,
   .station-card {
     width: 130px;
@@ -2640,13 +2650,13 @@ input {
   padding-bottom: 8px;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 768px) and (min-height: 541px) {
   .genres-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .genres-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
@@ -2885,6 +2895,10 @@ input {
   z-index: 9999;
 }
 
+#connection-overlay {
+  z-index: 26000 !important;
+}
+
 .overlay-card {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
@@ -2968,6 +2982,8 @@ input {
   border-radius: 20px;
   width: 100%;
   max-width: 440px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   padding: 24px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
 }
@@ -3206,12 +3222,12 @@ body.ui-blocked #busy-overlay {
   margin-bottom: 16px;
   color: #fff;
 }
-.genres-grid {
+#search-landing .genres-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 12px;
 }
-.genre-card {
+#search-landing .genre-card {
   position: relative;
   border-radius: 12px;
   height: 100px;
@@ -3224,7 +3240,7 @@ body.ui-blocked #busy-overlay {
   box-shadow: 0 4px 10px rgba(0,0,0,0.2);
   transition: transform 0.2s, filter 0.2s;
 }
-.genre-card:active {
+#search-landing .genre-card:active {
   transform: scale(0.96);
   filter: brightness(0.8);
 }
@@ -4285,7 +4301,7 @@ body.ui-blocked #busy-overlay {
   padding: 16px 24px 60px 24px;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .collection-tiles-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 16px 12px;
@@ -5716,7 +5732,7 @@ body.tv-mode-open .app-layout {
 }
 
 /* Hide duplicate player-top-header buttons on PC / Tablet (they exist in desktop-nav-actions on the right) */
-@media (min-width: 768px) {
+@media (min-width: 768px) and (min-height: 541px) {
   #player-btn-settings,
   #player-btn-standby {
     display: none !important;
@@ -5724,7 +5740,7 @@ body.tv-mode-open .app-layout {
 }
 
 /* Hide TV / StandBy button on Mobile */
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   #btn-standby-mode,
   #mobile-btn-standby,
   #player-btn-standby,
@@ -5734,8 +5750,8 @@ body.tv-mode-open .app-layout {
 }
 
 /* Mobile Landscape Mode: TV-Style Horizontal Player (Left: Artwork, Right: Progress & Controls, No WLED/Library/Close) */
-@media only screen and (max-height: 540px) and (orientation: landscape) {
-  #standby-tv-overlay {
+@media only screen and (max-height: 540px) and (min-width: 568px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
+  body:not(.keyboard-open) #standby-tv-overlay {
     display: flex !important;
     position: fixed !important;
     inset: 0 !important;
@@ -5932,7 +5948,7 @@ body.tv-mode-open .app-layout {
   top: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
-  z-index: 9500 !important;
+  z-index: 10020 !important;
   border-left: none;
 }
 
@@ -6294,7 +6310,7 @@ body.tv-mode-open .app-layout {
   color: rgba(255, 255, 255, 0.52);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .booklet-close-btn {
     top: max(12px, env(safe-area-inset-top));
     right: 12px;
@@ -6338,6 +6354,8 @@ body.tv-mode-open .app-layout {
   top: max(56px, calc(env(safe-area-inset-top) + 46px));
   left: max(16px, env(safe-area-inset-left));
   width: min(350px, calc(100vw - 32px));
+  max-height: calc(100dvh - 72px);
+  overflow-y: auto;
   z-index: 9500;
   background: rgba(22, 22, 28, 0.94);
   backdrop-filter: blur(28px) saturate(180%);
@@ -6348,6 +6366,11 @@ body.tv-mode-open .app-layout {
   padding: 16px;
   color: var(--text-primary);
   animation: popoverFadeIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#amr-info-popover .modal-card {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
 }
 
 @keyframes popoverFadeIn {

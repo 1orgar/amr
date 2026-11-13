@@ -23,12 +23,16 @@ public final class WebSocketServer: @unchecked Sendable {
 
     var listener: NWListener?
     var clients: [UUID: NWConnection] = [:]
+    var clientHostAddresses: [UUID: String] = [:]
     var liveStreamConnections: [UUID: NWConnection] = [:]
+    var headRequestConnections: Set<ObjectIdentifier> = []
+    var fragmentBuffers: [ObjectIdentifier: (opcode: UInt8, data: Data)] = [:]
     let liveStreamLock = NSLock()
     let clientLock = NSRecursiveLock()
     let sendLock = NSRecursiveLock()
     let curateTaskLock = NSLock()
     var activeCurateTask: Task<Void, Never>?
+    var activeCurateTasks: [UUID: Task<Void, Never>] = [:]
     var isRunning = false
     public private(set) var port: Int = 8080
 
@@ -109,14 +113,14 @@ public final class WebSocketServer: @unchecked Sendable {
             self.broadcastStatus(includeQueue: false)
         }
 
-        CoreAudioDeviceManager.shared.onDevicesChanged = { [weak self] devices in
+        CoreAudioDeviceManager.shared.addDevicesChangedObserver(id: "WebSocketServer") { [weak self] devices in
             guard let self = self else { return }
             let devList = devices.map { $0.dictionary }
             self.broadcastEvent(name: "audio_devices_changed", data: ["devices": devList])
             self.broadcastStatus(includeQueue: false)
         }
 
-        CoreAudioDeviceManager.shared.onSampleRateChanged = { [weak self] _, _ in
+        CoreAudioDeviceManager.shared.addSampleRateChangedObserver(id: "WebSocketServer") { [weak self] _, _ in
             guard let self = self else { return }
             self.broadcastStatus(includeQueue: false)
         }
@@ -165,6 +169,9 @@ public final class WebSocketServer: @unchecked Sendable {
 
             nwListener.stateUpdateHandler = { [weak self] state in
                 guard let self = self else { return }
+                if case .failed = state {
+                    self.isRunning = false
+                }
                 NSLog("[Server] Listener state: \(state)")
                 self.delegate?.webSocketServer(self, didChangeState: state)
             }
@@ -210,6 +217,10 @@ public final class WebSocketServer: @unchecked Sendable {
             conn.cancel()
         }
         clients.removeAll()
+        clientHostAddresses.removeAll()
+        headRequestConnections.removeAll()
+        fragmentBuffers.removeAll()
+        cancelAllCurateTasks()
         isRunning = false
         delegate?.webSocketServer(self, didUpdateClientCount: 0)
     }
@@ -232,9 +243,9 @@ public final class WebSocketServer: @unchecked Sendable {
                 self.readInitialConnection(clientId: clientId, connection: conn, buffer: Data())
             case .failed(let err):
                 NSLog("[Server] Client connection failed: %@", err.localizedDescription)
-                self.removeClient(clientId: clientId)
+                self.removeClient(clientId: clientId, connection: conn)
             case .cancelled:
-                self.removeClient(clientId: clientId)
+                self.removeClient(clientId: clientId, connection: conn)
             default:
                 break
             }
@@ -244,19 +255,40 @@ public final class WebSocketServer: @unchecked Sendable {
         connection.start(queue: queue)
     }
 
-    private func removeClient(clientId: UUID) {
+    private func removeClient(clientId: UUID, connection: NWConnection? = nil) {
         clientLock.lock()
-        guard let conn = clients.removeValue(forKey: clientId) else {
-            clientLock.unlock()
-            return
+        let conn = clients.removeValue(forKey: clientId)
+        clientHostAddresses.removeValue(forKey: clientId)
+        if let c = conn ?? connection {
+            let objId = ObjectIdentifier(c)
+            headRequestConnections.remove(objId)
+            fragmentBuffers.removeValue(forKey: objId)
         }
         let count = clients.count
         clientLock.unlock()
+
+        cancelCurateTask(for: clientId)
+
+        guard let conn = conn else { return }
 
         ClientDeviceManager.shared.unregisterConnection(connectionId: clientId)
         conn.cancel()
         NSLog("[WebSocket] Client disconnected. Total clients: %d", count)
         delegate?.webSocketServer(self, didUpdateClientCount: count)
+    }
+
+    public func hasAuthorizedWebSocketClient(fromIP remoteIP: String) -> Bool {
+        let cleanIP = remoteIP.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleanIP.isEmpty else { return false }
+        let unauthIds = ClientDeviceManager.shared.getUnauthorizedConnectionIds()
+        clientLock.lock()
+        defer { clientLock.unlock() }
+        for (clientId, hostIP) in clientHostAddresses {
+            if !unauthIds.contains(clientId) && hostIP.lowercased() == cleanIP && clients[clientId] != nil {
+                return true
+            }
+        }
+        return false
     }
 
     internal func extractRemoteIP(from connection: NWConnection) -> String {
@@ -289,13 +321,18 @@ public final class WebSocketServer: @unchecked Sendable {
             guard let self = self, let conn = connection else { return }
             if let error = error {
                 NSLog("[Server] Initial receive error: %@", error.localizedDescription)
-                self.removeClient(clientId: clientId)
+                conn.cancel()
+                self.removeClient(clientId: clientId, connection: conn)
                 return
             }
 
             var current = buffer
             if let data = content {
                 current.append(data)
+            }
+            if current.count > 16 * 1024 * 1024 {
+                conn.cancel()
+                return
             }
 
             var delimiterRange: Range<Data.Index>?
@@ -336,25 +373,91 @@ public final class WebSocketServer: @unchecked Sendable {
                 let response = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: \(accept)\r\n\r\n"
                 conn.send(content: Data(response.utf8), completion: .contentProcessed({ [weak self, weak conn] _ in
                     guard let self = self, let c = conn else { return }
+                    let remoteIP = self.extractRemoteIP(from: c)
                     self.clientLock.lock()
                     self.clients[clientId] = c
+                    self.clientHostAddresses[clientId] = remoteIP
                     let count = self.clients.count
                     self.clientLock.unlock()
 
                     NSLog("[WebSocket] Handshake complete. Total WebSocket clients: %d", count)
                     self.delegate?.webSocketServer(self, didUpdateClientCount: count)
 
+                    let firstLine = headerString.components(separatedBy: .newlines).first ?? ""
+                    let reqParts = firstLine.split(separator: " ")
+                    let reqFullPath = reqParts.count >= 2 ? String(reqParts[1]) : ""
+                    let wsInviteToken: String? = {
+                        guard let qIdx = reqFullPath.firstIndex(of: "?") else { return nil }
+                        let query = String(reqFullPath[reqFullPath.index(after: qIdx)...])
+                        for pair in query.components(separatedBy: "&") {
+                            let kv = pair.components(separatedBy: "=")
+                            if kv.count == 2 && kv[0].lowercased() == "invite" {
+                                return kv[1].removingPercentEncoding ?? kv[1]
+                            }
+                        }
+                        return nil
+                    }()
+
+                    let hasValidInvite = ClientDeviceManager.shared.validateInviteToken(wsInviteToken)
+                    let lowerIP = remoteIP.lowercased()
+                    let isLoopback = (lowerIP == "127.0.0.1" || lowerIP == "::1" || lowerIP == "localhost" || lowerIP == "::ffff:127.0.0.1")
+                    let ua = self.extractHeader(named: "user-agent", from: headerString) ?? ""
+
                     if let cookieUid = self.extractCookie(named: "amr_device_uid", from: headerString),
                        !cookieUid.isEmpty {
-                        let remoteIP = self.extractRemoteIP(from: c)
-                        let existing = ClientDeviceManager.shared.getDevice(deviceId: cookieUid)
+                        if let existing = ClientDeviceManager.shared.getDevice(deviceId: cookieUid) {
+                            let record = ClientDeviceManager.shared.registerConnection(
+                                connectionId: clientId,
+                                deviceId: cookieUid,
+                                deviceName: existing.deviceName,
+                                deviceType: existing.deviceType,
+                                preferredLockScreen: existing.lockScreenControls,
+                                remoteIP: remoteIP,
+                                inviteToken: wsInviteToken
+                            )
+                            self.sendEvent(name: "device_auth_status", data: record.dictionary, to: c)
+                            if record.isAuthorized {
+                                let status = MusicBridge.shared.getPlayerStatus()
+                                self.sendEvent("player_state_changed", data: status, to: c)
+                                Task {
+                                    let queue = await MusicBridge.shared.getPlaybackQueue()
+                                    self.sendEvent("queue", data: queue, to: c)
+                                }
+                            }
+                        } else if hasValidInvite {
+                            let record = ClientDeviceManager.shared.registerConnection(
+                                connectionId: clientId,
+                                deviceId: cookieUid,
+                                deviceName: "Invited Client",
+                                deviceType: "mobile",
+                                preferredLockScreen: nil,
+                                remoteIP: remoteIP,
+                                inviteToken: wsInviteToken
+                            )
+                            self.sendEvent(name: "device_auth_status", data: record.dictionary, to: c)
+                            if record.isAuthorized {
+                                let status = MusicBridge.shared.getPlayerStatus()
+                                self.sendEvent("player_state_changed", data: status, to: c)
+                                Task {
+                                    let queue = await MusicBridge.shared.getPlaybackQueue()
+                                    self.sendEvent("queue", data: queue, to: c)
+                                }
+                            }
+                        } else {
+                            // Brand-new UID that hasn't sent register_device yet:
+                            // do NOT pre-create a fake "mobile" record before register_device arrives with real device_type & lock_screen_controls.
+                            ClientDeviceManager.shared.markBrowserConnectionPending(connectionId: clientId)
+                        }
+                    } else if hasValidInvite {
+                        let generatedUid = UUID().uuidString.lowercased()
                         let record = ClientDeviceManager.shared.registerConnection(
                             connectionId: clientId,
-                            deviceId: cookieUid,
-                            deviceName: existing?.deviceName ?? "",
-                            deviceType: existing?.deviceType ?? "mobile",
-                            preferredLockScreen: existing?.lockScreenControls,
-                            remoteIP: remoteIP
+                            deviceId: generatedUid,
+                            deviceName: "Invited Client",
+                            deviceType: "mobile",
+                            preferredLockScreen: nil,
+                            remoteIP: remoteIP,
+                            inviteToken: wsInviteToken
                         )
                         self.sendEvent(name: "device_auth_status", data: record.dictionary, to: c)
                         if record.isAuthorized {
@@ -365,8 +468,12 @@ public final class WebSocketServer: @unchecked Sendable {
                                 self.sendEvent("queue", data: queue, to: c)
                             }
                         }
+                    } else if !isLoopback || ua.contains("Mozilla/") {
+                        // Non-loopback client or browser tab without valid cookie or invite token:
+                        // mark pending registration so it cannot bypass PWA device authorization by omitting register_device.
+                        ClientDeviceManager.shared.markBrowserConnectionPending(connectionId: clientId)
                     } else {
-                        // Headless / Node.js / API WebSocket client without PWA cookie:
+                        // Localhost headless / Node.js / API WebSocket client without PWA cookie:
                         // send initial status & queue immediately for API compatibility.
                         let status = MusicBridge.shared.getPlayerStatus()
                         self.sendEvent("player_state_changed", data: status, to: c)
@@ -383,14 +490,21 @@ public final class WebSocketServer: @unchecked Sendable {
 
             // Normal HTTP request
             var expectedBodyLen = 0
-            if let clStr = self.extractHeader(named: "content-length", from: headerString), let cl = Int(clStr) {
-                expectedBodyLen = cl
+            if let clStr = self.extractHeader(named: "content-length", from: headerString) {
+                guard let rawLen = Int(clStr.trimmingCharacters(in: .whitespacesAndNewlines)),
+                      rawLen >= 0,
+                      rawLen <= 16 * 1024 * 1024 else {
+                    conn.cancel()
+                    return
+                }
+                expectedBodyLen = max(0, min(rawLen, 16 * 1024 * 1024))
             }
 
             if restData.count < expectedBodyLen {
                 self.readRemainingHTTPBody(clientId: clientId, connection: conn, headerString: headerString, buffer: restData, expectedLen: expectedBodyLen)
             } else {
-                self.handleHTTPRequest(headerString: headerString, bodyData: restData.prefix(expectedBodyLen), connection: conn)
+                let bodySlice = expectedBodyLen > 0 ? Data(restData.prefix(expectedBodyLen)) : Data()
+                self.handleHTTPRequest(headerString: headerString, bodyData: bodySlice, connection: conn)
             }
         }
     }
@@ -407,8 +521,13 @@ public final class WebSocketServer: @unchecked Sendable {
             if let data = content {
                 current.append(data)
             }
+            if current.count > 16 * 1024 * 1024 {
+                conn.cancel()
+                return
+            }
             if current.count >= expectedLen || isComplete {
-                self.handleHTTPRequest(headerString: headerString, bodyData: current.prefix(expectedLen), connection: conn)
+                let bodySlice = expectedLen > 0 ? Data(current.prefix(expectedLen)) : Data()
+                self.handleHTTPRequest(headerString: headerString, bodyData: bodySlice, connection: conn)
             } else {
                 self.readRemainingHTTPBody(clientId: clientId, connection: conn, headerString: headerString, buffer: current, expectedLen: expectedLen)
             }
@@ -417,25 +536,102 @@ public final class WebSocketServer: @unchecked Sendable {
 
     private func readWebSocketFrames(clientId: UUID, connection: NWConnection, buffer: Data) {
         var current = buffer
-        let frames = decodeWebSocketFrames(buffer: &current)
-        for (opcode, payload) in frames {
+        var oversizedFrame = false
+        let frames = decodeWebSocketFrames(buffer: &current, oversizedFrame: &oversizedFrame)
+        if oversizedFrame {
+            NSLog("[WebSocket] ❌ Closing connection due to oversized or malformed frame")
+            removeClient(clientId: clientId, connection: connection)
+            connection.cancel()
+            return
+        }
+
+        let connKey = ObjectIdentifier(connection)
+        for (opcode, payload, fin) in frames {
             switch opcode {
-            case 0x01:
-                if let text = String(data: payload, encoding: .utf8) {
-                    Task {
-                        await self.processClientTextMessage(text, clientId: clientId, connection: connection)
+            case 0x01, 0x02:
+                var protocolError = false
+                clientLock.lock()
+                if fragmentBuffers[connKey] != nil || clients[clientId] == nil {
+                    fragmentBuffers.removeValue(forKey: connKey)
+                    protocolError = true
+                } else if !fin {
+                    if payload.count > 16 * 1024 * 1024 {
+                        protocolError = true
+                    } else {
+                        fragmentBuffers[connKey] = (opcode: opcode, data: payload)
                     }
                 }
-            case 0x02:
-                Task {
-                    await self.processClientBinaryMessage(payload, connection: connection)
+                clientLock.unlock()
+
+                if protocolError {
+                    removeClient(clientId: clientId, connection: connection)
+                    connection.cancel()
+                    return
+                }
+
+                if fin {
+                    if opcode == 0x01 {
+                        if let text = String(data: payload, encoding: .utf8) {
+                            Task {
+                                await self.processClientTextMessage(text, clientId: clientId, connection: connection)
+                            }
+                        }
+                    } else {
+                        Task {
+                            await self.processClientBinaryMessage(payload, clientId: clientId, connection: connection)
+                        }
+                    }
+                }
+            case 0x00:
+                var completedMessage: (opcode: UInt8, data: Data)? = nil
+                var protocolOrSizeError = false
+                clientLock.lock()
+                if clients[clientId] != nil, var existing = fragmentBuffers[connKey] {
+                    if existing.data.count + payload.count > 16 * 1024 * 1024 {
+                        fragmentBuffers.removeValue(forKey: connKey)
+                        protocolOrSizeError = true
+                    } else {
+                        existing.data.append(payload)
+                        if fin {
+                            fragmentBuffers.removeValue(forKey: connKey)
+                            completedMessage = existing
+                        } else {
+                            fragmentBuffers[connKey] = existing
+                        }
+                    }
+                } else {
+                    fragmentBuffers.removeValue(forKey: connKey)
+                    protocolOrSizeError = true
+                }
+                clientLock.unlock()
+                if protocolOrSizeError {
+                    removeClient(clientId: clientId, connection: connection)
+                    connection.cancel()
+                    return
+                }
+                if let msg = completedMessage {
+                    if msg.opcode == 0x01 {
+                        if let text = String(data: msg.data, encoding: .utf8) {
+                            Task {
+                                await self.processClientTextMessage(text, clientId: clientId, connection: connection)
+                            }
+                        }
+                    } else if msg.opcode == 0x02 {
+                        Task {
+                            await self.processClientBinaryMessage(msg.data, clientId: clientId, connection: connection)
+                        }
+                    }
                 }
             case 0x08:
-                removeClient(clientId: clientId)
+                removeClient(clientId: clientId, connection: connection)
                 return
             case 0x09:
                 let pong = makeWebSocketFrame(payload: payload, opcode: 0x0A)
+                sendLock.lock()
+                defer { sendLock.unlock() }
                 connection.send(content: pong, completion: .contentProcessed({ _ in }))
+            case 0x0A:
+                break
             default:
                 break
             }
@@ -444,11 +640,11 @@ public final class WebSocketServer: @unchecked Sendable {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self, weak connection] content, _, isComplete, error in
             guard let self = self, let conn = connection else { return }
             if error != nil {
-                self.removeClient(clientId: clientId)
+                self.removeClient(clientId: clientId, connection: conn)
                 return
             }
             if isComplete {
-                self.removeClient(clientId: clientId)
+                self.removeClient(clientId: clientId, connection: conn)
                 return
             }
             var next = current
@@ -459,15 +655,29 @@ public final class WebSocketServer: @unchecked Sendable {
         }
     }
 
-    internal func decodeWebSocketFrames(buffer: inout Data) -> [(opcode: UInt8, payload: Data)] {
-        var results: [(opcode: UInt8, payload: Data)] = []
+    internal func decodeWebSocketFrames(buffer: inout Data) -> [(opcode: UInt8, payload: Data, fin: Bool)] {
+        var oversized = false
+        return decodeWebSocketFrames(buffer: &buffer, oversizedFrame: &oversized)
+    }
+
+    internal func decodeWebSocketFrames(buffer: inout Data, oversizedFrame: inout Bool) -> [(opcode: UInt8, payload: Data, fin: Bool)] {
+        var results: [(opcode: UInt8, payload: Data, fin: Bool)] = []
         while buffer.count >= 2 {
             let b0 = buffer[buffer.startIndex]
+            let fin = (b0 & 0x80) != 0
             let opcode = b0 & 0x0F
             let b1 = buffer[buffer.startIndex + 1]
             let isMasked = (b1 & 0x80) != 0
             var payloadLen = UInt64(b1 & 0x7F)
             var offset = 2
+
+            // RFC 6455 §5.5: Control frames (opcode >= 0x08) MUST NOT be fragmented (!fin)
+            // and MUST have a payload length of 125 bytes or less.
+            if opcode >= 0x08 && (!fin || payloadLen > 125) {
+                oversizedFrame = true
+                buffer.removeAll()
+                return []
+            }
 
             if payloadLen == 126 {
                 guard buffer.count >= offset + 2 else { break }
@@ -477,10 +687,16 @@ public final class WebSocketServer: @unchecked Sendable {
                 offset += 2
             } else if payloadLen == 127 {
                 guard buffer.count >= offset + 8 else { break }
-                payloadLen = 0
+                var len: UInt64 = 0
                 for i in 0..<8 {
-                    payloadLen = (payloadLen << 8) | UInt64(buffer[buffer.startIndex + offset + i])
+                    len = (len << 8) | UInt64(buffer[buffer.startIndex + offset + i])
                 }
+                guard len <= UInt64(16 * 1024 * 1024) else {
+                    oversizedFrame = true
+                    buffer.removeAll()
+                    break
+                }
+                payloadLen = len
                 offset += 8
             }
 
@@ -518,7 +734,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 unmasked = rawPayload
             }
 
-            results.append((opcode: opcode, payload: unmasked))
+            results.append((opcode: opcode, payload: unmasked, fin: fin))
         }
         return results
     }
@@ -550,7 +766,7 @@ public final class WebSocketServer: @unchecked Sendable {
     }
 
     internal func extractHeader(named name: String, from headerString: String) -> String? {
-        let lines = headerString.components(separatedBy: "\r\n")
+        let lines = headerString.components(separatedBy: .newlines)
         let target = name.lowercased() + ":"
         for line in lines {
             if line.lowercased().hasPrefix(target) {
@@ -618,32 +834,98 @@ public final class WebSocketServer: @unchecked Sendable {
         pollerTimer = nil
     }
 
-    public func isAllowedWebSocketOrigin(_ origin: String, requestHost: String? = nil) -> Bool {
-        let trimmed = origin.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if trimmed.isEmpty || trimmed == "null" || trimmed.hasPrefix("file://") || trimmed.hasPrefix("capacitor://") || trimmed.hasPrefix("ionic://") {
+    private func isPrivateOrLocalHost(_ rawHost: String) -> Bool {
+        var host = rawHost
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "[", with: "")
+            .replacingOccurrences(of: "]", with: "")
+        if let pct = host.firstIndex(of: "%") {
+            host = String(host[..<pct])
+        }
+        guard !host.isEmpty else { return false }
+        if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "::ffff:127.0.0.1"
+            || host.hasSuffix(".local") || host.hasSuffix(".lan") || host.hasSuffix(".home") {
             return true
         }
-        guard let url = URL(string: trimmed), let host = url.host?.lowercased(), !host.isEmpty else {
+        if host.hasPrefix("fe80:") || ((host.hasPrefix("fc") || host.hasPrefix("fd")) && host.contains(":")) {
+            return true
+        }
+        let ipv4Candidate = host.hasPrefix("::ffff:") ? String(host.dropFirst("::ffff:".count)) : host
+        let parts = ipv4Candidate.split(separator: ".", omittingEmptySubsequences: false)
+        if parts.count == 4 {
+            var octets: [Int] = []
+            for p in parts {
+                guard let val = Int(p), (0...255).contains(val), String(val) == p else {
+                    return false
+                }
+                octets.append(val)
+            }
+            if octets[0] == 10 || octets[0] == 127 { return true }
+            if octets[0] == 192 && octets[1] == 168 { return true }
+            if octets[0] == 172 && (16...31).contains(octets[1]) { return true }
+            if octets[0] == 100 && (64...127).contains(octets[1]) { return true }
+            if octets[0] == 169 && octets[1] == 254 { return true }
+        }
+        return false
+    }
+
+    public func isAllowedWebSocketOrigin(_ origin: String, requestHost: String? = nil) -> Bool {
+        let trimmed = origin.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed == "null" {
             return false
         }
-        if let reqHost = requestHost?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-            let reqHostOnly = reqHost.components(separatedBy: ":").first ?? reqHost
+        if trimmed.isEmpty || trimmed.hasPrefix("file://") || trimmed.hasPrefix("capacitor://") || trimmed.hasPrefix("ionic://") {
+            return true
+        }
+        guard let url = URL(string: trimmed), let rawHost = url.host?.lowercased(), !rawHost.isEmpty else {
+            return false
+        }
+        var host = rawHost.replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "")
+        if let pct = host.firstIndex(of: "%") {
+            host = String(host[..<pct])
+        }
+        guard isPrivateOrLocalHost(host) else {
+            return false
+        }
+        if let rawReqHost = requestHost?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !rawReqHost.isEmpty {
+            var reqHostOnly: String
+            var reqPort: Int? = nil
+            if rawReqHost.hasPrefix("["), let closeBracket = rawReqHost.firstIndex(of: "]") {
+                reqHostOnly = String(rawReqHost[rawReqHost.index(after: rawReqHost.startIndex)..<closeBracket])
+                let afterBracket = rawReqHost[rawReqHost.index(after: closeBracket)...]
+                if afterBracket.hasPrefix(":") {
+                    reqPort = Int(afterBracket.dropFirst())
+                }
+            } else {
+                let colonParts = rawReqHost.split(separator: ":", omittingEmptySubsequences: false)
+                if colonParts.count == 2, let p = Int(colonParts[1]) {
+                    reqHostOnly = String(colonParts[0])
+                    reqPort = p
+                } else {
+                    reqHostOnly = rawReqHost
+                }
+            }
+            if let pct = reqHostOnly.firstIndex(of: "%") {
+                reqHostOnly = String(reqHostOnly[..<pct])
+            }
+            guard isPrivateOrLocalHost(reqHostOnly) else {
+                return false
+            }
+            let defaultPort = (url.scheme == "https" || url.scheme == "wss") ? 443 : 80
+            if (url.port != nil || reqPort != nil) && (url.port ?? defaultPort) != (reqPort ?? defaultPort) {
+                return false
+            }
             if host == reqHostOnly {
                 return true
             }
+            let loopbackHosts: Set<String> = ["localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"]
+            if loopbackHosts.contains(host) && loopbackHosts.contains(reqHostOnly) {
+                return true
+            }
+            return false
         }
-        if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]" || host.hasSuffix(".local") || host.hasSuffix(".lan") || host.hasSuffix(".home") {
-            return true
-        }
-        // Check RFC1918 private LAN IPv4 addresses (10.x.x.x, 192.168.x.x, 172.16-31.x.x) and Tailscale/Carrier NAT (100.64-127.x.x)
-        let parts = host.split(separator: ".").compactMap { Int($0) }
-        if parts.count == 4 {
-            if parts[0] == 10 || parts[0] == 127 { return true }
-            if parts[0] == 192 && parts[1] == 168 { return true }
-            if parts[0] == 172 && (16...31).contains(parts[1]) { return true }
-            if parts[0] == 100 && (64...127).contains(parts[1]) { return true }
-        }
-        return false
+        return true
     }
 
     // MARK: - IP Address Detection

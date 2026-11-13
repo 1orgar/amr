@@ -11,7 +11,10 @@ extension QueueManager {
         if PlaybackRouter.shared.isTestingEnvironment {
             return
         }
-        stopQueueMonitoring()
+        timerLock.lock()
+        defer { timerLock.unlock() }
+        queueTimer?.cancel()
+        queueTimer = nil
         let timer = DispatchSource.makeTimerSource(queue: queueTimerQueue)
         timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
         timer.setEventHandler { [weak self] in
@@ -22,6 +25,8 @@ extension QueueManager {
     }
 
     public func stopQueueMonitoring() {
+        timerLock.lock()
+        defer { timerLock.unlock() }
         queueTimer?.cancel()
         queueTimer = nil
     }
@@ -49,6 +54,33 @@ extension QueueManager {
         return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private enum TitleScript {
+        case latin
+        case cyrillic
+        case cjk
+        case other
+    }
+
+    private func classifyTitleScript(_ text: String) -> TitleScript {
+        var hasLatin = false
+        var hasCyrillic = false
+        var hasCJK = false
+        for scalar in text.unicodeScalars {
+            let v = scalar.value
+            if (0x0400...0x04FF).contains(v) || (0x0500...0x052F).contains(v) {
+                hasCyrillic = true
+            } else if (0x3040...0x30FF).contains(v) || (0x4E00...0x9FFF).contains(v) || (0xAC00...0xD7AF).contains(v) {
+                hasCJK = true
+            } else if CharacterSet.letters.contains(scalar) {
+                hasLatin = true
+            }
+        }
+        if hasCJK && !hasCyrillic { return .cjk }
+        if hasCyrillic && !hasCJK { return .cyrillic }
+        if hasLatin && !hasCyrillic && !hasCJK { return .latin }
+        return .other
+    }
+
     func isTrackMatching(expected: TrackInfo, candidateName: String, candidateArtist: String? = nil) -> Bool {
         let cn = candidateName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cn.isEmpty else { return false }
@@ -61,6 +93,12 @@ extension QueueManager {
         let normEn = normalizeTrackTitle(en)
         let normCn = normalizeTrackTitle(cn)
         if !normEn.isEmpty && normEn == normCn {
+            return true
+        }
+
+        let libNormEn = LibraryService.normalizeMatchingTitle(en)
+        let libNormCn = LibraryService.normalizeMatchingTitle(cn)
+        if !libNormEn.isEmpty && libNormEn == libNormCn {
             return true
         }
 
@@ -79,10 +117,10 @@ extension QueueManager {
                         }
                     }
                 }
-                // Localization support: If artist matches and either title has non-ASCII characters
-                // (e.g. Japanese Kanji '人芝居' vs English 'Hitoshibai'), treat as match
-                let hasNonAscii = !en.allSatisfy({ $0.isASCII }) || !cn.allSatisfy({ $0.isASCII })
-                if hasNonAscii && (normEa == normCa) {
+                let enScript = classifyTitleScript(en)
+                let cnScript = classifyTitleScript(cn)
+                if (enScript == .latin && (cnScript == .cyrillic || cnScript == .cjk)) ||
+                   (cnScript == .latin && (enScript == .cyrillic || enScript == .cjk)) {
                     return true
                 }
             }
@@ -385,11 +423,14 @@ extension QueueManager {
         // Once confirmed == true, a foreign track means Music.app finished the track and auto-advanced in "library playlist 1"
         // (e.g., to another song by the same artist), so we MUST intercept it and advance activeCustomQueue!
         if isAMRPlaylist && !confirmed && timeSincePlay < 15.0 {
+            let expArtist = expected.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            let candArtist = (artistName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let artistMatches = expArtist.isEmpty || (!candArtist.isEmpty && (candArtist.localizedCaseInsensitiveContains(expArtist) || expArtist.localizedCaseInsensitiveContains(candArtist)))
             PlaybackStateStore.shared.withLock {
                 PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
                 PlaybackStateStore.shared.lastWasPlayingCloud = true
                 PlaybackStateStore.shared.lastSkipTime = .distantPast
-                if activeIdx < PlaybackStateStore.shared.activeCustomQueue.count && !trackName.isEmpty {
+                if artistMatches && activeIdx < PlaybackStateStore.shared.activeCustomQueue.count && !trackName.isEmpty {
                     PlaybackStateStore.shared.activeCustomQueue[activeIdx].name = trackName
                 }
             }
@@ -600,11 +641,14 @@ extension QueueManager {
                     return
                 } else if isAMR && !confirmed && timeSincePlay < 15.0 {
                     // First confirmation of a localized track played via "Очередь AMR"
+                    let expArtist = expectedTrack.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let candArtist = curArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let artistMatches = expArtist.isEmpty || (!candArtist.isEmpty && (candArtist.localizedCaseInsensitiveContains(expArtist) || expArtist.localizedCaseInsensitiveContains(candArtist)))
                     PlaybackStateStore.shared.withLock {
                         PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
                         PlaybackStateStore.shared.lastWasPlayingCloud = true
                         PlaybackStateStore.shared.lastSkipTime = .distantPast
-                        if activeIdx < PlaybackStateStore.shared.activeCustomQueue.count && !curTrackName.isEmpty {
+                        if artistMatches && activeIdx < PlaybackStateStore.shared.activeCustomQueue.count && !curTrackName.isEmpty {
                             PlaybackStateStore.shared.activeCustomQueue[activeIdx].name = curTrackName
                         }
                         if pos > 0 {

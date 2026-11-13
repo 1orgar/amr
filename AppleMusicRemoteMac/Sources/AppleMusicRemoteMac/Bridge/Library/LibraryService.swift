@@ -32,6 +32,10 @@ public final class LibraryService: @unchecked Sendable {
         " - single", " - ep"
     ]
 
+    private static let masterLibraryPlaylistNames: Set<String> = [
+        "музыка", "music", "медиатека", "библиотека", "musik", "musique", "música", "musica", "ミュージック", "音乐", "очередь amr"
+    ]
+
     public static func normalizeMatchingTitle(_ t: String) -> String {
         var s = t.lowercased()
         for tag in removableTitleTags {
@@ -80,7 +84,7 @@ public final class LibraryService: @unchecked Sendable {
                 repeat with p in pList
                     try
                         set pName to (name of p as string)
-                        if pName is not in {"Музыка", "Music", "Медиатека", "Библиотека", "Очередь AMR"} then
+                        if pName is not in {"Музыка", "Music", "Медиатека", "Библиотека", "Musik", "Musique", "Música", "Musica", "ミュージック", "音乐", "Очередь AMR"} then
                             set pCount to 0
                             try
                                 set pCount to (count of tracks of p)
@@ -106,9 +110,9 @@ public final class LibraryService: @unchecked Sendable {
                             let trackCount = Int(parts[1]) ?? 0
                             let lower = name.lowercased()
                             if !name.isEmpty, !seenNames.contains(lower),
-                               name != "Музыка", name != "Music", name != "Медиатека", name != "Библиотека", name != "Очередь AMR" {
+                               !Self.masterLibraryPlaylistNames.contains(lower) {
                                 seenNames.insert(lower)
-                                let enc = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+                                let enc = name.amrQueryValueEncoded
                                 let art = ArtworkService.shared.getCachedPlaylistArtworkUrl(name: name) ?? "/api/artwork/playlist?name=\(enc)&v=2"
                                 result.append(PlaylistInfo(name: name, trackCount: trackCount, artworkUrl: art, isPlaylist: true))
                             }
@@ -126,13 +130,13 @@ public final class LibraryService: @unchecked Sendable {
                 let name = (obj.value(forKey: "name") as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 let lower = name.lowercased()
                 if name.isEmpty || seenNames.contains(lower) ||
-                   name == "Музыка" || name == "Music" || name == "Медиатека" || name == "Библиотека" || name == "Очередь AMR" {
+                   Self.masterLibraryPlaylistNames.contains(lower) {
                     continue
                 }
                 let trks = obj.value(forKey: "tracks") as? SBElementArray
                 let count = trks?.count ?? 0
                 seenNames.insert(lower)
-                let enc = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+                let enc = name.amrQueryValueEncoded
                 let art = ArtworkService.shared.getCachedPlaylistArtworkUrl(name: name) ?? "/api/artwork/playlist?name=\(enc)&v=2"
                 result.append(PlaylistInfo(name: name, trackCount: count, artworkUrl: art, isPlaylist: true))
             }
@@ -179,7 +183,7 @@ public final class LibraryService: @unchecked Sendable {
             if let art = ArtworkService.shared.getCachedPlaylistArtworkUrl(name: name), !art.isEmpty {
                 baseList[i].artworkUrl = art
             } else if baseList[i].artworkUrl?.isEmpty ?? true {
-                let enc = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+                let enc = name.amrQueryValueEncoded
                 baseList[i].artworkUrl = "/api/artwork/playlist?name=\(enc)"
             }
         }
@@ -282,9 +286,9 @@ public final class LibraryService: @unchecked Sendable {
 
                         var artUrl = ""
                         if dbId > 0 {
-                            let encN = tName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                            let encA = tArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                            let encAl = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                            let encN = tName.amrQueryValueEncoded
+                            let encA = tArtist.amrQueryValueEncoded
+                            let encAl = tAlbum.amrQueryValueEncoded
                             artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
                         } else if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
                             artUrl = cached
@@ -446,7 +450,7 @@ public final class LibraryService: @unchecked Sendable {
         tell application "Music"
             try
                 with timeout of 4 seconds
-                    set p to playlist "Музыка"
+                    set p to library playlist 1
                     if not (exists p) then
                         set p to playlist 1
                     end if
@@ -483,9 +487,9 @@ public final class LibraryService: @unchecked Sendable {
                         if dbId > 0 {
                             PlaybackStateStore.shared.setTrackMetadata(id: dbId, name: tName, artist: tArtist, album: tAlbum)
                         }
-                        let encN = tName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                        let encA = tArtist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                        let encAl = tAlbum.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                        let encN = tName.amrQueryValueEncoded
+                        let encA = tArtist.amrQueryValueEncoded
+                        let encAl = tAlbum.amrQueryValueEncoded
                         let artUrl = (dbId > 0) ? "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)" : ""
                         result.append(TrackInfo(
                             id: "\(dbId)",
@@ -622,9 +626,9 @@ public final class LibraryService: @unchecked Sendable {
 
     public func registerStagedTrackInCache(dbId: Int, name: String, artist: String, album: String = "", duration: Double = 0) {
         guard dbId > 0, !name.isEmpty else { return }
-        let encN = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let encA = artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let encAl = album.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let encN = name.amrQueryValueEncoded
+        let encA = artist.amrQueryValueEncoded
+        let encAl = album.amrQueryValueEncoded
         let artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
         let info = TrackInfo(
             id: "\(dbId)",
@@ -735,7 +739,7 @@ public final class LibraryService: @unchecked Sendable {
         tell application "Music"
             try
                 with timeout of 4 seconds
-                    set p to playlist "Музыка"
+                    set p to library playlist 1
                     if not (exists p) then
                         set p to playlist 1
                     end if
@@ -807,9 +811,9 @@ public final class LibraryService: @unchecked Sendable {
             if c.dbId > 0 {
                 PlaybackStateStore.shared.setTrackMetadata(id: c.dbId, name: c.name, artist: c.artist, album: c.album)
             }
-            let encN = c.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            let encA = c.artist.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            let encAl = c.album.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let encN = c.name.amrQueryValueEncoded
+            let encA = c.artist.amrQueryValueEncoded
+            let encAl = c.album.amrQueryValueEncoded
             let artUrl = (c.dbId > 0) ? "/api/artwork/track?id=\(c.dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)" : ""
 
             result.append(TrackInfo(
@@ -833,27 +837,15 @@ public final class LibraryService: @unchecked Sendable {
     // MARK: - Artists & Albums
 
     public func getLibraryArtists() -> [ArtistInfo] {
-        guard let app = MusicAppProvider.shared.getMusicApp() else { return [] }
-        let playlists = app.playlists()
+        let songs = getLibrarySongs()
         var artistSet = Set<String>()
         var result = [ArtistInfo]()
 
-        for p in playlists {
-            guard let obj = p as? SBObject, let pName = obj.value(forKey: "name") as? String else { continue }
-            if pName == "Музыка" || pName == "Music" || pName == "Медиатека" || pName == "Библиотека" {
-                if let tracks = obj.value(forKey: "tracks") as? SBElementArray {
-                    for tObj in tracks {
-                        guard let t = tObj as? SBObject else { continue }
-                        let artist = t.value(forKey: "artist") as? String ?? ""
-                        let name = t.value(forKey: "name") as? String ?? ""
-                        let dur = t.value(forKey: "duration") as? Double ?? 0
-                        if !artist.isEmpty && isValidTrack(name: name, artist: artist, duration: dur) && !artistSet.contains(artist) {
-                            artistSet.insert(artist)
-                            result.append(ArtistInfo(name: artist))
-                        }
-                    }
-                }
-                break
+        for t in songs {
+            let artist = t.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !artist.isEmpty && isValidTrack(name: t.name, artist: artist, duration: t.duration) && !artistSet.contains(artist) {
+                artistSet.insert(artist)
+                result.append(ArtistInfo(name: artist))
             }
         }
 
@@ -861,40 +853,28 @@ public final class LibraryService: @unchecked Sendable {
     }
 
     public func getLibraryAlbums() -> [AlbumInfo] {
-        guard let app = MusicAppProvider.shared.getMusicApp() else { return [] }
-        let playlists = app.playlists()
+        let songs = getLibrarySongs()
         var albumDict = [String: AlbumInfo]()
 
-        for p in playlists {
-            guard let obj = p as? SBObject, let pName = obj.value(forKey: "name") as? String else { continue }
-            if pName == "Музыка" || pName == "Music" || pName == "Медиатека" || pName == "Библиотека" {
-                if let tracks = obj.value(forKey: "tracks") as? SBElementArray {
-                    for tObj in tracks {
-                        guard let t = tObj as? SBObject else { continue }
-                        let album = t.value(forKey: "album") as? String ?? ""
-                        let artist = t.value(forKey: "artist") as? String ?? ""
-                        let dur = t.value(forKey: "duration") as? Double ?? 0
-                        let dbId = t.value(forKey: "databaseID") as? Int ?? 0
-                        let name = t.value(forKey: "name") as? String ?? ""
+        for t in songs {
+            let album = t.album.trimmingCharacters(in: .whitespacesAndNewlines)
+            let artist = t.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            let dbId = t.numericId ?? Int(t.id) ?? 0
 
-                        if !album.isEmpty && isValidTrack(name: name, artist: artist, duration: dur) {
-                            let key = "\(album.lowercased())___\(artist.lowercased())"
-                            if var existing = albumDict[key] {
-                                existing.trackCount = (existing.trackCount ?? 0) + 1
-                                albumDict[key] = existing
-                            } else {
-                                albumDict[key] = AlbumInfo(
-                                    id: "\(dbId)",
-                                    name: album,
-                                    artist: artist,
-                                    artwork: "",
-                                    trackCount: 1
-                                )
-                            }
-                        }
-                    }
+            if !album.isEmpty && isValidTrack(name: t.name, artist: artist, duration: t.duration) {
+                let key = "\(album.lowercased())___\(artist.lowercased())"
+                if var existing = albumDict[key] {
+                    existing.trackCount = (existing.trackCount ?? 0) + 1
+                    albumDict[key] = existing
+                } else {
+                    albumDict[key] = AlbumInfo(
+                        id: "\(dbId)",
+                        name: album,
+                        artist: artist,
+                        artwork: t.artworkUrl,
+                        trackCount: 1
+                    )
                 }
-                break
             }
         }
 
@@ -933,7 +913,7 @@ public final class LibraryService: @unchecked Sendable {
 
         let playlistsList: [[String: Any]] = playlists.compactMap { p in
             guard p.trackCount > 0 else { return nil }
-            let enc = p.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let enc = p.name.amrQueryValueEncoded
             return [
                 "name": p.name,
                 "track_count": p.trackCount,

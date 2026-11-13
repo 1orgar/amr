@@ -95,17 +95,26 @@ public final class AccountHealthService: @unchecked Sendable {
         "143444": "gb",
         "143442": "fr",
         "143443": "de",
-        "143462": "jp",
-        "143455": "ca",
-        "143460": "au",
-        "143465": "it",
+        "143450": "it",
         "143454": "es",
-        "143467": "nl",
-        "143468": "se",
+        "143455": "ca",
+        "143462": "jp",
         "143476": "ch",
-        "143491": "kr",
-        "143477": "br",
-        "143472": "tr"
+        "143478": "pl",
+        "143452": "nl",
+        "143456": "se",
+        "143491": "il",
+        "143480": "tr",
+        "143503": "br",
+        "143468": "mx",
+        "143466": "kr",
+        "143467": "in",
+        "143465": "cn",
+        "143463": "hk",
+        "143470": "tw",
+        "143464": "sg",
+        "143460": "au",
+        "143461": "nz"
     ]
 
     private init() {}
@@ -130,6 +139,7 @@ public final class AccountHealthService: @unchecked Sendable {
         }
 
         // 2. Music.app active subscription & DSID from iTunes Cloud preferences
+        var foundExplicitSubscriptionStatus = false
         let itunesCloudPath = ("~/Library/Preferences/com.apple.itunescloud.plist" as NSString).expandingTildeInPath
         if let dict = NSDictionary(contentsOfFile: itunesCloudPath) as? [String: Any],
            let sub = dict["ICDefaultsCachedSubscriptionStatus"] as? [String: Any] {
@@ -143,6 +153,7 @@ public final class AccountHealthService: @unchecked Sendable {
                        let statusDict = obj["status"] as? [String: Any] {
                         if let music = statusDict["music"] as? [String: Any],
                            let s = music["status"] as? String {
+                            foundExplicitSubscriptionStatus = true
                             isSubscriptionActive = (s.localizedCaseInsensitiveCompare("Enabled") == .orderedSame)
                         }
                         if let data = k.data(using: .utf8),
@@ -156,13 +167,20 @@ public final class AccountHealthService: @unchecked Sendable {
         }
 
         // Fallback: If subscription not in responses, check if lastKnownActiveDSID is present
-        if !isSubscriptionActive && dsid != nil {
+        if !foundExplicitSubscriptionStatus && !isSubscriptionActive && dsid != nil {
             isSubscriptionActive = true
         }
 
-        // Fallback for storefront: check MusicKitManager storefront
-        let defaultSf = MusicKitManager.shared.getUserStorefront()
-        let countryCode = storefrontId.flatMap { storefrontMap[$0] } ?? defaultSf
+        let countryCode: String? = storefrontId.flatMap { rawSf in
+            let trimmed = rawSf.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let direct = storefrontMap[trimmed] {
+                return direct
+            }
+            if let prefix = trimmed.split(whereSeparator: { $0 == "-" || $0 == "," }).first {
+                return storefrontMap[String(prefix)]
+            }
+            return nil
+        }
         return (appleId, dsid, isSubscriptionActive, storefrontId, countryCode)
     }
 
@@ -225,9 +243,29 @@ public final class AccountHealthService: @unchecked Sendable {
             return status
         }
 
+        if tokenCheck.validationSkipped {
+            let fallbackSf = tokenCheck.storefront ?? macInfo.countryCode ?? MusicKitManager.shared.getUserStorefront()
+            let status = AccountHealthStatus(
+                status: "synchronized",
+                macAppleId: macInfo.appleId,
+                macDsid: macInfo.dsid,
+                isSubscriptionActive: macInfo.isSubscriptionActive,
+                macStorefront: macInfo.storefrontId,
+                macCountryCode: macInfo.countryCode,
+                webStorefront: fallbackSf,
+                isTokenValid: true,
+                isTokenExpired: false,
+                isAccountsMatched: true,
+                message: "Учетная запись Apple ID активна (онлайн-проверка отложена).",
+                checkedAt: Date()
+            )
+            updateCache(status)
+            return status
+        }
+
         guard tokenCheck.isValid else {
             let status = AccountHealthStatus(
-                status: macInfo.appleId != nil ? "synchronized" : "not_authorized",
+                status: "not_authorized",
                 macAppleId: macInfo.appleId,
                 macDsid: macInfo.dsid,
                 isSubscriptionActive: macInfo.isSubscriptionActive,
@@ -236,10 +274,8 @@ public final class AccountHealthService: @unchecked Sendable {
                 webStorefront: tokenCheck.storefront ?? macInfo.countryCode,
                 isTokenValid: false,
                 isTokenExpired: false,
-                isAccountsMatched: macInfo.appleId != nil,
-                message: macInfo.appleId != nil
-                    ? "Учетная запись Apple ID авторизована на Mac (\(macInfo.appleId!))."
-                    : "Не удалось верифицировать токен Apple ID.",
+                isAccountsMatched: false,
+                message: "Не удалось верифицировать токен Apple ID.",
                 checkedAt: Date()
             )
             updateCache(status)
@@ -247,7 +283,8 @@ public final class AccountHealthService: @unchecked Sendable {
         }
 
         // Check storefront mismatch if detectable
-        if let macCountry = macInfo.countryCode, let webSf = tokenCheck.storefront, !webSf.isEmpty {
+        if let macCountry = macInfo.countryCode, !macCountry.isEmpty,
+           let webSf = tokenCheck.storefront, !webSf.isEmpty {
             if macCountry.lowercased() != webSf.lowercased() {
                 let status = AccountHealthStatus(
                     status: "mismatch",
@@ -302,13 +339,13 @@ public final class AccountHealthService: @unchecked Sendable {
 
     // MARK: - Apple Music API Validation
 
-    private func validateToken(userToken: String) async -> (isValid: Bool, isExpired: Bool, storefront: String?) {
+    internal func validateToken(userToken: String) async -> (isValid: Bool, isExpired: Bool, validationSkipped: Bool, storefront: String?) {
         guard let devToken = MusicKitManager.shared.getDeveloperToken() else {
-            return (false, false, nil)
+            return (false, false, true, nil)
         }
 
         guard let url = URL(string: "https://api.music.apple.com/v1/me/storefront") else {
-            return (false, false, nil)
+            return (false, false, true, nil)
         }
 
         var req = URLRequest(url: url)
@@ -326,17 +363,20 @@ public final class AccountHealthService: @unchecked Sendable {
                        let first = dataArr.first,
                        let sfId = first["id"] as? String {
                         MusicKitManager.shared.updateStorefrontMetadata(from: first)
-                        return (true, false, sfId)
+                        return (true, false, false, sfId)
                     }
-                    return (true, false, nil)
-                } else if http.statusCode == 401 || http.statusCode == 403 {
-                    return (false, true, nil)
+                    return (true, false, false, nil)
+                } else if http.statusCode == 403 {
+                    return (false, true, false, nil)
+                } else if http.statusCode == 401 || http.statusCode == 429 || (500...599).contains(http.statusCode) {
+                    return (false, false, true, nil)
                 }
             }
         } catch {
             NSLog("[AccountHealthService] Error verifying token: %@", error.localizedDescription)
+            return (false, false, true, nil)
         }
-        return (false, false, nil)
+        return (false, false, false, nil)
     }
 
     // MARK: - Library Fingerprint Matching

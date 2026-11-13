@@ -36,17 +36,26 @@ public final class AppleScriptExecutor: @unchecked Sendable {
             return nil
         }
 
-        guard lock.lock(before: Date().addingTimeInterval(3.5)) else {
+        guard lock.lock(before: Date().addingTimeInterval(4.2)) else {
             NSLog("[AppleScriptExecutor] Lock acquisition timeout (contended)")
             return nil
         }
         defer { lock.unlock() }
 
         var timedSource = source
-        if !timedSource.contains("with timeout") {
-            if let tellRange = timedSource.range(of: "tell application \"Music\""),
+        let lowerSource = timedSource.lowercased()
+        let hasTimeoutClause = lowerSource.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("with timeout")
+            || lowerSource.contains("\nwith timeout")
+            || lowerSource.range(of: #"(?m)^\s+with timeout\b"#, options: .regularExpression) != nil
+        if !hasTimeoutClause {
+            let tellCount = timedSource.components(separatedBy: "tell application \"Music\"").count - 1
+            let endTellCount = timedSource.components(separatedBy: "end tell").count - 1
+            if tellCount == 1,
+               endTellCount >= 1,
+               let tellRange = timedSource.range(of: "tell application \"Music\""),
                let endTellRange = timedSource.range(of: "end tell", options: .backwards),
-               tellRange.upperBound <= endTellRange.lowerBound {
+               tellRange.upperBound <= endTellRange.lowerBound,
+               !timedSource[tellRange.upperBound...].hasPrefix(" to ") {
                 let prefix = timedSource[..<tellRange.upperBound]
                 let body = timedSource[tellRange.upperBound..<endTellRange.lowerBound]
                 let suffix = timedSource[endTellRange.lowerBound...]

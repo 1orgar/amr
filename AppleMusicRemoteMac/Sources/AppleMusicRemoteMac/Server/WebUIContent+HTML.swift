@@ -430,7 +430,7 @@ extension WebUIContent {
               </div>
               <div class="account-card-info">
                 <div class="account-card-email-row">
-                  <span class="account-email" id="account-card-email">tse.tds@gmail.com</span>
+                  <span class="account-email" id="account-card-email">Apple Music</span>
                   <span class="account-sync-badge" id="account-card-badge">СИНХРОНИЗИРОВАНО</span>
                 </div>
                 <div class="account-card-subtext" id="account-card-subtext">Apple Music: подписка активна • Регион US • Медиатека синхронизирована</div>
@@ -472,6 +472,17 @@ extension WebUIContent {
             </div>
             <div id="home-albums-carousel" class="home-carousel-row">
               <div class="loading-state">Загрузка альбомов...</div>
+            </div>
+          </div>
+
+          <!-- 4. Heavy Rotation (На репите) -->
+          <div class="home-section hidden" id="home-heavy-section">
+            <div class="home-section-header-link" id="home-heavy-link">
+              <h2 class="home-section-title">На репите</h2>
+              <span class="home-chevron">›</span>
+            </div>
+            <div id="home-heavy-carousel" class="home-carousel-row">
+              <div class="loading-state">Загрузка...</div>
             </div>
           </div>
 
@@ -721,7 +732,7 @@ extension WebUIContent {
   </div>
 
   <!-- Track Actions & Station Picker Modal (••• Menu) -->
-  <div id="station-picker-modal" class="modal-backdrop hidden" aria-hidden="true">
+  <div id="station-picker-modal" class="modal-backdrop hidden" aria-hidden="true" role="dialog">
     <div class="modal-card station-modal-card">
       <div class="modal-header">
         <div class="modal-title-wrap">
@@ -807,7 +818,7 @@ extension WebUIContent {
   </div>
 
   <!-- Signal Path Inspector Modal (Roon-like Audio Pipeline) -->
-  <div id="quality-modal" class="modal-backdrop hidden" aria-hidden="true">
+  <div id="quality-modal" class="modal-backdrop hidden" aria-hidden="true" role="dialog">
     <div class="modal-card signal-path-card">
       <div class="modal-header">
         <div class="modal-title-wrap">
@@ -952,7 +963,7 @@ extension WebUIContent {
   </div>
 
   <!-- Audio Output Devices Modal -->
-  <div id="devices-modal" class="modal-backdrop hidden" aria-hidden="true">
+  <div id="devices-modal" class="modal-backdrop hidden" aria-hidden="true" role="dialog">
     <div class="modal-card devices-modal-card">
       <div class="modal-header">
         <div class="modal-title-wrap">
@@ -1021,7 +1032,7 @@ extension WebUIContent {
       <div class="diag-details-list">
         <div class="diag-detail-item">
           <span class="diag-label">Учетная запись Mac:</span>
-          <span class="diag-value" id="diag-val-account">tse.tds@gmail.com</span>
+          <span class="diag-value" id="diag-val-account">Apple ID</span>
         </div>
         <div class="diag-detail-item">
           <span class="diag-label">Статус синхронизации:</span>
@@ -1349,7 +1360,7 @@ extension WebUIContent {
   </div>
 
   <!-- Top Bar / TV Mode Settings Popover (WLED DDP Mode Selector) -->
-  <div id="top-settings-popover" class="top-settings-popover hidden" role="dialog" aria-label="Режим работы WLED DDP">
+  <div id="top-settings-popover" class="top-settings-popover hidden" aria-hidden="true" role="dialog" aria-label="Режим работы WLED DDP">
     <div class="top-settings-header">
       <div class="top-settings-title-group">
         <span class="top-settings-badge">UDP 4048 · DDP</span>

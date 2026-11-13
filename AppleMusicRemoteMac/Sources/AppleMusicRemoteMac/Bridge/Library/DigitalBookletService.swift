@@ -131,12 +131,19 @@ public final class DigitalBookletService: @unchecked Sendable {
     }
 
     private let lock = NSLock()
+    private let pdfRenderLock = NSLock()
     private var bookletCache: [String: CachedBookletEntry] = [:]
     private var renderedPageCache: [String: Data] = [:]
+    private var renderedPageOrder: [String] = []
+    private let maxRenderedPageCacheEntries = 60
     private let session: URLSession
 
     /// Additional local directories to scan for Apple Digital Booklet PDFs (used by unit tests).
-    public var additionalSearchDirectories: [URL] = []
+    private var _additionalSearchDirectories: [URL] = []
+    public var additionalSearchDirectories: [URL] {
+        get { lock.withLock { _additionalSearchDirectories } }
+        set { lock.withLock { _additionalSearchDirectories = newValue } }
+    }
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -159,6 +166,7 @@ public final class DigitalBookletService: @unchecked Sendable {
         lock.withLock {
             bookletCache.removeAll()
             renderedPageCache.removeAll()
+            renderedPageOrder.removeAll()
         }
     }
 
@@ -256,7 +264,20 @@ public final class DigitalBookletService: @unchecked Sendable {
             || meta.tracks.contains { !$0.commentary.isEmpty || !$0.instruments.isEmpty || !$0.vocals.isEmpty || !$0.producers.isEmpty }
 
         if hasRichContent {
-            let (pdfData, pageTitles) = renderComprehensiveEditorialBookletPdf(meta: meta, audioQualityLabel: status.audioQuality)
+            let isPlayingRequestedAlbum: Bool = {
+                guard let curTrack = status.track else { return false }
+                let curAlbum = curTrack.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !curAlbum.isEmpty && curAlbum.localizedCaseInsensitiveCompare(effAlbum) == .orderedSame {
+                    return true
+                }
+                if let reqTrack = trackName?.trimmingCharacters(in: .whitespacesAndNewlines), !reqTrack.isEmpty,
+                   curTrack.name.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(reqTrack) == .orderedSame {
+                    return true
+                }
+                return false
+            }()
+            let qualityLabel: String? = isPlayingRequestedAlbum ? status.audioQuality : nil
+            let (pdfData, pageTitles) = renderComprehensiveEditorialBookletPdf(meta: meta, audioQualityLabel: qualityLabel)
             if let doc = PDFDocument(data: pdfData), doc.pageCount > 0 {
                 let editorialPayload = buildEditorialContentPayload(from: meta)
                 let info = buildBookletInfo(
@@ -319,6 +340,13 @@ public final class DigitalBookletService: @unchecked Sendable {
             return cachedImg
         }
 
+        pdfRenderLock.lock()
+        defer { pdfRenderLock.unlock() }
+
+        if let afterWaitImg = lock.withLock({ renderedPageCache[cacheKey] }) {
+            return afterWaitImg
+        }
+
         guard let data = cachedOrPdf.pdfData,
               let doc = PDFDocument(data: data),
               pageIndex >= 0,
@@ -329,8 +357,18 @@ public final class DigitalBookletService: @unchecked Sendable {
         }
 
         lock.withLock {
-            if renderedPageCache.count > 160 {
-                renderedPageCache.removeAll()
+            while renderedPageCache[cacheKey] == nil && renderedPageCache.count >= maxRenderedPageCacheEntries {
+                if !renderedPageOrder.isEmpty {
+                    let oldestKey = renderedPageOrder.removeFirst()
+                    renderedPageCache.removeValue(forKey: oldestKey)
+                } else if let firstKey = renderedPageCache.keys.first {
+                    renderedPageCache.removeValue(forKey: firstKey)
+                } else {
+                    break
+                }
+            }
+            if renderedPageCache[cacheKey] == nil {
+                renderedPageOrder.append(cacheKey)
             }
             renderedPageCache[cacheKey] = jpegData
         }
@@ -380,17 +418,51 @@ public final class DigitalBookletService: @unchecked Sendable {
 
     // MARK: - Apple Digital Booklet Discovery (Music.app & ~/Music Media Library)
 
+    private func sanitizeFolderComponent(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed != ".",
+              trimmed != "..",
+              !trimmed.contains("/"),
+              !trimmed.contains("\\"),
+              !trimmed.contains("\0") else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private func isSafeSubpath(_ candidate: URL, under root: URL) -> Bool {
+        let rootPath = root.resolvingSymlinksInPath().standardizedFileURL.path
+        let candidatePath = candidate.resolvingSymlinksInPath().standardizedFileURL.path
+        let prefix = rootPath.hasSuffix("/") ? rootPath : (rootPath + "/")
+        return candidatePath == rootPath || candidatePath.hasPrefix(prefix)
+    }
+
+    private func isRegularNonSymlinkFile(_ url: URL) -> Bool {
+        guard let vals = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+              vals.isRegularFile == true,
+              vals.isSymbolicLink != true else {
+            return false
+        }
+        return true
+    }
+
     private func findAppleDigitalBookletPdf(album: String, artist: String) -> URL? {
         guard !album.isEmpty else { return nil }
         let fm = FileManager.default
 
-        let extraDirs = lock.withLock { additionalSearchDirectories }
+        let extraDirs = additionalSearchDirectories
         for root in extraDirs where fm.fileExists(atPath: root.path) {
-            let candidateDir = root
-                .appendingPathComponent(artist, isDirectory: true)
-                .appendingPathComponent(album, isDirectory: true)
-            if let pdf = firstPdfInDirectory(candidateDir) {
-                return pdf
+            if let safeArtist = sanitizeFolderComponent(artist),
+               let safeAlbum = sanitizeFolderComponent(album) {
+                let candidateDir = root
+                    .appendingPathComponent(safeArtist, isDirectory: true)
+                    .appendingPathComponent(safeAlbum, isDirectory: true)
+                if isSafeSubpath(candidateDir, under: root),
+                   let pdf = firstPdfInDirectory(candidateDir),
+                   isSafeSubpath(pdf, under: root) {
+                    return pdf
+                }
             }
             if let pdf = firstMatchingPdfInDirectory(root, album: album) {
                 return pdf
@@ -436,12 +508,19 @@ public final class DigitalBookletService: @unchecked Sendable {
             if let pathStr = AppleScriptExecutor.shared.execute(script).output?.trimmingCharacters(in: .whitespacesAndNewlines),
                !pathStr.isEmpty {
                 let url = URL(fileURLWithPath: pathStr)
-                if url.pathExtension.lowercased() == "pdf" && fm.fileExists(atPath: url.path) {
+                if url.pathExtension.lowercased() == "pdf" && fm.fileExists(atPath: url.path) && isRegularNonSymlinkFile(url) {
                     return url
                 }
-                let albumDir = url.deletingLastPathComponent()
-                if let foundInDir = firstPdfInDirectory(albumDir) {
-                    return foundInDir
+                if isRegularNonSymlinkFile(url) {
+                    let albumDir = url.deletingLastPathComponent()
+                    let isDedicatedAlbumFolder = albumDir.lastPathComponent.localizedCaseInsensitiveCompare(album) == .orderedSame
+                    if isDedicatedAlbumFolder {
+                        if let foundInDir = firstPdfInDirectory(albumDir), isSafeSubpath(foundInDir, under: albumDir) {
+                            return foundInDir
+                        }
+                    } else if let foundInDir = firstPdfInDirectory(albumDir, requireAlbumOrBookletMatch: album), isSafeSubpath(foundInDir, under: albumDir) {
+                        return foundInDir
+                    }
                 }
             }
         }
@@ -459,10 +538,17 @@ public final class DigitalBookletService: @unchecked Sendable {
         let artistVariants = Set([artist, "Compilations", "Various Artists"].filter { !$0.isEmpty })
         for root in musicRoots where fm.fileExists(atPath: root.path) {
             for artFolder in artistVariants {
+                guard let safeArtist = sanitizeFolderComponent(artFolder),
+                      let safeAlbum = sanitizeFolderComponent(album) else {
+                    continue
+                }
                 let candidateDir = root
-                    .appendingPathComponent(artFolder, isDirectory: true)
-                    .appendingPathComponent(album, isDirectory: true)
-                if let pdf = firstPdfInDirectory(candidateDir) {
+                    .appendingPathComponent(safeArtist, isDirectory: true)
+                    .appendingPathComponent(safeAlbum, isDirectory: true)
+                guard isSafeSubpath(candidateDir, under: root) else {
+                    continue
+                }
+                if let pdf = firstPdfInDirectory(candidateDir), isSafeSubpath(pdf, under: root) {
                     return pdf
                 }
             }
@@ -471,17 +557,23 @@ public final class DigitalBookletService: @unchecked Sendable {
         return nil
     }
 
-    private func firstPdfInDirectory(_ dir: URL) -> URL? {
+    private func firstPdfInDirectory(_ dir: URL, requireAlbumOrBookletMatch albumMatch: String? = nil) -> URL? {
         guard let items = try? FileManager.default.contentsOfDirectory(
             at: dir,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles]
         ) else {
             return nil
         }
-        let pdfs = items.filter { $0.pathExtension.lowercased() == "pdf" }
+        let pdfs = items.filter {
+            $0.pathExtension.lowercased() == "pdf" && isRegularNonSymlinkFile($0) && isSafeSubpath($0, under: dir)
+        }
         if let bookletPdf = pdfs.first(where: { $0.lastPathComponent.lowercased().contains("booklet") }) {
             return bookletPdf
+        }
+        if let album = albumMatch?.trimmingCharacters(in: .whitespacesAndNewlines), !album.isEmpty {
+            let normAlbum = album.lowercased()
+            return pdfs.first(where: { $0.lastPathComponent.lowercased().contains(normAlbum) })
         }
         return pdfs.first
     }
@@ -489,14 +581,17 @@ public final class DigitalBookletService: @unchecked Sendable {
     private func firstMatchingPdfInDirectory(_ dir: URL, album: String) -> URL? {
         guard let items = try? FileManager.default.contentsOfDirectory(
             at: dir,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles]
         ) else {
             return nil
         }
         let normAlbum = album.lowercased()
         return items.first { url in
-            url.pathExtension.lowercased() == "pdf" && url.lastPathComponent.lowercased().contains(normAlbum)
+            url.pathExtension.lowercased() == "pdf"
+                && url.lastPathComponent.lowercased().contains(normAlbum)
+                && isRegularNonSymlinkFile(url)
+                && isSafeSubpath(url, under: dir)
         }
     }
 
@@ -531,8 +626,8 @@ public final class DigitalBookletService: @unchecked Sendable {
                 .replacingOccurrences(of: #"\s*\[.*?\]"#, with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let searchTerm = "\(cleanAlbum.isEmpty ? album : cleanAlbum) \(artist)".trimmingCharacters(in: .whitespacesAndNewlines)
-            if let encoded = searchTerm.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-               let url = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=albums&limit=3&l=\(lang)") {
+            let encoded = searchTerm.amrQueryValueEncoded
+            if let url = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=albums&limit=3&l=\(lang)") {
                 var req = URLRequest(url: url)
                 req.timeoutInterval = 4.0
                 req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
@@ -796,8 +891,8 @@ public final class DigitalBookletService: @unchecked Sendable {
         guard !cleanAlbum.isEmpty else { return result }
 
         let queryStr = "release:\"\(cleanAlbum)\" AND artist:\"\(artist)\""
-        guard let encodedQ = queryStr.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let searchUrl = URL(string: "https://musicbrainz.org/ws/2/release?query=\(encodedQ)&limit=5&fmt=json") else {
+        let encodedQ = queryStr.amrQueryValueEncoded
+        guard let searchUrl = URL(string: "https://musicbrainz.org/ws/2/release?query=\(encodedQ)&limit=5&fmt=json") else {
             return result
         }
 
@@ -1047,10 +1142,13 @@ public final class DigitalBookletService: @unchecked Sendable {
         var result = WikiBookletNotes()
         guard !album.isEmpty else { return result }
 
-        // First try Russian Wikipedia, then English Wikipedia fallback
-        var extract = await fetchBestWikipediaAlbumExtract(album: album, artist: artist, lang: "ru")
+        let preferRu = MusicKitManager.shared.getPreferredLanguageTag().lowercased().hasPrefix("ru")
+        let primaryLang = preferRu ? "ru" : "en"
+        let secondaryLang = preferRu ? "en" : "ru"
+
+        var extract = await fetchBestWikipediaAlbumExtract(album: album, artist: artist, lang: primaryLang)
         if extract.isEmpty {
-            extract = await fetchBestWikipediaAlbumExtract(album: album, artist: artist, lang: "en")
+            extract = await fetchBestWikipediaAlbumExtract(album: album, artist: artist, lang: secondaryLang)
         }
 
         // Also include English Apple Music editorial text as supplemental source for track mentions if needed
@@ -1079,8 +1177,8 @@ public final class DigitalBookletService: @unchecked Sendable {
         guard !cleanAlbum.isEmpty else { return "" }
 
         let query = "\"\(cleanAlbum)\" \"\(artist)\""
-        guard let encodedQ = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let searchUrl = URL(string: "https://\(lang).wikipedia.org/w/api.php?action=query&list=search&srsearch=\(encodedQ)&srlimit=6&format=json") else {
+        let encodedQ = query.amrQueryValueEncoded
+        guard let searchUrl = URL(string: "https://\(lang).wikipedia.org/w/api.php?action=query&list=search&srsearch=\(encodedQ)&srlimit=6&format=json") else {
             return ""
         }
 
@@ -1121,9 +1219,11 @@ public final class DigitalBookletService: @unchecked Sendable {
                 return t.hasPrefix(normAlb)
             })?["title"] as? String
 
-        guard let pageTitle = chosenTitle,
-              let encodedTitle = pageTitle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let extUrl = URL(string: "https://\(lang).wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=\(encodedTitle)&format=json") else {
+        guard let pageTitle = chosenTitle else {
+            return ""
+        }
+        let encodedTitle = pageTitle.amrQueryValueEncoded
+        guard let extUrl = URL(string: "https://\(lang).wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=\(encodedTitle)&format=json") else {
             return ""
         }
 
@@ -1329,13 +1429,13 @@ public final class DigitalBookletService: @unchecked Sendable {
         }
     }
 
-    public func renderOfficialAppleEditorialBookletPdf(meta: AlbumCatalogMetadata, audioQualityLabel: String) -> Data {
+    public func renderOfficialAppleEditorialBookletPdf(meta: AlbumCatalogMetadata, audioQualityLabel: String? = nil) -> Data {
         return renderComprehensiveEditorialBookletPdf(meta: meta, audioQualityLabel: audioQualityLabel).data
     }
 
     public func renderComprehensiveEditorialBookletPdf(
         meta: AlbumCatalogMetadata,
-        audioQualityLabel: String
+        audioQualityLabel: String? = nil
     ) -> (data: Data, pageTitles: [String]) {
         let pageW: CGFloat = 720
         let pageH: CGFloat = 960
@@ -1458,7 +1558,7 @@ public final class DigitalBookletService: @unchecked Sendable {
                 drawCoverPage(
                     context: pdfCtx,
                     meta: meta,
-                    audioQualityLabel: audioQualityLabel,
+                    audioQualityLabel: audioQualityLabel ?? "",
                     width: pageW,
                     height: pageH,
                     pageNumber: pageNum,
@@ -1891,6 +1991,9 @@ public final class DigitalBookletService: @unchecked Sendable {
             context.setFillColor(CGColor(red: 0.98, green: 0.24, blue: 0.38, alpha: 0.85))
             context.fill(CGRect(x: margin, y: curY, width: 3.5, height: boxH))
 
+            context.saveGState()
+            context.clip(to: boxRect)
+
             let innerX = margin + 16
             var y = curY + 12
 
@@ -1964,7 +2067,7 @@ public final class DigitalBookletService: @unchecked Sendable {
 
             // 4. Structured Credits (Writers, Producers, Vocals, Instruments, Samples, Studios)
             let creditRows = buildTrackCreditRows(track: track)
-            if !creditRows.isEmpty {
+            if !creditRows.isEmpty && y < curY + boxH - 18 {
                 context.setStrokeColor(CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.08))
                 context.setLineWidth(0.7)
                 context.move(to: CGPoint(x: innerX, y: y + 2))
@@ -1976,6 +2079,9 @@ public final class DigitalBookletService: @unchecked Sendable {
                 rowStyle.lineSpacing = 2.5
 
                 for row in creditRows {
+                    if y >= curY + boxH - 12 {
+                        break
+                    }
                     let attrStr = NSMutableAttributedString(
                         string: "\(row.label): ",
                         attributes: [
@@ -2003,6 +2109,8 @@ public final class DigitalBookletService: @unchecked Sendable {
                     y += rH + 5
                 }
             }
+
+            context.restoreGState()
 
             curY += cardTotalH
         }
@@ -2258,11 +2366,26 @@ public final class DigitalBookletService: @unchecked Sendable {
         )
     }
 
+    private func purgeRenderedPagesUnlocked(forBookletId id: String) {
+        let prefix = "\(id)|"
+        let keysToRemove = renderedPageCache.keys.filter { $0.hasPrefix(prefix) }
+        for k in keysToRemove {
+            renderedPageCache.removeValue(forKey: k)
+        }
+        renderedPageOrder.removeAll { $0.hasPrefix(prefix) }
+    }
+
     private func storeInCache(bookletId: String, info: BookletInfo, pdfData: Data?, fileURL: URL?) {
         lock.withLock {
-            if bookletCache.count > 48 {
-                bookletCache.removeAll()
+            while bookletCache[bookletId] == nil && bookletCache.count >= 12 {
+                if let oldestKey = bookletCache.min(by: { $0.value.timestamp < $1.value.timestamp })?.key {
+                    bookletCache.removeValue(forKey: oldestKey)
+                    purgeRenderedPagesUnlocked(forBookletId: oldestKey)
+                } else {
+                    break
+                }
             }
+            purgeRenderedPagesUnlocked(forBookletId: bookletId)
             bookletCache[bookletId] = CachedBookletEntry(
                 info: info,
                 pdfData: pdfData,

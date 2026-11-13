@@ -9,6 +9,121 @@ import Network
 extension WebSocketServer {
     // MARK: - HTTP Request Handling & Media API
 
+    public func isAllowedOrigin(_ origin: String, hostHeader: String? = nil) -> Bool {
+        return isAllowedWebSocketOrigin(origin, requestHost: hostHeader)
+    }
+
+    internal static func maskAppleId(_ email: String?) -> String? {
+        guard let raw = email?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        if raw.contains("***") { return raw }
+        let parts = raw.split(separator: "@", maxSplits: 1)
+        if parts.count == 2 {
+            let local = String(parts[0])
+            let domain = String(parts[1])
+            let prefix = String(local.prefix(1))
+            return "\(prefix)***@\(domain)"
+        }
+        return "\(raw.prefix(1))***"
+    }
+
+    internal static func maskDsid(_ dsid: String?) -> String? {
+        guard let raw = dsid?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        if raw.contains("***") { return raw }
+        if raw.count > 4 {
+            return "***\(raw.suffix(4))"
+        }
+        return "***"
+    }
+
+    internal static func maskedAccountHealth(_ status: AccountHealthStatus) -> AccountHealthStatus {
+        var copy = status
+        let maskedEmail = maskAppleId(status.macAppleId)
+        let maskedId = maskDsid(status.macDsid)
+        if let origEmail = status.macAppleId, !origEmail.isEmpty, let mEmail = maskedEmail {
+            copy.message = copy.message.replacingOccurrences(of: origEmail, with: mEmail)
+        }
+        if let origDsid = status.macDsid, !origDsid.isEmpty, let mDsid = maskedId {
+            copy.message = copy.message.replacingOccurrences(of: origDsid, with: mDsid)
+        }
+        copy.macAppleId = maskedEmail
+        copy.macDsid = maskedId
+        return copy
+    }
+
+    internal func isAllowedDLNAStreamRequest(connection: NWConnection) -> Bool {
+        let remoteIP = extractRemoteIP(from: connection)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !remoteIP.isEmpty else { return false }
+        return DLNADiscoveryManager.shared.matchesSelectedRendererIP(remoteIP)
+    }
+
+    internal func isHTTPRequestAuthorized(headerString: String, fullPath: String, bodyData: Data, connection: NWConnection) -> Bool {
+        let firstLine = headerString.components(separatedBy: "\r\n").first
+            ?? headerString.components(separatedBy: "\n").first
+            ?? ""
+        let method = (firstLine.components(separatedBy: " ").first ?? "GET").uppercased()
+        let originHeader = extractHeader(named: "origin", from: headerString)
+        let hasOrigin = (originHeader?.isEmpty == false)
+        let secFetchMode = extractHeader(named: "sec-fetch-mode", from: headerString)?.lowercased() ?? ""
+        let ua = extractHeader(named: "user-agent", from: headerString) ?? ""
+
+        if let origin = originHeader, !origin.isEmpty {
+            guard isAllowedOrigin(origin, hostHeader: extractHeader(named: "host", from: headerString)) else {
+                return false
+            }
+        }
+
+        var candidateIds: [String] = []
+        if let hdrId = extractHeader(named: "x-amr-device-id", from: headerString), !hdrId.isEmpty {
+            candidateIds.append(hdrId)
+        }
+        if let cookieId = extractCookie(named: "amr_device_uid", from: headerString), !cookieId.isEmpty {
+            candidateIds.append(cookieId)
+        }
+        if let qIdx = fullPath.firstIndex(of: "?") {
+            let qs = String(fullPath[fullPath.index(after: qIdx)...])
+            for pair in qs.components(separatedBy: "&") {
+                let kv = pair.components(separatedBy: "=")
+                if kv.count == 2 && (kv[0] == "device_id" || kv[0] == "deviceId") {
+                    let val = kv[1].replacingOccurrences(of: "+", with: "%20").removingPercentEncoding ?? kv[1]
+                    if !val.isEmpty {
+                        candidateIds.append(val)
+                    }
+                }
+            }
+        }
+        if !bodyData.isEmpty,
+           let json = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any] {
+            if let topId = (json["device_id"] as? String) ?? (json["deviceId"] as? String), !topId.isEmpty {
+                candidateIds.append(topId)
+            }
+            if let params = json["params"] as? [String: Any],
+               let pId = (params["device_id"] as? String) ?? (params["deviceId"] as? String), !pId.isEmpty {
+                candidateIds.append(pId)
+            }
+        }
+
+        if !candidateIds.isEmpty {
+            return candidateIds.contains(where: { ClientDeviceManager.shared.isDeviceAuthorized(deviceId: $0) })
+        }
+
+        if method == "POST" && (hasOrigin || !secFetchMode.isEmpty || ua.contains("Mozilla/")) {
+            return false
+        }
+
+        let remoteIP = extractRemoteIP(from: connection).lowercased()
+        if remoteIP == "127.0.0.1" || remoteIP == "::1" || remoteIP == "localhost" || remoteIP == "::ffff:127.0.0.1" {
+            return true
+        }
+
+        if !hasOrigin && hasAuthorizedWebSocketClient(fromIP: remoteIP) {
+            return true
+        }
+
+        return false
+    }
+
     func handleHTTPRequest(headerString: String, bodyData: Data, connection: NWConnection) {
         let firstLine = headerString.components(separatedBy: "\r\n").first ?? headerString.components(separatedBy: "\n").first ?? ""
         let parts = firstLine.split(separator: " ")
@@ -20,6 +135,20 @@ extension WebSocketServer {
         let fullPath = String(parts[1])
         let path = fullPath.components(separatedBy: "?").first ?? fullPath
 
+        if method == "HEAD" {
+            clientLock.lock()
+            headRequestConnections.insert(ObjectIdentifier(connection))
+            clientLock.unlock()
+        }
+
+        if let origin = extractHeader(named: "origin", from: headerString), !origin.isEmpty {
+            if !isAllowedOrigin(origin, hostHeader: extractHeader(named: "host", from: headerString)) {
+                NSLog("[HTTP] ❌ Rejected HTTP request from untrusted Origin: %@", origin)
+                sendForbiddenWithoutCORS(connection: connection)
+                return
+            }
+        }
+
         if method == "OPTIONS" {
             sendCORSPreflight(connection: connection)
             return
@@ -29,11 +158,7 @@ extension WebSocketServer {
             switch path {
             case "/", "/index.html":
                 let content = loadWebAsset(filename: "index.html") ?? WebUIContent.indexHTML
-                let existingCookieUid = extractCookie(named: "amr_device_uid", from: headerString)
-                let cookieVal: String? = (existingCookieUid == nil || existingCookieUid?.isEmpty == true)
-                    ? "amr_device_uid=\(UUID().uuidString.lowercased()); Path=/; Max-Age=315360000; SameSite=Lax"
-                    : nil
-                sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0, setCookie: cookieVal)
+                sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0)
             case "/style.css":
                 let content = loadWebAsset(filename: "style.css") ?? WebUIContent.styleCSS
                 sendHTTPResponse(status: "200 OK", contentType: "text/css; charset=utf-8", body: Data(content.utf8), connection: connection, cacheSeconds: 0)
@@ -66,48 +191,81 @@ extension WebSocketServer {
                 }
             case let p where p.hasPrefix("/assets/"):
                 let sub = String(p.dropFirst("/assets/".count))
-                if let data = loadWebBinaryAsset(subpath: "assets/\(sub)") {
-                    let cType: String
-                    if sub.hasSuffix(".m4a") || sub.hasSuffix(".mp4") {
-                        cType = "audio/mp4"
-                    } else if sub.hasSuffix(".wav") {
-                        cType = "audio/wav"
-                    } else if sub.hasSuffix(".mp3") {
-                        cType = "audio/mpeg"
-                    } else if sub.hasSuffix(".png") {
-                        cType = "image/png"
-                    } else if sub.hasSuffix(".jpg") || sub.hasSuffix(".jpeg") {
-                        cType = "image/jpeg"
-                    } else if sub.hasSuffix(".svg") {
-                        cType = "image/svg+xml"
-                    } else {
-                        cType = "application/octet-stream"
-                    }
-                    if let rangeHeader = extractHeader(named: "Range", from: headerString),
-                       rangeHeader.hasPrefix("bytes=") {
-                        let spec = String(rangeHeader.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-                        let parts = spec.components(separatedBy: "-")
-                        if parts.count >= 2 {
-                            let startStr = parts[0]
-                            let endStr = parts[1]
-                            let total = data.count
-                            var start = Int(startStr) ?? 0
-                            var end = endStr.isEmpty ? (total - 1) : (Int(endStr) ?? (total - 1))
-                            if start < 0 { start = 0 }
-                            if end >= total { end = total - 1 }
-                            if start <= end && start < total {
-                                let chunk = data.subdata(in: start..<(end + 1))
-                                sendPartialHTTPResponse(contentType: cType, rangeStart: start, rangeEnd: end, totalLength: total, body: chunk, connection: connection, cacheSeconds: 86400 * 30)
-                                return
-                            }
-                        }
-                    }
-                    sendHTTPResponse(status: "200 OK", contentType: cType, body: data, connection: connection, cacheSeconds: 86400 * 30)
+                var assetData = loadWebBinaryAsset(subpath: "assets/\(sub)")
+                var cType: String
+                if sub.hasSuffix(".m4a") || sub.hasSuffix(".mp4") {
+                    cType = "audio/mp4"
+                } else if sub.hasSuffix(".wav") {
+                    cType = "audio/wav"
+                } else if sub.hasSuffix(".mp3") {
+                    cType = "audio/mpeg"
+                } else if sub.hasSuffix(".png") {
+                    cType = "image/png"
+                } else if sub.hasSuffix(".jpg") || sub.hasSuffix(".jpeg") {
+                    cType = "image/jpeg"
+                } else if sub.hasSuffix(".svg") {
+                    cType = "image/svg+xml"
+                } else {
+                    cType = "application/octet-stream"
+                }
+                if assetData == nil && (p == "/assets/silence.wav" || p == "/assets/silence.m4a") {
+                    let pcmBytes = 44100 * 2 * 3
+                    var wav = makeWAVHeader(sampleRate: 44100, bitDepth: 16, channels: 1, dataSize: pcmBytes)
+                    wav.append(Data(count: pcmBytes))
+                    assetData = wav
+                    cType = "audio/wav"
+                }
+                guard let data = assetData else {
+                    sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
                     return
                 }
+                if let rangeHeader = extractHeader(named: "Range", from: headerString),
+                   rangeHeader.hasPrefix("bytes=") {
+                    let spec = String(rangeHeader.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                    let parts = spec.components(separatedBy: "-")
+                    if parts.count >= 2 {
+                        let startStr = parts[0].trimmingCharacters(in: .whitespaces)
+                        let endStr = parts[1].trimmingCharacters(in: .whitespaces)
+                        let total = data.count
+                        let start: Int
+                        let end: Int
+                        if startStr.isEmpty {
+                            let suffix = Int(endStr) ?? 0
+                            guard suffix > 0, total > 0 else {
+                                sendRangeNotSatisfiable(totalLength: total, connection: connection)
+                                return
+                            }
+                            start = max(0, total - suffix)
+                            end = total - 1
+                        } else {
+                            guard let parsedStart = Int(startStr), parsedStart >= 0 else {
+                                sendRangeNotSatisfiable(totalLength: total, connection: connection)
+                                return
+                            }
+                            start = parsedStart
+                            let parsedEnd = endStr.isEmpty ? (total - 1) : (Int(endStr) ?? (total - 1))
+                            end = min(parsedEnd, total - 1)
+                        }
+                        guard start < total && start <= end else {
+                            sendRangeNotSatisfiable(totalLength: total, connection: connection)
+                            return
+                        }
+                        let chunk = data.subdata(in: start..<(end + 1))
+                        sendPartialHTTPResponse(contentType: cType, rangeStart: start, rangeEnd: end, totalLength: total, body: chunk, connection: connection, cacheSeconds: 86400 * 30)
+                        return
+                    }
+                }
+                sendHTTPResponse(status: "200 OK", contentType: cType, body: data, connection: connection, cacheSeconds: 86400 * 30)
+                return
             case "/stream/live.wav", "/stream/live":
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection)
+                        || isAllowedDLNAStreamRequest(connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 if method == "HEAD" {
-                    let headResp = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                    _ = consumeHeadRequestFlag(for: connection)
+                    let headResp = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n"
                     connection.send(content: Data(headResp.utf8), completion: .contentProcessed({ [weak connection] _ in
                         connection?.cancel()
                     }))
@@ -182,7 +340,7 @@ extension WebSocketServer {
                     for pair in qs.components(separatedBy: "&") {
                         let parts = pair.components(separatedBy: "=")
                         if parts.count == 2 {
-                            let val = parts[1].removingPercentEncoding ?? ""
+                            let val = parts[1].replacingOccurrences(of: "+", with: "%20").removingPercentEncoding ?? ""
                             if parts[0] == "name" { trackName = val }
                             else if parts[0] == "artist" { trackArtist = val }
                             else if parts[0] == "album" { trackAlbum = val }
@@ -193,13 +351,13 @@ extension WebSocketServer {
                 let tArtist = trackArtist
                 let tAlbum = trackAlbum
                 let lowName = tName.lowercased()
-                if lowName.contains("моя станция") {
+                if lowName.contains("моя станция") || lowName.contains("my station") {
                     sendRedirect(location: "/assets/stations/CoverPersonal.png", connection: connection, cacheSeconds: 86400)
                     return
-                } else if lowName.contains("станция открытий") {
+                } else if lowName.contains("станция открытий") || lowName.contains("discovery station") {
                     sendRedirect(location: "/assets/stations/CoverDiscovery.png", connection: connection, cacheSeconds: 86400)
                     return
-                } else if lowName.contains("сейчас на повторе") {
+                } else if lowName.contains("сейчас на повторе") || lowName.contains("heavy rotation") {
                     sendRedirect(location: "/assets/stations/CoverHeavyRotation.svg", connection: connection, cacheSeconds: 86400)
                     return
                 } else if lowName.contains("apple music 1") {
@@ -229,13 +387,24 @@ extension WebSocketServer {
                     for pair in qs.components(separatedBy: "&") {
                         let parts = pair.components(separatedBy: "=")
                         if parts.count == 2 {
-                            let val = parts[1].removingPercentEncoding ?? ""
+                            let val = parts[1].replacingOccurrences(of: "+", with: "%20").removingPercentEncoding ?? ""
                             if parts[0] == "id" { trackId = Int(val) ?? 0 }
                             else if parts[0] == "name" { paramName = val }
                             else if parts[0] == "artist" { paramArtist = val }
                             else if parts[0] == "album" { paramAlbum = val }
                         }
                     }
+                }
+                let lowTrackName = paramName.lowercased()
+                if lowTrackName.contains("моя станция") || lowTrackName.contains("my station") {
+                    sendRedirect(location: "/assets/stations/CoverPersonal.png", connection: connection, cacheSeconds: 86400)
+                    return
+                } else if lowTrackName.contains("станция открытий") || lowTrackName.contains("discovery station") {
+                    sendRedirect(location: "/assets/stations/CoverDiscovery.png", connection: connection, cacheSeconds: 86400)
+                    return
+                } else if lowTrackName.contains("сейчас на повторе") || lowTrackName.contains("heavy rotation") {
+                    sendRedirect(location: "/assets/stations/CoverHeavyRotation.svg", connection: connection, cacheSeconds: 86400)
+                    return
                 }
                 if trackId > 0, let art = MusicBridge.shared.getTrackArtwork(id: trackId), !art.isEmpty {
                     sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
@@ -320,7 +489,8 @@ extension WebSocketServer {
                     return
                 }
                 if method == "HEAD" {
-                    let headResp = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nContent-Length: \(data.count)\r\nAccept-Ranges: bytes\r\nCache-Control: public, max-age=604800\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                    _ = consumeHeadRequestFlag(for: connection)
+                    let headResp = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nContent-Length: \(data.count)\r\nAccept-Ranges: bytes\r\nCache-Control: public, max-age=604800\r\nConnection: close\r\n\r\n"
                     connection.send(content: Data(headResp.utf8), completion: .contentProcessed({ [weak connection] _ in
                         connection?.cancel()
                     }))
@@ -331,23 +501,44 @@ extension WebSocketServer {
                     let spec = String(rangeHeader.dropFirst(6)).trimmingCharacters(in: .whitespaces)
                     let parts = spec.components(separatedBy: "-")
                     if parts.count >= 2 {
-                        let startStr = parts[0]
-                        let endStr = parts[1]
+                        let startStr = parts[0].trimmingCharacters(in: .whitespaces)
+                        let endStr = parts[1].trimmingCharacters(in: .whitespaces)
                         let total = data.count
-                        var start = Int(startStr) ?? 0
-                        var end = endStr.isEmpty ? (total - 1) : (Int(endStr) ?? (total - 1))
-                        if start < 0 { start = 0 }
-                        if end >= total { end = total - 1 }
-                        if start <= end && start < total {
-                            let chunk = data.subdata(in: start..<(end + 1))
-                            sendPartialHTTPResponse(contentType: "video/mp4", rangeStart: start, rangeEnd: end, totalLength: total, body: chunk, connection: connection, cacheSeconds: 86400 * 7)
+                        let start: Int
+                        let end: Int
+                        if startStr.isEmpty {
+                            let suffix = Int(endStr) ?? 0
+                            guard suffix > 0, total > 0 else {
+                                sendRangeNotSatisfiable(totalLength: total, connection: connection)
+                                return
+                            }
+                            start = max(0, total - suffix)
+                            end = total - 1
+                        } else {
+                            guard let parsedStart = Int(startStr), parsedStart >= 0 else {
+                                sendRangeNotSatisfiable(totalLength: total, connection: connection)
+                                return
+                            }
+                            start = parsedStart
+                            let parsedEnd = endStr.isEmpty ? (total - 1) : (Int(endStr) ?? (total - 1))
+                            end = min(parsedEnd, total - 1)
+                        }
+                        guard start < total && start <= end else {
+                            sendRangeNotSatisfiable(totalLength: total, connection: connection)
                             return
                         }
+                        let chunk = data.subdata(in: start..<(end + 1))
+                        sendPartialHTTPResponse(contentType: "video/mp4", rangeStart: start, rangeEnd: end, totalLength: total, body: chunk, connection: connection, cacheSeconds: 86400 * 7)
+                        return
                     }
                 }
                 sendHTTPResponse(status: "200 OK", contentType: "video/mp4", body: data, connection: connection, cacheSeconds: 86400 * 7)
                 return
             case "/api/status":
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 let status = MusicBridge.shared.getPlayerStatus()
                 if let data = try? JSONEncoder().encode(status) {
                     sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
@@ -355,6 +546,10 @@ extension WebSocketServer {
                     sendHTTPResponse(status: "500 Internal Server Error", contentType: "text/plain", body: Data("{}".utf8), connection: connection)
                 }
             case let p where p.hasPrefix("/api/duck"):
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 var reduction = 80.0
                 var timeout: Double? = nil
                 if let components = URLComponents(string: fullPath) {
@@ -378,6 +573,10 @@ extension WebSocketServer {
                 sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
 
             case "/api/unduck":
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 let res = MusicBridge.shared.deactivateDucking()
                 broadcastStatus(includeQueue: false)
                 let respObj: [String: Any] = [
@@ -390,6 +589,10 @@ extension WebSocketServer {
                 sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
 
             case "/api/booklet/info":
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 var qAlbum: String? = nil
                 var qArtist: String? = nil
                 var qAlbumId: String? = nil
@@ -423,6 +626,10 @@ extension WebSocketServer {
                 }
 
             case "/api/booklet/page":
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 var bookletId = ""
                 var pageIndex = 0
                 var scale: Double = 1600
@@ -448,6 +655,10 @@ extension WebSocketServer {
                 }
 
             case "/api/booklet/pdf":
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 var bookletId = ""
                 if let components = URLComponents(string: fullPath) {
                     bookletId = components.queryItems?.first(where: { $0.name == "id" })?.value ?? ""
@@ -462,6 +673,10 @@ extension WebSocketServer {
                 sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
             }
         } else if method == "POST" && (path == "/api/duck" || path == "/api/unduck") {
+            guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                return
+            }
             if path == "/api/duck" {
                 var reduction = 80.0
                 var timeout: Double? = nil
@@ -497,6 +712,10 @@ extension WebSocketServer {
                 sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: data, connection: connection)
             }
         } else if method == "POST" && path == "/api/media" {
+            guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                return
+            }
             Task {
                 await handleMediaAPI(bodyData: bodyData, connection: connection)
             }
@@ -572,7 +791,7 @@ extension WebSocketServer {
             let ok = bridge.stop()
             resultData["success"] = ok
             if DLNADiscoveryManager.shared.hasActiveRenderer {
-                DLNADiscoveryManager.shared.stop()
+                DLNADiscoveryManager.shared.stopPlayback()
             }
             broadcastStatus(includeQueue: false)
 
@@ -759,7 +978,8 @@ extension WebSocketServer {
 
         case "get_account_status", "account_health":
             let force = (params["refresh"] as? Bool) ?? false
-            let health = await AccountHealthService.shared.checkAccountHealth(forceRefresh: force)
+            let rawHealth = await AccountHealthService.shared.checkAccountHealth(forceRefresh: force)
+            let health = Self.maskedAccountHealth(rawHealth)
             if let enc = try? JSONEncoder().encode(health),
                let dict = try? JSONSerialization.jsonObject(with: enc) as? [String: Any] {
                 resultData["data"] = dict
@@ -799,7 +1019,7 @@ extension WebSocketServer {
             for pair in qs.components(separatedBy: "&") {
                 let parts = pair.components(separatedBy: "=")
                 if parts.count == 2 {
-                    if parts[0] == "rate", let r = Int(parts[1]), r > 0 {
+                    if parts[0] == "rate", let r = Int(parts[1]), (8_000...768_000).contains(r) {
                         requestedRate = r
                     } else if (parts[0] == "bits" || parts[0] == "depth"), let b = Int(parts[1]), (b == 16 || b == 24) {
                         requestedBits = b
@@ -809,12 +1029,22 @@ extension WebSocketServer {
         }
 
         let detectedDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth
-        let effectiveRate = requestedRate ?? AudioProcessTapService.shared.sampleRate
-        let effectiveBits = requestedBits ?? detectedDepth ?? (effectiveRate >= 48000 ? 24 : 16)
+        let isAuthorizedCaller = isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: Data(), connection: connection)
+        let canConfigureCapture = !AudioProcessTapService.shared.isCapturing && isAuthorizedCaller
+        let effectiveRate: Int
+        let effectiveBits: Int
+        if canConfigureCapture {
+            let rate = requestedRate ?? AudioProcessTapService.shared.sampleRate
+            let bits = requestedBits ?? detectedDepth ?? (rate >= 48000 ? 24 : 16)
+            AudioProcessTapService.shared.setFormat(sampleRate: rate, bitDepth: bits)
+            effectiveRate = AudioProcessTapService.shared.sampleRate
+            effectiveBits = AudioProcessTapService.shared.bitDepth
+        } else {
+            effectiveRate = AudioProcessTapService.shared.sampleRate
+            effectiveBits = AudioProcessTapService.shared.bitDepth
+        }
 
-        AudioProcessTapService.shared.setFormat(sampleRate: effectiveRate, bitDepth: effectiveBits)
-
-        let httpHeader = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+        let httpHeader = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n"
 
         let wavHeader = AudioProcessTapService.shared.makeWAVHeader(sampleRate: effectiveRate, bitDepth: effectiveBits)
         var initData = Data(httpHeader.utf8)
@@ -855,34 +1085,63 @@ extension WebSocketServer {
         }
     }
 
-    private func makeWAVHeader(sampleRate: Int, channels: Int, bitsPerSample: Int) -> Data {
+    internal func makeWAVHeader(sampleRate: Int = 44100, bitDepth: Int = 16, channels: Int = 1, dataSize: Int = 0x7FFFFFFF - 36) -> Data {
         var header = Data()
         header.append(contentsOf: "RIFF".utf8)
-        var chunkSize: UInt32 = 0x7FFFFFFF
+        let clampedDataSize = max(0, min(dataSize, 0x7FFFFFFF - 36))
+        var chunkSize = UInt32(clampedDataSize + 36).littleEndian
         header.append(Data(bytes: &chunkSize, count: 4))
         header.append(contentsOf: "WAVEfmt ".utf8)
-        var subchunk1Size: UInt32 = 16
+        var subchunk1Size = UInt32(16).littleEndian
         header.append(Data(bytes: &subchunk1Size, count: 4))
-        var audioFormat: UInt16 = 1
+        var audioFormat = UInt16(1).littleEndian
         header.append(Data(bytes: &audioFormat, count: 2))
-        var numChannels = UInt16(channels)
+        var numChannels = UInt16(channels).littleEndian
         header.append(Data(bytes: &numChannels, count: 2))
-        var sRate = UInt32(sampleRate)
+        var sRate = UInt32(sampleRate).littleEndian
         header.append(Data(bytes: &sRate, count: 4))
-        var byteRate = UInt32(sampleRate * channels * bitsPerSample / 8)
+        var byteRate = UInt32(sampleRate * channels * bitDepth / 8).littleEndian
         header.append(Data(bytes: &byteRate, count: 4))
-        var blockAlign = UInt16(channels * bitsPerSample / 8)
+        var blockAlign = UInt16(channels * bitDepth / 8).littleEndian
         header.append(Data(bytes: &blockAlign, count: 2))
-        var bits = UInt16(bitsPerSample)
+        var bits = UInt16(bitDepth).littleEndian
         header.append(Data(bytes: &bits, count: 2))
         header.append(contentsOf: "data".utf8)
-        var dataSize: UInt32 = 0x7FFFFFFF - 36
-        header.append(Data(bytes: &dataSize, count: 4))
+        var subchunk2Size = UInt32(clampedDataSize).littleEndian
+        header.append(Data(bytes: &subchunk2Size, count: 4))
         return header
     }
 
-    private func sendHTTPResponse(status: String, contentType: String, body: Data, connection: NWConnection, cacheSeconds: Int = 0, setCookie: String? = nil) {
-        var header = "HTTP/1.1 \(status)\r\nContent-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nAccept-Ranges: bytes\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: Range, Content-Type\r\nConnection: close\r\n"
+    private func consumeHeadRequestFlag(for connection: NWConnection) -> Bool {
+        clientLock.lock()
+        defer { clientLock.unlock() }
+        return headRequestConnections.remove(ObjectIdentifier(connection)) != nil
+    }
+
+    private func sendForbiddenWithoutCORS(connection: NWConnection) {
+        let isHead = consumeHeadRequestFlag(for: connection)
+        let body = Data("{\"status\":\"error\",\"error\":\"Forbidden Origin\"}".utf8)
+        let header = "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+        var respData = Data(header.utf8)
+        if !isHead {
+            respData.append(body)
+        }
+        connection.send(content: respData, completion: .contentProcessed({ [weak connection] _ in
+            connection?.cancel()
+        }))
+    }
+
+    private func sendRangeNotSatisfiable(totalLength: Int, connection: NWConnection) {
+        _ = consumeHeadRequestFlag(for: connection)
+        let header = "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */\(totalLength)\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak connection] _ in
+            connection?.cancel()
+        }))
+    }
+
+    private func sendHTTPResponse(status: String, contentType: String, body: Data, connection: NWConnection, cacheSeconds: Int = 0, setCookie: String? = nil, headOnly: Bool = false) {
+        let isHead = headOnly || consumeHeadRequestFlag(for: connection)
+        var header = "HTTP/1.1 \(status)\r\nContent-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nAccept-Ranges: bytes\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID\r\nConnection: close\r\n"
         if let cookie = setCookie, !cookie.isEmpty {
             header += "Set-Cookie: \(cookie)\r\n"
         }
@@ -893,14 +1152,17 @@ extension WebSocketServer {
         }
         header += "\r\n"
         var respData = Data(header.utf8)
-        respData.append(body)
+        if !isHead {
+            respData.append(body)
+        }
         connection.send(content: respData, completion: .contentProcessed({ [weak connection] _ in
             connection?.cancel()
         }))
     }
 
     private func sendPartialHTTPResponse(contentType: String, rangeStart: Int, rangeEnd: Int, totalLength: Int, body: Data, connection: NWConnection, cacheSeconds: Int = 2592000) {
-        var header = "HTTP/1.1 206 Partial Content\r\nContent-Type: \(contentType)\r\nContent-Range: bytes \(rangeStart)-\(rangeEnd)/\(totalLength)\r\nContent-Length: \(body.count)\r\nAccept-Ranges: bytes\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type\r\n"
+        let isHead = consumeHeadRequestFlag(for: connection)
+        var header = "HTTP/1.1 206 Partial Content\r\nContent-Type: \(contentType)\r\nContent-Range: bytes \(rangeStart)-\(rangeEnd)/\(totalLength)\r\nContent-Length: \(body.count)\r\nAccept-Ranges: bytes\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID\r\n"
         if cacheSeconds > 0 {
             header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
         } else {
@@ -908,7 +1170,9 @@ extension WebSocketServer {
         }
         header += "Connection: close\r\n\r\n"
         var respData = Data(header.utf8)
-        respData.append(body)
+        if !isHead {
+            respData.append(body)
+        }
         connection.send(content: respData, completion: .contentProcessed({ [weak connection] _ in
             connection?.cancel()
         }))
@@ -924,15 +1188,17 @@ extension WebSocketServer {
     }
 
     private func sendCORSPreflight(connection: NWConnection) {
-        let header = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        _ = consumeHeadRequestFlag(for: connection)
+        let header = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak connection] _ in
             connection?.cancel()
         }))
     }
 
     private func sendRedirect(location: String, connection: NWConnection, cacheSeconds: Int = 0) {
+        _ = consumeHeadRequestFlag(for: connection)
         let safeLocation = location.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "")
-        var header = "HTTP/1.1 302 Found\r\nLocation: \(safeLocation)\r\nContent-Length: 0\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n"
+        var header = "HTTP/1.1 302 Found\r\nLocation: \(safeLocation)\r\nContent-Length: 0\r\nConnection: close\r\n"
         if cacheSeconds > 0 {
             header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
         } else {
@@ -945,24 +1211,30 @@ extension WebSocketServer {
     }
 
     internal func loadWebAsset(filename: String) -> String? {
-        let currentDir = FileManager.default.currentDirectoryPath
-        let thisFile = URL(fileURLWithPath: #filePath)
-        let rootMac = thisFile.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-
-        var candidates: [String] = []
-        if let resourcePath = Bundle.main.resourcePath {
-            candidates.append((resourcePath as NSString).appendingPathComponent("Web/\(filename)"))
+        guard !filename.isEmpty,
+              !filename.contains(".."),
+              !filename.hasPrefix("/"),
+              !filename.hasPrefix("\\") else {
+            return nil
         }
-        candidates.append((currentDir as NSString).appendingPathComponent("AppleMusicRemoteMac/Web/\(filename)"))
-        candidates.append((currentDir as NSString).appendingPathComponent("Web/\(filename)"))
-        candidates.append(((currentDir as NSString).appendingPathComponent("..") as NSString).appendingPathComponent("AppleMusicRemoteMac/Web/\(filename)"))
-        candidates.append(rootMac.appendingPathComponent("Web/\(filename)").path)
-        candidates.append(rootMac.appendingPathComponent("AppleMusicRemoteMac/Web/\(filename)").path)
-        candidates.append("/Users/kirill/Documents/projects/amr/AppleMusicRemoteMac/Web/\(filename)")
 
-        for path in candidates {
-            if FileManager.default.fileExists(atPath: path),
-               let content = try? String(contentsOfFile: path, encoding: .utf8) {
+        let currentDir = FileManager.default.currentDirectoryPath
+
+        var baseWebDirs: [URL] = []
+        if let resourcePath = Bundle.main.resourcePath {
+            baseWebDirs.append(URL(fileURLWithPath: resourcePath).appendingPathComponent("Web"))
+        }
+        baseWebDirs.append(URL(fileURLWithPath: currentDir).appendingPathComponent("AppleMusicRemoteMac/Web"))
+        baseWebDirs.append(URL(fileURLWithPath: currentDir).appendingPathComponent("Web"))
+        baseWebDirs.append(URL(fileURLWithPath: currentDir).deletingLastPathComponent().appendingPathComponent("AppleMusicRemoteMac/Web"))
+        baseWebDirs.append(URL(fileURLWithPath: currentDir).deletingLastPathComponent().appendingPathComponent("Web"))
+
+        for baseWebURL in baseWebDirs {
+            let basePath = baseWebURL.standardizedFileURL.path
+            let resolvedURL = baseWebURL.appendingPathComponent(filename).standardizedFileURL
+            guard resolvedURL.path.hasPrefix(basePath + "/") else { continue }
+            if FileManager.default.fileExists(atPath: resolvedURL.path),
+               let content = try? String(contentsOfFile: resolvedURL.path, encoding: .utf8) {
                 return content
             }
         }
@@ -980,24 +1252,30 @@ extension WebSocketServer {
     }
 
     internal func loadWebBinaryAsset(subpath: String) -> Data? {
-        let currentDir = FileManager.default.currentDirectoryPath
-        let thisFile = URL(fileURLWithPath: #filePath)
-        let rootMac = thisFile.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-
-        var candidates: [String] = []
-        if let resourcePath = Bundle.main.resourcePath {
-            candidates.append((resourcePath as NSString).appendingPathComponent("Web/\(subpath)"))
+        guard !subpath.isEmpty,
+              !subpath.contains(".."),
+              !subpath.hasPrefix("/"),
+              !subpath.hasPrefix("\\") else {
+            return nil
         }
-        candidates.append((currentDir as NSString).appendingPathComponent("AppleMusicRemoteMac/Web/\(subpath)"))
-        candidates.append((currentDir as NSString).appendingPathComponent("Web/\(subpath)"))
-        candidates.append(((currentDir as NSString).appendingPathComponent("..") as NSString).appendingPathComponent("AppleMusicRemoteMac/Web/\(subpath)"))
-        candidates.append(rootMac.appendingPathComponent("Web/\(subpath)").path)
-        candidates.append(rootMac.appendingPathComponent("AppleMusicRemoteMac/Web/\(subpath)").path)
-        candidates.append("/Users/kirill/Documents/projects/amr/AppleMusicRemoteMac/Web/\(subpath)")
 
-        for path in candidates {
-            if FileManager.default.fileExists(atPath: path),
-               let data = try? Data(contentsOf: URL(fileURLWithPath: path)) {
+        let currentDir = FileManager.default.currentDirectoryPath
+
+        var baseWebDirs: [URL] = []
+        if let resourcePath = Bundle.main.resourcePath {
+            baseWebDirs.append(URL(fileURLWithPath: resourcePath).appendingPathComponent("Web"))
+        }
+        baseWebDirs.append(URL(fileURLWithPath: currentDir).appendingPathComponent("AppleMusicRemoteMac/Web"))
+        baseWebDirs.append(URL(fileURLWithPath: currentDir).appendingPathComponent("Web"))
+        baseWebDirs.append(URL(fileURLWithPath: currentDir).deletingLastPathComponent().appendingPathComponent("AppleMusicRemoteMac/Web"))
+        baseWebDirs.append(URL(fileURLWithPath: currentDir).deletingLastPathComponent().appendingPathComponent("Web"))
+
+        for baseWebURL in baseWebDirs {
+            let basePath = baseWebURL.standardizedFileURL.path
+            let resolvedURL = baseWebURL.appendingPathComponent(subpath).standardizedFileURL
+            guard resolvedURL.path.hasPrefix(basePath + "/") else { continue }
+            if FileManager.default.fileExists(atPath: resolvedURL.path),
+               let data = try? Data(contentsOf: resolvedURL) {
                 return data
             }
         }

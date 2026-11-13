@@ -60,6 +60,7 @@ import ScriptingBridge
     func playpause()
     func playOnce(_ once: Bool)
     func pause()
+    @objc optional func stop()
     func nextTrack()
     func previousTrack()
     func backTrack()
@@ -231,7 +232,8 @@ public final class MusicAppProvider: @unchecked Sendable {
 
         lastMusicPid = currentPid
         if let raw = SBApplication(bundleIdentifier: "com.apple.Music") {
-            raw.timeout = 2
+            // 120 ticks = 2 seconds (1/60s per tick in SBApplication / AESendMessage)
+            raw.timeout = 120
             let app = unsafeBitCast(raw, to: MusicApplicationProtocol.self)
             self.musicApp = app
             return app

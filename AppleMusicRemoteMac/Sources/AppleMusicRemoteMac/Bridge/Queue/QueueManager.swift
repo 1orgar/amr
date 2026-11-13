@@ -14,6 +14,7 @@ public final class QueueManager: @unchecked Sendable {
 
     private let lock = NSLock()
     let monitorLock = NSRecursiveLock()
+    let timerLock = NSLock()
     private var albumTracksCache: [String: (timestamp: Date, tracks: [TrackInfo])] = [:]
     var queueTimer: DispatchSourceTimer?
     let queueTimerQueue = DispatchQueue(label: "org.ksholokhov.amr.queue.timer", qos: .utility)
@@ -23,25 +24,25 @@ public final class QueueManager: @unchecked Sendable {
     // MARK: - Recently Played
 
     public func getRecentlyPlayed(limit: Int = 30) -> [TrackInfo] {
-        var tracks = LibraryService.shared.getPlaylistTracks(name: "Любимые песни")
+        let hist = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.latestHistoryTracks }
+        if !hist.isEmpty {
+            return Array(hist.prefix(limit))
+        }
+        var tracks = LibraryService.shared.getPlaylistTracks(name: "Недавно добавленные")
+        if tracks.isEmpty {
+            tracks = LibraryService.shared.getPlaylistTracks(name: "Recently Added")
+        }
+        if tracks.isEmpty {
+            tracks = LibraryService.shared.getPlaylistTracks(name: "Любимые песни")
+        }
         if tracks.isEmpty {
             tracks = LibraryService.shared.getPlaylistTracks(name: "Favorites")
-        }
-        if tracks.isEmpty {
-            tracks = LibraryService.shared.getPlaylistTracks(name: "Недавно добавленные")
-        }
-        if tracks.isEmpty {
-            tracks = LibraryService.shared.getPlaylistTracks(name: "Классика рока")
         }
         if tracks.isEmpty {
             tracks = Array(LibraryService.shared.getLibrarySongs().prefix(limit))
         }
         if !tracks.isEmpty {
             return Array(tracks.prefix(limit))
-        }
-        let hist = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.latestHistoryTracks }
-        if !hist.isEmpty {
-            return Array(hist.prefix(limit))
         }
         return []
     }

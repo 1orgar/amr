@@ -160,6 +160,8 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public func resetPlaybackState(originalPlaylist: String? = nil, isRadio: Bool = false, stationName: String? = nil) {
         lock.lock()
         defer { lock.unlock() }
+        playbackGeneration &+= 1
+        isStagingCloudTrack = false
         isUserPaused = false
         currentOriginalPlaylistName = originalPlaylist
         isRadioPlayback = isRadio
@@ -168,7 +170,11 @@ public final class PlaybackStateStore: @unchecked Sendable {
         isCustomQueuePlayback = false
         activeCustomQueue.removeAll()
         originalCustomQueue.removeAll()
+        activeCustomQueueIndex = 0
         activeCustomQueueName = nil
+        isShuffleQueueActive = false
+        activeShuffledQueue.removeAll()
+        activeShuffledPlaylistName = nil
         currentTrackPlaybackConfirmed = false
         hasTriggeredAdvanceForCurrentTrack = false
         lastWasPlayingCloud = false
@@ -187,6 +193,8 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public func resetCustomQueue() {
         lock.lock()
         defer { lock.unlock() }
+        playbackGeneration &+= 1
+        isStagingCloudTrack = false
         isUserPaused = false
         isCustomQueuePlayback = false
         activeCustomQueue.removeAll()
@@ -206,6 +214,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
         isShuffleQueueActive = false
         repeatMode = "off"
         activeShuffledQueue.removeAll()
+        activeShuffledPlaylistName = nil
         activeSearchQuery = nil
         activeSearchCountry = nil
         activeSearchOffset = 0

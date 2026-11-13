@@ -57,15 +57,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
 
         // 5. Start Bit-Perfect Unified Log Monitoring & CoreAudio Listeners
         BitPerfectLogMonitor.shared.start()
-        BitPerfectLogMonitor.shared.onFormatChanged = { _, _, _ in
-            MenuManager.shared.updateMenuState()
+        BitPerfectLogMonitor.shared.addFormatChangedObserver(id: "AppDelegate") { _, _, _ in
+            Task { @MainActor in
+                MenuManager.shared.updateMenuState()
+            }
         }
 
-        CoreAudioDeviceManager.shared.onDevicesChanged = { _ in
-            MenuManager.shared.updateMenuState()
+        CoreAudioDeviceManager.shared.addDevicesChangedObserver(id: "AppDelegate") { _ in
+            Task { @MainActor in
+                MenuManager.shared.updateMenuState()
+            }
         }
-        CoreAudioDeviceManager.shared.onSampleRateChanged = { _, _ in
-            MenuManager.shared.updateMenuState()
+        CoreAudioDeviceManager.shared.addSampleRateChangedObserver(id: "AppDelegate") { _, _ in
+            Task { @MainActor in
+                MenuManager.shared.updateMenuState()
+            }
         }
 
         // 6. Observe System Sleep / Wake to restore network listeners & multicast discovery

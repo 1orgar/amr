@@ -33,6 +33,41 @@ DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 export DEVELOPER_DIR
 SDK_PATH="$(xcrun --show-sdk-path)"
 
+echo "🔄 Syncing Web/* assets with embedded WebUIContent*.swift..."
+python3 - "$MAC_DIR" << 'PYEOF'
+import os, re, sys
+base = sys.argv[1]
+for name, sw, prop in [("app.js", "WebUIContent+JS.swift", "appJS"), ("style.css", "WebUIContent+CSS.swift", "styleCSS"), ("index.html", "WebUIContent+HTML.swift", "indexHTML")]:
+    web_path = os.path.join(base, "Web", name)
+    sw_path = os.path.join(base, "Sources", "AppleMusicRemoteMac", "Server", sw)
+    if os.path.isfile(web_path) and os.path.isfile(sw_path):
+        with open(web_path, "r", encoding="utf-8") as f:
+            web_s = f.read().rstrip("\n")
+        out = f"//\n//  {sw}\n//  AppleMusicRemoteMac\n//\n\nimport Foundation\n\nextension WebUIContent {{\n    public static let {prop}: String = #\"\"\"\n{web_s}\n\"\"\"#\n}}\n"
+        with open(sw_path, "r", encoding="utf-8") as f:
+            cur_s = f.read()
+        if cur_s != out:
+            with open(sw_path, "w", encoding="utf-8") as f:
+                f.write(out)
+
+core_sw_path = os.path.join(base, "Sources", "AppleMusicRemoteMac", "Server", "WebUIContent.swift")
+if os.path.isfile(core_sw_path):
+    with open(core_sw_path, "r", encoding="utf-8") as f:
+        core_s = f.read()
+    orig_core_s = core_s
+    for name, props in [("manifest.json", ("manifestJSON",)), ("sw.js", ("serviceWorkerJS", "swJS")), ("apple-touch-icon.svg", ("appleTouchIconSVG",))]:
+        web_path = os.path.join(base, "Web", name)
+        if os.path.isfile(web_path):
+            with open(web_path, "r", encoding="utf-8") as f:
+                web_s = f.read().rstrip("\n")
+            for prop in props:
+                pattern = rf'(public\s+static\s+let\s+{prop}\s*:\s*String\s*=\s*)(?:#"""|""")\n.*?\n\s*(?:"""#|""")'
+                core_s = re.sub(pattern, lambda m: f'{m.group(1)}#"""\n{web_s}\n"""#', core_s, flags=re.DOTALL)
+    if core_s != orig_core_s:
+        with open(core_sw_path, "w", encoding="utf-8") as f:
+            f.write(core_s)
+PYEOF
+
 SWIFT_SOURCES=()
 while IFS= read -r -d '' file; do
     SWIFT_SOURCES+=("$file")
@@ -92,11 +127,42 @@ fi
 if [ -f "$ROOT_DIR/SharedAssets/Icons/macOS/icon_256x256.png" ]; then
     cp "$ROOT_DIR/SharedAssets/Icons/macOS/icon_256x256.png" "$RESOURCES_DIR/icon.png"
 fi
+rm -f "$RESOURCES_DIR"/AuthKey_*.p8
+rm -f "$HOME/Library/Application Support/AppleMusicRemoteMac/AuthKey_MJHWRCSZHH.p8"
 if [ -f "$ROOT_DIR/AuthKey_MJHWRCSZHH.p8" ]; then
-    echo "🔑 Bundling MusicKit AuthKey_MJHWRCSZHH.p8 into Resources..."
-    cp "$ROOT_DIR/AuthKey_MJHWRCSZHH.p8" "$RESOURCES_DIR/AuthKey_MJHWRCSZHH.p8"
+    echo "🎟️ Minting pre-signed public MusicKit Developer JWT into Resources/musickit_dev_token.jwt..."
+    xcrun swift -module-cache-path "$MODULE_CACHE" - "$ROOT_DIR/AuthKey_MJHWRCSZHH.p8" "$RESOURCES_DIR/musickit_dev_token.jwt" << 'SWIFTEOF'
+import Foundation
+import CryptoKit
+
+let args = CommandLine.arguments
+guard args.count >= 3 else { exit(1) }
+let pem = try String(contentsOfFile: args[1], encoding: .utf8)
+let cleaned = pem
+    .replacingOccurrences(of: "-----BEGIN PRIVATE KEY-----", with: "")
+    .replacingOccurrences(of: "-----END PRIVATE KEY-----", with: "")
+    .replacingOccurrences(of: "\n", with: "")
+    .replacingOccurrences(of: "\r", with: "")
+    .trimmingCharacters(in: .whitespacesAndNewlines)
+guard let der = Data(base64Encoded: cleaned) else { exit(1) }
+let key = try P256.Signing.PrivateKey(derRepresentation: der)
+func b64url(_ d: Data) -> String {
+    d.base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+}
+let now = Int(Date().timeIntervalSince1970)
+let exp = now + 86400 * 180
+let header = try JSONSerialization.data(withJSONObject: ["alg": "ES256", "kid": "MJHWRCSZHH"])
+let payload = try JSONSerialization.data(withJSONObject: ["iss": "886CSW93R8", "iat": now, "exp": exp])
+let signingInput = "\(b64url(header)).\(b64url(payload))"
+let sig = try key.signature(for: Data(signingInput.utf8))
+let jwt = "\(signingInput).\(b64url(sig.rawRepresentation))"
+try jwt.write(toFile: args[2], atomically: true, encoding: .utf8)
+SWIFTEOF
 else
-    echo "ℹ️ AuthKey_MJHWRCSZHH.p8 not found; building DMG without embedded key"
+    echo "ℹ️ AuthKey_MJHWRCSZHH.p8 not found on build host; building DMG without pre-signed dev token"
 fi
 
 GIT_COMMIT_SHORT="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || echo "7278dab")"
@@ -162,7 +228,7 @@ fi
 
 if [ -n "$SIGN_IDENTITY" ]; then
     echo "🔏 Signing with identity: $SIGN_IDENTITY"
-    codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+    codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_BUNDLE" 2>/dev/null || codesign --force --deep --sign - "$APP_BUNDLE"
 else
     echo "🔏 Ad-hoc codesigning Universal binary..."
     codesign --force --deep --sign - "$APP_BUNDLE"

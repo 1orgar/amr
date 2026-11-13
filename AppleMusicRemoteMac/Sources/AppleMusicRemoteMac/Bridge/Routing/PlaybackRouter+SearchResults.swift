@@ -11,15 +11,24 @@ extension PlaybackRouter {
 
     public func playCustomTracks(_ tracks: [TrackInfo], startIndex: Int, shuffle: Bool, queueName: String?) -> Bool {
         guard !tracks.isEmpty else { return false }
+        var finalTracks = LibraryService.shared.resolveLocalLibraryMatches(tracks, updateNames: false)
         let targetIndex: Int = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.playbackGeneration &+= 1
+            PlaybackStateStore.shared.isStagingCloudTrack = false
+            PlaybackStateStore.shared.isUserPaused = false
             let displayName = queueName?.isEmpty == false ? queueName! : "Очередь"
             PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
             PlaybackStateStore.shared.activeCustomQueueName = displayName
             PlaybackStateStore.shared.isCustomQueuePlayback = true
             PlaybackStateStore.shared.isRadioPlayback = false
+            PlaybackStateStore.shared.activeStationName = (queueName == "Сейчас на повторе") ? "Сейчас на повторе" : nil
+            PlaybackStateStore.shared.activeSearchQuery = nil
+            PlaybackStateStore.shared.activeSearchOffset = 0
+            PlaybackStateStore.shared.isFetchingNextSearchPage = false
+            PlaybackStateStore.shared.activeCuratorPrompt = nil
+            PlaybackStateStore.shared.isFetchingNextCuratorPage = false
             PlaybackStateStore.shared.isShuffleQueueActive = shuffle
 
-            var finalTracks = LibraryService.shared.resolveLocalLibraryMatches(tracks, updateNames: false)
             var unshuffledFormatted = [TrackInfo]()
             for (idx, var t) in finalTracks.enumerated() {
                 t.index = idx + 1
@@ -59,7 +68,7 @@ extension PlaybackRouter {
         return playCustomTracks(tracks, startIndex: startIndex, shuffle: shuffle, queueName: queueName)
     }
 
-    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool, queueName: String? = nil, query: String? = nil, curatorPrompt: String? = nil) async -> Bool {
+    public func playSearchResults(tracks: [TrackInfo], startIndex: Int = 0, shuffle: Bool, queueName: String? = nil, query: String? = nil, curatorPrompt: String? = nil, incrementGeneration: Bool = true) async -> Bool {
         guard !tracks.isEmpty else { return false }
         let resolvedQueueName = (queueName?.isEmpty == false) ? queueName! : "Результаты поиска"
         var playList = tracks
@@ -101,6 +110,10 @@ extension PlaybackRouter {
 
         BitPerfectLogMonitor.shared.resetTrackState()
         PlaybackStateStore.shared.withLock {
+            if incrementGeneration {
+                PlaybackStateStore.shared.playbackGeneration &+= 1
+            }
+            PlaybackStateStore.shared.isStagingCloudTrack = false
             PlaybackStateStore.shared.isUserPaused = false
             PlaybackStateStore.shared.isRadioPlayback = false
             PlaybackStateStore.shared.activeStationName = nil
@@ -334,7 +347,9 @@ extension PlaybackRouter {
             excluding: existingTracks
         )
         let stillSameSession = PlaybackStateStore.shared.withLock {
-            PlaybackStateStore.shared.isCustomQueuePlayback && PlaybackStateStore.shared.activeCuratorPrompt == prompt
+            PlaybackStateStore.shared.isCustomQueuePlayback &&
+            PlaybackStateStore.shared.playbackGeneration == targetGen &&
+            PlaybackStateStore.shared.activeCuratorPrompt == prompt
         }
         guard stillSameSession, !rawWave.isEmpty else {
             PlaybackStateStore.shared.withLock {
@@ -351,12 +366,21 @@ extension PlaybackRouter {
     }
 
     public func fetchAndAppendNextSearchResults(query: String) async {
-        let (currentCount, country) = PlaybackStateStore.shared.withLock {
-            (PlaybackStateStore.shared.activeCustomQueue.count, PlaybackStateStore.shared.activeSearchCountry ?? "ru")
+        let (currentCount, country, expectedGen) = PlaybackStateStore.shared.withLock {
+            (
+                PlaybackStateStore.shared.activeCustomQueue.count,
+                PlaybackStateStore.shared.activeSearchCountry ?? "ru",
+                PlaybackStateStore.shared.playbackGeneration
+            )
         }
         NSLog("[PlaybackRouter] 🔍 Auto-fetching next search page for '%@' at offset %d", query, currentCount)
         let res = await CloudCatalogService.shared.search(query: query, country: country, source: "all", limit: 25, offset: currentCount)
-        guard let songsArray = res["songs"]?.value as? [[String: Any]], !songsArray.isEmpty else {
+        let stillSameSearch = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback &&
+            PlaybackStateStore.shared.playbackGeneration == expectedGen &&
+            PlaybackStateStore.shared.activeSearchQuery == query
+        }
+        guard stillSameSearch, let songsArray = res["songs"]?.value as? [[String: Any]], !songsArray.isEmpty else {
             PlaybackStateStore.shared.withLock {
                 PlaybackStateStore.shared.isFetchingNextSearchPage = false
             }
@@ -396,16 +420,19 @@ extension PlaybackRouter {
         public let station: String?
         public let query: String?
         public let count: Int?
+        public let expectedGeneration: UInt64
 
-        public init(success: Bool, station: String? = nil, query: String? = nil, count: Int? = nil) {
+        public init(success: Bool, station: String? = nil, query: String? = nil, count: Int? = nil, expectedGeneration: UInt64 = 0) {
             self.success = success
             self.station = station
             self.query = query
             self.count = count
+            self.expectedGeneration = expectedGeneration
         }
     }
 
     public func searchAndPlayDetailed(query: String) async -> SearchAndPlayResult {
+        let expectedGen = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.playbackGeneration }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // 1. If query is empty -> randomly pick one of three stations:
@@ -419,18 +446,22 @@ extension PlaybackRouter {
                 ok = playPlaylist(name: "Сейчас на повторе", trackId: nil, trackIndex: nil, shuffle: true)
             case "станция открытий":
                 let personal = await MusicKitManager.shared.fetchPersonalStations()
-                let discUrl = personal.discovery?.url
-                    ?? "https://music.apple.com/station/item/ra.q-GAI6IDk2Yjk1YTAzMWEyZmIwYWExYWJiNzBmZjc1N2FhOTVm"
+                guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+                    return SearchAndPlayResult(success: false, station: chosen, query: nil, count: nil, expectedGeneration: expectedGen)
+                }
+                let discUrl = personal.discovery?.url ?? ""
                 ok = await playStation(url: discUrl, name: "Станция открытий")
             case "моя станция":
                 let personal = await MusicKitManager.shared.fetchPersonalStations()
-                let myUrl = personal.personal?.url
-                    ?? "https://music.apple.com/station/my-station/ra.u-96b95a031a2fb0aa1abb70ff757aa95f"
+                guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+                    return SearchAndPlayResult(success: false, station: chosen, query: nil, count: nil, expectedGeneration: expectedGen)
+                }
+                let myUrl = personal.personal?.url ?? ""
                 ok = await playStation(url: myUrl, name: "Моя станция")
             default:
                 ok = false
             }
-            return SearchAndPlayResult(success: ok, station: chosen, query: nil, count: nil)
+            return SearchAndPlayResult(success: ok, station: chosen, query: nil, count: nil, expectedGeneration: expectedGen &+ 1)
         }
 
         // 2. Query provided -> perform search and play found results sequentially
@@ -438,11 +469,17 @@ extension PlaybackRouter {
         let userSf = MusicKitManager.shared.getUserStorefront()
         let fallbackSf = (userSf == "us") ? "ru" : "us"
         var searchResults = await CloudCatalogService.shared.search(query: q, country: userSf, source: "all")
+        guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+            return SearchAndPlayResult(success: false, station: nil, query: q, count: 0, expectedGeneration: expectedGen)
+        }
         var anySongs = (searchResults["songs"]?.value as? [[String: Any]]) ?? []
 
         // 2b. Storefront fallback if primary storefront returned no songs
         if anySongs.isEmpty {
             searchResults = await CloudCatalogService.shared.search(query: q, country: fallbackSf, source: "all")
+            guard PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+                return SearchAndPlayResult(success: false, station: nil, query: q, count: 0, expectedGeneration: expectedGen)
+            }
             anySongs = (searchResults["songs"]?.value as? [[String: Any]]) ?? []
         }
 
@@ -491,7 +528,7 @@ extension PlaybackRouter {
         }
 
         guard !anySongs.isEmpty else {
-            return SearchAndPlayResult(success: false, station: nil, query: q, count: 0)
+            return SearchAndPlayResult(success: false, station: nil, query: q, count: 0, expectedGeneration: expectedGen)
         }
 
         // 2d. Build TrackInfo list
@@ -525,13 +562,14 @@ extension PlaybackRouter {
             ))
         }
 
-        guard !trackInfos.isEmpty else {
-            return SearchAndPlayResult(success: false, station: nil, query: q, count: 0)
+        guard !trackInfos.isEmpty,
+              PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.playbackGeneration == expectedGen }) else {
+            return SearchAndPlayResult(success: false, station: nil, query: q, count: 0, expectedGeneration: expectedGen)
         }
 
         // 2e. Play found results sequentially (shuffle: false)
         let ok = await playSearchResults(tracks: trackInfos, shuffle: false)
-        return SearchAndPlayResult(success: ok, station: nil, query: q, count: trackInfos.count)
+        return SearchAndPlayResult(success: ok, station: nil, query: q, count: trackInfos.count, expectedGeneration: expectedGen &+ 1)
     }
 
     public func searchAndPlay(query: String) async -> Bool {

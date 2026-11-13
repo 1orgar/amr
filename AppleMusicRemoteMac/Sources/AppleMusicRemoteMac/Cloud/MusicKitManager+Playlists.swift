@@ -25,13 +25,17 @@ extension MusicKitManager {
             }
         }
 
+        let safeName = name
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+
         // Remove any old temporary queue playlists in Music.app so they do not accumulate
         // and so that their deletion syncs to iCloud, ensuring only ONE queue playlist exists.
         if !PlaybackRouter.shared.isTestingEnvironment {
             _ = AppleScriptExecutor.shared.execute("""
             tell application "Music"
                 try
-                    repeat with p in (get every user playlist whose name is "\(name)")
+                    repeat with p in (get every user playlist whose name is "\(safeName)")
                         try
                             delete p
                         end try
@@ -101,7 +105,7 @@ extension MusicKitManager {
             let (ok, out) = AppleScriptExecutor.shared.execute("""
             tell application "Music"
                 set maxTracks to 0
-                repeat with p in (get every user playlist whose name is "\(name)")
+                repeat with p in (get every user playlist whose name is "\(safeName)")
                     try
                         set c to count of tracks of p
                         if c > maxTracks then
@@ -343,14 +347,22 @@ extension MusicKitManager {
         req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
 
         let sema = DispatchSemaphore(value: 0)
+        let boxLock = NSLock()
         var ok = false
-        session.dataTask(with: req) { _, resp, _ in
+        let task = session.dataTask(with: req) { _, resp, _ in
             if let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) {
+                boxLock.lock()
                 ok = true
+                boxLock.unlock()
             }
             sema.signal()
-        }.resume()
-        _ = sema.wait(timeout: .now() + 4.0)
+        }
+        task.resume()
+        if sema.wait(timeout: .now() + 4.0) == .timedOut {
+            task.cancel()
+        }
+        boxLock.lock()
+        defer { boxLock.unlock() }
         return ok
     }
 
@@ -360,7 +372,8 @@ extension MusicKitManager {
         let sf = getUserStorefront()
         let lang = getPreferredLanguageTag()
         let query = "\(name) \(artist)".trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty, let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        guard !query.isEmpty else { return nil }
+        let encoded = query.amrQueryValueEncoded
         guard let url = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=songs&limit=5&l=\(lang)") else { return nil }
 
         var req = URLRequest(url: url)
@@ -372,12 +385,13 @@ extension MusicKitManager {
         }
 
         let sema = DispatchSemaphore(value: 0)
+        let boxLock = NSLock()
         var resolvedId: String?
         let targetNameNorm = LibraryService.normalizeMatchingTitle(name)
         let targetBaseNorm = LibraryService.normalizeMatchingTitle(Self.extractBaseTrackTitle(name))
         let targetArtistNorm = artist.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
 
-        session.dataTask(with: req) { data, resp, _ in
+        let task = session.dataTask(with: req) { data, resp, _ in
             defer { sema.signal() }
             guard let d = data, let http = resp as? HTTPURLResponse, http.statusCode == 200,
                   let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
@@ -394,15 +408,25 @@ extension MusicKitManager {
                 let sArtist = ((attr["artistName"] as? String) ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                 let artistOk = targetArtistNorm.isEmpty || (!sArtist.isEmpty && (sArtist.contains(targetArtistNorm) || targetArtistNorm.contains(sArtist)))
                 if artistOk && (sName == targetNameNorm || (!targetBaseNorm.isEmpty && sBase == targetBaseNorm)) {
+                    boxLock.lock()
                     resolvedId = sid
+                    boxLock.unlock()
                     return
                 }
             }
             if targetArtistNorm.isEmpty {
-                resolvedId = arr.first?["id"] as? String
+                let firstId = arr.first?["id"] as? String
+                boxLock.lock()
+                resolvedId = firstId
+                boxLock.unlock()
             }
-        }.resume()
-        _ = sema.wait(timeout: .now() + 3.5)
+        }
+        task.resume()
+        if sema.wait(timeout: .now() + 3.5) == .timedOut {
+            task.cancel()
+        }
+        boxLock.lock()
+        defer { boxLock.unlock() }
         return resolvedId
     }
 
@@ -460,8 +484,9 @@ extension MusicKitManager {
         }
 
         let sema = DispatchSemaphore(value: 0)
+        let boxLock = NSLock()
         var resolved: (name: String, artist: String)?
-        session.dataTask(with: req) { data, resp, _ in
+        let task = session.dataTask(with: req) { data, resp, _ in
             defer { sema.signal() }
             guard let d = data, let http = resp as? HTTPURLResponse, http.statusCode == 200,
                   let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
@@ -470,9 +495,16 @@ extension MusicKitManager {
                   let attr = first["attributes"] as? [String: Any],
                   let locName = attr["name"] as? String, !locName.isEmpty else { return }
             let locArtist = (attr["artistName"] as? String) ?? ""
+            boxLock.lock()
             resolved = (locName, locArtist)
-        }.resume()
-        _ = sema.wait(timeout: .now() + 2.5)
+            boxLock.unlock()
+        }
+        task.resume()
+        if sema.wait(timeout: .now() + 2.5) == .timedOut {
+            task.cancel()
+        }
+        boxLock.lock()
+        defer { boxLock.unlock() }
         return resolved
     }
 
@@ -790,8 +822,20 @@ extension MusicKitManager {
             end try
         end tell
         """]
-        try? pUpd.run()
-        pUpd.waitUntilExit()
+        let doneSema = DispatchSemaphore(value: 0)
+        pUpd.terminationHandler = { _ in
+            doneSema.signal()
+        }
+        do {
+            try pUpd.run()
+            if doneSema.wait(timeout: .now() + 3.0) == .timedOut {
+                if pUpd.isRunning {
+                    pUpd.terminate()
+                }
+            }
+        } catch {
+            // Ignore osascript launch failure
+        }
     }
 
     private func extractCatalogIdsFromTracks(_ tracks: [TrackInfo]) -> [String] {
@@ -839,8 +883,8 @@ extension MusicKitManager {
            let token = devToken {
             let sf = getUserStorefront()
             let lang = getPreferredLanguageTag()
-            if let encoded = cleanName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-               let searchUrl = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=playlists&limit=5&l=\(lang)") {
+            let encoded = cleanName.amrQueryValueEncoded
+            if let searchUrl = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=playlists&limit=5&l=\(lang)") {
                 var sReq = URLRequest(url: searchUrl)
                 sReq.timeoutInterval = 4.0
                 sReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -983,8 +1027,8 @@ extension MusicKitManager {
             let sf = getUserStorefront()
             let lang = getPreferredLanguageTag()
             let query = "\(cleanName) \(cleanArtist)".trimmingCharacters(in: .whitespacesAndNewlines)
-            if let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-               let searchUrl = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=albums&limit=3&l=\(lang)") {
+            let encoded = query.amrQueryValueEncoded
+            if let searchUrl = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=albums&limit=3&l=\(lang)") {
                 var sReq = URLRequest(url: searchUrl)
                 sReq.timeoutInterval = 4.0
                 sReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

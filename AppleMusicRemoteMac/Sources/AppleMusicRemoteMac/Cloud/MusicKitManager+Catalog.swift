@@ -11,7 +11,7 @@ extension MusicKitManager {
     public func searchAppleMusic(query: String, storefront: String = "us", limit: Int = 25, offset: Int = 0, timeout: TimeInterval = 5.0) async -> [String: Any]? {
         guard !Task.isCancelled else { return nil }
         guard let token = getDeveloperToken() else { return nil }
-        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        let encodedQuery = query.amrQueryValueEncoded
 
         let sf = storefront.lowercased()
         let effectiveLimit = max(1, min(limit, 25))
@@ -90,7 +90,7 @@ extension MusicKitManager {
         if let barIdx = query.firstIndex(of: "|") {
             query = String(query[..<barIdx]).trimmingCharacters(in: .whitespaces)
         }
-        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        let encodedQuery = query.amrQueryValueEncoded
 
         let sf = storefront.lowercased()
         let lang = getPreferredLanguageTag()
@@ -335,7 +335,7 @@ extension MusicKitManager {
             let lang = getPreferredLanguageTag()
             for sf in uniqueSfs {
                 for candidate in candidates {
-                    guard let enc = candidate.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                    let enc = candidate.amrQueryValueEncoded
                     let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(enc)&types=artists&limit=5&l=\(lang)"
                     guard let url = URL(string: urlStr) else { continue }
                     var req = URLRequest(url: url)
@@ -394,7 +394,7 @@ extension MusicKitManager {
 
         // 2. Fallback to iTunes Store Search API
         for candidate in candidates {
-            guard let enc = candidate.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+            let enc = candidate.amrQueryValueEncoded
             for country in uniqueSfs {
                 let countryParam = country.isEmpty ? "" : "&country=\(country)"
                 let searchUrlStr = "https://itunes.apple.com/search?term=\(enc)&entity=musicArtist&limit=5\(countryParam)"
@@ -501,7 +501,7 @@ extension MusicKitManager {
                 if let b = bestCandidate, b.score >= 0.85 { break }
                 for q in queries {
                     if let b = bestCandidate, b.score >= 0.85 { break }
-                    guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                    let encoded = q.amrQueryValueEncoded
                     let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=songs&limit=10&l=\(lang)"
                     guard let url = URL(string: urlStr) else { continue }
                     var req = URLRequest(url: url)
@@ -580,7 +580,7 @@ extension MusicKitManager {
         // 2. Fallback to iTunes Store Search API
         for country in uniqueSfs {
             for q in queries {
-                guard let enc = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                let enc = q.amrQueryValueEncoded
                 let searchUrlStr = "https://itunes.apple.com/search?term=\(enc)&entity=song&limit=10&country=\(country)"
                 guard let url = URL(string: searchUrlStr) else { continue }
                 var req = URLRequest(url: url)
@@ -683,7 +683,7 @@ extension MusicKitManager {
                 if foundArtUrl != nil { break }
                 for q in queries {
                     if foundArtUrl != nil { break }
-                    guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                    let encoded = q.amrQueryValueEncoded
                     let urlStr = "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=songs&limit=1&l=\(lang)"
                     guard let url = URL(string: urlStr) else { continue }
                     var request = URLRequest(url: url)
@@ -720,7 +720,7 @@ extension MusicKitManager {
         if foundArtUrl == nil {
             for q in queries {
                 if foundArtUrl != nil { break }
-                guard let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { continue }
+                let encoded = q.amrQueryValueEncoded
                 let itunesUrlStr = "https://itunes.apple.com/search?term=\(encoded)&entity=song&limit=1"
                 guard let itunesUrl = URL(string: itunesUrlStr) else { continue }
                 var req = URLRequest(url: itunesUrl)
@@ -766,7 +766,7 @@ extension MusicKitManager {
             .replacingOccurrences(of: "[Deluxe Edition]", with: "")
             .trimmingCharacters(in: .whitespaces)
         let query = "\(cleanAlbum) \(artist)".trimmingCharacters(in: .whitespaces)
-        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return [] }
+        let encodedQuery = query.amrQueryValueEncoded
 
         let sf = storefront.lowercased()
         let lang = getPreferredLanguageTag()
@@ -1196,8 +1196,7 @@ extension MusicKitManager {
             let searchTerm = (!cleanAlbum.isEmpty ? "\(cleanAlbum) \(cleanArtist)" : "\(cleanTrack) \(cleanArtist)")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !searchTerm.isEmpty,
-               let encoded = searchTerm.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-               let searchUrl = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=albums,songs&limit=3&l=\(lang)") {
+               let searchUrl = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(searchTerm.amrQueryValueEncoded)&types=albums,songs&limit=3&l=\(lang)") {
                 var req = URLRequest(url: searchUrl)
                 req.timeoutInterval = 3.5
                 req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
