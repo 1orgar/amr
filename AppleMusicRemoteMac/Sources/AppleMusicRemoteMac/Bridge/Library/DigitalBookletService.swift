@@ -130,9 +130,14 @@ public final class DigitalBookletService: @unchecked Sendable {
         }
     }
 
+    private struct BookletBox: @unchecked Sendable {
+        let info: BookletInfo
+    }
+
     private let lock = NSLock()
     private let pdfRenderLock = NSLock()
     private var bookletCache: [String: CachedBookletEntry] = [:]
+    private var inFlightBookletTasks: [String: Task<BookletBox, Never>] = [:]
     private var renderedPageCache: [String: Data] = [:]
     private var renderedPageOrder: [String] = []
     private let maxRenderedPageCacheEntries = 60
@@ -179,12 +184,15 @@ public final class DigitalBookletService: @unchecked Sendable {
         trackName: String? = nil,
         forceRefresh: Bool = false
     ) async -> BookletInfo {
-        let status = MusicBridge.shared.getPlayerStatus()
-        let effAlbum = (album?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
-            ?? status.track?.album.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAlbum = (album?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        let trimmedArtist = (artist?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        let fallbackStatus: PlayerStatus? = (trimmedAlbum == nil || trimmedArtist == nil) ? MusicBridge.shared.getPlayerStatus() : nil
+
+        let effAlbum = trimmedAlbum
+            ?? fallbackStatus?.track?.album.trimmingCharacters(in: .whitespacesAndNewlines)
             ?? ""
-        let effArtist = (artist?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
-            ?? status.track?.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effArtist = trimmedArtist
+            ?? fallbackStatus?.track?.artist.trimmingCharacters(in: .whitespacesAndNewlines)
             ?? ""
 
         let bookletId = Self.makeBookletId(album: effAlbum, artist: effArtist)
@@ -194,16 +202,65 @@ public final class DigitalBookletService: @unchecked Sendable {
         }
 
         if !forceRefresh {
-            let cachedInfo: BookletInfo? = lock.withLock {
+            let lookup: (cached: BookletInfo?, existingTask: Task<BookletBox, Never>?) = lock.withLock {
                 if let cached = bookletCache[bookletId], Date().timeIntervalSince(cached.timestamp) < 300 {
-                    return cached.info
+                    return (cached.info, nil)
                 }
-                return nil
+                return (nil, inFlightBookletTasks[bookletId])
             }
-            if let info = cachedInfo {
+            if let info = lookup.cached {
                 return info
             }
+            if let existing = lookup.existingTask {
+                return (await existing.value).info
+            }
+
+            let task = Task<BookletBox, Never> {
+                let resolved = await self.performResolveBooklet(
+                    bookletId: bookletId,
+                    effAlbum: effAlbum,
+                    effArtist: effArtist,
+                    albumId: albumId,
+                    trackName: trackName,
+                    fallbackStatus: fallbackStatus
+                )
+                return BookletBox(info: resolved)
+            }
+            let taskToAwait: Task<BookletBox, Never> = lock.withLock {
+                if let raced = inFlightBookletTasks[bookletId] {
+                    task.cancel()
+                    return raced
+                }
+                inFlightBookletTasks[bookletId] = task
+                return task
+            }
+            let result = (await taskToAwait.value).info
+            lock.withLock {
+                if inFlightBookletTasks[bookletId] == taskToAwait {
+                    inFlightBookletTasks.removeValue(forKey: bookletId)
+                }
+            }
+            return result
         }
+
+        return await performResolveBooklet(
+            bookletId: bookletId,
+            effAlbum: effAlbum,
+            effArtist: effArtist,
+            albumId: albumId,
+            trackName: trackName,
+            fallbackStatus: fallbackStatus
+        )
+    }
+
+    private func performResolveBooklet(
+        bookletId: String,
+        effAlbum: String,
+        effArtist: String,
+        albumId: String?,
+        trackName: String?,
+        fallbackStatus: PlayerStatus?
+    ) async -> BookletInfo {
 
         // 1. Check Music.app library & local Apple Music / iTunes Media folders for a native PDF file
         if let localPdfUrl = findAppleDigitalBookletPdf(album: effAlbum, artist: effArtist),
@@ -264,8 +321,9 @@ public final class DigitalBookletService: @unchecked Sendable {
             || meta.tracks.contains { !$0.commentary.isEmpty || !$0.instruments.isEmpty || !$0.vocals.isEmpty || !$0.producers.isEmpty }
 
         if hasRichContent {
+            let cachedStatus = fallbackStatus ?? PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastPlayerStatusCache?.status }
             let isPlayingRequestedAlbum: Bool = {
-                guard let curTrack = status.track else { return false }
+                guard let curTrack = cachedStatus?.track else { return false }
                 let curAlbum = curTrack.album.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !curAlbum.isEmpty && curAlbum.localizedCaseInsensitiveCompare(effAlbum) == .orderedSame {
                     return true
@@ -276,7 +334,7 @@ public final class DigitalBookletService: @unchecked Sendable {
                 }
                 return false
             }()
-            let qualityLabel: String? = isPlayingRequestedAlbum ? status.audioQuality : nil
+            let qualityLabel: String? = isPlayingRequestedAlbum ? cachedStatus?.audioQuality : nil
             let (pdfData, pageTitles) = renderComprehensiveEditorialBookletPdf(meta: meta, audioQualityLabel: qualityLabel)
             if let doc = PDFDocument(data: pdfData), doc.pageCount > 0 {
                 let editorialPayload = buildEditorialContentPayload(from: meta)

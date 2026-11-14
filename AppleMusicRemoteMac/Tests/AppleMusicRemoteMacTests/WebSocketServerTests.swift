@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Network
 @testable import AppleMusicRemoteMac
 
 final class WebSocketServerTests: XCTestCase {
@@ -154,5 +155,72 @@ final class WebSocketServerTests: XCTestCase {
             let parts = ip.split(separator: ".")
             XCTAssertEqual(parts.count, 4, "IP address \(ip) should have 4 octets")
         }
+    }
+
+    func testHTTPRequestAuthorizationRequiresAuthorizedDeviceForLANClient() {
+        let server = WebSocketServer.shared
+        let lanConn = NWConnection(host: "10.10.30.77", port: 8080, using: .tcp)
+        let testUid = "test-http-auth-\(UUID().uuidString.lowercased())"
+        defer {
+            ClientDeviceManager.shared.removeDevice(deviceId: testUid)
+        }
+
+        let unauthHeader = "GET /api/artwork/track?id=123 HTTP/1.1\r\nHost: 10.10.30.1:8080\r\n\r\n"
+        XCTAssertFalse(
+            server.isHTTPRequestAuthorized(
+                headerString: unauthHeader,
+                fullPath: "/api/artwork/track?id=123",
+                bodyData: Data(),
+                connection: lanConn
+            ),
+            "Unauthenticated LAN HTTP request to /api/artwork/track must be rejected"
+        )
+
+        let invite = ClientDeviceManager.shared.createInviteToken(ttlSeconds: 60)
+        let connId = UUID()
+        _ = ClientDeviceManager.shared.registerConnection(
+            connectionId: connId,
+            deviceId: testUid,
+            deviceName: "Unit Test iPhone",
+            deviceType: "mobile",
+            preferredLockScreen: true,
+            remoteIP: "10.10.30.77",
+            inviteToken: invite
+        )
+        ClientDeviceManager.shared.unregisterConnection(connectionId: connId)
+
+        let authHeader = "GET /api/artwork/track?id=123 HTTP/1.1\r\nHost: 10.10.30.1:8080\r\nCookie: amr_device_uid=\(testUid)\r\n\r\n"
+        XCTAssertTrue(
+            server.isHTTPRequestAuthorized(
+                headerString: authHeader,
+                fullPath: "/api/artwork/track?id=123",
+                bodyData: Data(),
+                connection: lanConn
+            ),
+            "Authorized device Cookie must pass HTTP request authorization"
+        )
+    }
+
+    func testDispatchClientTextMessageRegistersDeviceSynchronously() {
+        let server = WebSocketServer.shared
+        let lanConn = NWConnection(host: "10.10.30.88", port: 8080, using: .tcp)
+        let connId = UUID()
+        let testUid = "test-ws-sync-\(UUID().uuidString.lowercased())"
+        let invite = ClientDeviceManager.shared.createInviteToken(ttlSeconds: 60)
+        defer {
+            ClientDeviceManager.shared.unregisterConnection(connectionId: connId)
+            ClientDeviceManager.shared.removeDevice(deviceId: testUid)
+        }
+
+        ClientDeviceManager.shared.markBrowserConnectionPending(connectionId: connId)
+        XCTAssertFalse(ClientDeviceManager.shared.isConnectionAuthorized(connectionId: connId))
+
+        let payload = """
+        {"action":"register_device","params":{"device_id":"\(testUid)","device_name":"Sync Test iPad","device_type":"tablet","invite_token":"\(invite)"}}
+        """
+        server.dispatchClientTextMessage(payload, clientId: connId, connection: lanConn)
+
+        // Must be authorized immediately upon return so pipelined frames in the same TCP read buffer do not fail auth
+        XCTAssertTrue(ClientDeviceManager.shared.isConnectionAuthorized(connectionId: connId))
     }
 }

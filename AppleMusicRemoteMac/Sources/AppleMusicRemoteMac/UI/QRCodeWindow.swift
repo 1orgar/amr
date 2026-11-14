@@ -8,6 +8,7 @@
 import AppKit
 import CoreImage
 
+@MainActor
 public final class QRCodeWindow: NSWindowController {
     public static let shared = QRCodeWindow()
 

@@ -436,6 +436,9 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
     }
 
     private func engageMutingGuardPreSwitch(deviceID: AudioDeviceID, durationMs: Int, fromRate: Double, toRate: Double) {
+        AudioProcessTapService.shared.setMutingGuardZeroFill(true)
+
+        var needSoftwareMute = false
         mutingGuardLock.lock()
         unmuteWorkItem?.cancel()
         unmuteWorkItem = nil
@@ -446,20 +449,26 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         if !wasAlreadyActive && !PlaybackRouter.shared.isTestingEnvironment {
             preGuardWasDucked = AudioDuckingController.shared.isDucked
             preGuardUnduckedVolume = preGuardWasDucked ? AudioDuckingController.shared.originalVolume : nil
-            if let app = MusicAppProvider.shared.getMusicApp() {
-                let currentVol = app.soundVolume
-                if currentVol >= 0 {
-                    preGuardAppVolume = currentVol
-                }
-                app.soundVolume = 0
-            }
-            if deviceID != 0 && setHardwareMute(true, for: deviceID) {
+            let hwMuted = (deviceID != 0) && setHardwareMute(true, for: deviceID)
+            if hwMuted {
                 hardwareMutedDeviceID = deviceID
+            } else if !ExternalAmpTCPController.shared.isActive && !AppleScriptExecutor.shared.isBusy {
+                needSoftwareMute = true
             }
         }
         mutingGuardLock.unlock()
 
-        AudioProcessTapService.shared.setMutingGuardZeroFill(true)
+        // Only fall back to ScriptingBridge soundVolume when the DAC lacks hardware kAudioDevicePropertyMute
+        // and Music.app IPC is idle — never stall the DAC clock switch on contended AppleEvents.
+        if needSoftwareMute, let app = MusicAppProvider.shared.getMusicApp() {
+            let currentVol = app.soundVolume
+            if currentVol >= 0 {
+                mutingGuardLock.lock()
+                preGuardAppVolume = currentVol
+                mutingGuardLock.unlock()
+            }
+            app.soundVolume = 0
+        }
 
         // Drain CoreAudio output FIFO with digital silence before flipping the hardware oscillator/relay
         let preDelaySec: Double
@@ -520,7 +529,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
                 _ = setHardwareMute(false, for: devID)
             }
             let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
-            if !isDLNAMuted {
+            if !isDLNAMuted && savedVol != nil {
                 let targetAppVol: Int
                 if AudioDuckingController.shared.isDucked {
                     targetAppVol = wasDuckedAtEngage
@@ -535,8 +544,10 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
                     let simVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
                     targetAppVol = savedVol ?? simVol
                 }
-                if let app = MusicAppProvider.shared.getMusicApp() {
-                    app.soundVolume = targetAppVol
+                DispatchQueue.global(qos: .utility).async {
+                    if let app = MusicAppProvider.shared.getMusicApp() {
+                        app.soundVolume = targetAppVol
+                    }
                 }
             }
         }

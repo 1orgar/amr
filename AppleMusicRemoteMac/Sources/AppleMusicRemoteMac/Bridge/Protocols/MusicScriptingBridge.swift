@@ -143,13 +143,15 @@ public final class MusicAppProvider: @unchecked Sendable {
             self?.onMusicAppLaunched?()
 
             if !PlaybackRouter.shared.isTestingEnvironment {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.5) {
                     PlaybackTransportController.shared.checkAndEnforceVolumeLock()
                 }
             }
 
             DispatchQueue.main.async {
                 MenuManager.shared.updateMenuState()
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
                 UPnPMediaRendererServer.shared.notifySubscribers(force: true)
             }
@@ -174,6 +176,8 @@ public final class MusicAppProvider: @unchecked Sendable {
 
             DispatchQueue.main.async {
                 MenuManager.shared.updateMenuState()
+            }
+            DispatchQueue.global(qos: .utility).async {
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
                 UPnPMediaRendererServer.shared.notifySubscribers(force: true)
             }
@@ -232,12 +236,24 @@ public final class MusicAppProvider: @unchecked Sendable {
 
         lastMusicPid = currentPid
         if let raw = SBApplication(bundleIdentifier: "com.apple.Music") {
-            // 120 ticks = 2 seconds (1/60s per tick in SBApplication / AESendMessage)
-            raw.timeout = 120
+            // 30 ticks = 0.5 seconds (1/60s per tick in SBApplication / AESendMessage)
+            // Keeps synchronous SBApplication calls fast so busy AppleEvent queues never stall threads for 2s.
+            raw.timeout = 30
             let app = unsafeBitCast(raw, to: MusicApplicationProtocol.self)
             self.musicApp = app
             return app
         }
         return nil
+    }
+
+    /// Creates a thread-private `SBApplication` instance with an isolated `SBContext` (`lastError()`),
+    /// preventing cross-thread `lastError()` data races during watchdog health probes.
+    public func createIsolatedMusicApp(timeoutTicks: Int = 90) -> MusicApplicationProtocol? {
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty,
+              let raw = SBApplication(bundleIdentifier: "com.apple.Music") else {
+            return nil
+        }
+        raw.timeout = max(15, timeoutTicks)
+        return unsafeBitCast(raw, to: MusicApplicationProtocol.self)
     }
 }

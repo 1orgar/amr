@@ -1779,25 +1779,27 @@ public final class SettingsWindow: NSWindowController {
         if repObj.hasPrefix("dlna:") {
             if let renderer = DLNADiscoveryManager.shared.selectRenderer(uid: repObj) {
                 NSLog("[SettingsWindow] Selected DLNA renderer: \(renderer.friendlyName)")
-                let status = MusicBridge.shared.getPlayerStatus()
-                if status.isPlaying {
-                    AudioProcessTapService.shared.startCapture()
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let status = MusicBridge.shared.getPlayerStatus()
+                    if status.isPlaying {
+                        AudioProcessTapService.shared.startCapture()
 
-                    let (streamURL, imageURL, fullTitle, metadata) = DLNADiscoveryManager.shared.resolveStreamAndImageURLs()
-                    DLNADiscoveryManager.shared.setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { success, _ in
-                        if success, !renderer.isBluOS {
-                            DLNADiscoveryManager.shared.play()
+                        let (streamURL, imageURL, fullTitle, metadata) = DLNADiscoveryManager.shared.resolveStreamAndImageURLs()
+                        DLNADiscoveryManager.shared.setAVTransportURI(uri: streamURL, metadata: metadata, imageURL: imageURL, title: fullTitle) { success, _ in
+                            if success, !renderer.isBluOS {
+                                DLNADiscoveryManager.shared.play()
+                            }
                         }
+                    } else {
+                        let isLossy = status.audioQuality.contains("AAC") || status.audioQuality.contains("MP3")
+                        let targetRate = isLossy ? 44100 : (status.track?.sampleRate ?? 44100)
+                        let targetDepth = isLossy ? 16 : (status.track?.bitDepth ?? (targetRate >= 48000 ? 24 : 16))
+                        AudioProcessTapService.shared.setFormat(sampleRate: targetRate, bitDepth: targetDepth)
                     }
-                } else {
-                    let isLossy = status.audioQuality.contains("AAC") || status.audioQuality.contains("MP3")
-                    let targetRate = isLossy ? 44100 : (status.track?.sampleRate ?? 44100)
-                    let targetDepth = isLossy ? 16 : (status.track?.bitDepth ?? (targetRate >= 48000 ? 24 : 16))
-                    AudioProcessTapService.shared.setFormat(sampleRate: targetRate, bitDepth: targetDepth)
-                }
 
-                WebSocketServer.shared.broadcastAudioDevices()
-                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                    WebSocketServer.shared.broadcastAudioDevices()
+                    WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                }
             }
         } else if repObj.hasPrefix("coreaudio:") {
             let idStr = repObj.replacingOccurrences(of: "coreaudio:", with: "")
@@ -1814,29 +1816,33 @@ public final class SettingsWindow: NSWindowController {
                     PlaybackStateStore.shared.isDLNAMuted = false
                     return (m, v)
                 }
-                if wasMuted {
-                    AudioProcessTapService.shared.setMutingGuardZeroFill(false)
-                    if AudioDuckingController.shared.isDucked {
-                        let duckedVol = AudioDuckingController.shared.currentDuckedVolume
-                        PlaybackStateStore.shared.withLock {
-                            PlaybackStateStore.shared.simulatedVolume = duckedVol
-                        }
-                        if let app = MusicAppProvider.shared.getMusicApp() {
-                            app.soundVolume = duckedVol
-                        }
-                        PlaybackStateStore.shared.invalidateStatusCache()
-                    } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
-                        if let app = MusicAppProvider.shared.getMusicApp() {
-                            app.soundVolume = 100
-                        }
-                        PlaybackStateStore.shared.invalidateStatusCache()
-                    } else {
-                        _ = MusicBridge.shared.setVolume(restoreVol)
-                    }
-                }
                 _ = CoreAudioDeviceManager.shared.setDefaultOutputDevice(id: devID)
-                WebSocketServer.shared.broadcastAudioDevices()
-                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    if wasMuted {
+                        AudioProcessTapService.shared.setMutingGuardZeroFill(false)
+                        if AudioDuckingController.shared.isDucked {
+                            let duckedVol = AudioDuckingController.shared.currentDuckedVolume
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.simulatedVolume = duckedVol
+                                PlaybackStateStore.shared.lastPlayerStatusCache = nil
+                            }
+                            if let app = MusicAppProvider.shared.getMusicApp() {
+                                app.soundVolume = duckedVol
+                            }
+                        } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.lastPlayerStatusCache = nil
+                            }
+                            if let app = MusicAppProvider.shared.getMusicApp() {
+                                app.soundVolume = 100
+                            }
+                        } else {
+                            _ = MusicBridge.shared.setVolume(restoreVol)
+                        }
+                    }
+                    WebSocketServer.shared.broadcastAudioDevices()
+                    WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                }
             }
         }
 
@@ -1863,28 +1869,34 @@ public final class SettingsWindow: NSWindowController {
         let enabled = (sender.state == .on)
         CoreAudioDeviceManager.shared.isMutingGuardEnabled = enabled
         dacMutingGuardPopUp.isEnabled = enabled
-        PlaybackStateStore.shared.invalidateStatusCache()
-        WebSocketServer.shared.broadcastStatus(includeQueue: false)
+        DispatchQueue.global(qos: .userInitiated).async {
+            WebSocketServer.shared.broadcastStatus(includeQueue: false)
+        }
     }
 
     @objc private func dacMutingGuardDurationChanged(_ sender: NSPopUpButton) {
         let ms = sender.selectedTag()
         if ms >= 30 && ms <= 500 {
             CoreAudioDeviceManager.shared.mutingGuardDurationMs = ms
-            PlaybackStateStore.shared.invalidateStatusCache()
-            WebSocketServer.shared.broadcastStatus(includeQueue: false)
+            DispatchQueue.global(qos: .userInitiated).async {
+                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+            }
         }
     }
 
     @objc private func lockVolume100Toggled(_ sender: NSSwitch) {
         let enabled = (sender.state == .on)
         PlaybackStateStore.shared.isVolumeLockedTo100 = enabled
-        if enabled {
-            PlaybackTransportController.shared.checkAndEnforceVolumeLock()
-        }
         refreshState()
-        PlaybackStateStore.shared.invalidateStatusCache()
-        WebSocketServer.shared.broadcastStatus(includeQueue: false)
+        DispatchQueue.global(qos: .userInitiated).async {
+            if enabled {
+                PlaybackTransportController.shared.checkAndEnforceVolumeLock()
+            }
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.lastPlayerStatusCache = nil
+            }
+            WebSocketServer.shared.broadcastStatus(includeQueue: false)
+        }
     }
 
     @objc private func extAmpEnabledToggled(_ sender: NSSwitch) {
@@ -2074,8 +2086,9 @@ public final class SettingsWindow: NSWindowController {
     @objc private func spectralAnalyzerToggled(_ sender: NSSwitch) {
         let enabled = (sender.state == .on)
         SpectralIntegrityAnalyzer.shared.isEnabled = enabled
-        PlaybackStateStore.shared.invalidateStatusCache()
-        WebSocketServer.shared.broadcastStatus(includeQueue: false)
+        DispatchQueue.global(qos: .userInitiated).async {
+            WebSocketServer.shared.broadcastStatus(includeQueue: false)
+        }
     }
 
     @objc private func localDMRToggled(_ sender: NSSwitch) {
@@ -2132,29 +2145,36 @@ public final class SettingsWindow: NSWindowController {
             }
             if wasMuted {
                 AudioProcessTapService.shared.setMutingGuardZeroFill(false)
-                if AudioDuckingController.shared.isDucked {
-                    let duckedVol = AudioDuckingController.shared.currentDuckedVolume
-                    PlaybackStateStore.shared.withLock {
-                        PlaybackStateStore.shared.simulatedVolume = duckedVol
+                DispatchQueue.global(qos: .userInitiated).async {
+                    if AudioDuckingController.shared.isDucked {
+                        let duckedVol = AudioDuckingController.shared.currentDuckedVolume
+                        PlaybackStateStore.shared.withLock {
+                            PlaybackStateStore.shared.simulatedVolume = duckedVol
+                            PlaybackStateStore.shared.lastPlayerStatusCache = nil
+                        }
+                        if let app = MusicAppProvider.shared.getMusicApp() {
+                            app.soundVolume = duckedVol
+                        }
+                    } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
+                        PlaybackStateStore.shared.withLock {
+                            PlaybackStateStore.shared.lastPlayerStatusCache = nil
+                        }
+                        if let app = MusicAppProvider.shared.getMusicApp() {
+                            app.soundVolume = 100
+                        }
+                    } else {
+                        _ = MusicBridge.shared.setVolume(restoreVol)
                     }
-                    if let app = MusicAppProvider.shared.getMusicApp() {
-                        app.soundVolume = duckedVol
-                    }
-                    PlaybackStateStore.shared.invalidateStatusCache()
-                } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
-                    if let app = MusicAppProvider.shared.getMusicApp() {
-                        app.soundVolume = 100
-                    }
-                    PlaybackStateStore.shared.invalidateStatusCache()
-                } else {
-                    _ = MusicBridge.shared.setVolume(restoreVol)
+                    WebSocketServer.shared.broadcastStatus(includeQueue: false)
                 }
             }
         }
         DLNADiscoveryManager.shared.setEnabled(isEnabled)
         updateDLNAStatusLabel()
         refreshState()
-        WebSocketServer.shared.broadcastAudioDevices()
+        DispatchQueue.global(qos: .userInitiated).async {
+            WebSocketServer.shared.broadcastAudioDevices()
+        }
     }
 
     private func updateDLNAStatusLabel() {

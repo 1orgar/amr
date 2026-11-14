@@ -20,25 +20,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
         // 1. Setup Menu Bar UI
         MenuManager.shared.setup()
 
-        // 2. If Native AI Functions are enabled, preload Neural Engine / NL 512-D / Vision / FoundationModels weights FIRST
-        //    before opening WebSocket / UPnP network listeners and accepting client connections.
+        // 2. Start network and system services immediately so clients never wait on ANE warmup,
+        //    and preload Neural Engine / NL 512-D / Vision weights asynchronously in the background after cold-launch settles.
+        startNetworkAndSystemServices()
+
         if NativeMusicCuratorService.shared.isEnabled {
-            NSLog("[AppDelegate] 🧠 AI functions enabled — preloading model weights before accepting network connections...")
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 6.0) {
+                NSLog("[AppDelegate] 🧠 AI functions enabled — warming up model weights in background...")
                 NativeMusicCuratorService.shared.preloadModelWeightsSynchronously()
-                DispatchQueue.main.async {
-                    self?.startNetworkAndSystemServices()
-                }
             }
-        } else {
-            startNetworkAndSystemServices()
         }
     }
 
     private func startNetworkAndSystemServices() {
-        // 2. Check and enforce 100% volume in Music.app if volume lock is enabled
-        PlaybackTransportController.shared.checkAndEnforceVolumeLock()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        // 2. Check and enforce 100% volume in Music.app off the main thread if volume lock is enabled
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.0) {
             PlaybackTransportController.shared.checkAndEnforceVolumeLock()
         }
 
@@ -79,13 +75,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
             NSLog("[AppDelegate] ☀️ System woke from sleep. Restoring SSDP multicast and UPnP...")
             if UPnPMediaRendererServer.shared.isEnabled {
                 SSDPService.shared.restart()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.0) {
                     UPnPMediaRendererServer.shared.notifySubscribers(force: true)
                 }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 DLNADiscoveryManager.shared.startIfEnabled()
                 ExternalAmpTCPController.shared.startIfActive()
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.2) {
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
             }
         }

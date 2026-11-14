@@ -12,9 +12,11 @@ public final class AppleScriptExecutor: @unchecked Sendable {
     public static let shared = AppleScriptExecutor()
 
     private let lock = NSLock()
-    private let workerLock = NSLock()
-    private var workerGeneration: UInt64 = 1
-    private var workerQueue = DispatchQueue(label: "com.amr.applescript.worker.1", qos: .userInitiated)
+    private let workerIdleCondition = NSCondition()
+    private var isWorkerExecuting: Bool = false
+    private let workerQueue = DispatchQueue(label: "com.amr.applescript.worker", qos: .userInitiated)
+    /// Strictly confined to `workerQueue` per Apple TN2084.
+    private var compiledScripts: [String: NSAppleScript] = [:]
 
     private final class ExecutionBox: @unchecked Sendable {
         var descriptor: NSAppleEventDescriptor?
@@ -24,11 +26,23 @@ public final class AppleScriptExecutor: @unchecked Sendable {
 
     private init() {}
 
+    /// True when the single serial OpenScripting worker is actively compiling or executing an AppleEvent.
+    public var isBusy: Bool {
+        workerIdleCondition.lock()
+        defer { workerIdleCondition.unlock() }
+        return isWorkerExecuting
+    }
+
     /// Executes an AppleScript source and returns the raw NSAppleEventDescriptor.
-    /// Safely prevents deadlocks by:
-    /// 1. Confining each NSAppleScript's lifecycle (init, compile, execute, dealloc) to a single thread inside an autoreleasepool (per Apple TN2084).
-    /// 2. Enforcing a hard 3.8s wall-clock watchdog with automatic worker queue rotation if macOS OpenScripting / AESendMessage ever stalls.
-    public func executeDescriptor(_ source: String) -> NSAppleEventDescriptor? {
+    /// Safely prevents deadlocks and OpenScripting corruption by:
+    /// 1. Strictly serializing ALL NSAppleScript compilation, execution, caching, and deallocation on a single permanent worker queue (Apple TN2084).
+    /// 2. Never spawning a second concurrent OSA worker queue while a prior call is still inside OpenScripting.
+    /// 3. Failing fast when contended so callers fall back to cached state instead of piling up threads.
+    public func executeDescriptor(
+        _ source: String,
+        maxWait: TimeInterval = 2.4,
+        reportTimeout: Bool = true
+    ) -> NSAppleEventDescriptor? {
         if PlaybackRouter.shared.isTestingEnvironment {
             return nil
         }
@@ -36,11 +50,27 @@ public final class AppleScriptExecutor: @unchecked Sendable {
             return nil
         }
 
-        guard lock.lock(before: Date().addingTimeInterval(4.2)) else {
-            NSLog("[AppleScriptExecutor] Lock acquisition timeout (contended)")
+        let lockBudget = max(0.25, min(maxWait, 1.6))
+        guard lock.lock(before: Date().addingTimeInterval(lockBudget)) else {
+            NSLog("[AppleScriptExecutor] Lock acquisition skipped (busy/contended, budget=%.2fs)", lockBudget)
             return nil
         }
         defer { lock.unlock() }
+
+        // If a prior script timed out on wall-clock wait and is still finishing inside OpenScripting on workerQueue,
+        // wait briefly for it to exit rather than queuing unbounded work or violating TN2084.
+        workerIdleCondition.lock()
+        if isWorkerExecuting {
+            let drainDeadline = Date().addingTimeInterval(min(0.6, lockBudget * 0.5))
+            while isWorkerExecuting && workerIdleCondition.wait(until: drainDeadline) {}
+            if isWorkerExecuting {
+                workerIdleCondition.unlock()
+                NSLog("[AppleScriptExecutor] Worker still draining prior AppleEvent — skipping new dispatch")
+                return nil
+            }
+        }
+        isWorkerExecuting = true
+        workerIdleCondition.unlock()
 
         var timedSource = source
         let lowerSource = timedSource.lowercased()
@@ -59,26 +89,33 @@ public final class AppleScriptExecutor: @unchecked Sendable {
                 let prefix = timedSource[..<tellRange.upperBound]
                 let body = timedSource[tellRange.upperBound..<endTellRange.lowerBound]
                 let suffix = timedSource[endTellRange.lowerBound...]
-                timedSource = "\(prefix)\nwith timeout of 3 seconds\(body)\nend timeout\n\(suffix)"
+                timedSource = "\(prefix)\nwith timeout of 2 seconds\(body)\nend timeout\n\(suffix)"
             } else {
-                timedSource = "with timeout of 3 seconds\n" + timedSource + "\nend timeout"
+                timedSource = "with timeout of 2 seconds\n" + timedSource + "\nend timeout"
             }
         }
-
-        let (currentWorker, capturedGen): (DispatchQueue, UInt64) = {
-            workerLock.lock()
-            defer { workerLock.unlock() }
-            return (workerQueue, workerGeneration)
-        }()
 
         let box = ExecutionBox()
         let sema = DispatchSemaphore(value: 0)
         let scriptText = timedSource
+        let shouldCacheCompiled = scriptText.utf8.count <= 2048
 
-        currentWorker.async {
+        workerQueue.async { [weak self] in
             autoreleasepool {
                 var error: NSDictionary?
-                let script = NSAppleScript(source: scriptText)
+                let script: NSAppleScript?
+                if shouldCacheCompiled, let cached = self?.compiledScripts[scriptText] {
+                    script = cached
+                } else {
+                    let fresh = NSAppleScript(source: scriptText)
+                    if shouldCacheCompiled, let self = self, let fresh = fresh {
+                        if self.compiledScripts.count >= 32 {
+                            self.compiledScripts.removeAll(keepingCapacity: true)
+                        }
+                        self.compiledScripts[scriptText] = fresh
+                    }
+                    script = fresh
+                }
                 let desc = script?.executeAndReturnError(&error)
                 if let err = error {
                     box.errorMessage = err[NSAppleScript.errorMessage] as? String ?? "Unknown error"
@@ -87,36 +124,42 @@ public final class AppleScriptExecutor: @unchecked Sendable {
                     box.descriptor = desc
                 }
             }
+            if let self = self {
+                self.workerIdleCondition.lock()
+                self.isWorkerExecuting = false
+                self.workerIdleCondition.broadcast()
+                self.workerIdleCondition.unlock()
+            }
             sema.signal()
         }
 
-        if sema.wait(timeout: .now() + 3.8) == .timedOut {
-            workerLock.lock()
-            if workerGeneration == capturedGen {
-                workerGeneration &+= 1
-                workerQueue = DispatchQueue(label: "com.amr.applescript.worker.\(workerGeneration)", qos: .userInitiated)
+        let waitBudget = max(0.5, maxWait)
+        if sema.wait(timeout: .now() + waitBudget) == .timedOut {
+            NSLog("[AppleScriptExecutor] ⚠️ Worker execution timed out (>%.1fs)", waitBudget)
+            if reportTimeout {
+                MusicAppLifecycleManager.shared.reportIPCTimeout()
             }
-            let newGen = workerGeneration
-            workerLock.unlock()
-            NSLog("[AppleScriptExecutor] ⚠️ Worker execution timed out (>3.8s) — rotated worker queue to gen=%llu", newGen)
-            MusicAppLifecycleManager.shared.reportIPCTimeout()
             return nil
         }
 
         if let msg = box.errorMessage {
             let errNum = box.errorNumber
             NSLog("[AppleScriptExecutor] Error (\(errNum)): \(msg)")
-            if errNum == -1712 || msg.contains("timed out") || msg.contains("AppleEvent timed out") {
+            if reportTimeout && (errNum == -1712 || msg.contains("timed out") || msg.contains("AppleEvent timed out")) {
                 MusicAppLifecycleManager.shared.reportIPCTimeout()
             }
             return nil
+        }
+
+        if source.contains("tell application \"Music\"") {
+            MusicAppLifecycleManager.shared.reportIPCSuccess()
         }
         return box.descriptor
     }
 
     /// Executes AppleScript and returns (success, stringValue).
-    public func run(_ source: String) -> (Bool, String?) {
-        if let desc = executeDescriptor(source) {
+    public func run(_ source: String, maxWait: TimeInterval = 2.4, reportTimeout: Bool = true) -> (Bool, String?) {
+        if let desc = executeDescriptor(source, maxWait: maxWait, reportTimeout: reportTimeout) {
             return (true, desc.stringValue)
         }
         return (false, nil)
@@ -124,8 +167,8 @@ public final class AppleScriptExecutor: @unchecked Sendable {
 
     /// Convenience wrapper returning (success: Bool, output: String?).
     @discardableResult
-    public func execute(_ source: String) -> (success: Bool, output: String?) {
-        let (ok, out) = run(source)
+    public func execute(_ source: String, maxWait: TimeInterval = 2.4, reportTimeout: Bool = true) -> (success: Bool, output: String?) {
+        let (ok, out) = run(source, maxWait: maxWait, reportTimeout: reportTimeout)
         return (ok, out)
     }
 }

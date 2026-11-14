@@ -10,15 +10,10 @@ import CoreAudio
 extension WebSocketServer {
     // MARK: - Message Routing & Dispatcher
 
-    private static let curateTasksLock = NSLock()
-    private static var activeCurateTasks: [UUID: Task<Void, Never>] = [:]
     private static let clientLogRateLock = NSLock()
     private static var clientLogTimestamps: [UUID: [TimeInterval]] = [:]
 
     internal func cancelCurateTask(for clientId: UUID) {
-        Self.curateTasksLock.withLock {
-            Self.activeCurateTasks.removeValue(forKey: clientId)?.cancel()
-        }
         curateTaskLock.withLock {
             activeCurateTasks.removeValue(forKey: clientId)?.cancel()
         }
@@ -28,22 +23,63 @@ extension WebSocketServer {
     }
 
     internal func cancelAllCurateTasks() {
-        Self.curateTasksLock.withLock {
-            for (_, task) in Self.activeCurateTasks {
-                task.cancel()
-            }
-            Self.activeCurateTasks.removeAll()
-        }
         curateTaskLock.withLock {
             for (_, task) in activeCurateTasks {
                 task.cancel()
             }
             activeCurateTasks.removeAll()
-            activeCurateTask?.cancel()
-            activeCurateTask = nil
         }
         Self.clientLogRateLock.withLock {
             Self.clientLogTimestamps.removeAll()
+        }
+    }
+
+    /// Synchronously handles `register_device` on the connection's serial queue so any pipelined
+    /// frames in the same TCP read buffer immediately observe the updated authorization state.
+    internal func dispatchClientTextMessage(_ text: String, clientId: UUID, connection: NWConnection) {
+        if text.contains("register_device"),
+           let data = text.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let action = (json["action"] as? String) ?? (json["command"] as? String) ?? (json["type"] as? String) ?? ""
+            if action.lowercased() == "register_device" {
+                let id = json["id"] as? String
+                let params = (json["params"] as? [String: Any]) ?? (json["payload"] as? [String: Any]) ?? (json["data"] as? [String: Any]) ?? json
+                let rawDeviceId = (params["device_id"] as? String) ?? (params["deviceId"] as? String) ?? ""
+                let rawDeviceName = (params["device_name"] as? String) ?? (params["deviceName"] as? String) ?? ""
+                let rawDeviceType = (params["device_type"] as? String) ?? (params["deviceType"] as? String) ?? "mobile"
+                let prefLockScreen = (params["lock_screen_controls"] as? Bool) ?? (params["lockScreenControls"] as? Bool)
+                let inviteToken = (params["invite_token"] as? String) ?? (params["inviteToken"] as? String)
+                let remoteIP = extractRemoteIP(from: connection)
+
+                NSLog("[WebSocket] Processing action: %@, id: %@", action, id ?? "nil")
+                let record = ClientDeviceManager.shared.registerConnection(
+                    connectionId: clientId,
+                    deviceId: rawDeviceId,
+                    deviceName: rawDeviceName,
+                    deviceType: rawDeviceType,
+                    preferredLockScreen: prefLockScreen,
+                    remoteIP: remoteIP,
+                    inviteToken: inviteToken
+                )
+                sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
+                sendSuccess(action: action, data: record.dictionary, id: id, to: connection)
+
+                if record.isAuthorized {
+                    Task(priority: .utility) { [weak self] in
+                        guard let self = self else { return }
+                        let status = MusicBridge.shared.getPlayerStatus()
+                        self.sendEvent("player_state_changed", data: status, to: connection)
+                        self.sendEvent(name: "ai_curator_settings", data: NativeMusicCuratorService.shared.getSettingsDictionary(), to: connection)
+                        let queue = await MusicBridge.shared.getPlaybackQueue()
+                        self.sendEvent("queue", data: queue, to: connection)
+                    }
+                }
+                return
+            }
+        }
+
+        Task {
+            await self.processClientTextMessage(text, clientId: clientId, connection: connection)
         }
     }
 
@@ -660,16 +696,10 @@ extension WebSocketServer {
             Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
                 let ok = await bridge.playHeroCard(index: index, name: name, artist: artist, cardId: cardId, url: url, type: type)
-                if ok {
-                    for _ in 1...10 {
-                        let (stOk, stOut) = AppleScriptExecutor.shared.execute("tell application \"Music\" to get player state as string")
-                        if stOk, stOut?.trimmingCharacters(in: .whitespacesAndNewlines) == "playing" {
-                            break
-                        }
-                        try? await Task.sleep(nanoseconds: 200_000_000)
-                    }
-                }
                 self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "name": name], id: id, to: connection)
+                if ok {
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                }
                 self.broadcastStatus(includeQueue: true)
             }
 
@@ -737,9 +767,7 @@ extension WebSocketServer {
                         ok = bridge.playCustomTracks(targetTracks, startIndex: startIdx, shuffle: shuffle, queueName: plName)
                     }
                     self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "playlist": plName], id: id, to: connection)
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    self.broadcastStatus(includeQueue: true)
-                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    try? await Task.sleep(nanoseconds: 250_000_000)
                     self.broadcastStatus(includeQueue: true)
                     return
                 }
@@ -774,15 +802,8 @@ extension WebSocketServer {
                         ?? localPlaylists.first(where: { isPlaylistMatch($0.name) })?.name
                         ?? plName
                     let localOk = bridge.playPlaylist(name: matchName, trackId: trackId, trackIndex: trackIndex, shuffle: shuffle)
-                    for _ in 1...10 {
-                        let (stOk, stOut) = AppleScriptExecutor.shared.execute("tell application \"Music\" to get player state as string")
-                        if stOk, stOut?.trimmingCharacters(in: .whitespacesAndNewlines) == "playing" {
-                            break
-                        }
-                        try? await Task.sleep(nanoseconds: 200_000_000)
-                    }
                     self.sendSuccess(action: action, data: ["status": localOk ? "ok" : "error", "playlist": matchName], id: id, to: connection)
-                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    try? await Task.sleep(nanoseconds: 250_000_000)
                     self.broadcastStatus(includeQueue: true)
                     return
                 }
@@ -807,9 +828,7 @@ extension WebSocketServer {
                         ok = bridge.playCustomTracks(targetTracks, startIndex: startIdx, shuffle: shuffle, queueName: plName)
                     }
                     self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "playlist": plName], id: id, to: connection)
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    self.broadcastStatus(includeQueue: true)
-                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    try? await Task.sleep(nanoseconds: 250_000_000)
                     self.broadcastStatus(includeQueue: true)
                     return
                 }
@@ -923,11 +942,7 @@ extension WebSocketServer {
                 }
 
                 self.sendSuccess(action: action, data: ["status": ok ? "ok" : "error", "playlist": plName], id: id, to: connection)
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                self.broadcastStatus(includeQueue: true)
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                self.broadcastStatus(includeQueue: true)
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                try? await Task.sleep(nanoseconds: 300_000_000)
                 self.broadcastStatus(includeQueue: true)
             }
 
@@ -1592,29 +1607,35 @@ extension WebSocketServer {
             sendSuccess(action: action, data: q, id: id, to: connection)
 
         case "get_artwork", "artwork":
-            if let isCur = params["current"] as? Bool, isCur {
-                if let data = bridge.getCurrentTrackArtwork() {
-                    let b64 = data.base64EncodedString()
-                    sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
+            let isCur = (params["current"] as? Bool) ?? false
+            let tid = params["track_id"] as? Int
+            let plName = params["playlist"] as? String
+            Task.detached(priority: .utility) { [weak self] in
+                guard let self = self else { return }
+                if isCur {
+                    if let data = bridge.getCurrentTrackArtwork() {
+                        let b64 = data.base64EncodedString()
+                        self.sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
+                    } else {
+                        self.sendError(action: action, error: "No artwork found", id: id, to: connection)
+                    }
+                } else if let tid = tid {
+                    if let data = bridge.getTrackArtwork(id: tid) {
+                        let b64 = data.base64EncodedString()
+                        self.sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
+                    } else {
+                        self.sendError(action: action, error: "No artwork found", id: id, to: connection)
+                    }
+                } else if let plName = plName {
+                    if let data = bridge.getPlaylistArtwork(name: plName) {
+                        let b64 = data.base64EncodedString()
+                        self.sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
+                    } else {
+                        self.sendError(action: action, error: "No artwork found", id: id, to: connection)
+                    }
                 } else {
-                    sendError(action: action, error: "No artwork found", id: id, to: connection)
+                    self.sendError(action: action, error: "Missing parameters for artwork", id: id, to: connection)
                 }
-            } else if let tid = params["track_id"] as? Int {
-                if let data = bridge.getTrackArtwork(id: tid) {
-                    let b64 = data.base64EncodedString()
-                    sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
-                } else {
-                    sendError(action: action, error: "No artwork found", id: id, to: connection)
-                }
-            } else if let plName = params["playlist"] as? String {
-                if let data = bridge.getPlaylistArtwork(name: plName) {
-                    let b64 = data.base64EncodedString()
-                    sendSuccess(action: action, data: ["artwork_base64": b64, "mime": "image/jpeg"], id: id, to: connection)
-                } else {
-                    sendError(action: action, error: "No artwork found", id: id, to: connection)
-                }
-            } else {
-                sendError(action: action, error: "Missing parameters for artwork", id: id, to: connection)
             }
 
         case "get_account_status", "account_health":
@@ -1715,10 +1736,6 @@ extension WebSocketServer {
                 }
                 self.sendSuccess(action: action, data: curated, id: id, to: connection)
             }
-            Self.curateTasksLock.withLock {
-                Self.activeCurateTasks[clientId]?.cancel()
-                Self.activeCurateTasks[clientId] = task
-            }
             curateTaskLock.withLock {
                 activeCurateTasks[clientId]?.cancel()
                 activeCurateTasks[clientId] = task
@@ -1759,10 +1776,6 @@ extension WebSocketServer {
                     curated["request_id"] = reqId
                 }
                 self.sendSuccess(action: action, data: curated, id: id, to: connection)
-            }
-            Self.curateTasksLock.withLock {
-                Self.activeCurateTasks[clientId]?.cancel()
-                Self.activeCurateTasks[clientId] = task
             }
             curateTaskLock.withLock {
                 activeCurateTasks[clientId]?.cancel()

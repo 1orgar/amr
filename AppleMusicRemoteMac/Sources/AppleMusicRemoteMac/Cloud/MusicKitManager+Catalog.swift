@@ -1188,6 +1188,49 @@ extension MusicKitManager {
             return cachedRemoteUrl
         }
 
+        let singleFlightKey = !albumKey.isEmpty ? albumKey : (!idKey.isEmpty ? idKey : trackKey)
+        if let existingTask = withLock({ inFlightMotionArtworkTasks[singleFlightKey] }) {
+            return await existingTask.value
+        }
+
+        let task = Task<String?, Never> {
+            await self.performResolveMotionArtworkUrl(
+                initialAlbumId: targetAlbumId,
+                cleanTrack: cleanTrack,
+                cleanArtist: cleanArtist,
+                cleanAlbum: cleanAlbum,
+                idKey: idKey,
+                albumKey: albumKey,
+                trackKey: trackKey
+            )
+        }
+        let taskToAwait: Task<String?, Never> = withLock {
+            if let raced = inFlightMotionArtworkTasks[singleFlightKey] {
+                task.cancel()
+                return raced
+            }
+            inFlightMotionArtworkTasks[singleFlightKey] = task
+            return task
+        }
+        let resolved = await taskToAwait.value
+        withLock {
+            if inFlightMotionArtworkTasks[singleFlightKey] == taskToAwait {
+                inFlightMotionArtworkTasks.removeValue(forKey: singleFlightKey)
+            }
+        }
+        return resolved
+    }
+
+    private func performResolveMotionArtworkUrl(
+        initialAlbumId: String,
+        cleanTrack: String,
+        cleanArtist: String,
+        cleanAlbum: String,
+        idKey: String,
+        albumKey: String,
+        trackKey: String
+    ) async -> String? {
+        var targetAlbumId = initialAlbumId
         let sf = getUserStorefront()
 
         // 1. Resolve catalog album ID if not provided

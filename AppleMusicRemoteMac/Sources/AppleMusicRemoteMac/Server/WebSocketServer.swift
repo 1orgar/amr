@@ -31,7 +31,6 @@ public final class WebSocketServer: @unchecked Sendable {
     let clientLock = NSRecursiveLock()
     let sendLock = NSRecursiveLock()
     let curateTaskLock = NSLock()
-    var activeCurateTask: Task<Void, Never>?
     var activeCurateTasks: [UUID: Task<Void, Never>] = [:]
     var isRunning = false
     public private(set) var port: Int = 8080
@@ -109,7 +108,6 @@ public final class WebSocketServer: @unchecked Sendable {
 
         NotificationCenter.default.addObserver(forName: .bitPerfectFormatDidChange, object: nil, queue: notifQueue) { [weak self] _ in
             guard let self = self else { return }
-            PlaybackStateStore.shared.invalidateStatusCache()
             self.broadcastStatus(includeQueue: false)
         }
 
@@ -417,9 +415,10 @@ public final class WebSocketServer: @unchecked Sendable {
                             )
                             self.sendEvent(name: "device_auth_status", data: record.dictionary, to: c)
                             if record.isAuthorized {
-                                let status = MusicBridge.shared.getPlayerStatus()
-                                self.sendEvent("player_state_changed", data: status, to: c)
-                                Task {
+                                Task(priority: .utility) { [weak self] in
+                                    guard let self = self else { return }
+                                    let status = MusicBridge.shared.getPlayerStatus()
+                                    self.sendEvent("player_state_changed", data: status, to: c)
                                     let queue = await MusicBridge.shared.getPlaybackQueue()
                                     self.sendEvent("queue", data: queue, to: c)
                                 }
@@ -436,9 +435,10 @@ public final class WebSocketServer: @unchecked Sendable {
                             )
                             self.sendEvent(name: "device_auth_status", data: record.dictionary, to: c)
                             if record.isAuthorized {
-                                let status = MusicBridge.shared.getPlayerStatus()
-                                self.sendEvent("player_state_changed", data: status, to: c)
-                                Task {
+                                Task(priority: .utility) { [weak self] in
+                                    guard let self = self else { return }
+                                    let status = MusicBridge.shared.getPlayerStatus()
+                                    self.sendEvent("player_state_changed", data: status, to: c)
                                     let queue = await MusicBridge.shared.getPlaybackQueue()
                                     self.sendEvent("queue", data: queue, to: c)
                                 }
@@ -461,9 +461,10 @@ public final class WebSocketServer: @unchecked Sendable {
                         )
                         self.sendEvent(name: "device_auth_status", data: record.dictionary, to: c)
                         if record.isAuthorized {
-                            let status = MusicBridge.shared.getPlayerStatus()
-                            self.sendEvent("player_state_changed", data: status, to: c)
-                            Task {
+                            Task(priority: .utility) { [weak self] in
+                                guard let self = self else { return }
+                                let status = MusicBridge.shared.getPlayerStatus()
+                                self.sendEvent("player_state_changed", data: status, to: c)
                                 let queue = await MusicBridge.shared.getPlaybackQueue()
                                 self.sendEvent("queue", data: queue, to: c)
                             }
@@ -474,10 +475,11 @@ public final class WebSocketServer: @unchecked Sendable {
                         ClientDeviceManager.shared.markBrowserConnectionPending(connectionId: clientId)
                     } else {
                         // Localhost headless / Node.js / API WebSocket client without PWA cookie:
-                        // send initial status & queue immediately for API compatibility.
-                        let status = MusicBridge.shared.getPlayerStatus()
-                        self.sendEvent("player_state_changed", data: status, to: c)
-                        Task {
+                        // send initial status & queue asynchronously for API compatibility.
+                        Task(priority: .utility) { [weak self] in
+                            guard let self = self else { return }
+                            let status = MusicBridge.shared.getPlayerStatus()
+                            self.sendEvent("player_state_changed", data: status, to: c)
                             let queue = await MusicBridge.shared.getPlaybackQueue()
                             self.sendEvent("queue", data: queue, to: c)
                         }
@@ -572,9 +574,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 if fin {
                     if opcode == 0x01 {
                         if let text = String(data: payload, encoding: .utf8) {
-                            Task {
-                                await self.processClientTextMessage(text, clientId: clientId, connection: connection)
-                            }
+                            self.dispatchClientTextMessage(text, clientId: clientId, connection: connection)
                         }
                     } else {
                         Task {
@@ -612,9 +612,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 if let msg = completedMessage {
                     if msg.opcode == 0x01 {
                         if let text = String(data: msg.data, encoding: .utf8) {
-                            Task {
-                                await self.processClientTextMessage(text, clientId: clientId, connection: connection)
-                            }
+                            self.dispatchClientTextMessage(text, clientId: clientId, connection: connection)
                         }
                     } else if msg.opcode == 0x02 {
                         Task {

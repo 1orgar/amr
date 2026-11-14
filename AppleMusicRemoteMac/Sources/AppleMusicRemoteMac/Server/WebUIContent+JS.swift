@@ -1240,7 +1240,12 @@ extension WebUIContent {
     socket.onopen = function () {
       state.connected = true;
       state.lastServerMessageAt = Date.now();
+      state.lastPlayerStateReceivedAt = 0;
+      state.lastQueueReceivedAt = 0;
+      state.lastAiSettingsReceivedAt = 0;
       state.initialAuthFetched = false;
+      trendsInFlightCountry = '';
+      trendsInFlightSince = 0;
       reconnectAttempt = 0;
       dom.overlay.classList.add('hidden');
       ensureScrubberLoopRunning();
@@ -1504,6 +1509,7 @@ extension WebUIContent {
       case 'ai_curator_settings':
       case 'get_ai_curator_settings':
       case 'refresh_ai_prompts':
+        state.lastAiSettingsReceivedAt = Date.now();
         handleAiCuratorSettings(data);
         break;
 
@@ -1515,12 +1521,14 @@ extension WebUIContent {
       case 'player_state_changed':
       case 'status':
       case 'get_status':
+        state.lastPlayerStateReceivedAt = Date.now();
         updatePlayerState(data);
         break;
 
       case 'queue_changed':
       case 'queue':
       case 'get_queue':
+        state.lastQueueReceivedAt = Date.now();
         updateQueue(data);
         break;
 
@@ -7118,6 +7126,8 @@ extension WebUIContent {
 
   let lastTrendsLoadedTime = 0;
   let lastTrendsCountry = '';
+  let trendsInFlightCountry = '';
+  let trendsInFlightSince = 0;
 
   function loadTrends(country, force = false) {
     if (country) {
@@ -7127,10 +7137,14 @@ extension WebUIContent {
     state.trends.country = c;
 
     const now = Date.now();
+    if (!force && trendsInFlightCountry === c && now - trendsInFlightSince < 12000) {
+      return;
+    }
     if (!force && lastTrendsCountry === c && now - lastTrendsLoadedTime < 30000 && state.trends.stations && state.trends.stations.length > 0) {
       return;
     }
-    lastTrendsLoadedTime = now;
+    trendsInFlightCountry = c;
+    trendsInFlightSince = now;
     lastTrendsCountry = c;
 
     send({
@@ -7144,6 +7158,9 @@ extension WebUIContent {
   }
 
   function updateExploreFeed(data) {
+    trendsInFlightCountry = '';
+    trendsInFlightSince = 0;
+    lastTrendsLoadedTime = Date.now();
     if (!data) return;
 
     if (data.stations && data.stations.length > 0) {
@@ -10800,20 +10817,38 @@ extension WebUIContent {
 
     syncDeviceInfoUI();
 
-    // Load status, queue, library, and Apple ID / MusicKit status ONLY after device is authorized
+    // Load library and Apple ID / MusicKit status ONLY after device is authorized.
+    // Note: register_device / device approval already pushes player_state_changed, ai_curator_settings, and queue;
+    // avoid duplicate get_status + get_queue storms and let get_user_token_status resolve storefront before loadTrends().
     if (state.deviceAuthorized && !state.initialAuthFetched && state.connected) {
       state.initialAuthFetched = true;
-      send({ action: 'get_status' });
-      send({ action: 'get_queue' });
-      send({ action: 'get_playlists' });
-      send({ action: 'get_explore', params: { country: state.trends.country } });
-      send({ action: 'get_audio_devices' });
+      const authTime = Date.now();
       send({ action: 'get_user_token_status' });
       send({ action: 'get_developer_token' });
-      send({ action: 'get_account_status' });
+      send({ action: 'get_audio_devices' });
       send({ action: 'get_wled_settings' });
-      send({ action: 'get_ai_curator_settings' });
       send({ action: 'get_info' });
+      send({ action: 'get_playlists' });
+      send({ action: 'get_account_status' });
+
+      setTimeout(() => {
+        if (state.connected && state.deviceAuthorized) {
+          loadTrends();
+        }
+      }, 120);
+
+      setTimeout(() => {
+        if (!state.connected || !state.deviceAuthorized) return;
+        if (!state.lastPlayerStateReceivedAt || state.lastPlayerStateReceivedAt < authTime - 2000) {
+          send({ action: 'get_status' });
+        }
+        if (!state.lastQueueReceivedAt || state.lastQueueReceivedAt < authTime - 2000) {
+          send({ action: 'get_queue' });
+        }
+        if (!state.lastAiSettingsReceivedAt || state.lastAiSettingsReceivedAt < authTime - 2000) {
+          send({ action: 'get_ai_curator_settings' });
+        }
+      }, 900);
     }
   }
 

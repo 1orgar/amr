@@ -431,8 +431,13 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 guard let self = self else { return }
                 let now = Date()
                 self.subscriptions.removeAll { now > $0.expiryDate }
-                // Remove previous subscription for this specific service path or matching SID
-                self.subscriptions.removeAll { $0.sid == sid || ($0.callbackURL == url && $0.path == cleanPath) }
+                let newHost = url.host?.lowercased()
+                // Remove previous subscription for this specific service path, matching SID, or failed endpoint on the same host
+                self.subscriptions.removeAll {
+                    $0.sid == sid
+                        || ($0.callbackURL == url && $0.path == cleanPath)
+                        || (newHost != nil && $0.callbackURL.host?.lowercased() == newHost && $0.path == cleanPath && $0.failureCount > 0)
+                }
                 if self.subscriptions.count >= 32 {
                     self.subscriptions.removeFirst(self.subscriptions.count - 31)
                 }
@@ -508,26 +513,34 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         return false
     }
 
-    public func notifySubscribers(status: PlayerStatus? = nil, force: Bool = false, completion: (() -> Void)? = nil) {
-        let currentStatus = status ?? MusicBridge.shared.getPlayerStatus()
-        let stateStr: String = stateLock.withLock {
-            if Date().timeIntervalSince(optimisticStateDate) < 5.0, let optState = optimisticState {
-                return optState
+    /// Fast status helper for UPnP SOAP & GENA polling so Home Assistant polling never queues behind
+    /// busy AppleScript workers or triggers extra IPC when a fresh cached status (<4.5s) already exists.
+    private func getFastDMRStatus() -> PlayerStatus {
+        if !PlaybackRouter.shared.isTestingEnvironment {
+            let cached: (status: PlayerStatus, age: TimeInterval)? = PlaybackStateStore.shared.withLock { () -> (status: PlayerStatus, age: TimeInterval)? in
+                guard let entry = PlaybackStateStore.shared.lastPlayerStatusCache else { return nil }
+                return (entry.status, Date().timeIntervalSince(entry.timestamp))
             }
-            switch currentStatus.playerState.lowercased() {
-            case "playing": return "PLAYING"
-            case "paused": return "PAUSED_PLAYBACK"
-            default: return "STOPPED"
+            if let cached = cached, (cached.age < 4.5 || AppleScriptExecutor.shared.isBusy) {
+                if cached.status.playerState.lowercased() == "playing" {
+                    let dur = cached.status.track?.duration ?? 0
+                    let rawPos = cached.status.position + max(0, cached.age)
+                    let interpolatedPos = dur > 0 ? min(rawPos, dur) : rawPos
+                    var updated = cached.status
+                    updated.position = interpolatedPos
+                    return updated
+                }
+                return cached.status
             }
         }
-        let trackId = currentStatus.track?.id ?? "0"
-        let artUrl = currentStatus.track?.artworkUrl ?? ""
-        let trackTitle = currentStatus.track?.name ?? ""
-        let curVol = currentStatus.volume
-        let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
-        let curMute = ExternalAmpTCPController.shared.isActive
-            ? ExternalAmpTCPController.shared.isMuted
-            : (isDLNAMuted || curVol == 0)
+        return MusicBridge.shared.getPlayerStatus()
+    }
+
+    public func notifySubscribers(status: PlayerStatus? = nil, force: Bool = false, completion: (() -> Void)? = nil) {
+        guard isEnabled else {
+            completion?()
+            return
+        }
 
         subQueue.async { [weak self] in
             guard let self = self, self.isEnabled else {
@@ -535,7 +548,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 return
             }
 
-            // Prune expired subscriptions
+            // Prune expired subscriptions BEFORE querying MusicBridge if no subscribers exist
             let now = Date()
             self.subscriptions.removeAll { now > $0.expiryDate }
 
@@ -543,6 +556,26 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 completion?()
                 return
             }
+
+            let currentStatus = status ?? self.getFastDMRStatus()
+            let stateStr: String = self.stateLock.withLock {
+                if Date().timeIntervalSince(self.optimisticStateDate) < 5.0, let optState = self.optimisticState {
+                    return optState
+                }
+                switch currentStatus.playerState.lowercased() {
+                case "playing": return "PLAYING"
+                case "paused": return "PAUSED_PLAYBACK"
+                default: return "STOPPED"
+                }
+            }
+            let trackId = currentStatus.track?.id ?? "0"
+            let artUrl = currentStatus.track?.artworkUrl ?? ""
+            let trackTitle = currentStatus.track?.name ?? ""
+            let curVol = currentStatus.volume
+            let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
+            let curMute = ExternalAmpTCPController.shared.isActive
+                ? ExternalAmpTCPController.shared.isMuted
+                : (isDLNAMuted || curVol == 0)
 
             // Deduplicate: Don't spam notifications if state, track, artwork, title, volume, and mute haven't changed and not forced
             if !force,
@@ -591,7 +624,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     }
 
     private func sendRenderingControlNotification(for subscription: EventSubscription, status: PlayerStatus? = nil, completion: (() -> Void)? = nil) {
-        let currentStatus = status ?? MusicBridge.shared.getPlayerStatus()
+        let currentStatus = status ?? getFastDMRStatus()
         let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
         let isMutedBool = ExternalAmpTCPController.shared.isActive
             ? ExternalAmpTCPController.shared.isMuted
@@ -657,7 +690,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
     }
 
     private func sendNotification(for subscription: EventSubscription, status: PlayerStatus? = nil, overrideState: String? = nil, completion: (() -> Void)? = nil) {
-        let currentStatus = status ?? MusicBridge.shared.getPlayerStatus()
+        let currentStatus = status ?? getFastDMRStatus()
         let lanIP = getLANIP()
 
         let curSec: Double = stateLock.withLock {
@@ -970,11 +1003,13 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         }
 
         let action = extractSOAPAction(from: headers, body: bodyString)
-        NSLog("[UPnPMediaRendererServer] 📩 AVTransport SOAP action: %@", action)
+        if action != "GetPositionInfo" && action != "GetTransportInfo" {
+            NSLog("[UPnPMediaRendererServer] 📩 AVTransport SOAP action: %@", action)
+        }
         var cachedStatus: PlayerStatus?
-        let getStatus: () -> PlayerStatus = {
+        let getStatus: () -> PlayerStatus = { [weak self] in
             if let s = cachedStatus { return s }
-            let s = MusicBridge.shared.getPlayerStatus()
+            let s = self?.getFastDMRStatus() ?? MusicBridge.shared.getPlayerStatus()
             cachedStatus = s
             return s
         }
@@ -1213,7 +1248,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 _ = MusicBridge.shared.seek(to: seconds)
             }
             sendSOAPResponse(connection, response: "<u:SeekResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\"/>")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.notifySubscribers(force: true)
                 WebSocketServer.shared.broadcastStatus()
             }
@@ -1253,9 +1288,9 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
         let action = extractSOAPAction(from: headers, body: bodyString)
         var cachedStatus: PlayerStatus?
-        let getStatus: () -> PlayerStatus = {
+        let getStatus: () -> PlayerStatus = { [weak self] in
             if let s = cachedStatus { return s }
-            let s = MusicBridge.shared.getPlayerStatus()
+            let s = self?.getFastDMRStatus() ?? MusicBridge.shared.getPlayerStatus()
             cachedStatus = s
             return s
         }
@@ -1273,13 +1308,15 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         case "SetVolume":
             if let volStr = extractTagValue(tag: "DesiredVolume", from: bodyString), let vol = Int(volStr) {
                 let clamped = min(max(vol, 0), 100)
-                DispatchQueue.main.async {
+                DispatchQueue.global(qos: .userInitiated).async {
                     _ = MusicBridge.shared.setVolume(clamped)
                 }
             }
             sendSOAPResponse(connection, response: "<u:SetVolumeResponse xmlns:u=\"urn:schemas-upnp-org:service:RenderingControl:1\"/>")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                MusicBridge.shared.invalidateStatusCache()
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.lastPlayerStatusCache = nil
+                }
                 self?.notifySubscribers()
                 WebSocketServer.shared.broadcastStatus()
             }
@@ -1301,7 +1338,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
         case "SetMute":
             if let muteStr = extractTagValue(tag: "DesiredMute", from: bodyString) {
                 let mute = (muteStr == "1" || muteStr.lowercased() == "true")
-                DispatchQueue.main.async { [weak self] in
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     if DLNADiscoveryManager.shared.hasActiveRenderer {
                         DLNADiscoveryManager.shared.setMute(mute)
                     }
@@ -1310,6 +1347,7 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                     } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
                         PlaybackStateStore.shared.withLock {
                             PlaybackStateStore.shared.isDLNAMuted = mute
+                            PlaybackStateStore.shared.lastPlayerStatusCache = nil
                         }
                         AudioProcessTapService.shared.setMutingGuardZeroFill(mute)
                         if mute {
@@ -1326,9 +1364,9 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                             }
                             PlaybackStateStore.shared.withLock {
                                 PlaybackStateStore.shared.simulatedVolume = 100
+                                PlaybackStateStore.shared.lastPlayerStatusCache = nil
                             }
                         }
-                        PlaybackStateStore.shared.invalidateStatusCache()
                     } else {
                         if mute {
                             let curVol = MusicBridge.shared.getPlayerStatus().volume
@@ -1357,8 +1395,10 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
                 }
             }
             sendSOAPResponse(connection, response: "<u:SetMuteResponse xmlns:u=\"urn:schemas-upnp-org:service:RenderingControl:1\"/>")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                MusicBridge.shared.invalidateStatusCache()
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.lastPlayerStatusCache = nil
+                }
                 self?.notifySubscribers()
                 WebSocketServer.shared.broadcastStatus()
             }

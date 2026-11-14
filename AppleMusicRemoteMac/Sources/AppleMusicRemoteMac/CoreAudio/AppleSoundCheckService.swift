@@ -15,6 +15,7 @@ public final class AppleSoundCheckService: @unchecked Sendable {
     }
 
     private let lock = NSLock()
+    private let localScanQueue = DispatchQueue(label: "com.amr.soundcheck.local", qos: .utility)
     private var memoryCache: [String: Double] = [:]
     private var liveDspProvisionalKeys: Set<String> = []
     private var inFlightKeys: Set<String> = []
@@ -464,10 +465,17 @@ public final class AppleSoundCheckService: @unchecked Sendable {
 
         // Tier 1: If true local file in Music.app (without cloud catalogId), inspect local file header first (or scan local PCM slices if iTunNORM is absent)
         let hasCloudCatalogId = Self.isValidCatalogId(catalogId)
-        if isLocal && !hasCloudCatalogId, let localGain = readLocalCurrentTrackITunNorm(expectedName: name) {
-            storeGainInCache(localGain, canonicalKey: canonicalKey, trackId: trackId, catalogId: catalogId)
-            NSLog("[AppleSoundCheck] Local track loudness for '%@ - %@': %+.2f dB", artist, name, localGain)
-            return localGain
+        if isLocal && !hasCloudCatalogId, !AppleScriptExecutor.shared.isBusy {
+            let localGain: Double? = await withCheckedContinuation { continuation in
+                localScanQueue.async { [weak self] in
+                    continuation.resume(returning: self?.readLocalCurrentTrackITunNorm(expectedName: name))
+                }
+            }
+            if let localGain {
+                storeGainInCache(localGain, canonicalKey: canonicalKey, trackId: trackId, catalogId: catalogId)
+                NSLog("[AppleSoundCheck] Local track loudness for '%@ - %@': %+.2f dB", artist, name, localGain)
+                return localGain
+            }
         }
 
         // Tier 2: Resolve previewUrl via Apple Music / iTunes Lookup or Search API and read first 48 KB of .m4a
@@ -484,21 +492,24 @@ public final class AppleSoundCheckService: @unchecked Sendable {
     }
 
     private func readLocalCurrentTrackITunNorm(expectedName: String) -> Double? {
+        guard !AppleScriptExecutor.shared.isBusy else { return nil }
         let script = """
         tell application "Music"
             if player state is not stopped then
                 try
-                    set trName to name of current track
-                    set loc to location of current track
-                    if loc is not missing value then
-                        return trName & "|||" & (POSIX path of loc)
-                    end if
+                    with timeout of 1.2 seconds
+                        set trName to name of current track
+                        set loc to location of current track
+                        if loc is not missing value then
+                            return trName & "|||" & (POSIX path of loc)
+                        end if
+                    end timeout
                 end try
             end if
         end tell
         return ""
         """
-        let (ok, rawOut) = AppleScriptExecutor.shared.execute(script)
+        let (ok, rawOut) = AppleScriptExecutor.shared.execute(script, maxWait: 1.3, reportTimeout: false)
         guard ok, let out = rawOut, !out.isEmpty else {
             return nil
         }

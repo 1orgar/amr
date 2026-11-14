@@ -37,6 +37,7 @@ public final class MusicKitManager: @unchecked Sendable {
     var privateKey: P256.Signing.PrivateKey?
     var trackArtworkCache: [String: String] = [:]
     var trackCatalogIdCache: [String: String] = [:]
+    var inFlightMotionArtworkTasks: [String: Task<String?, Never>] = [:]
     var userToken: String?
 
     public struct ArtistStationInfo: Sendable {
@@ -76,8 +77,10 @@ public final class MusicKitManager: @unchecked Sendable {
     let session: URLSession
 
     static var storageDefaults: UserDefaults {
-        let bundleId = Bundle.main.bundleIdentifier ?? "org.ksholokhov.amr.mac"
-        return UserDefaults(suiteName: bundleId) ?? UserDefaults.standard
+        if Bundle.main.bundleIdentifier != nil {
+            return UserDefaults.standard
+        }
+        return UserDefaults(suiteName: "org.ksholokhov.amr.mac") ?? UserDefaults.standard
     }
 
     internal static let keychainService = "org.ksholokhov.amr.musickit"

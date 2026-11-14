@@ -10,8 +10,13 @@ import Foundation
 public final class CloudCatalogService: @unchecked Sendable {
     public static let shared = CloudCatalogService()
 
+    private struct UncheckedFeedBox: @unchecked Sendable {
+        let feed: [String: Any]
+    }
+
     private let session: URLSession
     private var cachedFeed: [String: (timestamp: Date, feed: [String: Any])] = [:]
+    private var inFlightFeedTasks: [String: Task<UncheckedFeedBox, Never>] = [:]
     private let feedLock = NSLock()
 
     private init() {
@@ -561,16 +566,44 @@ public final class CloudCatalogService: @unchecked Sendable {
     public func getExploreFeed(country: String = "ru") async -> [String: Any] {
         let c = country.isEmpty ? "ru" : country.lowercased()
 
-        let cached = feedLock.withLock { () -> [String: Any]? in
+        let lookup: (cached: [String: Any]?, existingTask: Task<UncheckedFeedBox, Never>?) = feedLock.withLock {
             if let entry = cachedFeed[c], Date().timeIntervalSince(entry.timestamp) < 600.0 {
-                return entry.feed
+                return (entry.feed, nil)
             }
-            return nil
+            if let existing = inFlightFeedTasks[c] {
+                return (nil, existing)
+            }
+            return (nil, nil)
         }
-        if let cached = cached {
+        if let cached = lookup.cached {
             return cached
         }
+        if let existingTask = lookup.existingTask {
+            return (await existingTask.value).feed
+        }
 
+        let task = Task<UncheckedFeedBox, Never> {
+            let built = await self.computeExploreFeed(country: c)
+            return UncheckedFeedBox(feed: built)
+        }
+        let taskToAwait: Task<UncheckedFeedBox, Never> = feedLock.withLock {
+            if let raced = inFlightFeedTasks[c] {
+                task.cancel()
+                return raced
+            }
+            inFlightFeedTasks[c] = task
+            return task
+        }
+        let result = (await taskToAwait.value).feed
+        feedLock.withLock {
+            if inFlightFeedTasks[c] == taskToAwait {
+                inFlightFeedTasks.removeValue(forKey: c)
+            }
+        }
+        return result
+    }
+
+    private func computeExploreFeed(country c: String) async -> [String: Any] {
         let isRu = ["ru", "kz", "by", "ua"].contains(c) || MusicKitManager.shared.getPreferredLanguageTag().lowercased().hasPrefix("ru")
 
         var personalMixes: [PlaylistInfo] = []

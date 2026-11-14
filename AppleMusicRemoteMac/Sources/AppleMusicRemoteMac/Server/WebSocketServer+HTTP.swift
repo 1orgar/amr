@@ -274,28 +274,53 @@ extension WebSocketServer {
                 handleLiveAudioStream(connection: connection, headerString: headerString, fullPath: fullPath)
                 return
             case let p where p == "/api/artwork" || p == "/api/artwork.jpg" || p == "/artwork.jpg" || p.hasPrefix("/api/artwork.jpg?") || p.hasPrefix("/api/artwork?"):
-                // 1. Try local track artwork from Music.app
-                let artData = MusicBridge.shared.getCurrentTrackArtwork()
-                if let art = artData, !art.isEmpty {
-                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 0)
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection)
+                        || isAllowedDLNAStreamRequest(connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
                     return
                 }
+                Task.detached(priority: .utility) { [weak self] in
+                    guard let self = self else { return }
+                    let curStatus = MusicBridge.shared.getPlayerStatus()
+                    let trackArt = curStatus.track?.artworkUrl ?? ""
 
-                // 2. Try current player status track artworkUrl
-                let curStatus = MusicBridge.shared.getPlayerStatus()
-                let trackArt = curStatus.track?.artworkUrl ?? ""
-
-                if !trackArt.isEmpty && (trackArt.hasPrefix("http://") || trackArt.hasPrefix("https://")) {
-                    if let disk = ArtworkDiskCache.shared.get(key: trackArt) {
-                        sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: disk, connection: connection, cacheSeconds: 86400)
-                        return
+                    // 1. Try current player status remote artworkUrl first (avoids unnecessary AppleEvent for streaming tracks)
+                    if !trackArt.isEmpty && (trackArt.hasPrefix("http://") || trackArt.hasPrefix("https://")) {
+                        if let disk = ArtworkDiskCache.shared.get(key: trackArt) {
+                            self.sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: disk, connection: connection, cacheSeconds: 86400)
+                            return
+                        }
+                        if let url = URL(string: trackArt) {
+                            let req = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
+                            URLSession.shared.dataTask(with: req) { [weak self] data, response, _ in
+                                guard let self = self else { return }
+                                if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
+                                    ArtworkDiskCache.shared.set(key: trackArt, data: d)
+                                    let mime = http.mimeType ?? "image/jpeg"
+                                    self.sendHTTPResponse(status: "200 OK", contentType: mime, body: d, connection: connection, cacheSeconds: 86400)
+                                } else {
+                                    self.sendDefaultArtwork(connection: connection)
+                                }
+                            }.resume()
+                            return
+                        }
                     }
-                    if let url = URL(string: trackArt) {
+
+                    // 2. Check cached track artwork via MusicKit
+                    let tName = curStatus.track?.name ?? ""
+                    let tArtist = curStatus.track?.artist ?? ""
+                    let tAlbum = curStatus.track?.album ?? ""
+                    if !tName.isEmpty, let cloudUrlStr = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum),
+                       !cloudUrlStr.isEmpty, let url = URL(string: cloudUrlStr) {
+                        if let disk = ArtworkDiskCache.shared.get(key: cloudUrlStr) {
+                            self.sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: disk, connection: connection, cacheSeconds: 86400)
+                            return
+                        }
                         let req = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
                         URLSession.shared.dataTask(with: req) { [weak self] data, response, _ in
                             guard let self = self else { return }
                             if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
-                                ArtworkDiskCache.shared.set(key: trackArt, data: d)
+                                ArtworkDiskCache.shared.set(key: cloudUrlStr, data: d)
                                 let mime = http.mimeType ?? "image/jpeg"
                                 self.sendHTTPResponse(status: "200 OK", contentType: mime, body: d, connection: connection, cacheSeconds: 86400)
                             } else {
@@ -304,34 +329,20 @@ extension WebSocketServer {
                         }.resume()
                         return
                     }
-                }
 
-                // 3. Check cached track artwork via MusicKit / Search
-                let tName = curStatus.track?.name ?? ""
-                let tArtist = curStatus.track?.artist ?? ""
-                let tAlbum = curStatus.track?.album ?? ""
-                if !tName.isEmpty, let cloudUrlStr = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum),
-                   !cloudUrlStr.isEmpty, let url = URL(string: cloudUrlStr) {
-                    if let disk = ArtworkDiskCache.shared.get(key: cloudUrlStr) {
-                        sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: disk, connection: connection, cacheSeconds: 86400)
+                    // 3. Try local embedded track artwork from Music.app
+                    if curStatus.track?.isLocal != false, let art = MusicBridge.shared.getCurrentTrackArtwork(), !art.isEmpty {
+                        self.sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 0)
                         return
                     }
-                    let req = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 4.0)
-                    URLSession.shared.dataTask(with: req) { [weak self] data, response, _ in
-                        guard let self = self else { return }
-                        if let d = data, let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) {
-                            ArtworkDiskCache.shared.set(key: cloudUrlStr, data: d)
-                            let mime = http.mimeType ?? "image/jpeg"
-                            self.sendHTTPResponse(status: "200 OK", contentType: mime, body: d, connection: connection, cacheSeconds: 86400)
-                        } else {
-                            self.sendDefaultArtwork(connection: connection)
-                        }
-                    }.resume()
+
+                    self.sendDefaultArtwork(connection: connection)
+                }
+            case let p where p.hasPrefix("/api/artwork/search"):
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
                     return
                 }
-
-                sendDefaultArtwork(connection: connection)
-            case let p where p.hasPrefix("/api/artwork/search"):
                 var trackName = ""
                 var trackArtist = ""
                 var trackAlbum = ""
@@ -378,6 +389,10 @@ extension WebSocketServer {
                     }
                 }
             case let p where p.hasPrefix("/api/artwork/track"):
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 var trackId = 0
                 var paramName = ""
                 var paramArtist = ""
@@ -406,32 +421,44 @@ extension WebSocketServer {
                     sendRedirect(location: "/assets/stations/CoverHeavyRotation.svg", connection: connection, cacheSeconds: 86400)
                     return
                 }
-                if trackId > 0, let art = MusicBridge.shared.getTrackArtwork(id: trackId), !art.isEmpty {
-                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
-                } else {
-                    let meta = (trackId > 0) ? MusicBridge.shared.getTrackMetadata(id: trackId) : nil
-                    let effName = !paramName.isEmpty ? paramName : (meta?.name ?? "")
-                    let effArtist = !paramArtist.isEmpty ? paramArtist : (meta?.artist ?? "")
-                    let effAlbum = !paramAlbum.isEmpty ? paramAlbum : (meta?.album ?? "")
 
-                    if !effName.isEmpty {
-                        if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: effName, artist: effArtist, album: effAlbum), !cached.isEmpty {
-                            sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
-                        } else {
-                            Task { [weak self] in
-                                guard let self = self else { return }
-                                if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: effName, artist: effArtist, album: effAlbum) {
-                                    self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
-                                } else {
-                                    self.sendDefaultArtwork(connection: connection)
-                                }
-                            }
-                        }
+                // 1. Instant memory / disk cache check (0ms, zero AppleEvents)
+                if trackId > 0, let fastArt = ArtworkService.shared.getCachedTrackArtwork(id: trackId) ?? ArtworkDiskCache.shared.get(key: "track_\(trackId)"), !fastArt.isEmpty {
+                    sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: fastArt, connection: connection, cacheSeconds: 86400)
+                    return
+                }
+
+                let meta = (trackId > 0) ? MusicBridge.shared.getTrackMetadata(id: trackId) : nil
+                let effName = !paramName.isEmpty ? paramName : (meta?.name ?? "")
+                let effArtist = !paramArtist.isEmpty ? paramArtist : (meta?.artist ?? "")
+                let effAlbum = !paramAlbum.isEmpty ? paramAlbum : (meta?.album ?? "")
+
+                // 2. Instant MusicKit CDN cache check BEFORE touching Music.app IPC
+                if !effName.isEmpty, let cached = MusicKitManager.shared.getCachedTrackArtwork(name: effName, artist: effArtist, album: effAlbum), !cached.isEmpty {
+                    sendRedirect(location: cached, connection: connection, cacheSeconds: 86400)
+                    return
+                }
+
+                // 3. Async background resolution so NWConnection threads NEVER block on AppleScriptExecutor
+                let resolvedTrackId = trackId
+                Task.detached(priority: .utility) { [weak self] in
+                    guard let self = self else { return }
+                    if resolvedTrackId > 0 && !ArtworkService.shared.isKnownMissingTrackArtwork(id: resolvedTrackId),
+                       let art = MusicBridge.shared.getTrackArtwork(id: resolvedTrackId), !art.isEmpty {
+                        self.sendHTTPResponse(status: "200 OK", contentType: "image/jpeg", body: art, connection: connection, cacheSeconds: 86400)
+                        return
+                    }
+                    if !effName.isEmpty, let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: effName, artist: effArtist, album: effAlbum) {
+                        self.sendRedirect(location: cloudArt, connection: connection, cacheSeconds: 86400)
                     } else {
-                        sendDefaultArtwork(connection: connection)
+                        self.sendDefaultArtwork(connection: connection)
                     }
                 }
             case let p where p.hasPrefix("/api/artwork/playlist"):
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 var plName = ""
                 if let components = URLComponents(string: fullPath),
                    let nameItem = components.queryItems?.first(where: { $0.name == "name" })?.value {
@@ -471,6 +498,10 @@ extension WebSocketServer {
                     }
                 }
             case let p where p.hasPrefix("/api/artwork/motion.mp4"):
+                guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
+                    sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
+                    return
+                }
                 var hashParam = ""
                 if let components = URLComponents(string: fullPath),
                    let hVal = components.queryItems?.first(where: { $0.name == "hash" })?.value {

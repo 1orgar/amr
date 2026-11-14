@@ -189,4 +189,58 @@ final class DLNADiscoveryTests: XCTestCase {
         XCTAssertTrue(metadata.contains("<DIDL-Lite"))
         XCTAssertTrue(metadata.contains("<upnp:albumArtURI>"))
     }
+
+    // MARK: - SSRF & Origin Hardening Tests
+
+    func testAllowedLANRendererURLBlocksSSRFAndSenderSpoofing() {
+        // Valid LAN literal URLs
+        XCTAssertTrue(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://192.168.1.55:8095/desc.xml")!))
+        XCTAssertTrue(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://10.10.30.16:49152/desc.xml")!, expectedSenderIP: "10.10.30.16"))
+        XCTAssertTrue(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://172.20.0.15:1400/xml/device_description.xml")!))
+        XCTAssertTrue(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://[fd00::1234]:8095/desc.xml")!, expectedSenderIP: "fd00::1234"))
+
+        // Blocked loopback, cloud metadata, WAN, DNS hostnames, non-HTTP schemes, and spoofed sender IPs
+        XCTAssertFalse(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://127.0.0.1:8080/api/status")!))
+        XCTAssertFalse(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://[::1]:8080/api/status")!))
+        XCTAssertFalse(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://169.254.169.254/latest/meta-data/")!))
+        XCTAssertFalse(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://8.8.8.8:80/desc.xml")!))
+        XCTAssertFalse(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "http://evil-rebind.example.com:8095/desc.xml")!))
+        XCTAssertFalse(DLNADiscoveryManager.isAllowedLANRendererURL(URL(string: "file:///etc/passwd")!))
+        XCTAssertFalse(DLNADiscoveryManager.isAllowedLANRendererURL(
+            URL(string: "http://10.10.30.1:80/admin.xml")!,
+            expectedSenderIP: "10.10.30.99"
+        ))
+    }
+
+    func testExtractServiceControlURLRejectsCrossOriginTargets() {
+        let manager = DLNADiscoveryManager.shared
+        let baseURL = URL(string: "http://192.168.1.55:8095/mock/description.xml")!
+
+        let sameOriginAbsXML = """
+        <service>
+          <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+          <controlURL>http://192.168.1.55:8095/AVTransport/control</controlURL>
+        </service>
+        """
+        XCTAssertEqual(
+            manager.extractServiceControlURL(serviceType: "AVTransport", from: sameOriginAbsXML, baseURL: baseURL)?.absoluteString,
+            "http://192.168.1.55:8095/AVTransport/control"
+        )
+
+        let crossHostXML = """
+        <service>
+          <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+          <controlURL>http://127.0.0.1:8080/api/play</controlURL>
+        </service>
+        """
+        XCTAssertNil(manager.extractServiceControlURL(serviceType: "AVTransport", from: crossHostXML, baseURL: baseURL))
+
+        let crossPortXML = """
+        <service>
+          <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+          <controlURL>http://192.168.1.55:8080/AVTransport/control</controlURL>
+        </service>
+        """
+        XCTAssertNil(manager.extractServiceControlURL(serviceType: "AVTransport", from: crossPortXML, baseURL: baseURL))
+    }
 }

@@ -1406,7 +1406,8 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
     }
 
     private func notifyStateChanged() {
-        PlaybackStateStore.shared.invalidateStatusCache()
+        // PlayerStatusEngine.getPlayerStatus() reads ExternalAmpTCPController properties dynamically;
+        // never wipe Music.app static track metadata cache on amplifier volume/SoundCheck updates.
         onStateChanged?()
     }
 }

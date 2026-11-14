@@ -163,14 +163,17 @@ extension WebSocketServer {
         }
 
         if newlyAuthorized && record.isAuthorized {
-            let status = MusicBridge.shared.getPlayerStatus()
-            for conn in conns {
-                sendEvent("player_state_changed", data: status, to: conn)
-            }
-            Task {
+            Task.detached(priority: .utility) { [weak self] in
+                guard let self = self else { return }
+                let status = MusicBridge.shared.getPlayerStatus()
+                let aiSettings = NativeMusicCuratorService.shared.getSettingsDictionary()
+                for conn in conns {
+                    self.sendEvent("player_state_changed", data: status, to: conn)
+                    self.sendEvent(name: "ai_curator_settings", data: aiSettings, to: conn)
+                }
                 let queue = await MusicBridge.shared.getPlaybackQueue()
                 for conn in conns {
-                    sendEvent("queue", data: queue, to: conn)
+                    self.sendEvent("queue", data: queue, to: conn)
                 }
             }
         }
@@ -246,6 +249,12 @@ extension WebSocketServer {
     }
 
     public func broadcastStatus(status customStatus: PlayerStatus? = nil, includeQueue: Bool = false) {
+        if customStatus == nil && Thread.isMainThread && !PlaybackRouter.shared.isTestingEnvironment {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.broadcastStatus(status: nil, includeQueue: includeQueue)
+            }
+            return
+        }
         let status = customStatus ?? MusicBridge.shared.getPlayerStatus()
         let unauthIds = ClientDeviceManager.shared.getUnauthorizedConnectionIds()
         clientLock.lock()

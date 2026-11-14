@@ -85,8 +85,13 @@ public struct AccountHealthStatus: Codable, Sendable {
 public final class AccountHealthService: @unchecked Sendable {
     public static let shared = AccountHealthService()
 
+    private struct HealthBox: @unchecked Sendable {
+        let status: AccountHealthStatus
+    }
+
     private let lock = NSLock()
     private var cachedStatus: (timestamp: Date, status: AccountHealthStatus)?
+    private var inFlightHealthTask: Task<HealthBox, Never>?
 
     // Common Apple Music Storefront ID to ISO Country Code mappings
     private let storefrontMap: [String: String] = [
@@ -196,10 +201,38 @@ public final class AccountHealthService: @unchecked Sendable {
     }
 
     public func checkAccountHealth(forceRefresh: Bool = false) async -> AccountHealthStatus {
-        if let cached = getCachedStatus(forceRefresh: forceRefresh) {
-            return cached
+        if !forceRefresh {
+            if let cached = getCachedStatus(forceRefresh: false) {
+                return cached
+            }
+            let existing: Task<HealthBox, Never>? = lock.withLock { inFlightHealthTask }
+            if let existing = existing {
+                return (await existing.value).status
+            }
+            let task = Task<HealthBox, Never> {
+                let s = await self.performAccountHealthCheck()
+                return HealthBox(status: s)
+            }
+            let taskToAwait: Task<HealthBox, Never> = lock.withLock {
+                if let raced = inFlightHealthTask {
+                    task.cancel()
+                    return raced
+                }
+                inFlightHealthTask = task
+                return task
+            }
+            let result = (await taskToAwait.value).status
+            lock.withLock {
+                if inFlightHealthTask == taskToAwait {
+                    inFlightHealthTask = nil
+                }
+            }
+            return result
         }
+        return await performAccountHealthCheck()
+    }
 
+    private func performAccountHealthCheck() async -> AccountHealthStatus {
         let macInfo = getMacAccountInfo()
         let userToken = MusicKitManager.shared.getUserToken()
 

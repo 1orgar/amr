@@ -13,6 +13,7 @@ private final class MockContext: @unchecked Sendable {
     var forceTerminatedPids: [pid_t] = []
     var launched: Bool = false
     var eventEmitted: Bool = false
+    var probeCount: Int = 0
 }
 
 final class MusicAppLifecycleManagerTests: XCTestCase {
@@ -232,5 +233,42 @@ final class MusicAppLifecycleManagerTests: XCTestCase {
         let status = PlayerStatusEngine.shared.getPlayerStatus()
         // Fast path immediately returns status with isMusicAppRunning = false
         XCTAssertFalse(status.isMusicAppRunning)
+    }
+
+    func testReportIPCSuccessResetsFailureStrikes() {
+        manager.resetForTesting(state: .running)
+        manager.failureThreshold = 2
+
+        // 1st transient timeout strike
+        manager.reportIPCTimeout()
+        XCTAssertEqual(manager.state, .running)
+
+        // Successful IPC clears strike counter
+        manager.reportIPCSuccess()
+        XCTAssertEqual(manager.state, .running)
+
+        // Next single timeout must be strike 1/2 again, NOT 2/2 unresponsive
+        manager.reportIPCTimeout()
+        XCTAssertEqual(manager.state, .running)
+        XCTAssertTrue(manager.isHealthy)
+    }
+
+    func testLaunchGracePeriodDefersWatchdogProbes() {
+        let ctx = MockContext()
+        manager.nowProvider = { ctx.now }
+        manager.processChecker = { [7777] }
+        manager.probeHandler = {
+            ctx.probeCount += 1
+            return false
+        }
+        manager.launchGracePeriod = 15.0
+
+        manager.handleAppLaunched(pid: 7777)
+        ctx.now = ctx.now.addingTimeInterval(5.0)
+        manager.performWatchdogCheck()
+
+        // Within 15s launch grace period, watchdog must not probe or mark Music.app unresponsive
+        XCTAssertEqual(ctx.probeCount, 0)
+        XCTAssertEqual(manager.state, .running)
     }
 }

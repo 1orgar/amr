@@ -719,17 +719,28 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
         ]
     }
 
+    private var cachedEngineDescriptionCache: (timestamp: Date, desc: String)?
+
     /// Checks whether Apple Intelligence (FoundationModels) is active on this Mac,
     /// or whether the built-in NaturalLanguage 512-D Neural Embedding engine is used.
     public var activeEngineDescription: String {
+        if let cached = lock.withLock({ cachedEngineDescriptionCache }),
+           Date().timeIntervalSince(cached.timestamp) < 60.0 {
+            return cached.desc
+        }
+        var resolved = "Apple Neural Engine • NaturalLanguage 512-D"
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
+        if #available(macOS 26.0, *),
+           ProcessInfo.processInfo.physicalMemory > 16 * 1024 * 1024 * 1024 {
             if case .available = SystemLanguageModel.default.availability {
-                return "Apple Intelligence • FoundationModels + NLEmbedding"
+                resolved = "Apple Intelligence • FoundationModels + NLEmbedding"
             }
         }
         #endif
-        return "Apple Neural Engine • NaturalLanguage 512-D"
+        lock.withLock {
+            cachedEngineDescriptionCache = (Date(), resolved)
+        }
+        return resolved
     }
 
     private final class OnceResumeGate<T: Sendable>: @unchecked Sendable {
@@ -1503,7 +1514,12 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
         if curatedSongs.isEmpty && !Task.isCancelled && !PlaybackRouter.shared.isTestingEnvironment {
             var localPool = LibraryService.shared.getCachedLibrarySongs()
             if localPool.isEmpty {
-                localPool = LibraryService.shared.getLibrarySongs()
+                localPool = QueueManager.shared.getRecentlyPlayed(limit: 25)
+                if localPool.isEmpty && !AppleScriptExecutor.shared.isBusy {
+                    Task.detached(priority: .background) {
+                        _ = LibraryService.shared.getLibrarySongs()
+                    }
+                }
             }
             for ls in localPool.shuffled().prefix(20) {
                 curatedSongs.append([
@@ -1678,7 +1694,7 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
             }
 
             guard let content = rawContent else {
-                if (taskState.didTimeOut || !Task.isCancelled) && !Task.isCancelled {
+                if taskState.didTimeOut || !Task.isCancelled {
                     lock.withLock {
                         foundationModelsCooldownUntil = Date().addingTimeInterval(600)
                     }

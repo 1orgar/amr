@@ -640,7 +640,10 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
                 cacheTrackFormat(artist: curTrack.artist, title: curTrack.name, sampleRate: rate, bitDepth: validDepth)
             }
         }
-        PlaybackStateStore.shared.invalidateStatusCache()
+        // Do NOT call PlaybackStateStore.shared.invalidateStatusCache() here!
+        // PlayerStatusEngine.getPlayerStatus() dynamically overlays BitPerfectLogMonitor's sampleRate/bitDepth/audioQuality
+        // onto the cached Music.app track state without forcing a 17-property Tier 2 AppleScript during DAC clock switching.
+        MusicAppLifecycleManager.shared.reportAudioActivity()
 
         NSLog("[BitPerfectLogMonitor] 🎯 Locked track format: %.1f kHz, %d-бит (%@) [Trigger: %@]", rate / 1000.0, validDepth, desc, reason)
 
@@ -666,6 +669,8 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
                 )
             }
             MenuManager.shared.updateMenuState()
+        }
+        DispatchQueue.global(qos: .utility).async {
             UPnPMediaRendererServer.shared.notifySubscribers(force: true)
         }
     }

@@ -52,7 +52,7 @@ public final class LibraryService: @unchecked Sendable {
 
     public func getPlaylists(forceRefresh: Bool = false) -> [PlaylistInfo] {
         lock.lock()
-        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 120.0 {
+        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 300.0 {
             let list = cached.playlists
             lock.unlock()
             return list
@@ -63,11 +63,12 @@ public final class LibraryService: @unchecked Sendable {
         defer { playlistsFetchLock.unlock() }
 
         lock.lock()
-        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 120.0 {
+        if !forceRefresh, let cached = playlistsCache, Date().timeIntervalSince(cached.timestamp) < 300.0 {
             let list = cached.playlists
             lock.unlock()
             return list
         }
+        let staleFallback = playlistsCache?.playlists
         lock.unlock()
 
         var result = [PlaylistInfo]()
@@ -75,30 +76,33 @@ public final class LibraryService: @unchecked Sendable {
 
         MusicAppProvider.shared.ensureMusicAppRunning()
 
-        // 1. Ultra-fast batch query via AppleScript (queries all playlists in ~0.05s, skipping full-library track counts)
+        // Ultra-fast batch query via AppleScript (non-fatal if contended; never triggers watchdog termination)
         let scriptSrc = """
         tell application "Music"
             set res to {}
             try
-                set pList to (every playlist)
-                repeat with p in pList
-                    try
-                        set pName to (name of p as string)
-                        if pName is not in {"Музыка", "Music", "Медиатека", "Библиотека", "Musik", "Musique", "Música", "Musica", "ミュージック", "音乐", "Очередь AMR"} then
-                            set pCount to 0
-                            try
-                                set pCount to (count of tracks of p)
-                            end try
-                            set end of res to (pName & "|||" & pCount)
-                        end if
-                    end try
-                end repeat
+                with timeout of 2.5 seconds
+                    set pList to (every playlist)
+                    repeat with p in pList
+                        try
+                            set pName to (name of p as string)
+                            if pName is not in {"Музыка", "Music", "Медиатека", "Библиотека", "Musik", "Musique", "Música", "Musica", "ミュージック", "音乐", "Очередь AMR"} then
+                                set pCount to 0
+                                try
+                                    set pCount to (count of tracks of p)
+                                end try
+                                set end of res to (pName & "|||" & pCount)
+                            end if
+                        end try
+                    end repeat
+                end timeout
             end try
             return res
         end tell
         """
 
-        if let desc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc) {
+        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc, maxWait: 2.8, reportTimeout: false)
+        if let desc = rawDesc {
             let count = desc.numberOfItems
             if count > 0 {
                 result.reserveCapacity(count)
@@ -120,26 +124,8 @@ public final class LibraryService: @unchecked Sendable {
                     }
                 }
             }
-        }
-
-        // 2. Fallback to ScriptingBridge if AppleScript returned empty
-        if result.isEmpty, let app = MusicAppProvider.shared.getMusicApp() {
-            let playlists = app.playlists()
-            for p in playlists {
-                guard let obj = p as? SBObject else { continue }
-                let name = (obj.value(forKey: "name") as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                let lower = name.lowercased()
-                if name.isEmpty || seenNames.contains(lower) ||
-                   Self.masterLibraryPlaylistNames.contains(lower) {
-                    continue
-                }
-                let trks = obj.value(forKey: "tracks") as? SBElementArray
-                let count = trks?.count ?? 0
-                seenNames.insert(lower)
-                let enc = name.amrQueryValueEncoded
-                let art = ArtworkService.shared.getCachedPlaylistArtworkUrl(name: name) ?? "/api/artwork/playlist?name=\(enc)&v=2"
-                result.append(PlaylistInfo(name: name, trackCount: count, artworkUrl: art, isPlaylist: true))
-            }
+        } else if let stale = staleFallback, !stale.isEmpty {
+            return stale
         }
 
         NSLog("[LibraryService] getPlaylists returning %d playlists", result.count)
@@ -193,11 +179,20 @@ public final class LibraryService: @unchecked Sendable {
 
     // MARK: - Playlist Tracks
 
-    public func getPlaylistTracks(name: String) -> [TrackInfo] {
+    public func getPlaylistTracks(name: String, limit: Int? = nil) -> [TrackInfo] {
         guard !name.isEmpty else { return [] }
+        let cacheKey = limit.map { "\($0 > 0 ? "\(name)#limit:\($0)" : name)" } ?? name
         lock.lock()
-        if let entry = playlistTracksCache[name], Date().timeIntervalSince(entry.timestamp) < 120.0 {
-            let cached = entry.tracks
+        if let fullEntry = playlistTracksCache[name], Date().timeIntervalSince(fullEntry.timestamp) < 600.0 {
+            let cached = fullEntry.tracks
+            lock.unlock()
+            if let maxCount = limit, maxCount > 0 {
+                return Array(cached.prefix(maxCount))
+            }
+            return cached
+        }
+        if cacheKey != name, let limEntry = playlistTracksCache[cacheKey], Date().timeIntervalSince(limEntry.timestamp) < 600.0 {
+            let cached = limEntry.tracks
             lock.unlock()
             return cached
         }
@@ -215,42 +210,72 @@ public final class LibraryService: @unchecked Sendable {
         defer { plLock.unlock() }
 
         lock.lock()
-        if let entry = playlistTracksCache[name], Date().timeIntervalSince(entry.timestamp) < 120.0 {
-            let cached = entry.tracks
+        if let fullEntry = playlistTracksCache[name], Date().timeIntervalSince(fullEntry.timestamp) < 600.0 {
+            let cached = fullEntry.tracks
+            lock.unlock()
+            if let maxCount = limit, maxCount > 0 {
+                return Array(cached.prefix(maxCount))
+            }
+            return cached
+        }
+        if cacheKey != name, let limEntry = playlistTracksCache[cacheKey], Date().timeIntervalSince(limEntry.timestamp) < 600.0 {
+            let cached = limEntry.tracks
             lock.unlock()
             return cached
         }
-        let staleFallback = playlistTracksCache[name]?.tracks
+        let staleFallback = playlistTracksCache[name]?.tracks ?? playlistTracksCache[cacheKey]?.tracks
         lock.unlock()
 
         MusicAppProvider.shared.ensureMusicAppRunning()
         let escapedName = name.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let rangeExpr: String
+        if let maxCount = limit, maxCount > 0 {
+            rangeExpr = """
+            set endIdx to totalCount
+            if endIdx > \(maxCount) then set endIdx to \(maxCount)
+            set idList to database ID of tracks 1 thru endIdx of p
+            set nList to name of tracks 1 thru endIdx of p
+            set aList to artist of tracks 1 thru endIdx of p
+            set alList to album of tracks 1 thru endIdx of p
+            set dList to duration of tracks 1 thru endIdx of p
+            set fList to favorited of tracks 1 thru endIdx of p
+            set cList to class of tracks 1 thru endIdx of p
+            """
+        } else {
+            rangeExpr = """
+            set idList to database ID of every track of p
+            set nList to name of every track of p
+            set aList to artist of every track of p
+            set alList to album of every track of p
+            set dList to duration of every track of p
+            set fList to favorited of every track of p
+            set cList to class of every track of p
+            """
+        }
+
         let scriptSrc = """
         tell application "Music"
             try
-                with timeout of 3 seconds
+                with timeout of 2.5 seconds
                     set p to missing value
                     try
-                        set p to (first user playlist whose name is "\(escapedName)")
-                    on error
-                        try
-                            set p to playlist "\(escapedName)"
-                        on error
-                            try
-                                set p to (first subscription playlist whose name is "\(escapedName)")
-                            on error
-                                set p to (first playlist whose name is "\(escapedName)")
-                            end try
-                        end try
+                        set p to playlist "\(escapedName)"
                     end try
+                    if p is missing value then
+                        repeat with cand in (every playlist)
+                            try
+                                if (name of cand as string) is "\(escapedName)" then
+                                    set p to cand
+                                    exit repeat
+                                end if
+                            end try
+                        end repeat
+                    end if
                     if p is missing value then return {}
-                    set idList to database ID of every track of p
-                    set nList to name of every track of p
-                    set aList to artist of every track of p
-                    set alList to album of every track of p
-                    set dList to duration of every track of p
-                    set fList to favorited of every track of p
-                    return {idList, nList, aList, alList, dList, fList}
+                    set totalCount to count of tracks of p
+                    if totalCount = 0 then return {}
+                    \(rangeExpr)
+                    return {idList, nList, aList, alList, dList, fList, cList}
                 end timeout
             on error
                 return {}
@@ -259,7 +284,7 @@ public final class LibraryService: @unchecked Sendable {
         """
 
         var result = [TrackInfo]()
-        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc)
+        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc, maxWait: 2.8, reportTimeout: false)
         if let desc = rawDesc, desc.numberOfItems >= 6 {
             let idsDesc = desc.atIndex(1)
             let namesDesc = desc.atIndex(2)
@@ -267,6 +292,7 @@ public final class LibraryService: @unchecked Sendable {
             let albumsDesc = desc.atIndex(4)
             let dursDesc = desc.atIndex(5)
             let favsDesc = desc.atIndex(6)
+            let classesDesc = desc.numberOfItems >= 7 ? desc.atIndex(7) : nil
 
             let count = namesDesc?.numberOfItems ?? 0
             if count > 0 {
@@ -278,6 +304,8 @@ public final class LibraryService: @unchecked Sendable {
                     let tAlbum = albumsDesc?.atIndex(i)?.stringValue ?? ""
                     let dur = dursDesc?.atIndex(i)?.doubleValue ?? 0
                     let fav = favsDesc?.atIndex(i)?.booleanValue ?? false
+                    let trackClassCode = classesDesc?.atIndex(i)?.typeCodeValue ?? 0x63466C54 // 'cFlT' = file track
+                    let isFileTrack = (trackClassCode == 0x63466C54)
 
                     if self.isValidTrack(name: tName, artist: tArtist, duration: dur) {
                         if dbId > 0 {
@@ -285,15 +313,15 @@ public final class LibraryService: @unchecked Sendable {
                         }
 
                         var artUrl = ""
-                        if dbId > 0 {
-                            let encN = tName.amrQueryValueEncoded
-                            let encA = tArtist.amrQueryValueEncoded
-                            let encAl = tAlbum.amrQueryValueEncoded
-                            artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
-                        } else if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
+                        let encN = tName.amrQueryValueEncoded
+                        let encA = tArtist.amrQueryValueEncoded
+                        let encAl = tAlbum.amrQueryValueEncoded
+                        if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: tName, artist: tArtist, album: tAlbum), !cached.isEmpty {
                             artUrl = cached
-                        } else if let local = ArtworkService.shared.findLocalTrackArtwork(name: tName, artist: tArtist), !local.isEmpty {
-                            artUrl = local
+                        } else if isFileTrack && dbId > 0 {
+                            artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
+                        } else if !tName.isEmpty {
+                            artUrl = "/api/artwork/search?name=\(encN)&artist=\(encA)&album=\(encAl)"
                         }
 
                         result.append(TrackInfo(
@@ -306,7 +334,7 @@ public final class LibraryService: @unchecked Sendable {
                             hasArtwork: !artUrl.isEmpty,
                             artworkUrl: artUrl,
                             favorited: fav,
-                            isLocal: true,
+                            isLocal: isFileTrack,
                             index: i
                         ))
                     }
@@ -316,13 +344,16 @@ public final class LibraryService: @unchecked Sendable {
 
         if rawDesc == nil, let fallback = staleFallback, !fallback.isEmpty {
             NSLog("[LibraryService] getPlaylistTracks('%@') returning %d stale cached tracks after AppleScript contention", name, fallback.count)
+            if let maxCount = limit, maxCount > 0 {
+                return Array(fallback.prefix(maxCount))
+            }
             return fallback
         }
 
         NSLog("[LibraryService] getPlaylistTracks('%@') returning %d tracks", name, result.count)
         if rawDesc != nil || !result.isEmpty {
             lock.lock()
-            playlistTracksCache[name] = (timestamp: Date(), tracks: result)
+            playlistTracksCache[cacheKey] = (timestamp: Date(), tracks: result)
             lock.unlock()
         }
 
@@ -330,7 +361,8 @@ public final class LibraryService: @unchecked Sendable {
     }
 
     public func getCurrentPlaylistTracks() -> [TrackInfo] {
-        guard let app = MusicAppProvider.shared.getMusicApp(), app.playerState != .stopped, app.currentTrack != nil else {
+        let isStopped = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastPlayerStatusCache?.status.playerState == "stopped" }
+        if isStopped {
             return []
         }
         MusicAppProvider.shared.ensureMusicAppRunning()
@@ -338,6 +370,7 @@ public final class LibraryService: @unchecked Sendable {
         tell application "Music"
             try
                 with timeout of 2 seconds
+                    if player state is stopped then return {}
                     if not (exists current playlist) then return {}
                     set p to current playlist
                     set totalCount to count of tracks of p
@@ -357,7 +390,7 @@ public final class LibraryService: @unchecked Sendable {
         """
 
         var result = [TrackInfo]()
-        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc)
+        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc, maxWait: 2.2, reportTimeout: false)
         if let desc = rawDesc, desc.numberOfItems >= 6 {
             let idsDesc = desc.atIndex(1)
             let namesDesc = desc.atIndex(2)
@@ -413,12 +446,19 @@ public final class LibraryService: @unchecked Sendable {
 
     public func invalidatePlaylistCache(name: String) {
         lock.lock()
-        playlistTracksCache.removeValue(forKey: name)
+        let prefix = "\(name)#limit:"
+        for key in Array(playlistTracksCache.keys) where key == name || key.hasPrefix(prefix) {
+            playlistTracksCache.removeValue(forKey: key)
+        }
         lock.unlock()
     }
 
     public func updatePlaylistTracksCache(name: String, tracks: [TrackInfo]) {
         lock.lock()
+        let prefix = "\(name)#limit:"
+        for key in Array(playlistTracksCache.keys) where key.hasPrefix(prefix) {
+            playlistTracksCache.removeValue(forKey: key)
+        }
         playlistTracksCache[name] = (timestamp: Date(), tracks: tracks)
         lock.unlock()
     }
@@ -463,7 +503,7 @@ public final class LibraryService: @unchecked Sendable {
         """
 
         var result = [TrackInfo]()
-        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc)
+        let rawDesc = AppleScriptExecutor.shared.executeDescriptor(scriptSrc, maxWait: 3.5, reportTimeout: false)
         if let desc = rawDesc, desc.numberOfItems >= 6 {
             let idsDesc = desc.atIndex(1)
             let namesDesc = desc.atIndex(2)

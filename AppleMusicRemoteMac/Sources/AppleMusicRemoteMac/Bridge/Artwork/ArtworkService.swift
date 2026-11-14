@@ -15,11 +15,19 @@ import Vision
 public final class ArtworkService: @unchecked Sendable {
     public static let shared = ArtworkService()
 
+    private final class PaletteResultBox: @unchecked Sendable {
+        let value: [String: Any]?
+        init(_ value: [String: Any]?) { self.value = value }
+    }
+
     private let lock = NSLock()
     private let visionLock = NSLock()
+    private let visionQueue = DispatchQueue(label: "com.amr.artwork.vision", qos: .utility)
+    private let artworkFetchQueue = DispatchQueue(label: "com.amr.artwork.local", qos: .utility)
     private let artworkCache = NSCache<NSString, NSData>()
     private var playlistArtworkUrlCache: [String: String] = [:]
     private var paletteCache: [String: [String: Any]] = [:]
+    private var inFlightPaletteTasks: [String: Task<PaletteResultBox, Never>] = [:]
     private var negativeArtworkIds = Set<Int>()
     private var fetchingArtworkIds = Set<Int>()
     private var negativePlaylistArtworks: [String: Date] = [:]
@@ -118,6 +126,15 @@ public final class ArtworkService: @unchecked Sendable {
 
     // MARK: - Track Artwork by Database ID
 
+    public func isKnownMissingTrackArtwork(id: Int) -> Bool {
+        guard id > 0 else { return true }
+        lock.lock()
+        let missing = negativeArtworkIds.contains(id)
+        lock.unlock()
+        if missing { return true }
+        return PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.stagedTemporaryTrackDbIds.contains(id) }
+    }
+
     public func getTrackArtwork(id: Int) -> Data? {
         // Local Music.app database IDs are small integers (< 10,000,000); 10-digit Apple Music catalog IDs are never local
         guard id > 0 && id < 10_000_000 else { return nil }
@@ -133,34 +150,18 @@ public final class ArtworkService: @unchecked Sendable {
             return diskData
         }
 
-        // Fast path 1: Check if requested id matches currently playing track (must be local file track)
-        if let app = MusicAppProvider.shared.getMusicApp(), let curTrack = app.currentTrack {
-            if let curId = curTrack.value(forKey: "databaseID") as? Int, curId == id {
-                if curTrack.value(forKey: "location") != nil, let d = getCurrentTrackArtwork() {
-                    lock.lock()
-                    negativeArtworkIds.remove(id)
-                    lock.unlock()
-                    artworkCache.setObject(d as NSData, forKey: cacheKey)
-                    ArtworkDiskCache.shared.set(key: "track_\(id)", data: d)
-                    return d
-                }
-            }
-        }
-
-        lock.lock()
-        if negativeArtworkIds.contains(id) {
-            lock.unlock()
+        // Fast negative-cache & staged-cloud-track check BEFORE touching Music.app IPC
+        if isKnownMissingTrackArtwork(id: id) {
             return nil
         }
-        lock.unlock()
 
-        // Fast path 2: Retrieve embedded track artwork from Music.app via indexed database ID lookup
+        // Retrieve embedded track artwork from Music.app via indexed database ID lookup (short budget, never triggers watchdog)
         let script = """
         tell application "Music"
             try
-                with timeout of 1.5 seconds
+                with timeout of 1.2 seconds
                     set t to (first track of library playlist 1 whose database ID is \(id))
-                    if (count of artworks of t) > 0 then
+                    if (location of t) is not missing value and (count of artworks of t) > 0 then
                         return raw data of artwork 1 of t
                     end if
                 end timeout
@@ -168,7 +169,11 @@ public final class ArtworkService: @unchecked Sendable {
             return missing value
         end tell
         """
-        if let desc = AppleScriptExecutor.shared.executeDescriptor(script), !desc.data.isEmpty {
+        guard let desc = AppleScriptExecutor.shared.executeDescriptor(script, maxWait: 1.3, reportTimeout: false) else {
+            // Executor was contended or timed out — do not poison negative cache if merely contended, just return nil
+            return nil
+        }
+        if !desc.data.isEmpty {
             let d = desc.data
             if let img = NSImage(data: d), let jpeg = jpegData(from: img, maxDimension: 600) {
                 artworkCache.setObject(jpeg as NSData, forKey: cacheKey)
@@ -385,11 +390,15 @@ public final class ArtworkService: @unchecked Sendable {
     }
 
     public func queueNativeArtworkFetch(ids: [Int]) {
+        guard !AppleScriptExecutor.shared.isBusy else { return }
+        let stagedIds = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.stagedTemporaryTrackDbIds }
         var toFetch = [Int]()
         lock.withLock {
-            for nid in ids where nid > 0 && nid < 10_000_000 {
+            for nid in ids where nid > 0 && nid < 10_000_000 && !stagedIds.contains(nid) {
                 let cacheKey = "track_\(nid)" as NSString
-                if self.artworkCache.object(forKey: cacheKey) == nil && !self.fetchingArtworkIds.contains(nid) {
+                if self.artworkCache.object(forKey: cacheKey) == nil
+                    && !self.negativeArtworkIds.contains(nid)
+                    && !self.fetchingArtworkIds.contains(nid) {
                     self.fetchingArtworkIds.insert(nid)
                     toFetch.append(nid)
                 }
@@ -398,9 +407,12 @@ public final class ArtworkService: @unchecked Sendable {
 
         let fetchIds = toFetch
         if !fetchIds.isEmpty {
-            Task.detached(priority: .utility) {
+            artworkFetchQueue.async { [weak self] in
+                guard let self = self else { return }
                 for nid in fetchIds {
-                    _ = self.getTrackArtwork(id: nid)
+                    if !AppleScriptExecutor.shared.isBusy {
+                        _ = self.getTrackArtwork(id: nid)
+                    }
                     _ = self.lock.withLock {
                         self.fetchingArtworkIds.remove(nid)
                     }
@@ -757,8 +769,8 @@ public final class ArtworkService: @unchecked Sendable {
         return (nr, ng, nb)
     }
 
-    /// Resolves artwork bytes from Data URI, local track database ID, or remote HTTP(S) URL
-    /// and extracts the Neural Engine Vision Saliency palette (cached per track/URL).
+    /// Resolves artwork bytes from Data URI, remote HTTP(S) URL, relative `/api/artwork/...` URL, or local track database ID
+    /// and extracts the Neural Engine Vision Saliency palette (cached + single-flight deduplicated across clients).
     public func resolveArtworkPalette(url: String?, trackId: Int?) async -> [String: Any]? {
         let aiEnabled = NativeMusicCuratorService.shared.isEnabled
         let rawUrl = (url ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -779,6 +791,50 @@ public final class ArtworkService: @unchecked Sendable {
             return cached
         }
 
+        let (existingTask, createdTask): (Task<PaletteResultBox, Never>?, Task<PaletteResultBox, Never>?) = lock.withLock {
+            if let existing = inFlightPaletteTasks[cacheKey] {
+                return (existing, nil)
+            }
+            let task = Task<PaletteResultBox, Never> { [weak self] in
+                guard let self = self else { return PaletteResultBox(nil) }
+                let computed = await self.computeArtworkPalette(rawUrl: rawUrl, tid: tid, aiEnabled: aiEnabled, cacheKey: cacheKey)
+                _ = self.lock.withLock {
+                    self.inFlightPaletteTasks.removeValue(forKey: cacheKey)
+                }
+                return PaletteResultBox(computed)
+            }
+            inFlightPaletteTasks[cacheKey] = task
+            return (nil, task)
+        }
+
+        let box = await (existingTask ?? createdTask!).value
+        return box.value
+    }
+
+    private func fetchRemotePaletteImageData(from urlStr: String) async -> Data? {
+        if let diskData = ArtworkDiskCache.shared.get(key: urlStr) {
+            return diskData
+        }
+        let fetchUrlStr = urlStr
+            .replacingOccurrences(of: "1200x1200bb", with: "300x300bb")
+            .replacingOccurrences(of: "600x600bb", with: "300x300bb")
+        if let diskSmall = ArtworkDiskCache.shared.get(key: fetchUrlStr) {
+            return diskSmall
+        }
+        guard let remoteUrl = URL(string: fetchUrlStr) else { return nil }
+        var req = URLRequest(url: remoteUrl)
+        req.timeoutInterval = 4.0
+        if let (data, resp) = try? await URLSession.shared.data(for: req),
+           let http = resp as? HTTPURLResponse,
+           (200...299).contains(http.statusCode),
+           !data.isEmpty {
+            ArtworkDiskCache.shared.set(key: fetchUrlStr, data: data)
+            return data
+        }
+        return nil
+    }
+
+    private func computeArtworkPalette(rawUrl: String, tid: Int, aiEnabled: Bool, cacheKey: String) async -> [String: Any]? {
         var imageData: Data? = nil
 
         // 1. Data URI
@@ -787,37 +843,66 @@ public final class ArtworkService: @unchecked Sendable {
             imageData = Data(base64Encoded: b64, options: .ignoreUnknownCharacters)
         }
 
-        // 2. Local track ID
-        if imageData == nil, tid > 0 {
-            imageData = getTrackArtwork(id: tid)
+        // 2. Remote HTTP/HTTPS URL FIRST (never touch AppleScript when CDN URL is already supplied!)
+        if imageData == nil, rawUrl.hasPrefix("http://") || rawUrl.hasPrefix("https://") {
+            imageData = await fetchRemotePaletteImageData(from: rawUrl)
         }
 
-        // 3. Remote HTTP/HTTPS URL
-        if imageData == nil, rawUrl.hasPrefix("http://") || rawUrl.hasPrefix("https://") {
-            let fetchUrlStr = rawUrl
-                .replacingOccurrences(of: "1200x1200bb", with: "300x300bb")
-                .replacingOccurrences(of: "600x600bb", with: "300x300bb")
-            if let remoteUrl = URL(string: fetchUrlStr) {
-                var req = URLRequest(url: remoteUrl)
-                req.timeoutInterval = 4.0
-                if let (data, resp) = try? await URLSession.shared.data(for: req),
-                   let http = resp as? HTTPURLResponse,
-                   (200...299).contains(http.statusCode),
-                   !data.isEmpty {
-                    imageData = data
+        // 3. Relative /api/artwork/search or /api/artwork/track URL -> check memory/disk/MusicKit CDN BEFORE AppleScript
+        if imageData == nil, rawUrl.hasPrefix("/api/artwork") {
+            if let comps = URLComponents(string: "http://localhost\(rawUrl)") {
+                let items = comps.queryItems ?? []
+                let qId = items.first(where: { $0.name == "id" })?.value.flatMap(Int.init) ?? tid
+                let qName = items.first(where: { $0.name == "name" })?.value ?? ""
+                let qArtist = items.first(where: { $0.name == "artist" })?.value ?? ""
+                let qAlbum = items.first(where: { $0.name == "album" })?.value ?? ""
+
+                if qId > 0 {
+                    imageData = getCachedTrackArtwork(id: qId) ?? ArtworkDiskCache.shared.get(key: "track_\(qId)")
+                }
+                if imageData == nil && !qName.isEmpty {
+                    var cdnUrl = MusicKitManager.shared.getCachedTrackArtwork(name: qName, artist: qArtist, album: qAlbum)
+                    if (cdnUrl ?? "").isEmpty {
+                        cdnUrl = await MusicKitManager.shared.searchTrackArtwork(name: qName, artist: qArtist, album: qAlbum)
+                    }
+                    if let validCdn = cdnUrl, !validCdn.isEmpty {
+                        imageData = await fetchRemotePaletteImageData(from: validCdn)
+                    }
                 }
             }
         }
 
-        // 4. Fallback to current playing track artwork
-        if imageData == nil {
-            imageData = getCurrentTrackArtwork()
+        // 4. Local track ID (offloaded to background queue so Swift's cooperative pool never blocks on IPC)
+        if imageData == nil, tid > 0, !rawUrl.hasPrefix("http://"), !rawUrl.hasPrefix("https://"), !isKnownMissingTrackArtwork(id: tid) {
+            imageData = await withCheckedContinuation { continuation in
+                artworkFetchQueue.async { [weak self] in
+                    continuation.resume(returning: self?.getTrackArtwork(id: tid))
+                }
+            }
         }
 
-        guard let finalData = imageData,
-              let palette = extractVisionSaliencyPalette(from: finalData, useNeuralSaliency: aiEnabled) else {
+        // 5. Fallback to current playing local track artwork only when no URL was provided
+        if imageData == nil && rawUrl.isEmpty {
+            imageData = await withCheckedContinuation { continuation in
+                artworkFetchQueue.async { [weak self] in
+                    continuation.resume(returning: self?.getCurrentTrackArtwork())
+                }
+            }
+        }
+
+        guard let finalData = imageData else {
             return nil
         }
+
+        // Run Vision ANE saliency on dedicated serial queue without blocking Swift's 8-thread cooperative pool
+        let palette: [String: Any]? = await withCheckedContinuation { continuation in
+            visionQueue.async { [weak self] in
+                let extracted = self?.extractVisionSaliencyPalette(from: finalData, useNeuralSaliency: aiEnabled)
+                continuation.resume(returning: extracted)
+            }
+        }
+
+        guard let palette else { return nil }
 
         lock.withLock {
             if paletteCache.count > 120 {

@@ -701,6 +701,122 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         }.resume()
     }
 
+    private static func extractSocketSenderIP(_ storage: inout sockaddr_storage) -> String? {
+        return withUnsafePointer(to: &storage) { ptr in
+            let family = Int32(ptr.pointee.ss_family)
+            if family == AF_INET {
+                return ptr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { sinPtr in
+                    var addr = sinPtr.pointee.sin_addr
+                    var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                    guard inet_ntop(AF_INET, &addr, &buf, socklen_t(INET_ADDRSTRLEN)) != nil else { return nil }
+                    return String(cString: buf)
+                }
+            } else if family == AF_INET6 {
+                return ptr.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { sin6Ptr in
+                    var addr6 = sin6Ptr.pointee.sin6_addr
+                    var buf = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+                    guard inet_ntop(AF_INET6, &addr6, &buf, socklen_t(INET6_ADDRSTRLEN)) != nil else { return nil }
+                    let raw = String(cString: buf)
+                    if let pct = raw.firstIndex(of: "%") {
+                        return String(raw[..<pct])
+                    }
+                    return raw
+                }
+            }
+            return nil
+        }
+    }
+
+    internal static func normalizeLiteralIP(_ rawHost: String) -> String? {
+        var clean = rawHost.trimmingCharacters(in: CharacterSet(charactersIn: "[] \t\r\n")).lowercased()
+        if let pct = clean.firstIndex(of: "%") {
+            clean = String(clean[..<pct])
+        }
+        guard !clean.isEmpty else { return nil }
+        if clean.hasPrefix("::ffff:") {
+            clean = String(clean.dropFirst("::ffff:".count))
+        }
+        var addr4 = in_addr()
+        if inet_pton(AF_INET, clean, &addr4) == 1 {
+            var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            if inet_ntop(AF_INET, &addr4, &buf, socklen_t(INET_ADDRSTRLEN)) != nil {
+                return String(cString: buf)
+            }
+            return clean
+        }
+        var addr6 = in6_addr()
+        if inet_pton(AF_INET6, clean, &addr6) == 1 {
+            var buf = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+            if inet_ntop(AF_INET6, &addr6, &buf, socklen_t(INET6_ADDRSTRLEN)) != nil {
+                return String(cString: buf).lowercased()
+            }
+            return clean
+        }
+        return nil
+    }
+
+    /// Validates that an SSDP `LOCATION` URL is an HTTP(S) private/LAN literal IP address (preventing SSRF
+    /// to loopback, cloud metadata `169.254.169.254`, DNS rebinding, or WAN endpoints) and matches the UDP sender IP when known.
+    public static func isAllowedLANRendererURL(_ url: URL, expectedSenderIP: String? = nil) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return false
+        }
+        guard url.user == nil && url.password == nil else {
+            return false
+        }
+        guard let rawHost = url.host, let ip = normalizeLiteralIP(rawHost) else {
+            return false
+        }
+
+        if let senderRaw = expectedSenderIP, !senderRaw.isEmpty {
+            guard let senderIP = normalizeLiteralIP(senderRaw), senderIP == ip else {
+                return false
+            }
+        }
+
+        var addr4 = in_addr()
+        if inet_pton(AF_INET, ip, &addr4) == 1 {
+            let hostOrder = UInt32(bigEndian: addr4.s_addr)
+            let b0 = Int((hostOrder >> 24) & 0xFF)
+            let b1 = Int((hostOrder >> 16) & 0xFF)
+            let b2 = Int((hostOrder >> 8) & 0xFF)
+            let b3 = Int(hostOrder & 0xFF)
+
+            // Reject loopback (127.0.0.0/8), unspecified (0.0.0.0/8), multicast/broadcast (>=224.0.0.0)
+            if b0 == 127 || b0 == 0 || b0 >= 224 || b3 == 255 {
+                return false
+            }
+            // Reject cloud metadata endpoint 169.254.169.254
+            if b0 == 169 && b1 == 254 && b2 == 169 && b3 == 254 {
+                return false
+            }
+            // Allow RFC1918 private LAN (10/8, 172.16/12, 192.168/16) and AutoIP link-local DLNA (169.254/16)
+            if b0 == 10 { return true }
+            if b0 == 172 && (16...31).contains(b1) { return true }
+            if b0 == 192 && b1 == 168 { return true }
+            if b0 == 169 && b1 == 254 { return true }
+            return false
+        }
+
+        var addr6 = in6_addr()
+        if inet_pton(AF_INET6, ip, &addr6) == 1 {
+            let bytes = withUnsafeBytes(of: &addr6) { Array($0) }
+            guard bytes.count == 16 else { return false }
+            // Reject unspecified (::), loopback (::1), multicast (ff00::/8)
+            let isAllZero = bytes.allSatisfy { $0 == 0 }
+            let isLoopback = bytes.dropLast().allSatisfy({ $0 == 0 }) && bytes[15] == 1
+            if isAllZero || isLoopback || bytes[0] == 0xFF {
+                return false
+            }
+            // Allow ULA (fc00::/7) and link-local (fe80::/10)
+            if (bytes[0] & 0xFE) == 0xFC { return true }
+            if bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80 { return true }
+            return false
+        }
+
+        return false
+    }
+
     private func readIncomingDatagram() {
         var buffer = [UInt8](repeating: 0, count: 4096)
         while udpSocketFD >= 0 {
@@ -714,13 +830,14 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
             }
 
             guard bytesRead > 0 else { break }
+            let senderIP = Self.extractSocketSenderIP(&srcAddr)
             if let text = String(bytes: buffer[0..<bytesRead], encoding: .utf8) {
-                processSSDPMessage(text)
+                processSSDPMessage(text, senderIP: senderIP)
             }
         }
     }
 
-    public func processSSDPMessage(_ text: String) {
+    public func processSSDPMessage(_ text: String, senderIP: String? = nil) {
         guard text.contains("200 OK") || text.contains("NOTIFY") else { return }
 
         guard let locationStr = extractHeader("LOCATION", from: text),
@@ -735,6 +852,12 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
             return
         }
 
+        // Enforce strict LAN SSRF & sender-origin check before making any outbound HTTP request
+        guard Self.isAllowedLANRendererURL(locationURL, expectedSenderIP: senderIP) else {
+            NSLog("[DLNADiscovery] 🛡️ Blocked disallowed or spoofed SSDP LOCATION URL: %@ (sender: %@)", locationURL.absoluteString, senderIP ?? "unknown")
+            return
+        }
+
         // Fetch description XML asynchronously
         fetchDeviceDescription(from: locationURL)
     }
@@ -742,6 +865,10 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     // MARK: - Device XML Description Fetch & Parse
 
     public func fetchDeviceDescription(from url: URL) {
+        guard Self.isAllowedLANRendererURL(url) else {
+            NSLog("[DLNADiscovery] 🛡️ Blocked fetchDeviceDescription for disallowed URL: %@", url.absoluteString)
+            return
+        }
         let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
             guard let self = self, let data = data, let xml = String(data: data, encoding: .utf8) else {
                 return
@@ -927,11 +1054,38 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         guard let match = regex.firstMatch(in: xml, options: [], range: NSRange(location: 0, length: nsText.length)) else { return nil }
         let relOrAbs = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
 
+        let resolved: URL?
         if relOrAbs.hasPrefix("http://") || relOrAbs.hasPrefix("https://") {
-            return URL(string: relOrAbs)
+            resolved = URL(string: relOrAbs)
         } else {
-            return URL(string: relOrAbs, relativeTo: baseURL)?.absoluteURL
+            resolved = URL(string: relOrAbs, relativeTo: baseURL)?.absoluteURL
         }
+        guard let candidate = resolved,
+              let candScheme = candidate.scheme?.lowercased(),
+              let baseScheme = baseURL.scheme?.lowercased(),
+              (candScheme == "http" || candScheme == "https"),
+              candScheme == baseScheme,
+              candidate.user == nil,
+              candidate.password == nil else {
+            return nil
+        }
+
+        let candHost = Self.normalizeLiteralIP(candidate.host ?? "") ?? candidate.host?.lowercased()
+        let baseHost = Self.normalizeLiteralIP(baseURL.host ?? "") ?? baseURL.host?.lowercased()
+        guard let ch = candHost, let bh = baseHost, ch == bh else {
+            NSLog("[DLNADiscovery] 🛡️ Blocked cross-host controlURL '%@' for baseURL '%@'", candidate.absoluteString, baseURL.absoluteString)
+            return nil
+        }
+
+        let defaultPort = (baseScheme == "https") ? 443 : 80
+        let candPort = candidate.port ?? defaultPort
+        let basePort = baseURL.port ?? defaultPort
+        guard candPort == basePort else {
+            NSLog("[DLNADiscovery] 🛡️ Blocked cross-port controlURL '%@' for baseURL '%@'", candidate.absoluteString, baseURL.absoluteString)
+            return nil
+        }
+
+        return candidate
     }
 
     // MARK: - AVTransport SOAP Remote Control
