@@ -38,7 +38,7 @@ public final class LateNightDRCService: @unchecked Sendable {
     public let localPassthroughProcessor = LateNightDRCProcessor()
 
     public init(
-        userDefaults: UserDefaults = .standard,
+        userDefaults: UserDefaults = AppStorageProvider.shared,
         suiteKeyPrefix: String = "amr.late_night_drc",
         isIsolated: Bool = false
     ) {

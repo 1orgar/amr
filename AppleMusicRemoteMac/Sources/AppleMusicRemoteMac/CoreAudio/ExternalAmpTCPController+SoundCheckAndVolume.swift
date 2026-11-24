@@ -53,8 +53,8 @@ extension ExternalAmpTCPController {
                     appliedVolumeOffset = 0
                 }
                 lastPersistedAmpVolume = clamped
-                UserDefaults.standard.set(_baseListeningVolume, forKey: kBaseVolumeKey)
-                UserDefaults.standard.set(clamped, forKey: kLastSentAmpVolumeKey)
+                AppStorageProvider.shared.set(_baseListeningVolume, forKey: kBaseVolumeKey)
+                AppStorageProvider.shared.set(clamped, forKey: kLastSentAmpVolumeKey)
                 lastUserCommandTime = Date()
             }
             if clamped > 0 {
@@ -125,7 +125,7 @@ extension ExternalAmpTCPController {
                     _currentVolume = targetVol
                     lastAutoNormCommandTime = Date()
                     lastPersistedAmpVolume = targetVol
-                    UserDefaults.standard.set(targetVol, forKey: kLastSentAmpVolumeKey)
+                    AppStorageProvider.shared.set(targetVol, forKey: kLastSentAmpVolumeKey)
                     volumeToSend = (targetVol, _profile)
                     volChanged = true
                     NSLog("[ExternalAmpTCP] SoundCheck '%@': gain=%+.2f dB, crest=%.1f dB, offset=%+d, base=%d -> ampVol=%d",
@@ -197,7 +197,7 @@ extension ExternalAmpTCPController {
                     _currentVolume = targetVol
                     lastAutoNormCommandTime = Date()
                     lastPersistedAmpVolume = targetVol
-                    UserDefaults.standard.set(targetVol, forKey: kLastSentAmpVolumeKey)
+                    AppStorageProvider.shared.set(targetVol, forKey: kLastSentAmpVolumeKey)
                     volumeToSend = (targetVol, _profile)
                     NSLog("[ExternalAmpTCP] Refined Post-Filter Crest Normalization '%@': gain=%+.2f dB, rawCrest=%.1f dB, restored=%+.1f dB, pad=%+.1f dB, digitalSC=%d -> offset=%+d (ampVol=%d)",
                           cleanKey, _currentTrackGainDb ?? 0.0, crestFactorDb, postAdj.restoredPeakDb, postAdj.digitalPadDb, digitalSoundCheckAlreadyActive ? 1 : 0, newOffset, targetVol)
@@ -251,7 +251,7 @@ extension ExternalAmpTCPController {
                     _currentVolume = targetVol
                     lastAutoNormCommandTime = Date()
                     lastPersistedAmpVolume = targetVol
-                    UserDefaults.standard.set(targetVol, forKey: kLastSentAmpVolumeKey)
+                    AppStorageProvider.shared.set(targetVol, forKey: kLastSentAmpVolumeKey)
                     volumeToSend = (targetVol, _profile)
                 }
             }
@@ -294,7 +294,7 @@ extension ExternalAmpTCPController {
                         _currentVolume = targetVol
                         lastAutoNormCommandTime = Date()
                         lastPersistedAmpVolume = targetVol
-                        UserDefaults.standard.set(targetVol, forKey: kLastSentAmpVolumeKey)
+                        AppStorageProvider.shared.set(targetVol, forKey: kLastSentAmpVolumeKey)
                         extraVolTarget = targetVol
                     }
                 }

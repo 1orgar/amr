@@ -26,6 +26,7 @@ public struct ClientDeviceRecord: Codable, Sendable, Equatable {
     public var firstSeenAt: TimeInterval
     public var lastSeenAt: TimeInterval
     public var lastIPAddress: String
+    internal var decodedInlineLegacySecret: String? = nil
 
     private enum CodingKeys: String, CodingKey {
         case deviceId
@@ -102,14 +103,55 @@ public struct ClientDeviceRecord: Codable, Sendable, Equatable {
         if let decodedSecret = try container.decodeIfPresent(String.self, forKey: .deviceSecret),
            decodedSecret.count >= 32 {
             self.deviceSecret = decodedSecret
+            self.decodedInlineLegacySecret = decodedSecret
         } else {
             self.deviceSecret = Self.generateRandomHexSecret(byteCount: 32)
+            self.decodedInlineLegacySecret = nil
         }
         self.hasConfirmedSecret = try container.decodeIfPresent(Bool.self, forKey: .hasConfirmedSecret) ?? false
         self.revokedAt = try container.decodeIfPresent(TimeInterval.self, forKey: .revokedAt)
         self.firstSeenAt = try container.decodeIfPresent(TimeInterval.self, forKey: .firstSeenAt) ?? 0
         self.lastSeenAt = try container.decodeIfPresent(TimeInterval.self, forKey: .lastSeenAt) ?? 0
         self.lastIPAddress = try container.decodeIfPresent(String.self, forKey: .lastIPAddress) ?? ""
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(deviceId, forKey: .deviceId)
+        try container.encode(deviceName, forKey: .deviceName)
+        try container.encode(deviceType, forKey: .deviceType)
+        try container.encode(isAuthorized, forKey: .isAuthorized)
+        try container.encode(lockScreenControls, forKey: .lockScreenControls)
+        try container.encode(allowDACSelection, forKey: .allowDACSelection)
+        try container.encode(allowDSPPresetSelection, forKey: .allowDSPPresetSelection)
+        try container.encode(allowRoomMeasurement, forKey: .allowRoomMeasurement)
+        try container.encode(allowLateNightMode, forKey: .allowLateNightMode)
+        try container.encode(allowLibraryModification, forKey: .allowLibraryModification)
+        // Intentionally omit `deviceSecret` from UserDefaults JSON — stored exclusively in Keychain (`AppSecretStore`)!
+        try container.encode(hasConfirmedSecret, forKey: .hasConfirmedSecret)
+        try container.encodeIfPresent(revokedAt, forKey: .revokedAt)
+        try container.encode(firstSeenAt, forKey: .firstSeenAt)
+        try container.encode(lastSeenAt, forKey: .lastSeenAt)
+        try container.encode(lastIPAddress, forKey: .lastIPAddress)
+    }
+
+    public static func == (lhs: ClientDeviceRecord, rhs: ClientDeviceRecord) -> Bool {
+        lhs.deviceId == rhs.deviceId
+            && lhs.deviceName == rhs.deviceName
+            && lhs.deviceType == rhs.deviceType
+            && lhs.isAuthorized == rhs.isAuthorized
+            && lhs.lockScreenControls == rhs.lockScreenControls
+            && lhs.allowDACSelection == rhs.allowDACSelection
+            && lhs.allowDSPPresetSelection == rhs.allowDSPPresetSelection
+            && lhs.allowRoomMeasurement == rhs.allowRoomMeasurement
+            && lhs.allowLateNightMode == rhs.allowLateNightMode
+            && lhs.allowLibraryModification == rhs.allowLibraryModification
+            && lhs.deviceSecret == rhs.deviceSecret
+            && lhs.hasConfirmedSecret == rhs.hasConfirmedSecret
+            && lhs.revokedAt == rhs.revokedAt
+            && lhs.firstSeenAt == rhs.firstSeenAt
+            && lhs.lastSeenAt == rhs.lastSeenAt
+            && lhs.lastIPAddress == rhs.lastIPAddress
     }
 
     public var shortId: String {

@@ -20,9 +20,13 @@ public final class ArtworkDiskCache: @unchecked Sendable {
 
     public init(maxSizeMB: Int = 250) {
         self.maxCacheSizeBytes = Int64(maxSizeMB) * 1024 * 1024
-        let baseCache = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        self.cacheDirectory = baseCache.appendingPathComponent("com.kirill.AppleMusicRemoteMac/Artworks", isDirectory: true)
+        if let testRoot = AppStorageProvider.testCachesRootDirectory {
+            self.cacheDirectory = testRoot.appendingPathComponent("Artworks", isDirectory: true)
+        } else {
+            let baseCache = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory())
+            self.cacheDirectory = baseCache.appendingPathComponent("com.kirill.AppleMusicRemoteMac/Artworks", isDirectory: true)
+        }
 
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }
@@ -183,9 +187,13 @@ public final class MotionArtworkDiskCache: @unchecked Sendable {
 
     public init(maxSizeMB: Int = 500) {
         self.maxCacheSizeBytes = Int64(maxSizeMB) * 1024 * 1024
-        let baseCache = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        self.cacheDirectory = baseCache.appendingPathComponent("com.kirill.AppleMusicRemoteMac/MotionArtworks", isDirectory: true)
+        if let testRoot = AppStorageProvider.testCachesRootDirectory {
+            self.cacheDirectory = testRoot.appendingPathComponent("MotionArtworks", isDirectory: true)
+        } else {
+            let baseCache = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory())
+            self.cacheDirectory = baseCache.appendingPathComponent("com.kirill.AppleMusicRemoteMac/MotionArtworks", isDirectory: true)
+        }
         self.indexFileURL = cacheDirectory.appendingPathComponent("motion_index.json")
 
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)

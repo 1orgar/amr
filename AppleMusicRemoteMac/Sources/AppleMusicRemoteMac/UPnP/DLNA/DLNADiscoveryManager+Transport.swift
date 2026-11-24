@@ -140,14 +140,14 @@ extension DLNADiscoveryManager {
         var scheduledWork: DispatchWorkItem?
         lock.lock()
         lastLocalVolumeCommandDate = Date()
-        if let uid = UserDefaults.standard.string(forKey: Self.activeRendererDefaultsKey) {
+        if let uid = AppStorageProvider.shared.string(forKey: Self.activeRendererDefaultsKey) {
             let cleanId = uid.hasPrefix("dlna:") ? String(uid.dropFirst(5)) : uid
             rendererVolumesByUID[cleanId] = clamped
             if clamped > 0 {
                 rendererMutedState = false
             }
             if !isTestEnv {
-                UserDefaults.standard.set(rendererVolumesByUID, forKey: Self.rendererVolumesDefaultsKey)
+                AppStorageProvider.shared.set(rendererVolumesByUID, forKey: Self.rendererVolumesDefaultsKey)
             }
         }
         let supersededCompletion = pendingVolumeCompletion
@@ -326,7 +326,7 @@ extension DLNADiscoveryManager {
             if ignoreSuppressionWindow || Date().timeIntervalSince(self.lastLocalVolumeCommandDate) > 3.0 {
                 if self.rendererVolumesByUID[rendererID] != clamped {
                     self.rendererVolumesByUID[rendererID] = clamped
-                    UserDefaults.standard.set(self.rendererVolumesByUID, forKey: Self.rendererVolumesDefaultsKey)
+                    AppStorageProvider.shared.set(self.rendererVolumesByUID, forKey: Self.rendererVolumesDefaultsKey)
                     changed = true
                 }
             }

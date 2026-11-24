@@ -32,13 +32,13 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     internal var discoveredRenderers: [String: DiscoveredDLNARenderer] = [:]
     internal var resolvedHostIPs: [String: Set<String>] = [:]
     internal var _streamSessionToken: String = {
-        if let saved = UserDefaults.standard.string(forKey: "amr.dlna.streamSessionToken.v1")?
+        if let saved = AppStorageProvider.shared.string(forKey: "amr.dlna.streamSessionToken.v1")?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            saved.count >= 32 {
             return saved
         }
         let generated = ClientDeviceRecord.generateRandomHexSecret(byteCount: 16)
-        UserDefaults.standard.set(generated, forKey: "amr.dlna.streamSessionToken.v1")
+        AppStorageProvider.shared.set(generated, forKey: "amr.dlna.streamSessionToken.v1")
         return generated
     }()
     internal var _previousStreamSessionToken: String? = nil
@@ -56,7 +56,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     internal var lastLocalVolumeCommandDate: Date = Date.distantPast
     internal var pendingVolumeWorkItem: DispatchWorkItem?
     internal var pendingVolumeCompletion: ((Bool, String) -> Void)?
-    internal var rendererVolumesByUID: [String: Int] = (UserDefaults.standard.dictionary(forKey: "amr.dlna.rendererVolumes.v1") as? [String: Int]) ?? [:]
+    internal var rendererVolumesByUID: [String: Int] = (AppStorageProvider.shared.dictionary(forKey: "amr.dlna.rendererVolumes.v1") as? [String: Int]) ?? [:]
     internal var rendererMutedState: Bool = false
     internal var lastTrackId: String = ""
     internal var lastTrackTitle: String = ""
@@ -130,7 +130,7 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     public var currentVolume: Int {
         lock.lock()
         defer { lock.unlock() }
-        guard let uid = UserDefaults.standard.string(forKey: Self.activeRendererDefaultsKey) else {
+        guard let uid = AppStorageProvider.shared.string(forKey: Self.activeRendererDefaultsKey) else {
             return 50
         }
         let cleanId = uid.hasPrefix("dlna:") ? String(uid.dropFirst(5)) : uid
@@ -162,14 +162,14 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         get {
             lock.lock()
             defer { lock.unlock() }
-            return UserDefaults.standard.string(forKey: Self.activeRendererDefaultsKey)
+            return AppStorageProvider.shared.string(forKey: Self.activeRendererDefaultsKey)
         }
         set {
             lock.lock()
             if let val = newValue {
-                UserDefaults.standard.set(val, forKey: Self.activeRendererDefaultsKey)
+                AppStorageProvider.shared.set(val, forKey: Self.activeRendererDefaultsKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: Self.activeRendererDefaultsKey)
+                AppStorageProvider.shared.removeObject(forKey: Self.activeRendererDefaultsKey)
             }
             lock.unlock()
         }
@@ -188,16 +188,16 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
             return nil
         }
         let targetStoredUID = "dlna:\(renderer.id)"
-        let previousUID = UserDefaults.standard.string(forKey: Self.activeRendererDefaultsKey)
+        let previousUID = AppStorageProvider.shared.string(forKey: Self.activeRendererDefaultsKey)
         if previousUID != targetStoredUID {
             _previousStreamSessionToken = _streamSessionToken
             let rotated = ClientDeviceRecord.generateRandomHexSecret(byteCount: 16)
             _streamSessionToken = rotated
             if !PlaybackRouter.shared.isTestingEnvironment {
-                UserDefaults.standard.set(rotated, forKey: Self.streamSessionTokenDefaultsKey)
+                AppStorageProvider.shared.set(rotated, forKey: Self.streamSessionTokenDefaultsKey)
             }
         }
-        UserDefaults.standard.set(targetStoredUID, forKey: Self.activeRendererDefaultsKey)
+        AppStorageProvider.shared.set(targetStoredUID, forKey: Self.activeRendererDefaultsKey)
         lock.unlock()
 
         resolveAndCacheHostIfNeeded(renderer.locationURL.host)
@@ -287,9 +287,9 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         let cleanRemote = Self.normalizeHost(remoteIP)
         guard !cleanRemote.isEmpty else { return false }
         guard let selected = getActiveRenderer() else {
-            if let activeUID = UserDefaults.standard.string(forKey: Self.activeRendererDefaultsKey),
+            if let activeUID = AppStorageProvider.shared.string(forKey: Self.activeRendererDefaultsKey),
                activeUID.lowercased().contains("bluos:"),
-               let knownHosts = UserDefaults.standard.stringArray(forKey: "BluOSKnownHosts") {
+               let knownHosts = AppStorageProvider.shared.stringArray(forKey: "BluOSKnownHosts") {
                 return knownHosts.map(Self.normalizeHost).contains(cleanRemote)
             }
             return false
@@ -336,9 +336,9 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
         let rotated = ClientDeviceRecord.generateRandomHexSecret(byteCount: 16)
         _streamSessionToken = rotated
         if !PlaybackRouter.shared.isTestingEnvironment {
-            UserDefaults.standard.set(rotated, forKey: Self.streamSessionTokenDefaultsKey)
+            AppStorageProvider.shared.set(rotated, forKey: Self.streamSessionTokenDefaultsKey)
         }
-        UserDefaults.standard.removeObject(forKey: Self.activeRendererDefaultsKey)
+        AppStorageProvider.shared.removeObject(forKey: Self.activeRendererDefaultsKey)
         lock.unlock()
         supersededCompletion?(false, "Renderer deselected")
         stopBluOSStatusMonitoring()
@@ -352,20 +352,20 @@ public final class DLNADiscoveryManager: @unchecked Sendable {
     public func getActiveRenderer() -> DiscoveredDLNARenderer? {
         lock.lock()
         defer { lock.unlock() }
-        guard let uid = UserDefaults.standard.string(forKey: Self.activeRendererDefaultsKey) else { return nil }
+        guard let uid = AppStorageProvider.shared.string(forKey: Self.activeRendererDefaultsKey) else { return nil }
         let cleanId = uid.hasPrefix("dlna:") ? String(uid.dropFirst(5)) : uid
         return discoveredRenderers[cleanId] ?? discoveredRenderers.values.first(where: { $0.id == cleanId || "dlna:\($0.id)" == uid })
     }
 
     public var isEnabled: Bool {
         get {
-            if UserDefaults.standard.object(forKey: Self.defaultsKey) == nil {
+            if AppStorageProvider.shared.object(forKey: Self.defaultsKey) == nil {
                 return true
             }
-            return UserDefaults.standard.bool(forKey: Self.defaultsKey)
+            return AppStorageProvider.shared.bool(forKey: Self.defaultsKey)
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: Self.defaultsKey)
+            AppStorageProvider.shared.set(newValue, forKey: Self.defaultsKey)
             if newValue {
                 start()
             } else {

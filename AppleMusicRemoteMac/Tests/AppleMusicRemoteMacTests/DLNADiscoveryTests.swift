@@ -14,7 +14,7 @@ final class DLNADiscoveryTests: XCTestCase {
     override func setUp() {
         super.setUp()
         // Save current user default
-        UserDefaults.standard.removeObject(forKey: DLNADiscoveryManager.defaultsKey)
+        AppStorageProvider.shared.removeObject(forKey: DLNADiscoveryManager.defaultsKey)
     }
 
     override func tearDown() {

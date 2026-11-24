@@ -41,9 +41,9 @@ jobs:
             echo "ℹ️ MUSICKIT_KEY_P8 secret not found; running tests with fallback"
           fi
 
-      - name: Run Swift Unit Tests (Blocking)
+      - name: Run Swift Unit Tests (Parallel)
         run: |
-          xcrun swift test --package-path AppleMusicRemoteMac
+          xcrun swift test --package-path AppleMusicRemoteMac --parallel
 
       - name: Verify Universal Binary Compilation
         run: |

@@ -206,11 +206,11 @@ extension AudioEngineController {
         if isTestingEnvironment {
             return EngineConfiguration()
         }
-        if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
+        if let data = AppStorageProvider.shared.data(forKey: userDefaultsKey),
            let decoded = try? JSONDecoder().decode(EngineConfiguration.self, from: data) {
             return decoded
         }
-        if let legacyData = UserDefaults.standard.data(forKey: legacyUserDefaultsKeyV1),
+        if let legacyData = AppStorageProvider.shared.data(forKey: legacyUserDefaultsKeyV1),
            var legacyDecoded = try? JSONDecoder().decode(EngineConfiguration.self, from: legacyData) {
             if legacyDecoded.clockPolicy == .adaptiveDualGrid {
                 legacyDecoded.clockPolicy = .strictSACD44k1
@@ -224,7 +224,7 @@ extension AudioEngineController {
     internal static func persistConfiguration(_ config: EngineConfiguration) {
         guard !isTestingEnvironment else { return }
         if let encoded = try? JSONEncoder().encode(config) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+            AppStorageProvider.shared.set(encoded, forKey: userDefaultsKey)
         }
     }
 }

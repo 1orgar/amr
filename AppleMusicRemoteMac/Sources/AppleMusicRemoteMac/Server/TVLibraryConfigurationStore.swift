@@ -121,7 +121,7 @@ public final class TVLibraryConfigurationStore: @unchecked Sendable {
     private let storageKey: String
     private var state: TVLibraryConfiguration
 
-    public init(userDefaults: UserDefaults = .standard, storageKey: String = "AMRTVLibraryConfigurationV1") {
+    public init(userDefaults: UserDefaults = AppStorageProvider.shared, storageKey: String = "AMRTVLibraryConfigurationV1") {
         self.userDefaults = userDefaults
         self.storageKey = storageKey
 

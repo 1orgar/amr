@@ -368,16 +368,16 @@ extension MusicKitManager {
             if let r1 = Self.storageDefaults.string(forKey: Self.reusableStagingCloudPlaylistIdKey), !r1.isEmpty {
                 stored.insert(r1)
             }
-            if let r2 = UserDefaults.standard.string(forKey: Self.reusableStagingCloudPlaylistIdKey), !r2.isEmpty {
+            if let r2 = AppStorageProvider.shared.string(forKey: Self.reusableStagingCloudPlaylistIdKey), !r2.isEmpty {
                 stored.insert(r2)
             }
-            for item in (UserDefaults.standard.stringArray(forKey: Self.stagingCloudPlaylistIdsKey) ?? []) where !item.isEmpty {
+            for item in (AppStorageProvider.shared.stringArray(forKey: Self.stagingCloudPlaylistIdsKey) ?? []) where !item.isEmpty {
                 stored.insert(item)
             }
             Self.storageDefaults.removeObject(forKey: Self.reusableStagingCloudPlaylistIdKey)
             Self.storageDefaults.removeObject(forKey: Self.stagingCloudPlaylistIdsKey)
-            UserDefaults.standard.removeObject(forKey: Self.reusableStagingCloudPlaylistIdKey)
-            UserDefaults.standard.removeObject(forKey: Self.stagingCloudPlaylistIdsKey)
+            AppStorageProvider.shared.removeObject(forKey: Self.reusableStagingCloudPlaylistIdKey)
+            AppStorageProvider.shared.removeObject(forKey: Self.stagingCloudPlaylistIdsKey)
             return (sId, qId, Array(stored))
         }
 

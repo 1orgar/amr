@@ -93,7 +93,7 @@ final class PlaybackStateStoreTests: XCTestCase {
         let originalStaged = store.withLock { store.stagedTemporaryTrackDbIds }
         defer {
             store.withLock { store.stagedTemporaryTrackDbIds = originalStaged }
-            UserDefaults.standard.set(Array(originalStaged), forKey: "AMRStagedTemporaryTrackDbIds")
+            AppStorageProvider.shared.set(Array(originalStaged), forKey: "AMRStagedTemporaryTrackDbIds")
         }
 
         store.setTrackMetadata(id: 77001, name: "UnitTest Track 1", artist: "UnitTest Ólafur", album: "UnitTest re:member")

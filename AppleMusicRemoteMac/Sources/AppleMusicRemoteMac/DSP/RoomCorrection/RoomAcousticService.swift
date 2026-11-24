@@ -89,7 +89,7 @@ public final class RoomAcousticService: @unchecked Sendable {
     internal var localEQRingConfiguredUnitRate: Double = 0.0
     internal var localEQSampleRate: Double = 48_000.0
 
-    public init(userDefaults: UserDefaults = .standard, isIsolatedInstance: Bool = false) {
+    public init(userDefaults: UserDefaults = AppStorageProvider.shared, isIsolatedInstance: Bool = false) {
         self.defaults = userDefaults
         self.isIsolatedInstance = isIsolatedInstance || PlaybackRouter.shared.isTestingEnvironment
         self.localEQRingL = [Float](repeating: 0.0, count: Self.localEQRingCapacity)

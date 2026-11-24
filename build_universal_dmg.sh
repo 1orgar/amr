@@ -202,12 +202,16 @@ PLIST
 
 SIGN_IDENTITY="${APPLE_SIGN_IDENTITY:-}"
 if [ -z "$SIGN_IDENTITY" ]; then
+    SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -n 1 | awk -F'"' '{print $2}' || true)"
+fi
+if [ -z "$SIGN_IDENTITY" ]; then
     SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -n 1 | awk -F'"' '{print $2}' || true)"
 fi
 
 if [ -n "$SIGN_IDENTITY" ]; then
     echo "🔏 Signing with identity: $SIGN_IDENTITY"
-    codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign "$SIGN_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
+    codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "$SIGN_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
+        || codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign "$SIGN_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
         || codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign - "$APP_BUNDLE"
 else
     echo "🔏 Ad-hoc codesigning Universal binary with hardened runtime & entitlements..."
@@ -227,6 +231,23 @@ hdiutil create \
     "$DMG_OUTPUT"
 
 rm -rf "$DMG_STAGING"
+
+# Optional Apple Notarization & Stapling when Developer ID credentials are configured
+if [[ "$SIGN_IDENTITY" == *"Developer ID Application"* ]]; then
+    if [ -n "${APPLE_NOTARIZE_KEYCHAIN_PROFILE:-}" ]; then
+        echo "🛡️ Submitting DMG to Apple Notary Service (profile: $APPLE_NOTARIZE_KEYCHAIN_PROFILE)..."
+        xcrun notarytool submit "$DMG_OUTPUT" --keychain-profile "$APPLE_NOTARIZE_KEYCHAIN_PROFILE" --wait
+        xcrun stapler staple "$DMG_OUTPUT"
+    elif [ -n "${APPLE_NOTARIZE_APPLE_ID:-}" ] && [ -n "${APPLE_NOTARIZE_TEAM_ID:-}" ] && [ -n "${APPLE_NOTARIZE_APP_PASSWORD:-}" ]; then
+        echo "🛡️ Submitting DMG to Apple Notary Service (Apple ID: $APPLE_NOTARIZE_APPLE_ID)..."
+        xcrun notarytool submit "$DMG_OUTPUT" \
+            --apple-id "$APPLE_NOTARIZE_APPLE_ID" \
+            --team-id "$APPLE_NOTARIZE_TEAM_ID" \
+            --password "$APPLE_NOTARIZE_APP_PASSWORD" \
+            --wait
+        xcrun stapler staple "$DMG_OUTPUT"
+    fi
+fi
 
 echo ""
 echo "=========================================================="

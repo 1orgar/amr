@@ -40,6 +40,7 @@ public final class MusicKitManager: @unchecked Sendable {
 
     var cachedToken: String?
     var tokenExpiry: Date?
+    var lastDetectedExpiredDevTokenAt: Date?
     var privateKey: P256.Signing.PrivateKey?
     var trackArtworkCache: [String: String] = [:]
     var trackArtworkNegativeCache: [String: Date] = [:]
@@ -96,15 +97,21 @@ public final class MusicKitManager: @unchecked Sendable {
     let session: URLSession
 
     static var storageDefaults: UserDefaults {
-        if Bundle.main.bundleIdentifier != nil {
-            return UserDefaults.standard
+        if AppStorageProvider.isRunningUnderXCTest {
+            return AppStorageProvider.shared
         }
-        return UserDefaults(suiteName: "org.ksholokhov.amr.mac") ?? UserDefaults.standard
+        if Bundle.main.bundleIdentifier != nil {
+            return AppStorageProvider.shared
+        }
+        return UserDefaults(suiteName: "org.ksholokhov.amr.mac") ?? AppStorageProvider.shared
     }
 
     /// Safely opens a legacy UserDefaults suite without triggering macOS `_NSUserDefaults_Log_Nonsensical_Suites`
     /// when `suite` matches the running app's own `CFBundleIdentifier` (already covered by `UserDefaults.standard`).
     static func legacySuiteDefaults(_ suite: String) -> UserDefaults? {
+        if AppStorageProvider.isRunningUnderXCTest {
+            return nil
+        }
         if let bundleId = Bundle.main.bundleIdentifier, bundleId == suite {
             return nil
         }
@@ -114,7 +121,7 @@ public final class MusicKitManager: @unchecked Sendable {
     internal static let keychainService = "org.ksholokhov.amr.musickit"
 
     public var isTestingProcess: Bool {
-        NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        AppStorageProvider.isRunningUnderXCTest
     }
 
     // MARK: - Safe Identifier, Storefront & Pagination URL Validation
@@ -221,7 +228,7 @@ public final class MusicKitManager: @unchecked Sendable {
             }
         }
         if savedSf == nil || savedSf!.isEmpty {
-            savedSf = UserDefaults.standard.string(forKey: "AppleMusicUserStorefront")
+            savedSf = AppStorageProvider.shared.string(forKey: "AppleMusicUserStorefront")
         }
         if (savedSf == nil || savedSf!.isEmpty) && !isTestingProcess {
             savedSf = AccountHealthService.shared.getMacAccountInfo().countryCode
@@ -234,11 +241,11 @@ public final class MusicKitManager: @unchecked Sendable {
 
         if let savedLangs = defs.stringArray(forKey: "AppleMusicSupportedLanguageTags"), !savedLangs.isEmpty {
             self.supportedLanguageTags = savedLangs
-        } else if let stdLangs = UserDefaults.standard.stringArray(forKey: "AppleMusicSupportedLanguageTags"), !stdLangs.isEmpty {
+        } else if let stdLangs = AppStorageProvider.shared.stringArray(forKey: "AppleMusicSupportedLanguageTags"), !stdLangs.isEmpty {
             self.supportedLanguageTags = stdLangs
         }
         self.defaultLanguageTag = defs.string(forKey: "AppleMusicDefaultLanguageTag")
-            ?? UserDefaults.standard.string(forKey: "AppleMusicDefaultLanguageTag")
+            ?? AppStorageProvider.shared.string(forKey: "AppleMusicDefaultLanguageTag")
             ?? ""
 
         loadPrivateKey()
@@ -256,7 +263,7 @@ public final class MusicKitManager: @unchecked Sendable {
             }
             self.albumArtworkCacheByNormTitle = hydratedAlbums
         }
-        if self.userToken != nil && !self.userToken!.isEmpty {
+        if !isTestingProcess, self.userToken != nil && !self.userToken!.isEmpty {
             Task.detached(priority: .utility) { [weak self] in
                 _ = await self?.fetchUserStorefront()
             }
@@ -309,23 +316,62 @@ public final class MusicKitManager: @unchecked Sendable {
 
     // MARK: - Key Loading
 
+    public enum DeveloperTokenHealthState: Sendable, Equatable {
+        case ready(expiresAt: Date)
+        case expired(expiredAt: Date)
+        case unavailable
+    }
+
+    public var developerTokenHealthState: DeveloperTokenHealthState {
+        lock.lock()
+        let hasKey = (privateKey != nil)
+        let exp = tokenExpiry
+        let expiredFallback = lastDetectedExpiredDevTokenAt
+        lock.unlock()
+
+        if let exp, exp.timeIntervalSinceNow > 3600 {
+            return .ready(expiresAt: exp)
+        }
+        if hasKey {
+            return .ready(expiresAt: Date().addingTimeInterval(86400 * 30))
+        }
+        if let expiredFallback {
+            return .expired(expiredAt: expiredFallback)
+        }
+        return .unavailable
+    }
+
     private var allowWorkspaceKeyProbing: Bool {
+        if AppStorageProvider.isRunningUnderXCTest {
+            return ProcessInfo.processInfo.environment["AMR_ALLOW_TEST_MUSICKIT_KEY"] == "1"
+        }
         #if DEBUG
         return true
         #else
-        return isTestingProcess || PlaybackRouter.shared.isTestingEnvironment
+        return false
         #endif
     }
 
     private func loadPrivateKey() {
         let env = ProcessInfo.processInfo.environment
-        let allowDevProbe = allowWorkspaceKeyProbing
 
-        // 1. In DEBUG or XCTest, allow inline PEM environment override
-        if allowDevProbe,
-           let envPem = env["AMR_MUSICKIT_PRIVATE_KEY"], !envPem.isEmpty,
+        // 1. Explicit inline PEM environment override (DEBUG or opted-in test)
+        if let envPem = env["AMR_MUSICKIT_PRIVATE_KEY"], !envPem.isEmpty,
            configureKey(pemString: envPem) {
             NSLog("[MusicKitManager] Loaded MusicKit private key from AMR_MUSICKIT_PRIVATE_KEY")
+            return
+        }
+
+        // Under XCTest, avoid reading AuthKey_*.p8 from workspace CWD unless explicitly opted in
+        if AppStorageProvider.isRunningUnderXCTest && env["AMR_ALLOW_TEST_MUSICKIT_KEY"] != "1" {
+            return
+        }
+
+        // 2. macOS Keychain (`org.ksholokhov.amr.musickit` / `MusicKitPrivateKey.<keyId>`)
+        if !isTestingProcess,
+           let keychainPem = readKeychainString(account: "MusicKitPrivateKey.\(keyId)"),
+           configureKey(pemString: keychainPem) {
+            NSLog("[MusicKitManager] Loaded MusicKit private key from macOS Keychain")
             return
         }
 
@@ -333,13 +379,18 @@ public final class MusicKitManager: @unchecked Sendable {
             ?? Bundle.main.resourcePath.map { "\($0)/AuthKey_\(keyId).p8" }
         let appSupportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("AppleMusicRemoteMac", isDirectory: true)
+        let appSupportProtectedKeyPath = appSupportDir?
+            .appendingPathComponent("Keys", isDirectory: true)
+            .appendingPathComponent("AuthKey_\(keyId).p8")
+            .path
         let appSupportKeyPath = appSupportDir?.appendingPathComponent("AuthKey_\(keyId).p8").path
 
         var rawPaths: [String?] = [
-            bundleResourceKeyPath,
-            appSupportKeyPath
+            appSupportProtectedKeyPath,
+            appSupportKeyPath,
+            bundleResourceKeyPath
         ]
-        if allowDevProbe {
+        if allowWorkspaceKeyProbing {
             let cwd = FileManager.default.currentDirectoryPath
             let parentDirKeyPath = URL(fileURLWithPath: cwd)
                 .deletingLastPathComponent()
@@ -360,7 +411,7 @@ public final class MusicKitManager: @unchecked Sendable {
             }
         }
 
-        // Fallback: check pre-signed public Developer JWT token (Bundle Resources / Application Support; cwd only in DEBUG/tests)
+        // Fallback: check pre-signed public Developer JWT token (Bundle Resources / Application Support; cwd only in DEBUG)
         if loadFallbackDeveloperToken() {
             return
         }
@@ -368,7 +419,7 @@ public final class MusicKitManager: @unchecked Sendable {
         NSLog("[MusicKitManager] Warning: AuthKey_%@.p8 and pre-signed developer token not found", keyId)
     }
 
-    internal static func parseDeveloperTokenExpiry(_ rawToken: String) -> (token: String, exp: TimeInterval)? {
+    internal static func decodeDeveloperTokenExpiryRaw(_ rawToken: String) -> (token: String, exp: TimeInterval)? {
         let trimmed = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
         let parts = trimmed.split(separator: ".")
         guard parts.count == 3 else { return nil }
@@ -393,10 +444,16 @@ public final class MusicKitManager: @unchecked Sendable {
         } else {
             expVal = nil
         }
-        guard let exp = expVal, exp > Date().timeIntervalSince1970 + 3600 else {
+        guard let exp = expVal else { return nil }
+        return (trimmed, exp)
+    }
+
+    internal static func parseDeveloperTokenExpiry(_ rawToken: String) -> (token: String, exp: TimeInterval)? {
+        guard let decoded = decodeDeveloperTokenExpiryRaw(rawToken),
+              decoded.exp > Date().timeIntervalSince1970 + 3600 else {
             return nil
         }
-        return (trimmed, exp)
+        return decoded
     }
 
     @discardableResult
@@ -442,10 +499,15 @@ public final class MusicKitManager: @unchecked Sendable {
         }
 
         var bestMatch: (source: String, token: String, exp: TimeInterval)?
+        var latestExpiredAt: TimeInterval?
         for cand in candidates {
             if let parsed = Self.parseDeveloperTokenExpiry(cand.rawJwt) {
                 if bestMatch == nil || parsed.exp > bestMatch!.exp {
                     bestMatch = (cand.source, parsed.token, parsed.exp)
+                }
+            } else if let rawDecoded = Self.decodeDeveloperTokenExpiryRaw(cand.rawJwt) {
+                if latestExpiredAt == nil || rawDecoded.exp > latestExpiredAt! {
+                    latestExpiredAt = rawDecoded.exp
                 }
             }
         }
@@ -453,22 +515,34 @@ public final class MusicKitManager: @unchecked Sendable {
         if let best = bestMatch {
             self.cachedToken = best.token
             self.tokenExpiry = Date(timeIntervalSince1970: best.exp)
+            self.lastDetectedExpiredDevTokenAt = nil
             NSLog("[MusicKitManager] Loaded pre-signed MusicKit Developer JWT from %@", best.source)
             return true
+        }
+        if let expTs = latestExpiredAt {
+            self.lastDetectedExpiredDevTokenAt = Date(timeIntervalSince1970: expTs)
+            NSLog("[MusicKitManager] ⚠️ Pre-signed MusicKit Developer JWT expired at %@", Date(timeIntervalSince1970: expTs).description)
         }
         return false
     }
 
     @discardableResult
     public func configurePreSignedDeveloperToken(_ rawToken: String) -> Bool {
-        guard let parsed = Self.parseDeveloperTokenExpiry(rawToken) else {
+        guard let decoded = Self.decodeDeveloperTokenExpiryRaw(rawToken) else {
             return false
         }
         lock.lock()
-        self.cachedToken = parsed.token
-        self.tokenExpiry = Date(timeIntervalSince1970: parsed.exp)
-        lock.unlock()
-        return true
+        defer { lock.unlock() }
+        if decoded.exp > Date().timeIntervalSince1970 + 3600 {
+            self.cachedToken = decoded.token
+            self.tokenExpiry = Date(timeIntervalSince1970: decoded.exp)
+            self.lastDetectedExpiredDevTokenAt = nil
+            return true
+        }
+        self.cachedToken = nil
+        self.tokenExpiry = nil
+        self.lastDetectedExpiredDevTokenAt = Date(timeIntervalSince1970: decoded.exp)
+        return false
     }
 
     public func configureKey(pemString: String) -> Bool {
@@ -489,6 +563,7 @@ public final class MusicKitManager: @unchecked Sendable {
         self.privateKey = pKey
         self.cachedToken = nil
         self.tokenExpiry = nil
+        self.lastDetectedExpiredDevTokenAt = nil
         lock.unlock()
         return true
     }
@@ -499,6 +574,7 @@ public final class MusicKitManager: @unchecked Sendable {
         self.privateKey = key
         self.cachedToken = nil
         self.tokenExpiry = nil
+        self.lastDetectedExpiredDevTokenAt = nil
         lock.unlock()
     }
 
@@ -508,6 +584,7 @@ public final class MusicKitManager: @unchecked Sendable {
         self.privateKey = nil
         self.cachedToken = nil
         self.tokenExpiry = nil
+        self.lastDetectedExpiredDevTokenAt = nil
         lock.unlock()
         loadPrivateKey()
     }

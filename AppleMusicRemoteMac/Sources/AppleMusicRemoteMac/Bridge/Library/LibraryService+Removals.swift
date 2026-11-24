@@ -102,7 +102,7 @@ extension LibraryService {
         }
 
         if let snap = updatedStagedSnapshot, !PlaybackRouter.shared.isTestingEnvironment {
-            UserDefaults.standard.set(snap, forKey: "AMRStagedTemporaryTrackDbIds")
+            AppStorageProvider.shared.set(snap, forKey: "AMRStagedTemporaryTrackDbIds")
         }
 
         if PlaybackRouter.shared.isTestingEnvironment {

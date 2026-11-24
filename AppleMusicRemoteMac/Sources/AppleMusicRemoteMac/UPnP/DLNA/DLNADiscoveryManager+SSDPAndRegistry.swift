@@ -93,7 +93,7 @@ extension DLNADiscoveryManager {
     }
 
     public func probeKnownBluOSHosts() {
-        let hosts = UserDefaults.standard.stringArray(forKey: "BluOSKnownHosts") ?? []
+        let hosts = AppStorageProvider.shared.stringArray(forKey: "BluOSKnownHosts") ?? []
         for host in hosts {
             probeBluOS(host: host)
         }
@@ -141,10 +141,10 @@ extension DLNADiscoveryManager {
                 lastSeen: Date()
             )
 
-            var hosts = UserDefaults.standard.stringArray(forKey: "BluOSKnownHosts") ?? []
+            var hosts = AppStorageProvider.shared.stringArray(forKey: "BluOSKnownHosts") ?? []
             if !hosts.contains(host) {
                 hosts.append(host)
-                UserDefaults.standard.set(hosts, forKey: "BluOSKnownHosts")
+                AppStorageProvider.shared.set(hosts, forKey: "BluOSKnownHosts")
             }
 
             self.registerDevice(renderer)
@@ -362,7 +362,7 @@ extension DLNADiscoveryManager {
         lock.lock()
         let isNew = discoveredRenderers[renderer.id] == nil
         if isNew && discoveredRenderers.count >= Self.maxDiscoveredRenderers {
-            let activeRaw = UserDefaults.standard.string(forKey: Self.activeRendererDefaultsKey) ?? ""
+            let activeRaw = AppStorageProvider.shared.string(forKey: Self.activeRendererDefaultsKey) ?? ""
             let candidates = discoveredRenderers.values
                 .filter { $0.id != activeRaw && "dlna:\($0.id)" != activeRaw }
                 .sorted { $0.lastSeen < $1.lastSeen }
@@ -453,7 +453,7 @@ extension DLNADiscoveryManager {
 
     internal func cleanupStaleDevices() {
         let cutoff = Date().addingTimeInterval(-300)
-        let activeRaw = UserDefaults.standard.string(forKey: Self.activeRendererDefaultsKey) ?? ""
+        let activeRaw = AppStorageProvider.shared.string(forKey: Self.activeRendererDefaultsKey) ?? ""
         lock.lock()
         let beforeCount = discoveredRenderers.count
         discoveredRenderers = discoveredRenderers.filter {

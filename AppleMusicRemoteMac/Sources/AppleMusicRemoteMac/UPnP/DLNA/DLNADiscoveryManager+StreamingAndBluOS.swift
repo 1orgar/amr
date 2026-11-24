@@ -100,7 +100,7 @@ extension DLNADiscoveryManager {
             if let v = volVal, v >= 0 {
                 if rendererVolumesByUID[rendererID] != v {
                     rendererVolumesByUID[rendererID] = v
-                    UserDefaults.standard.set(rendererVolumesByUID, forKey: Self.rendererVolumesDefaultsKey)
+                    AppStorageProvider.shared.set(rendererVolumesByUID, forKey: Self.rendererVolumesDefaultsKey)
                     didChange = true
                 }
             }

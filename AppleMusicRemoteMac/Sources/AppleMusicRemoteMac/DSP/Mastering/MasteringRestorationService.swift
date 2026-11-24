@@ -34,7 +34,7 @@ public final class MasteringRestorationService: @unchecked Sendable {
     public let localPassthroughProcessor = MasteringRestorationProcessor()
 
     public init(
-        userDefaults: UserDefaults = .standard,
+        userDefaults: UserDefaults = AppStorageProvider.shared,
         suiteKeyPrefix: String = "amr.mastering_restoration",
         isIsolated: Bool = false
     ) {

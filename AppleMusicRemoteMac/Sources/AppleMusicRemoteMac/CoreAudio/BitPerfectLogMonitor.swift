@@ -30,7 +30,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             os_unfair_lock_lock(&fastSpinLock)
             _fastIsEnabled = newValue
             os_unfair_lock_unlock(&fastSpinLock)
-            UserDefaults.standard.set(newValue, forKey: "BitPerfectAutoSwitchEnabled")
+            AppStorageProvider.shared.set(newValue, forKey: "BitPerfectAutoSwitchEnabled")
             NSLog("[BitPerfectLogMonitor] Bit-Perfect auto-switch is now: \(newValue ? "ON" : "OFF")")
             if newValue, let rate = currentDetectedSampleRate {
                 applyFormat(rate: rate, bitDepth: currentDetectedBitDepth ?? (rate >= 48000.0 ? 24 : 16))
@@ -168,10 +168,10 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     ]
 
     private init() {
-        if UserDefaults.standard.object(forKey: "BitPerfectAutoSwitchEnabled") == nil {
+        if AppStorageProvider.shared.object(forKey: "BitPerfectAutoSwitchEnabled") == nil {
             self._fastIsEnabled = true
         } else {
-            self._fastIsEnabled = UserDefaults.standard.bool(forKey: "BitPerfectAutoSwitchEnabled")
+            self._fastIsEnabled = AppStorageProvider.shared.bool(forKey: "BitPerfectAutoSwitchEnabled")
         }
     }
 

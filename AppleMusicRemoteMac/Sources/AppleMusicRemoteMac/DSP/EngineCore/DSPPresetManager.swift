@@ -212,7 +212,7 @@ public final class DSPPresetManager: @unchecked Sendable {
 
     public init(loadFromDefaults: Bool = true) {
         if loadFromDefaults && !Self.isTestingEnvironment {
-            if let data = UserDefaults.standard.data(forKey: Self.customPresetsStorageKey),
+            if let data = AppStorageProvider.shared.data(forKey: Self.customPresetsStorageKey),
                let decoded = try? JSONDecoder().decode([DSPPreset].self, from: data) {
                 self._customPresets = decoded.map { p in
                     var copy = p
@@ -222,13 +222,13 @@ public final class DSPPresetManager: @unchecked Sendable {
             } else {
                 self._customPresets = []
             }
-            if let delData = UserDefaults.standard.data(forKey: Self.deletedPresetsStorageKey),
+            if let delData = AppStorageProvider.shared.data(forKey: Self.deletedPresetsStorageKey),
                let delDecoded = try? JSONDecoder().decode([String: TimeInterval].self, from: delData) {
                 self._deletedPresetTimestamps = delDecoded
             } else {
                 self._deletedPresetTimestamps = [:]
             }
-            self._preferredPresetID = UserDefaults.standard.string(forKey: Self.selectedPresetIDStorageKey)
+            self._preferredPresetID = AppStorageProvider.shared.string(forKey: Self.selectedPresetIDStorageKey)
         } else {
             self._customPresets = []
             self._preferredPresetID = nil
@@ -577,15 +577,15 @@ public final class DSPPresetManager: @unchecked Sendable {
     private func persistLocked() {
         guard !Self.isTestingEnvironment else { return }
         if let encoded = try? JSONEncoder().encode(_customPresets) {
-            UserDefaults.standard.set(encoded, forKey: Self.customPresetsStorageKey)
+            AppStorageProvider.shared.set(encoded, forKey: Self.customPresetsStorageKey)
         }
         if let delEncoded = try? JSONEncoder().encode(_deletedPresetTimestamps) {
-            UserDefaults.standard.set(delEncoded, forKey: Self.deletedPresetsStorageKey)
+            AppStorageProvider.shared.set(delEncoded, forKey: Self.deletedPresetsStorageKey)
         }
         if let pref = _preferredPresetID {
-            UserDefaults.standard.set(pref, forKey: Self.selectedPresetIDStorageKey)
+            AppStorageProvider.shared.set(pref, forKey: Self.selectedPresetIDStorageKey)
         } else {
-            UserDefaults.standard.removeObject(forKey: Self.selectedPresetIDStorageKey)
+            AppStorageProvider.shared.removeObject(forKey: Self.selectedPresetIDStorageKey)
         }
     }
 }

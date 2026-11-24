@@ -53,57 +53,51 @@ public final class ClientDeviceManager: @unchecked Sendable {
         loadFromDisk()
     }
 
-    // MARK: - Local API Bearer Token (0600 in Application Support)
+    // MARK: - Local API Bearer Token (Keychain + Legacy 0600 Migration)
+
+    private static let localAPITokenKeychainAccount = "local_api_token"
+
+    internal static func secretAccount(forDeviceId deviceId: String) -> String {
+        "device.\(deviceId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+    }
 
     private static func loadOrCreateLocalAPIToken() -> String {
-        let appSupportDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("Application Support", isDirectory: true)
-            .appendingPathComponent("AppleMusicRemoteMac", isDirectory: true)
-        let tokenURL = appSupportDir.appendingPathComponent(".local_api_token", isDirectory: false)
+        if let stored = AppSecretStore.shared.readSecret(account: localAPITokenKeychainAccount),
+           stored.count >= 32 {
+            return stored
+        }
 
-        try? FileManager.default.createDirectory(
-            at: appSupportDir,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
+        if !AppStorageProvider.isRunningUnderXCTest {
+            let appSupportDir = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("Application Support", isDirectory: true)
+                .appendingPathComponent("AppleMusicRemoteMac", isDirectory: true)
+            let tokenURL = appSupportDir.appendingPathComponent(".local_api_token", isDirectory: false)
 
-        var st = Darwin.stat()
-        if Darwin.lstat(tokenURL.path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG {
-            let readFD = Darwin.open(tokenURL.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
-            if readFD >= 0 {
-                defer { Darwin.close(readFD) }
-                _ = Darwin.fchmod(readFD, S_IRUSR | S_IWUSR)
-                var buf = [UInt8](repeating: 0, count: 256)
-                let n = Darwin.read(readFD, &buf, buf.count)
-                if n > 0,
-                   let str = String(bytes: buf.prefix(n), encoding: .utf8)?
-                       .trimmingCharacters(in: .whitespacesAndNewlines),
-                   str.count >= 32 {
-                    return str
+            var st = Darwin.stat()
+            if Darwin.lstat(tokenURL.path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG {
+                let readFD = Darwin.open(tokenURL.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+                if readFD >= 0 {
+                    defer { Darwin.close(readFD) }
+                    _ = Darwin.fchmod(readFD, S_IRUSR | S_IWUSR)
+                    var buf = [UInt8](repeating: 0, count: 256)
+                    let n = Darwin.read(readFD, &buf, buf.count)
+                    if n > 0,
+                       let str = String(bytes: buf.prefix(n), encoding: .utf8)?
+                           .trimmingCharacters(in: .whitespacesAndNewlines),
+                       str.count >= 32 {
+                        _ = AppSecretStore.shared.writeSecret(str, account: localAPITokenKeychainAccount)
+                        if MusicKitManager.hasTeamCodeSignature() {
+                            _ = Darwin.unlink(tokenURL.path)
+                        }
+                        return str
+                    }
                 }
             }
         }
 
         let generated = ClientDeviceRecord.generateRandomHexSecret(byteCount: 32)
-        if Darwin.lstat(tokenURL.path, &st) != 0 || (st.st_mode & S_IFMT) == S_IFREG {
-            let writeFD = Darwin.open(
-                tokenURL.path,
-                O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC,
-                S_IRUSR | S_IWUSR
-            )
-            if writeFD >= 0 {
-                _ = Darwin.fchmod(writeFD, S_IRUSR | S_IWUSR)
-                if let data = (generated + "\n").data(using: .utf8) {
-                    data.withUnsafeBytes { rawBuf in
-                        if let base = rawBuf.baseAddress {
-                            _ = Darwin.write(writeFD, base, rawBuf.count)
-                        }
-                    }
-                }
-                Darwin.close(writeFD)
-            }
-        }
+        _ = AppSecretStore.shared.writeSecret(generated, account: localAPITokenKeychainAccount)
         return generated
     }
 
@@ -120,28 +114,58 @@ public final class ClientDeviceManager: @unchecked Sendable {
     // MARK: - Persistence
 
     private func loadFromDisk() {
+        loadFromDefaults(AppStorageProvider.shared)
+    }
+
+    internal func loadFromDefaults(_ defaults: UserDefaults) {
         lock.lock()
         defer { lock.unlock() }
 
-        if let revDict = UserDefaults.standard.dictionary(forKey: revokedStorageKey) as? [String: TimeInterval] {
+        if let revDict = defaults.dictionary(forKey: revokedStorageKey) as? [String: TimeInterval] {
             revokedTimestampsByDeviceId = revDict
         }
-        guard let data = UserDefaults.standard.data(forKey: storageKey),
+        guard let data = defaults.data(forKey: storageKey),
               let list = try? JSONDecoder().decode([ClientDeviceRecord].self, from: data) else {
             return
         }
         devicesById.removeAll()
-        for item in list {
+        var migratedAnyLegacyPlaintextSecret = false
+        for var item in list {
+            let secAccount = Self.secretAccount(forDeviceId: item.deviceId)
+            if let keychainSecret = AppSecretStore.shared.readSecret(account: secAccount),
+               keychainSecret.count >= 32 {
+                item.deviceSecret = keychainSecret
+                if item.decodedInlineLegacySecret != nil {
+                    migratedAnyLegacyPlaintextSecret = true
+                }
+            } else if let legacySecret = item.decodedInlineLegacySecret, legacySecret.count >= 32 {
+                item.deviceSecret = legacySecret
+                _ = AppSecretStore.shared.writeSecret(legacySecret, account: secAccount)
+                migratedAnyLegacyPlaintextSecret = true
+            } else {
+                _ = AppSecretStore.shared.writeSecret(item.deviceSecret, account: secAccount)
+            }
+            item.decodedInlineLegacySecret = nil
             devicesById[item.deviceId] = item
+        }
+        if migratedAnyLegacyPlaintextSecret {
+            saveToDefaultsLocked(defaults)
         }
     }
 
     internal func saveToDiskLocked() {
+        saveToDefaultsLocked(AppStorageProvider.shared)
+    }
+
+    internal func saveToDefaultsLocked(_ defaults: UserDefaults) {
         let list = Array(devicesById.values).sorted { $0.firstSeenAt < $1.firstSeenAt }
-        if let data = try? JSONEncoder().encode(list) {
-            UserDefaults.standard.set(data, forKey: storageKey)
+        for item in list where item.deviceSecret.count >= 32 {
+            _ = AppSecretStore.shared.writeSecret(item.deviceSecret, account: Self.secretAccount(forDeviceId: item.deviceId))
         }
-        UserDefaults.standard.set(revokedTimestampsByDeviceId, forKey: revokedStorageKey)
+        if let data = try? JSONEncoder().encode(list) {
+            defaults.set(data, forKey: storageKey)
+        }
+        defaults.set(revokedTimestampsByDeviceId, forKey: revokedStorageKey)
     }
 
     internal func notifyObservers() {
@@ -283,6 +307,7 @@ public final class ClientDeviceManager: @unchecked Sendable {
                     let oldestUnauthorized = unauthorizedRecords.sorted { $0.lastSeenAt < $1.lastSeenAt }.prefix(toEvictCount)
                     for old in oldestUnauthorized {
                         devicesById.removeValue(forKey: old.deviceId)
+                        AppSecretStore.shared.deleteSecret(account: Self.secretAccount(forDeviceId: old.deviceId))
                     }
                 }
             }

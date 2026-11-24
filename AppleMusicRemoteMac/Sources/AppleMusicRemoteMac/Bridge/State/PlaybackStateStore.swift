@@ -88,7 +88,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
 
     // Temporary Cloud Tracks Staged in Library Playlist 1
     public var stagedTemporaryTrackDbIds: Set<Int> = {
-        let saved = UserDefaults.standard.array(forKey: "AMRStagedTemporaryTrackDbIds") as? [Int] ?? []
+        let saved = AppStorageProvider.shared.array(forKey: "AMRStagedTemporaryTrackDbIds") as? [Int] ?? []
         return Set(saved)
     }()
     var pendingStagedCatalogTracks: [PendingStagedCatalogTrack] = []
@@ -143,30 +143,30 @@ public final class PlaybackStateStore: @unchecked Sendable {
     // Volume Lock State (Bit-Perfect 100% volume mode)
     public var isVolumeLockedTo100: Bool {
         get {
-            if UserDefaults.standard.object(forKey: "LockVolume100") == nil {
+            if AppStorageProvider.shared.object(forKey: "LockVolume100") == nil {
                 return true
             }
-            return UserDefaults.standard.bool(forKey: "LockVolume100")
+            return AppStorageProvider.shared.bool(forKey: "LockVolume100")
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: "LockVolume100")
+            AppStorageProvider.shared.set(newValue, forKey: "LockVolume100")
             ExternalAmpTCPController.shared.enforceVolumeLockConstraint(isVolumeLockedTo100: newValue)
         }
     }
 
     private init() {
         if !Self.isRunningUnderXCTest {
-            if let savedPerm = UserDefaults.standard.stringArray(forKey: "AMRPermanentlySavedTrackKeys") {
+            if let savedPerm = AppStorageProvider.shared.stringArray(forKey: "AMRPermanentlySavedTrackKeys") {
                 self.permanentlySavedTrackKeys = Set(savedPerm)
             }
-            if let data = UserDefaults.standard.data(forKey: Self.pendingStagedStorageKey),
+            if let data = AppStorageProvider.shared.data(forKey: Self.pendingStagedStorageKey),
                let decoded = try? JSONDecoder().decode([PendingStagedCatalogTrack].self, from: data) {
                 let now = Date().timeIntervalSince1970
                 let maxAge: TimeInterval = 7.0 * 86_400.0
                 let fresh = decoded.filter { now - $0.stagedAt <= maxAge }
                 self.pendingStagedCatalogTracks = fresh
                 if fresh.count != decoded.count, let prunedData = try? JSONEncoder().encode(fresh) {
-                    UserDefaults.standard.set(prunedData, forKey: Self.pendingStagedStorageKey)
+                    AppStorageProvider.shared.set(prunedData, forKey: Self.pendingStagedStorageKey)
                 }
             }
         }
@@ -449,7 +449,7 @@ public final class PlaybackStateStore: @unchecked Sendable {
         guard !Self.isRunningUnderXCTest else { return }
         let sorted = keys.sorted()
         let bounded = sorted.count > 2000 ? Array(sorted.suffix(2000)) : sorted
-        UserDefaults.standard.set(bounded, forKey: "AMRPermanentlySavedTrackKeys")
+        AppStorageProvider.shared.set(bounded, forKey: "AMRPermanentlySavedTrackKeys")
     }
 
     public func removePermanentlySavedTrack(id: String?, name: String?, artist: String?) {

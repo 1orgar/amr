@@ -234,6 +234,24 @@ public final class AccountHealthService: @unchecked Sendable {
 
     private func performAccountHealthCheck() async -> AccountHealthStatus {
         let macInfo = getMacAccountInfo()
+        if case .expired = MusicKitManager.shared.developerTokenHealthState {
+            let status = AccountHealthStatus(
+                status: "token_expired",
+                macAppleId: macInfo.appleId,
+                macDsid: macInfo.dsid,
+                isSubscriptionActive: macInfo.isSubscriptionActive,
+                macStorefront: macInfo.storefrontId,
+                macCountryCode: macInfo.countryCode,
+                webStorefront: macInfo.countryCode,
+                isTokenValid: false,
+                isTokenExpired: true,
+                isAccountsMatched: false,
+                message: "Срок действия встроенного MusicKit Developer JWT истек. Обновите приложение или поместите актуальный ключ AuthKey_MJHWRCSZHH.p8 в ~/Library/Application Support/AppleMusicRemoteMac/Keys/.",
+                checkedAt: Date()
+            )
+            updateCache(status)
+            return status
+        }
         let userToken = MusicKitManager.shared.getUserToken()
 
         guard let token = userToken, !token.isEmpty else {

@@ -45,10 +45,10 @@ public final class DiagnosticLogger: @unchecked Sendable {
         self.logFileURL = logsDir.appendingPathComponent("amr.log", isDirectory: false)
         self.oldLogFileURL = logsDir.appendingPathComponent("amr.old.log", isDirectory: false)
 
-        if UserDefaults.standard.object(forKey: userDefaultsKey) == nil {
+        if AppStorageProvider.shared.object(forKey: userDefaultsKey) == nil {
             self._isEnabled = false
         } else {
-            self._isEnabled = UserDefaults.standard.bool(forKey: userDefaultsKey)
+            self._isEnabled = AppStorageProvider.shared.bool(forKey: userDefaultsKey)
         }
     }
 
@@ -64,7 +64,7 @@ public final class DiagnosticLogger: @unchecked Sendable {
             _isEnabled = newValue
             stateLock.unlock()
 
-            UserDefaults.standard.set(newValue, forKey: userDefaultsKey)
+            AppStorageProvider.shared.set(newValue, forKey: userDefaultsKey)
             guard changed else { return }
 
             if newValue {

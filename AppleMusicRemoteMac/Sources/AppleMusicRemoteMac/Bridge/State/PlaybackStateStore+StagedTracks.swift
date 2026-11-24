@@ -60,7 +60,7 @@ extension PlaybackStateStore {
         }
         let snapshot = Array(stagedTemporaryTrackDbIds)
         lock.unlock()
-        UserDefaults.standard.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
+        AppStorageProvider.shared.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
     }
 
     public func unregisterStagedTemporaryTrack(dbId: Int) {
@@ -71,7 +71,7 @@ extension PlaybackStateStore {
         let snapshot = removed ? Array(stagedTemporaryTrackDbIds) : nil
         lock.unlock()
         if let snap = snapshot {
-            UserDefaults.standard.set(snap, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(snap, forKey: Self.stagedDbIdsStorageKey)
         }
     }
 
@@ -86,7 +86,7 @@ extension PlaybackStateStore {
     func persistPendingStagedTracksIfAllowed(_ snapshot: [PendingStagedCatalogTrack]) {
         guard !PlaybackRouter.shared.isTestingEnvironment && !Self.isRunningUnderXCTest else { return }
         if let data = try? JSONEncoder().encode(snapshot) {
-            UserDefaults.standard.set(data, forKey: Self.pendingStagedStorageKey)
+            AppStorageProvider.shared.set(data, forKey: Self.pendingStagedStorageKey)
         }
     }
 
@@ -266,7 +266,7 @@ extension PlaybackStateStore {
 
         persistPermanentlySavedKeysIfAllowed(savedKeysSnap)
         if let snapshot = snapshotToSave {
-            UserDefaults.standard.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
         }
         if let pendingSnap = pendingSnapshotToSave {
             persistPendingStagedTracksIfAllowed(pendingSnap)
@@ -351,7 +351,7 @@ extension PlaybackStateStore {
 
         persistPermanentlySavedKeysIfAllowed(savedKeysSnap)
         if let snapshot = snapshotToSave {
-            UserDefaults.standard.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
         }
         if let pendingSnap = pendingSnapshotToSave {
             persistPendingStagedTracksIfAllowed(pendingSnap)
@@ -521,7 +521,7 @@ extension PlaybackStateStore {
                 stagedTemporaryTrackDbIds.subtract(deletedSet)
                 return Array(stagedTemporaryTrackDbIds)
             }
-            UserDefaults.standard.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
             LibraryService.shared.removeStagedTracksFromCache(dbIds: deletedSet)
             MusicKitManager.clearRecentlyStagedCatalogIds()
             return
@@ -534,7 +534,7 @@ extension PlaybackStateStore {
 
         guard !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty else {
             let persistedSnapshot = withLock { Array(stagedTemporaryTrackDbIds) }
-            UserDefaults.standard.set(persistedSnapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(persistedSnapshot, forKey: Self.stagedDbIdsStorageKey)
             return
         }
 
@@ -582,7 +582,7 @@ extension PlaybackStateStore {
                     }
                     return Array(self.stagedTemporaryTrackDbIds)
                 }
-                UserDefaults.standard.set(updatedSnapshot, forKey: Self.stagedDbIdsStorageKey)
+                AppStorageProvider.shared.set(updatedSnapshot, forKey: Self.stagedDbIdsStorageKey)
                 LibraryService.shared.removeStagedTracksFromCache(dbIds: confirmedDeleted)
                 MusicKitManager.clearRecentlyStagedCatalogIds()
                 if parsed.deletedFromLibrary > 0 {
@@ -604,7 +604,7 @@ extension PlaybackStateStore {
                 stagedTemporaryTrackDbIds.subtract(deletedSet)
                 return Array(stagedTemporaryTrackDbIds)
             }
-            UserDefaults.standard.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(snapshot, forKey: Self.stagedDbIdsStorageKey)
             LibraryService.shared.removeStagedTracksFromCache(dbIds: deletedSet)
             MusicKitManager.clearRecentlyStagedCatalogIds()
             return
@@ -612,7 +612,7 @@ extension PlaybackStateStore {
 
         guard !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty else {
             let persistedSnapshot = withLock { Array(stagedTemporaryTrackDbIds) }
-            UserDefaults.standard.set(persistedSnapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(persistedSnapshot, forKey: Self.stagedDbIdsStorageKey)
             return
         }
 
@@ -640,7 +640,7 @@ extension PlaybackStateStore {
 
         if sema.wait(timeout: .now() + 1.8) == .timedOut {
             let persistedSnapshot = withLock { Array(stagedTemporaryTrackDbIds) }
-            UserDefaults.standard.set(persistedSnapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(persistedSnapshot, forKey: Self.stagedDbIdsStorageKey)
             return
         }
 
@@ -655,12 +655,12 @@ extension PlaybackStateStore {
                 stagedTemporaryTrackDbIds.subtract(confirmedDeleted)
                 return Array(stagedTemporaryTrackDbIds)
             }
-            UserDefaults.standard.set(updatedSnapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(updatedSnapshot, forKey: Self.stagedDbIdsStorageKey)
             LibraryService.shared.removeStagedTracksFromCache(dbIds: confirmedDeleted)
             MusicKitManager.clearRecentlyStagedCatalogIds()
         } else {
             let persistedSnapshot = withLock { Array(stagedTemporaryTrackDbIds) }
-            UserDefaults.standard.set(persistedSnapshot, forKey: Self.stagedDbIdsStorageKey)
+            AppStorageProvider.shared.set(persistedSnapshot, forKey: Self.stagedDbIdsStorageKey)
         }
     }
 }

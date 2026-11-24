@@ -364,7 +364,7 @@ extension ExternalAmpTCPController {
                                 } else {
                                     let offsetToSubtract = self._isSoundCheckEnabled ? self.appliedVolumeOffset : 0
                                     self._baseListeningVolume = max(0, min(effectiveMax, newVol - offsetToSubtract))
-                                    UserDefaults.standard.set(self._baseListeningVolume, forKey: self.kBaseVolumeKey)
+                                    AppStorageProvider.shared.set(self._baseListeningVolume, forKey: self.kBaseVolumeKey)
                                 }
                                 if self._isSoundCheckEnabled {
                                     self._currentTrackVolumeOffset = Self.computeVolumeOffset(
@@ -388,7 +388,7 @@ extension ExternalAmpTCPController {
                                         self._currentVolume = targetVol
                                         self.lastAutoNormCommandTime = Date()
                                         self.lastPersistedAmpVolume = targetVol
-                                        UserDefaults.standard.set(targetVol, forKey: self.kLastSentAmpVolumeKey)
+                                        AppStorageProvider.shared.set(targetVol, forKey: self.kLastSentAmpVolumeKey)
                                         deferredAutoNormTarget = (targetVol, self._profile)
                                         NSLog("[ExternalAmpTCP] Initial sync SoundCheck '%@': gain=%+.2f dB, offset=%+d, base=%d -> ampVol=%d",
                                               self._currentTrackKey, self._currentTrackGainDb ?? 0.0, self._currentTrackVolumeOffset, self._baseListeningVolume, targetVol)
@@ -421,8 +421,8 @@ extension ExternalAmpTCPController {
                                 self.appliedVolumeOffset = 0
                             }
                             self.lastPersistedAmpVolume = newVol
-                            UserDefaults.standard.set(self._baseListeningVolume, forKey: self.kBaseVolumeKey)
-                            UserDefaults.standard.set(newVol, forKey: self.kLastSentAmpVolumeKey)
+                            AppStorageProvider.shared.set(self._baseListeningVolume, forKey: self.kBaseVolumeKey)
+                            AppStorageProvider.shared.set(newVol, forKey: self.kLastSentAmpVolumeKey)
                             NSLog("[ExternalAmpTCP] Physical knob/remote volume=%d (offset=%+d) -> new base=%d",
                                   newVol, resolved.offset, self._baseListeningVolume)
                             modified = true

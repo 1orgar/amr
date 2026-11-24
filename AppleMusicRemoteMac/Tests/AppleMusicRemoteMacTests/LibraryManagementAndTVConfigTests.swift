@@ -630,7 +630,7 @@ final class LibraryManagementAndTVConfigTests: XCTestCase {
         defer {
             LibraryService.shared.clearStagedBufferCache()
             store.withLock { store.stagedTemporaryTrackDbIds = originalStaged }
-            UserDefaults.standard.set(Array(originalStaged), forKey: "AMRStagedTemporaryTrackDbIds")
+            AppStorageProvider.shared.set(Array(originalStaged), forKey: "AMRStagedTemporaryTrackDbIds")
         }
 
         LibraryService.shared.clearStagedBufferCache()

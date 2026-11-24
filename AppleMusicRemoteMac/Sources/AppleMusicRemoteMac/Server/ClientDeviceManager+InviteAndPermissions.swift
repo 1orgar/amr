@@ -369,6 +369,7 @@ extension ClientDeviceManager {
             pendingBrowserConnections.insert(connId)
         }
         let removed = devicesById.removeValue(forKey: key)
+        AppSecretStore.shared.deleteSecret(account: Self.secretAccount(forDeviceId: key))
         saveToDiskLocked()
         lock.unlock()
 

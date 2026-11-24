@@ -152,7 +152,7 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
             lock.lock()
             let changed = (isEnabledInternal != newValue)
             isEnabledInternal = newValue
-            UserDefaults.standard.set(newValue, forKey: Self.keyEnabled)
+            AppStorageProvider.shared.set(newValue, forKey: Self.keyEnabled)
             if !newValue {
                 resetAccumulatorsLocked()
             }
@@ -331,10 +331,10 @@ public final class SpectralIntegrityAnalyzer: @unchecked Sendable {
         }
 
         let initialEnabled: Bool
-        if UserDefaults.standard.object(forKey: Self.keyEnabled) == nil {
+        if AppStorageProvider.shared.object(forKey: Self.keyEnabled) == nil {
             initialEnabled = true
         } else {
-            initialEnabled = UserDefaults.standard.bool(forKey: Self.keyEnabled)
+            initialEnabled = AppStorageProvider.shared.bool(forKey: Self.keyEnabled)
         }
         self.isEnabledInternal = initialEnabled
         self._fastIsEnabled = initialEnabled

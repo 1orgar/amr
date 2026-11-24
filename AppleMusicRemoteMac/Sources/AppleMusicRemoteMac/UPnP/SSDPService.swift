@@ -49,7 +49,7 @@ public final class SSDPService: @unchecked Sendable {
 
     public var friendlyName: String {
         get {
-            let saved = UserDefaults.standard.string(forKey: "UPnPFriendlyName")?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let saved = AppStorageProvider.shared.string(forKey: "UPnPFriendlyName")?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let saved = saved, !saved.isEmpty {
                 return saved
             }
@@ -58,16 +58,16 @@ public final class SSDPService: @unchecked Sendable {
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let val = trimmed.isEmpty ? "Apple Music Remote (Mac)" : trimmed
-            UserDefaults.standard.set(val, forKey: "UPnPFriendlyName")
+            AppStorageProvider.shared.set(val, forKey: "UPnPFriendlyName")
         }
     }
 
     private init() {
-        if let existing = UserDefaults.standard.string(forKey: "AMRUPnPDeviceUUID"), !existing.isEmpty {
+        if let existing = AppStorageProvider.shared.string(forKey: "AMRUPnPDeviceUUID"), !existing.isEmpty {
             self.deviceUUID = existing
         } else {
             let generated = UUID().uuidString.lowercased()
-            UserDefaults.standard.set(generated, forKey: "AMRUPnPDeviceUUID")
+            AppStorageProvider.shared.set(generated, forKey: "AMRUPnPDeviceUUID")
             self.deviceUUID = generated
         }
     }

@@ -110,7 +110,7 @@ final class UPnPMediaRendererServerTests: XCTestCase {
 
     func testLocalDMRToggleAndPersistence() {
         let server = UPnPMediaRendererServer.shared
-        UserDefaults.standard.removeObject(forKey: UPnPMediaRendererServer.defaultsKey)
+        AppStorageProvider.shared.removeObject(forKey: UPnPMediaRendererServer.defaultsKey)
 
         // Default should be true
         XCTAssertTrue(server.isEnabled)
@@ -118,7 +118,7 @@ final class UPnPMediaRendererServerTests: XCTestCase {
         // Toggle to false
         server.setEnabled(false)
         XCTAssertFalse(server.isEnabled)
-        XCTAssertFalse(UserDefaults.standard.bool(forKey: UPnPMediaRendererServer.defaultsKey))
+        XCTAssertFalse(AppStorageProvider.shared.bool(forKey: UPnPMediaRendererServer.defaultsKey))
 
         // startIfEnabled should return false when disabled
         XCTAssertFalse(server.startIfEnabled(port: 8090))
@@ -128,7 +128,7 @@ final class UPnPMediaRendererServerTests: XCTestCase {
         server.stop()
         SSDPService.shared.stop()
         XCTAssertTrue(server.isEnabled)
-        XCTAssertTrue(UserDefaults.standard.bool(forKey: UPnPMediaRendererServer.defaultsKey))
+        XCTAssertTrue(AppStorageProvider.shared.bool(forKey: UPnPMediaRendererServer.defaultsKey))
     }
 
     func testMultiVLANPrivateLANGuardAllowsLocalVLANsAndBlocksWANOrMetadata() {

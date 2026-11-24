@@ -83,12 +83,12 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
     internal static let curatorInstructionsRu = "Ты аудиофильский музыкальный куратор Apple Music. Ответь СТРОГО в 4 строки без лишнего текста: Строка 1: Название подборки. Строка 2: Одно предложение с описанием звучания, сцены и атмосферы. Строка 3: 4 коротких тега через |. Строка 4: 6 точных поисковых запросов для Apple Music (Артист Трек или Артист Альбом) через |."
 
     private init() {
-        if UserDefaults.standard.object(forKey: enabledStorageKey) != nil {
-            self._isEnabled = UserDefaults.standard.bool(forKey: enabledStorageKey)
+        if AppStorageProvider.shared.object(forKey: enabledStorageKey) != nil {
+            self._isEnabled = AppStorageProvider.shared.bool(forKey: enabledStorageKey)
         } else {
             self._isEnabled = true
         }
-        if let savedPinned = UserDefaults.standard.array(forKey: pinnedStorageKey) as? [[String: String]] {
+        if let savedPinned = AppStorageProvider.shared.array(forKey: pinnedStorageKey) as? [[String: String]] {
             self._pinnedPrompts = savedPinned.compactMap { dict in
                 guard let pRu = dict["prompt_ru"], !pRu.isEmpty else { return nil }
                 let lRu = dict["label_ru"] ?? "✨ \(pRu)"
@@ -296,11 +296,11 @@ public final class NativeMusicCuratorService: @unchecked Sendable {
             let needsPreload: Bool
             if isArm {
                 _isEnabled = newValue
-                UserDefaults.standard.set(newValue, forKey: enabledStorageKey)
+                AppStorageProvider.shared.set(newValue, forKey: enabledStorageKey)
                 needsPreload = newValue && !hasPreloadedWeights
             } else {
                 _isEnabled = false
-                UserDefaults.standard.set(false, forKey: enabledStorageKey)
+                AppStorageProvider.shared.set(false, forKey: enabledStorageKey)
                 needsPreload = false
             }
             lock.unlock()

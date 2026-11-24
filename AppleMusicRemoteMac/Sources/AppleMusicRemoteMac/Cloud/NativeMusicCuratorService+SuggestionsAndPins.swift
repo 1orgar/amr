@@ -356,7 +356,7 @@ extension NativeMusicCuratorService {
     public func clearPinnedPrompts() {
         lock.lock()
         _pinnedPrompts.removeAll()
-        UserDefaults.standard.removeObject(forKey: pinnedStorageKey)
+        AppStorageProvider.shared.removeObject(forKey: pinnedStorageKey)
         lock.unlock()
     }
 
@@ -369,7 +369,7 @@ extension NativeMusicCuratorService {
                 "prompt_en": item.promptEn
             ]
         }
-        UserDefaults.standard.set(serialized, forKey: pinnedStorageKey)
+        AppStorageProvider.shared.set(serialized, forKey: pinnedStorageKey)
     }
 
     private static func buildConciseLabel(from rawText: String) -> String {

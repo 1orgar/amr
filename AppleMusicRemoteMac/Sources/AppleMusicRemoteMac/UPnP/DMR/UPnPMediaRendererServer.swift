@@ -69,13 +69,13 @@ public final class UPnPMediaRendererServer: @unchecked Sendable {
 
     public var isEnabled: Bool {
         get {
-            if UserDefaults.standard.object(forKey: Self.defaultsKey) == nil {
+            if AppStorageProvider.shared.object(forKey: Self.defaultsKey) == nil {
                 return true
             }
-            return UserDefaults.standard.bool(forKey: Self.defaultsKey)
+            return AppStorageProvider.shared.bool(forKey: Self.defaultsKey)
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: Self.defaultsKey)
+            AppStorageProvider.shared.set(newValue, forKey: Self.defaultsKey)
         }
     }
 

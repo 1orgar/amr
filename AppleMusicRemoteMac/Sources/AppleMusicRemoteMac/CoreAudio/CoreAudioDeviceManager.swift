@@ -192,7 +192,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             mutingGuardLock.lock()
             let changed = (isMutingGuardEnabledInternal != newValue)
             isMutingGuardEnabledInternal = newValue
-            UserDefaults.standard.set(newValue, forKey: Self.keyMutingGuardEnabled)
+            AppStorageProvider.shared.set(newValue, forKey: Self.keyMutingGuardEnabled)
             mutingGuardLock.unlock()
             if changed {
                 NSLog("[CoreAudioDeviceManager] 🔇 DAC Muting Guard is now: %@", newValue ? "ON (\(mutingGuardDurationMs) ms)" : "OFF")
@@ -212,7 +212,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
             mutingGuardLock.lock()
             let changed = (mutingGuardDurationMsInternal != clamped)
             mutingGuardDurationMsInternal = clamped
-            UserDefaults.standard.set(clamped, forKey: Self.keyMutingGuardDurationMs)
+            AppStorageProvider.shared.set(clamped, forKey: Self.keyMutingGuardDurationMs)
             mutingGuardLock.unlock()
             if changed {
                 NSLog("[CoreAudioDeviceManager] ⏱️ DAC Muting Guard duration set to: %d ms", clamped)
@@ -250,12 +250,12 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
 
     private init() {
         HALDeviceManager.ensureDetachedHALRunLoop()
-        if UserDefaults.standard.object(forKey: Self.keyMutingGuardEnabled) == nil {
+        if AppStorageProvider.shared.object(forKey: Self.keyMutingGuardEnabled) == nil {
             self.isMutingGuardEnabledInternal = false
         } else {
-            self.isMutingGuardEnabledInternal = UserDefaults.standard.bool(forKey: Self.keyMutingGuardEnabled)
+            self.isMutingGuardEnabledInternal = AppStorageProvider.shared.bool(forKey: Self.keyMutingGuardEnabled)
         }
-        let savedMs = UserDefaults.standard.integer(forKey: Self.keyMutingGuardDurationMs)
+        let savedMs = AppStorageProvider.shared.integer(forKey: Self.keyMutingGuardDurationMs)
         self.mutingGuardDurationMsInternal = (savedMs >= 30 && savedMs <= 500) ? savedMs : 100
         setupHardwareListeners()
     }

@@ -359,11 +359,11 @@ final class ModelsAndSerializationTests: XCTestCase {
 
         store.isVolumeLockedTo100 = false
         XCTAssertFalse(store.isVolumeLockedTo100)
-        XCTAssertFalse(UserDefaults.standard.bool(forKey: "LockVolume100"))
+        XCTAssertFalse(AppStorageProvider.shared.bool(forKey: "LockVolume100"))
 
         store.isVolumeLockedTo100 = true
         XCTAssertTrue(store.isVolumeLockedTo100)
-        XCTAssertTrue(UserDefaults.standard.bool(forKey: "LockVolume100"))
+        XCTAssertTrue(AppStorageProvider.shared.bool(forKey: "LockVolume100"))
     }
 
     func testVolumeClampingLimits() {

@@ -105,6 +105,12 @@ extension MusicKitManager {
             return cached
         }
 
+        if AppStorageProvider.isRunningUnderXCTest {
+            let ephemeral = SymmetricKey(size: .bits256)
+            cachedFallbackSymmetricKey = ephemeral
+            return ephemeral
+        }
+
         guard let appSupportBase = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             let ephemeral = SymmetricKey(size: .bits256)
             cachedFallbackSymmetricKey = ephemeral
@@ -217,7 +223,7 @@ extension MusicKitManager {
 
     internal func wipeUserTokenFromAllDefaults() {
         Self.storageDefaults.removeObject(forKey: "AppleMusicUserToken")
-        UserDefaults.standard.removeObject(forKey: "AppleMusicUserToken")
+        AppStorageProvider.shared.removeObject(forKey: "AppleMusicUserToken")
         for suite in Self.legacySuites {
             Self.legacySuiteDefaults(suite)?.removeObject(forKey: "AppleMusicUserToken")
         }
@@ -229,7 +235,7 @@ extension MusicKitManager {
         if let t = defs.string(forKey: "AppleMusicUserToken"), !t.isEmpty {
             rawDefaultsCandidates.append(t)
         }
-        if let t = UserDefaults.standard.string(forKey: "AppleMusicUserToken"), !t.isEmpty, !rawDefaultsCandidates.contains(t) {
+        if let t = AppStorageProvider.shared.string(forKey: "AppleMusicUserToken"), !t.isEmpty, !rawDefaultsCandidates.contains(t) {
             rawDefaultsCandidates.append(t)
         }
         for suite in Self.legacySuites {
@@ -272,7 +278,7 @@ extension MusicKitManager {
                 wipeUserTokenFromAllDefaults()
                 if let encrypted = Self.encryptUserTokenForDefaults(tok) {
                     defs.set(encrypted, forKey: "AppleMusicUserToken")
-                    UserDefaults.standard.set(encrypted, forKey: "AppleMusicUserToken")
+                    AppStorageProvider.shared.set(encrypted, forKey: "AppleMusicUserToken")
                 }
             }
         } else if sawPlaintextInDefaults || sawCorruptedCiphertext {
@@ -492,17 +498,17 @@ extension MusicKitManager {
                 let lower = sfId.lowercased()
                 self.userStorefront = lower
                 Self.storageDefaults.set(lower, forKey: "AppleMusicUserStorefront")
-                UserDefaults.standard.set(lower, forKey: "AppleMusicUserStorefront")
+                AppStorageProvider.shared.set(lower, forKey: "AppleMusicUserStorefront")
             }
             if !supported.isEmpty {
                 self.supportedLanguageTags = supported
                 Self.storageDefaults.set(supported, forKey: "AppleMusicSupportedLanguageTags")
-                UserDefaults.standard.set(supported, forKey: "AppleMusicSupportedLanguageTags")
+                AppStorageProvider.shared.set(supported, forKey: "AppleMusicSupportedLanguageTags")
             }
             if !defLang.isEmpty {
                 self.defaultLanguageTag = defLang
                 Self.storageDefaults.set(defLang, forKey: "AppleMusicDefaultLanguageTag")
-                UserDefaults.standard.set(defLang, forKey: "AppleMusicDefaultLanguageTag")
+                AppStorageProvider.shared.set(defLang, forKey: "AppleMusicDefaultLanguageTag")
             }
         }
     }
@@ -551,7 +557,7 @@ extension MusicKitManager {
         wipeUserTokenFromAllDefaults()
         if let encrypted = encryptedFallback {
             Self.storageDefaults.set(encrypted, forKey: "AppleMusicUserToken")
-            UserDefaults.standard.set(encrypted, forKey: "AppleMusicUserToken")
+            AppStorageProvider.shared.set(encrypted, forKey: "AppleMusicUserToken")
         }
         self.personalDataCache = nil
         self.playlistTracksCache.removeAll()

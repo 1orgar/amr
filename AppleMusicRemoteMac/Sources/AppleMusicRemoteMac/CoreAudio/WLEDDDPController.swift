@@ -239,7 +239,7 @@ public final class WLEDDDPController: @unchecked Sendable {
     ]
 
     private init() {
-        let defaults = UserDefaults.standard
+        let defaults = AppStorageProvider.shared
         self._isEnabled = defaults.bool(forKey: Self.keyEnabled)
         let rawSavedIP = (defaults.string(forKey: Self.keyIP) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if let valid = Self.validatedUnicastPrivateOrLoopbackIPv4(rawSavedIP) {
@@ -308,7 +308,7 @@ public final class WLEDDDPController: @unchecked Sendable {
         let prevLedCount = self._ledCount
         if let en = enabled {
             self._isEnabled = en
-            UserDefaults.standard.set(en, forKey: Self.keyEnabled)
+            AppStorageProvider.shared.set(en, forKey: Self.keyEnabled)
         }
         if let rawIp = ip {
             let trimmed = rawIp.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -325,31 +325,31 @@ public final class WLEDDDPController: @unchecked Sendable {
                 self._ipAddress = sanitizedIp
                 self.lastProbedIP = ""
                 ipDidChange = true
-                UserDefaults.standard.set(sanitizedIp, forKey: Self.keyIP)
+                AppStorageProvider.shared.set(sanitizedIp, forKey: Self.keyIP)
             }
         }
         if let m = mode {
             let normalized = Self.normalizeModeName(m)
             self._mode = normalized
-            UserDefaults.standard.set(normalized, forKey: Self.keyMode)
+            AppStorageProvider.shared.set(normalized, forKey: Self.keyMode)
         }
         let userExplicitlyChangedLedCount: Bool
         if let cnt = ledCount, cnt > 0 {
             let clamped = min(max(cnt, 1), 480)
             userExplicitlyChangedLedCount = (clamped != prevLedCount)
             self._ledCount = clamped
-            UserDefaults.standard.set(clamped, forKey: Self.keyLedCount)
+            AppStorageProvider.shared.set(clamped, forKey: Self.keyLedCount)
         } else {
             userExplicitlyChangedLedCount = false
         }
         if let bri = brightness {
             let clamped = min(max(bri, 0.05), 1.0)
             self._brightness = clamped
-            UserDefaults.standard.set(clamped, forKey: Self.keyBrightness)
+            AppStorageProvider.shared.set(clamped, forKey: Self.keyBrightness)
         }
         if let defTv = defaultTVMode {
             self._defaultTVMode = defTv
-            UserDefaults.standard.set(defTv, forKey: Self.keyDefaultTVMode)
+            AppStorageProvider.shared.set(defTv, forKey: Self.keyDefaultTVMode)
         }
         let isNowActive = self._isEnabled && !self._ipAddress.isEmpty && self._mode != "off"
         currentIpSnapshot = self._ipAddress
@@ -519,7 +519,7 @@ public final class WLEDDDPController: @unchecked Sendable {
                 self.lastProbedIP = cleanIp
                 if self._ledCount != clamped {
                     self._ledCount = clamped
-                    UserDefaults.standard.set(clamped, forKey: Self.keyLedCount)
+                    AppStorageProvider.shared.set(clamped, forKey: Self.keyLedCount)
                     changed = true
                     callback = self._onSettingsChanged
                 }

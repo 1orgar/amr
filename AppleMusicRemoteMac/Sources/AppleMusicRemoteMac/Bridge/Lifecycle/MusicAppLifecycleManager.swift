@@ -230,12 +230,12 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         // Skip aggressive ScriptingBridge probing during cold launch warmup, active bulk AppleScript,
         // track/format transitions, or when Music.app has already proven responsive within the last 4.5s
         // ONLY while already marked healthy (.running); if unhealthy, probe immediately to restore sync!
+        if currentState == .running && now.timeIntervalSince(lastLaunchDate) < launchGracePeriod {
+            stateLock.unlock()
+            cooldownNotify?()
+            return
+        }
         if currentState == .running && probeHandler == nil && !isTestDIModeLocked {
-            if now.timeIntervalSince(lastLaunchDate) < launchGracePeriod {
-                stateLock.unlock()
-                cooldownNotify?()
-                return
-            }
             if now.timeIntervalSince(lastConfirmedResponsiveDate) < 4.5 {
                 consecutiveFailures = 0
                 stateLock.unlock()
@@ -429,9 +429,7 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
             return
         }
         consecutiveFailures = 0
-        if !isTestDIModeLocked {
-            lastLaunchDate = nowProvider()
-        }
+        lastLaunchDate = nowProvider()
         let notify = transitionToStateLocked(.running, reason: "Music.app launched (PID: \(pid))")
         stateLock.unlock()
         notify?()

@@ -111,7 +111,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
     }
 
     private init() {
-        let defaults = UserDefaults.standard
+        let defaults = AppStorageProvider.shared
         let lockedTo100 = PlaybackStateStore.shared.isVolumeLockedTo100
         self._cachedVolumeLockedTo100 = lockedTo100
         let savedProfile = ExternalAmpProfile(rawValue: defaults.string(forKey: kProfileKey) ?? "") ?? .rotel
@@ -162,12 +162,12 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                 _cachedVolumeLockedTo100 = lockedTo100
                 let prev = _isEnabled
                 _isEnabled = canEnable
-                UserDefaults.standard.set(canEnable, forKey: kEnabledKey)
+                AppStorageProvider.shared.set(canEnable, forKey: kEnabledKey)
                 if !canEnable && _isSoundCheckEnabled {
                     _isSoundCheckEnabled = false
                     _persistedSoundCheckPreference = false
                     _currentTrackVolumeOffset = 0
-                    UserDefaults.standard.set(false, forKey: kSoundCheckKey)
+                    AppStorageProvider.shared.set(false, forKey: kSoundCheckKey)
                 }
                 if !canEnable {
                     pendingVolumeCommand = nil
@@ -200,7 +200,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
             let changed: Bool = lock.withLock {
                 let prev = _profile
                 _profile = newValue
-                UserDefaults.standard.set(newValue.rawValue, forKey: kProfileKey)
+                AppStorageProvider.shared.set(newValue.rawValue, forKey: kProfileKey)
                 return prev != newValue
             }
             if changed {
@@ -217,7 +217,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
             let changed: Bool = lock.withLock {
                 let prev = _host
                 _host = trimmed
-                UserDefaults.standard.set(trimmed, forKey: kHostKey)
+                AppStorageProvider.shared.set(trimmed, forKey: kHostKey)
                 return prev != trimmed
             }
             if changed {
@@ -235,7 +235,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
             let changed: Bool = lock.withLock {
                 let prev = _port
                 _port = validPort
-                UserDefaults.standard.set(Int(validPort), forKey: kPortKey)
+                AppStorageProvider.shared.set(Int(validPort), forKey: kPortKey)
                 return prev != validPort
             }
             if changed {
@@ -258,7 +258,7 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                 let clamped = max(1, min(100, newValue))
                 let prev = _maxVolumeCap
                 _maxVolumeCap = clamped
-                UserDefaults.standard.set(clamped, forKey: kMaxCapKey)
+                AppStorageProvider.shared.set(clamped, forKey: kMaxCapKey)
                 return prev != clamped
             }
             if changed {
@@ -339,20 +339,20 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
             }
             if let isEnabled {
                 _isEnabled = isEnabled && lockedTo100
-                UserDefaults.standard.set(_isEnabled, forKey: kEnabledKey)
+                AppStorageProvider.shared.set(_isEnabled, forKey: kEnabledKey)
                 if !_isEnabled && _isSoundCheckEnabled {
                     _isSoundCheckEnabled = false
                     _persistedSoundCheckPreference = false
                     _currentTrackVolumeOffset = 0
                     appliedVolumeOffset = 0
-                    UserDefaults.standard.set(false, forKey: kSoundCheckKey)
+                    AppStorageProvider.shared.set(false, forKey: kSoundCheckKey)
                 }
             }
             syncRTSoundCheckFlagLocked()
-            UserDefaults.standard.set(profile.rawValue, forKey: kProfileKey)
-            UserDefaults.standard.set(trimmedHost, forKey: kHostKey)
-            UserDefaults.standard.set(Int(validPort), forKey: kPortKey)
-            UserDefaults.standard.set(clampedCap, forKey: kMaxCapKey)
+            AppStorageProvider.shared.set(profile.rawValue, forKey: kProfileKey)
+            AppStorageProvider.shared.set(trimmedHost, forKey: kHostKey)
+            AppStorageProvider.shared.set(Int(validPort), forKey: kPortKey)
+            AppStorageProvider.shared.set(clampedCap, forKey: kMaxCapKey)
         }
         reconfigureConnection()
         notifyStateChanged()
@@ -374,8 +374,8 @@ public final class ExternalAmpTCPController: @unchecked Sendable {
                 pendingMuteCommand = nil
                 lastAutoNormTargetVolume = nil
                 lastAutoNormPreviousVolume = nil
-                UserDefaults.standard.set(false, forKey: kEnabledKey)
-                UserDefaults.standard.set(false, forKey: kSoundCheckKey)
+                AppStorageProvider.shared.set(false, forKey: kEnabledKey)
+                AppStorageProvider.shared.set(false, forKey: kSoundCheckKey)
                 return prev
             }
             if wasEnabled {

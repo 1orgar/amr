@@ -33,15 +33,15 @@ extension ExternalAmpTCPController {
                 _isSoundCheckEnabled = canEnable
                 _persistedSoundCheckPreference = canEnable
                 syncRTSoundCheckFlagLocked()
-                UserDefaults.standard.set(canEnable, forKey: kSoundCheckKey)
+                AppStorageProvider.shared.set(canEnable, forKey: kSoundCheckKey)
                 if prev != canEnable {
                     let now = Date().timeIntervalSince1970
                     _normalizationPolicyUpdatedAt = now
-                    UserDefaults.standard.set(now, forKey: kNormalizationPolicyUpdatedAtKey)
+                    AppStorageProvider.shared.set(now, forKey: kNormalizationPolicyUpdatedAtKey)
                     if canEnable {
                         _baseListeningVolume = _currentVolume
                         appliedVolumeOffset = 0
-                        UserDefaults.standard.set(_baseListeningVolume, forKey: kBaseVolumeKey)
+                        AppStorageProvider.shared.set(_baseListeningVolume, forKey: kBaseVolumeKey)
                     } else {
                         if appliedVolumeOffset != 0 || _currentTrackVolumeOffset != 0 {
                             restoreVol = _baseListeningVolume
@@ -83,11 +83,11 @@ extension ExternalAmpTCPController {
                 _cachedVolumeLockedTo100 = lockedTo100
                 let prev = _isLowVolumeSmartNormEnabled
                 _isLowVolumeSmartNormEnabled = newValue
-                UserDefaults.standard.set(newValue, forKey: kLowVolumeSmartNormKey)
+                AppStorageProvider.shared.set(newValue, forKey: kLowVolumeSmartNormKey)
                 guard prev != newValue else { return false }
                 let now = Date().timeIntervalSince1970
                 _normalizationPolicyUpdatedAt = now
-                UserDefaults.standard.set(now, forKey: kNormalizationPolicyUpdatedAtKey)
+                AppStorageProvider.shared.set(now, forKey: kNormalizationPolicyUpdatedAtKey)
 
                 let active = _isEnabled && lockedTo100 && !_host.isEmpty
                 if _isSoundCheckEnabled {
@@ -113,7 +113,7 @@ extension ExternalAmpTCPController {
                             _currentVolume = targetVol
                             lastAutoNormCommandTime = Date()
                             lastPersistedAmpVolume = targetVol
-                            UserDefaults.standard.set(targetVol, forKey: kLastSentAmpVolumeKey)
+                            AppStorageProvider.shared.set(targetVol, forKey: kLastSentAmpVolumeKey)
                             volumeToSend = (targetVol, _profile)
                         }
                     }
@@ -146,11 +146,11 @@ extension ExternalAmpTCPController {
                 _cachedVolumeLockedTo100 = lockedTo100
                 let prev = _isCompressionCompensationEnabled
                 _isCompressionCompensationEnabled = newValue
-                UserDefaults.standard.set(newValue, forKey: kCompressionCompKey)
+                AppStorageProvider.shared.set(newValue, forKey: kCompressionCompKey)
                 guard prev != newValue else { return false }
                 let now = Date().timeIntervalSince1970
                 _normalizationPolicyUpdatedAt = now
-                UserDefaults.standard.set(now, forKey: kNormalizationPolicyUpdatedAtKey)
+                AppStorageProvider.shared.set(now, forKey: kNormalizationPolicyUpdatedAtKey)
 
                 let active = _isEnabled && lockedTo100 && !_host.isEmpty
                 if _isSoundCheckEnabled {
@@ -176,7 +176,7 @@ extension ExternalAmpTCPController {
                             _currentVolume = targetVol
                             lastAutoNormCommandTime = Date()
                             lastPersistedAmpVolume = targetVol
-                            UserDefaults.standard.set(targetVol, forKey: kLastSentAmpVolumeKey)
+                            AppStorageProvider.shared.set(targetVol, forKey: kLastSentAmpVolumeKey)
                             volumeToSend = (targetVol, _profile)
                         }
                     }
@@ -271,7 +271,7 @@ extension ExternalAmpTCPController {
             _isLowVolumeSmartNormEnabled = incoming.lowVolumeSmartNormEnabled
             _isCompressionCompensationEnabled = incoming.compressionCompensationEnabled
             if !PlaybackRouter.shared.isTestingEnvironment {
-                let defaults = UserDefaults.standard
+                let defaults = AppStorageProvider.shared
                 defaults.set(_normalizationPolicyUpdatedAt, forKey: kNormalizationPolicyUpdatedAtKey)
                 defaults.set(incoming.lowVolumeSmartNormEnabled, forKey: kLowVolumeSmartNormKey)
                 defaults.set(incoming.compressionCompensationEnabled, forKey: kCompressionCompKey)

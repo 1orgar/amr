@@ -53,7 +53,7 @@ public final class CloudSettingsSyncService: @unchecked Sendable {
 
     private init() {
         syncQueue.setSpecific(key: Self.syncQueueSpecificKey, value: 1)
-        let defaults = UserDefaults.standard
+        let defaults = AppStorageProvider.shared
         _isEnabled = defaults.bool(forKey: kEnabledKey)
         let rawCustom = defaults.string(forKey: kCustomFolderPathKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
         _customFolderPath = (rawCustom?.isEmpty == false) ? rawCustom : nil
@@ -93,7 +93,7 @@ public final class CloudSettingsSyncService: @unchecked Sendable {
             }
             guard changed else { return }
             if !Self.isTestingEnvironment {
-                UserDefaults.standard.set(newValue, forKey: kEnabledKey)
+                AppStorageProvider.shared.set(newValue, forKey: kEnabledKey)
             }
             if newValue {
                 startIfEnabled()
@@ -122,9 +122,9 @@ public final class CloudSettingsSyncService: @unchecked Sendable {
             guard changed else { return }
             if !Self.isTestingEnvironment {
                 if let normalized {
-                    UserDefaults.standard.set(normalized, forKey: kCustomFolderPathKey)
+                    AppStorageProvider.shared.set(normalized, forKey: kCustomFolderPathKey)
                 } else {
-                    UserDefaults.standard.removeObject(forKey: kCustomFolderPathKey)
+                    AppStorageProvider.shared.removeObject(forKey: kCustomFolderPathKey)
                 }
             }
             if currentlyEnabled {
@@ -340,7 +340,7 @@ public final class CloudSettingsSyncService: @unchecked Sendable {
                 _lastErrorMessage = nil
             }
             if !Self.isTestingEnvironment {
-                UserDefaults.standard.set(now, forKey: kLastSyncTimestampKey)
+                AppStorageProvider.shared.set(now, forKey: kLastSyncTimestampKey)
             }
 
             if summary.hasLocalChanges && !Self.isTestingEnvironment {
