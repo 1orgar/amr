@@ -1,0 +1,649 @@
+/* ==========================================================================
+   AI Sonic Curator (Apple Neural Engine: FoundationModels + NaturalLanguage)
+   ========================================================================== */
+
+.filter-chip-ai {
+  border: 1px solid rgba(191, 90, 242, 0.45) !important;
+  background: linear-gradient(135deg, rgba(191, 90, 242, 0.16), rgba(94, 92, 230, 0.16)) !important;
+  color: #e5b8ff !important;
+  font-weight: 600 !important;
+}
+
+.filter-chip-ai.active {
+  background: linear-gradient(135deg, #bf5af2, #5e5ce6) !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(191, 90, 242, 0.38);
+}
+
+.ai-curator-landing-card {
+  max-width: 640px;
+  width: 100%;
+  margin: 8px auto 0 auto;
+  padding: 20px;
+  border-radius: 18px;
+  background: linear-gradient(155deg, rgba(191, 90, 242, 0.11) 0%, rgba(94, 92, 230, 0.08) 48%, rgba(255, 255, 255, 0.03) 100%);
+  border: 1px solid rgba(191, 90, 242, 0.28);
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.ai-curator-landing-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ai-refresh-prompts-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #e5b8ff;
+  background: rgba(191, 90, 242, 0.14);
+  border: 1px solid rgba(191, 90, 242, 0.35);
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease, color 0.16s ease;
+}
+
+.ai-refresh-prompts-btn:hover {
+  background: rgba(191, 90, 242, 0.28);
+  border-color: rgba(191, 90, 242, 0.6);
+  color: #ffffff;
+}
+
+.ai-refresh-prompts-btn:active {
+  transform: scale(0.96);
+}
+
+.ai-refresh-prompts-btn.spinning svg {
+  animation: aiSpin 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes aiSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(180deg); }
+}
+
+.search-placeholder-minimal {
+  padding: 40px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.ai-curator-engine-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: #e5b8ff;
+  background: rgba(191, 90, 242, 0.18);
+  border: 1px solid rgba(191, 90, 242, 0.35);
+}
+
+.ai-curator-landing-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.2px;
+}
+
+.ai-curator-landing-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0 0 16px 0;
+}
+
+.ai-curator-prompts-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-prompt-chip {
+  padding: 8px 13px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f2f2f7;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+
+.ai-prompt-chip:hover {
+  background: rgba(191, 90, 242, 0.22);
+  border-color: rgba(191, 90, 242, 0.5);
+  color: #ffffff;
+}
+
+.ai-prompt-chip:active {
+  transform: scale(0.97);
+}
+
+.ai-curated-session-card {
+  margin: 4px 0 20px 0;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(191, 90, 242, 0.16) 0%, rgba(94, 92, 230, 0.12) 52%, rgba(20, 20, 26, 0.92) 100%);
+  border: 1px solid rgba(191, 90, 242, 0.38);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-curated-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-curated-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.ai-curated-subtitle {
+  font-size: 13px;
+  line-height: 1.48;
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0;
+}
+
+.ai-curated-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-curated-tag {
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e5e5ea;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ai-curated-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.ai-suggest-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, rgba(191, 90, 242, 0.16), rgba(94, 92, 230, 0.14));
+  border: 1px solid rgba(191, 90, 242, 0.36);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.ai-suggest-banner:hover {
+  background: linear-gradient(135deg, rgba(191, 90, 242, 0.24), rgba(94, 92, 230, 0.22));
+}
+
+.ai-suggest-banner-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #f2e6ff;
+}
+
+.ai-suggest-banner-cta {
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: rgba(191, 90, 242, 0.35);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   StandBy / TV Mode Fullscreen AI Sonic Curator Tag Cloud
+   ========================================================================== */
+
+.standby-ai-pill-btn.hidden {
+  display: none !important;
+}
+
+.standby-ai-modal {
+  z-index: 26;
+}
+
+.standby-ai-header-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.standby-ai-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.standby-ai-scroll {
+  max-width: 1640px;
+  width: 100%;
+  margin: 0 auto;
+  padding-bottom: 64px;
+}
+
+.standby-ai-tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 14px 16px;
+  padding: 10px 4px 32px 4px;
+}
+
+.standby-ai-tag-pill {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 14px 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.048);
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  line-height: 1.28;
+  cursor: pointer;
+  user-select: none;
+  text-align: center;
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 20px rgba(0, 0, 0, 0.26);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  animation: aiTagFadeIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes aiTagFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-tag-line-top {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1.25;
+}
+
+.ai-tag-icon {
+  font-size: clamp(17px, 1.45vw, 20px);
+  line-height: 1;
+  opacity: 0.94;
+  flex-shrink: 0;
+}
+
+.ai-tag-main {
+  font-size: clamp(17px, 1.5vw, 21px);
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 450;
+}
+
+.ai-tag-sub {
+  font-size: clamp(13.5px, 1.14vw, 16px);
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.standby-ai-tag-pill.tag-size-md {
+  padding: 13px 22px;
+}
+
+.standby-ai-tag-pill.tag-size-md .ai-tag-main {
+  font-size: clamp(16.5px, 1.42vw, 19.5px);
+}
+
+.standby-ai-tag-pill.tag-size-lg {
+  padding: 14px 24px;
+}
+
+.standby-ai-tag-pill.tag-size-lg .ai-tag-main {
+  font-size: clamp(17.5px, 1.52vw, 21px);
+}
+
+.standby-ai-tag-pill.tag-size-xl {
+  padding: 15px 26px;
+}
+
+.standby-ai-tag-pill.tag-size-xl .ai-tag-main {
+  font-size: clamp(18.5px, 1.62vw, 22.5px);
+}
+
+.standby-ai-tag-pill.tag-theme-violet {
+  border-color: rgba(191, 90, 242, 0.2);
+}
+
+.standby-ai-tag-pill.tag-theme-indigo {
+  border-color: rgba(94, 92, 230, 0.22);
+}
+
+.standby-ai-tag-pill.tag-theme-cyan {
+  border-color: rgba(100, 210, 255, 0.18);
+}
+
+.standby-ai-tag-pill.tag-theme-rose {
+  border-color: rgba(255, 55, 95, 0.18);
+}
+
+.standby-ai-tag-pill.tag-theme-amber {
+  border-color: rgba(255, 159, 10, 0.18);
+}
+
+.standby-ai-tag-pill.tag-theme-emerald {
+  border-color: rgba(48, 209, 88, 0.18);
+}
+
+.standby-ai-tag-pill:hover {
+  transform: translateY(-2px);
+  background: rgba(191, 90, 242, 0.14);
+  border-color: rgba(191, 90, 242, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.standby-ai-tag-pill:hover .ai-tag-sub {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.standby-ai-tag-pill:active {
+  transform: scale(0.975);
+}
+
+.standby-ai-sentinel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 0 36px 0;
+}
+
+.standby-ai-load-more-btn {
+  padding: 9px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13.5px;
+  font-weight: 450;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.standby-ai-load-more-btn:hover {
+  background: rgba(191, 90, 242, 0.2);
+  border-color: rgba(191, 90, 242, 0.5);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   AI Track Vibe Button (••• Modal & StandBy TV) + Pinned AI Prompts
+   ========================================================================== */
+
+.standby-ai-vibe-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.standby-ai-vibe-btn.hidden {
+  display: none !important;
+}
+
+.ai-pinned-section {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai-prompts-subhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.56);
+  margin: 0 0 8px 0;
+}
+
+.ai-prompts-subhead.pinned-head {
+  color: #ffd60a;
+}
+
+.ai-prompt-chip-item {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+
+.ai-prompt-chip-item:hover {
+  background: rgba(191, 90, 242, 0.18);
+  border-color: rgba(191, 90, 242, 0.45);
+}
+
+.ai-prompt-chip-item.is-pinned {
+  background: rgba(255, 214, 10, 0.11);
+  border-color: rgba(255, 214, 10, 0.38);
+}
+
+.ai-prompt-chip-item.is-pinned:hover {
+  background: rgba(255, 214, 10, 0.18);
+  border-color: rgba(255, 214, 10, 0.58);
+}
+
+.ai-prompt-chip-item .ai-prompt-chip {
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 8px 10px 8px 12px;
+}
+
+.ai-prompt-chip-item .ai-prompt-chip:hover {
+  background: transparent;
+}
+
+.ai-chip-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px 0 6px;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.36);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+
+.ai-chip-pin-btn:hover {
+  color: #ffd60a;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ai-chip-pin-btn.active {
+  color: #ffd60a;
+}
+
+.btn-search-action.btn-ai-pin-active {
+  background: rgba(255, 214, 10, 0.16);
+  border-color: rgba(255, 214, 10, 0.48);
+  color: #ffd60a;
+}
+
+.standby-ai-tag-pill {
+  position: relative;
+}
+
+.standby-ai-tag-pill.is-pinned {
+  border-color: rgba(255, 214, 10, 0.48) !important;
+  background: linear-gradient(145deg, rgba(255, 214, 10, 0.13), rgba(191, 90, 242, 0.1)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 214, 10, 0.22), 0 8px 24px rgba(0, 0, 0, 0.34);
+}
+
+.standby-tag-pin-badge {
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: color 0.16s ease, background 0.16s ease, transform 0.14s ease, opacity 0.16s ease;
+  opacity: 0.55;
+}
+
+.standby-ai-tag-pill:hover .standby-tag-pin-badge,
+.standby-ai-tag-pill.is-pinned .standby-tag-pin-badge {
+  opacity: 1;
+}
+
+.standby-tag-pin-badge:hover {
+  transform: scale(1.15);
+  color: #ffd60a;
+  background: rgba(0, 0, 0, 0.48);
+}
+
+.standby-ai-tag-pill.is-pinned .standby-tag-pin-badge {
+  color: #ffd60a;
+  border-color: rgba(255, 214, 10, 0.42);
+  background: rgba(255, 214, 10, 0.16);
+}
+
+/* --- Signal Path DSP Engine Controls --- */
+.signal-dsp-controls {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.signal-dsp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 8px;
+}
+
+.signal-dsp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.signal-dsp-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+  color: var(--text-muted);
+}
+
+.signal-dsp-select {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+
+.signal-dsp-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.signal-dsp-preset-subtitle {
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.signal-dsp-telemetry {
+  margin-top: 2px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(48, 209, 88, 0.1);
+  border: 1px solid rgba(48, 209, 88, 0.28);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #63e6be;
+}
+
+.signal-dsp-readonly-note {
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.86);
+}
+

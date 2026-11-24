@@ -82,6 +82,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 DLNADiscoveryManager.shared.startIfEnabled()
                 ExternalAmpTCPController.shared.startIfActive()
+                CloudSettingsSyncService.shared.syncIfEnabled(reason: "wake")
+                if AudioEngineController.shared.currentConfigurationSnapshot().mode != .bitPerfectPassthrough {
+                    Task(priority: .userInitiated) {
+                        _ = await AudioEngineController.shared.startOrReconfigurePipeline()
+                        await MainActor.run {
+                            MenuManager.shared.updateMenuState()
+                        }
+                    }
+                }
             }
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.2) {
                 WebSocketServer.shared.broadcastStatus(includeQueue: true)
@@ -89,6 +98,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
         }
 
         // 7. Start Music.app Lifecycle Watchdog & Fault Tolerance Monitor
+        let existingLifecycleHandler = MusicAppLifecycleManager.shared.onStateChanged
+        MusicAppLifecycleManager.shared.onStateChanged = { event in
+            existingLifecycleHandler?(event)
+            if event.state == .running {
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
+                    MusicKitManager.shared.reconcilePendingStagedCatalogTracksOnLaunch()
+                    PlaybackStateStore.shared.scheduleIdleStagedCleanup(after: 120.0)
+                }
+            }
+        }
+        MusicAppProvider.shared.addMusicAppLaunchedObserver {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
+                MusicKitManager.shared.reconcilePendingStagedCatalogTracksOnLaunch()
+                PlaybackStateStore.shared.scheduleIdleStagedCleanup(after: 120.0)
+            }
+        }
         MusicAppLifecycleManager.shared.startWatchdog()
 
         // 8. Start DLNA Discovery Manager if enabled
@@ -99,16 +124,70 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
             WebSocketServer.shared.broadcastStatus(includeQueue: false)
             UPnPMediaRendererServer.shared.notifySubscribers()
             DispatchQueue.main.async {
-                SettingsWindow.shared.refreshAmpStatusLabel()
+                SettingsWindow.refreshAmpStatusIfVisible()
             }
         }
         ExternalAmpTCPController.shared.startIfActive()
 
+        // 10. Start Hybrid DSP Engine if persisted mode is DSD DoP or HQ NOS PCM,
+        //     or activate persisted Room EQ / Late-Night DRC in local passthrough mode
+        let persistedDSP = AudioEngineController.shared.currentConfigurationSnapshot()
+        if persistedDSP.mode != .bitPerfectPassthrough {
+            AudioProcessTapService.shared.startCapture()
+            Task(priority: .userInitiated) {
+                _ = await AudioEngineController.shared.startOrReconfigurePipeline()
+                await MainActor.run {
+                    MenuManager.shared.updateMenuState()
+                }
+            }
+        } else {
+            RoomAcousticService.shared.refreshLocalPassthroughEQPipeline()
+        }
+
+        // Clean up any leftover crash-orphaned temporary staged tracks from previous runs ONCE at +1.8s on launch
+        // (before Explore pre-warming stages current-session personal mixes).
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.8) {
+            Self.performStartupStagedTracksCleanupPass()
+        }
+
+        // 11. Start Cloud Sync for DSP Presets & Track Normalization (if enabled by user)
+        CloudSettingsSyncService.shared.onStatusChanged = {
+            DispatchQueue.main.async {
+                SettingsWindow.refreshCloudSyncStatusIfVisible()
+            }
+        }
+        CloudSettingsSyncService.shared.startIfEnabled()
+
         NSLog("[AppDelegate] Apple Music Remote initialized successfully.")
+    }
+
+    nonisolated private static func performStartupStagedTracksCleanupPass() {
+        guard !PlaybackRouter.shared.isTestingEnvironment else { return }
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty else { return }
+
+        MusicKitManager.shared.reconcilePendingStagedCatalogTracksOnLaunch()
+        // Defer crash-orphan deletion until 120s of idle time so cold-launch playback never triggers an `amplibraryd` delete-push cooldown!
+        PlaybackStateStore.shared.scheduleIdleStagedCleanup(after: 120.0)
+
+        let isCustomQueueActive = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback
+        }
+        if !isCustomQueueActive {
+            MusicKitManager.shared.cleanupTemporaryPlaybackPlaylists(keepingActiveQueue: false)
+        }
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
         NSLog("[AppDelegate] Terminating Apple Music Remote...")
+        PlaybackStateStore.shared.cleanupStagedTemporaryTracksSyncOnTerminate()
+        MusicKitManager.shared.cleanupTemporaryPlaybackPlaylists(keepingActiveQueue: false, synchronous: true)
+        let sema = DispatchSemaphore(value: 0)
+        Task.detached(priority: .userInitiated) {
+            await AudioEngineController.shared.stopPipeline(restartTapAfterStop: false)
+            sema.signal()
+        }
+        _ = sema.wait(timeout: .now() + 0.5)
+        CloudSettingsSyncService.shared.stopMonitoring()
         MusicAppLifecycleManager.shared.stopWatchdog()
         BitPerfectLogMonitor.shared.stop()
         DLNADiscoveryManager.shared.stop()

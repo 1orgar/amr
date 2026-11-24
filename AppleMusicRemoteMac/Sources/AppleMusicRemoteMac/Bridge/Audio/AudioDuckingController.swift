@@ -65,6 +65,8 @@ public final class AudioDuckingController: @unchecked Sendable {
         let currentVol: Int
         if ExternalAmpTCPController.shared.isActive {
             currentVol = ExternalAmpTCPController.shared.currentVolume
+        } else if DLNADiscoveryManager.shared.hasActiveRenderer {
+            currentVol = DLNADiscoveryManager.shared.currentVolume
         } else if PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.isDLNAMuted }) {
             currentVol = 0
         } else {
@@ -179,12 +181,14 @@ public final class AudioDuckingController: @unchecked Sendable {
             return (true, restored)
         }
 
-        let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
-        if isDLNAMuted {
-            PlaybackStateStore.shared.withLock {
-                PlaybackStateStore.shared.preDLNAVolume = orig
+        if !DLNADiscoveryManager.shared.hasActiveRenderer {
+            let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
+            if isDLNAMuted {
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.preDLNAVolume = orig
+                }
+                return (true, 0)
             }
-            return (true, 0)
         }
 
         volumeApplyLock.withLock {

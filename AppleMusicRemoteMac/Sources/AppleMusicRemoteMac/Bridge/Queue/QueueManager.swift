@@ -19,6 +19,8 @@ public final class QueueManager: @unchecked Sendable {
     private var recentlyPlayedCache: (timestamp: Date, tracks: [TrackInfo])?
     private var inFlightQueueTask: Task<PlaybackQueueInfo, Never>?
     var queueTimer: DispatchSourceTimer?
+    var pendingCutoffWakeupWorkItem: DispatchWorkItem?
+    var pendingCutoffWakeupDeadline: Date?
     let queueTimerQueue = DispatchQueue(label: "org.ksholokhov.amr.queue.timer", qos: .utility)
 
     private init() {}
@@ -37,12 +39,14 @@ public final class QueueManager: @unchecked Sendable {
             }
         }
         let fetchLimit = max(limit, 30)
-        var tracks = LibraryService.shared.getPlaylistTracks(name: "Любимые песни", limit: fetchLimit)
-        if tracks.isEmpty {
-            tracks = LibraryService.shared.getPlaylistTracks(name: "Favorite Songs", limit: fetchLimit)
-        }
-        if tracks.isEmpty {
-            tracks = LibraryService.shared.getPlaylistTracks(name: "Favorites", limit: fetchLimit)
+        var tracks: [TrackInfo] = []
+        let playlistsWarm = LibraryService.shared.hasPopulatedPlaylistsCache()
+        for favName in ["Любимые песни", "Favorite Songs", "Favorites"] {
+            if !tracks.isEmpty { break }
+            if playlistsWarm && !LibraryService.shared.hasCachedUserPlaylist(named: favName) {
+                continue
+            }
+            tracks = LibraryService.shared.getPlaylistTracks(name: favName, limit: fetchLimit)
         }
         if tracks.isEmpty {
             tracks = Array(LibraryService.shared.getCachedLibrarySongs().prefix(fetchLimit))
@@ -198,7 +202,7 @@ public final class QueueManager: @unchecked Sendable {
             }
             var matchedIdx = activeIdx
             if !curName.isEmpty && !isTransitioning && origPl != "Очередь AMR" {
-                if activeIdx < customQueue.count && isTrackMatching(expected: customQueue[activeIdx], candidateName: curName, candidateArtist: curArtist) {
+                if activeIdx < customQueue.count && matchesExpectedQueueTrack(customQueue[activeIdx], candidateName: curName, candidateArtist: curArtist) {
                     matchedIdx = activeIdx
                 } else if let foundIdx = customQueue.firstIndex(where: { isTrackMatching(expected: $0, candidateName: curName, candidateArtist: curArtist) }) {
                     matchedIdx = foundIdx
@@ -243,7 +247,14 @@ public final class QueueManager: @unchecked Sendable {
 
             var recentHistory = [TrackInfo]()
             if matchedIdx > 0 {
-                recentHistory = Array(formattedTracks[0..<matchedIdx].reversed().prefix(25))
+                recentHistory = Array(formattedTracks[0..<matchedIdx].reversed().prefix(100))
+            }
+            enrichQueueTrackArtworks(&upcoming)
+            enrichQueueTrackArtworks(&recentHistory)
+
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.latestUpcomingTracks = upcoming
+                PlaybackStateStore.shared.latestHistoryTracks = recentHistory
             }
 
             let qInfo = PlaybackQueueInfo(
@@ -310,7 +321,11 @@ public final class QueueManager: @unchecked Sendable {
                 currentTrackInfo.hasArtwork = true
             }
 
-            let history = getRecentlyPlayed(limit: 25)
+            var history = PlaybackStateStore.shared.withLock { () -> [TrackInfo] in
+                PlaybackStateStore.shared.recordRadioTrackTransitionLocked(current: currentTrackInfo, stationName: stationName)
+                return PlaybackStateStore.shared.radioHistoryTracks
+            }
+            enrichQueueTrackArtworks(&history)
             PlaybackStateStore.shared.withLock {
                 PlaybackStateStore.shared.latestUpcomingTracks = []
                 PlaybackStateStore.shared.latestHistoryTracks = history
@@ -357,13 +372,20 @@ public final class QueueManager: @unchecked Sendable {
         if isShufActive && !shufQueue.isEmpty {
             effectivePlName = origPl ?? "Очередь"
             tracksList = shufQueue
-        } else if curPlName == "Очередь AMR" || curPlName.localizedCaseInsensitiveCompare("Очередь AMR") == .orderedSame {
+        } else if curPlName == "Очередь AMR"
+                    || curPlName.localizedCaseInsensitiveCompare("Очередь AMR") == .orderedSame {
             effectivePlName = origPl ?? "Очередь AMR"
-            tracksList = LibraryService.shared.getPlaylistTracks(name: "Очередь AMR")
+            // Single-track isolated playback without custom queue: leave tracksList empty so the active track block below builds a clean 1-track queue
+            tracksList = []
         } else if !curPlName.isEmpty && curPlName != "Музыка" && curPlName != "Music" && curPlName != "Медиатека" {
             tracksList = LibraryService.shared.getPlaylistTracks(name: curPlName)
         }
-        if tracksList.isEmpty && !curPlName.isEmpty && curPlName != "Музыка" && curPlName != "Music" && curPlName != "Медиатека" {
+        if tracksList.isEmpty
+            && !curPlName.isEmpty
+            && curPlName != "Музыка"
+            && curPlName != "Music"
+            && curPlName != "Медиатека"
+            && curPlName != "Очередь AMR" {
             tracksList = LibraryService.shared.getCurrentPlaylistTracks()
         }
 
@@ -379,6 +401,10 @@ public final class QueueManager: @unchecked Sendable {
                 let catalogTracks = await MusicKitManager.shared.getAlbumTracks(album: curAlbum, artist: curArtist)
                 if !catalogTracks.isEmpty {
                     lock.withLock {
+                        if albumTracksCache.count >= 256 {
+                            let oldest = albumTracksCache.sorted { $0.value.timestamp < $1.value.timestamp }.prefix(128).map(\.key)
+                            for k in oldest { albumTracksCache.removeValue(forKey: k) }
+                        }
                         albumTracksCache[cacheKey] = (Date(), catalogTracks)
                     }
                     tracksList = catalogTracks
@@ -409,7 +435,7 @@ public final class QueueManager: @unchecked Sendable {
                 currentTrackInfo.hasArtwork = true
             }
 
-            let history = getRecentlyPlayed(limit: 25)
+            let history: [TrackInfo] = []
             PlaybackStateStore.shared.withLock {
                 PlaybackStateStore.shared.latestUpcomingTracks = []
                 PlaybackStateStore.shared.latestHistoryTracks = history
@@ -476,45 +502,71 @@ public final class QueueManager: @unchecked Sendable {
 
         var upcoming = [TrackInfo]()
         var history = [TrackInfo]()
-        let isShuffle = status.shuffle && !isShufActive && curPlName != "Очередь AMR"
+        let isShuffle = (status.shuffle || isShufActive) && curPlName != "Очередь AMR"
 
         if !isShuffle {
             if curIdx >= 0 && curIdx + 1 < formattedTracks.count {
                 upcoming = Array(formattedTracks[(curIdx + 1)...])
             }
             if curIdx > 0 {
-                history = Array(formattedTracks[0..<curIdx].reversed().prefix(25))
+                history = Array(formattedTracks[0..<curIdx].reversed().prefix(100))
             }
         } else {
+            // Stable shuffle tracking even if Shuffle was enabled externally inside Music.app:
+            // maintains `[played_0..played_k, currentTrack, unplayed_0..unplayed_m]` without ever regenerating unplayed tracks!
             PlaybackStateStore.shared.withLock {
+                let matchesCur: (TrackInfo) -> Bool = { item in
+                    (curDbId > 0 && item.numericId == curDbId) ||
+                    (!curName.isEmpty && item.name.localizedCaseInsensitiveCompare(curName) == .orderedSame &&
+                     (curArtist.isEmpty || item.artist.isEmpty || item.artist.localizedCaseInsensitiveCompare(curArtist) == .orderedSame))
+                }
                 if PlaybackStateStore.shared.activeShuffledPlaylistName == effectivePlName && !PlaybackStateStore.shared.activeShuffledQueue.isEmpty {
-                    if let foundIdx = PlaybackStateStore.shared.activeShuffledQueue.firstIndex(where: {
-                        ($0.numericId != nil && $0.numericId == curDbId) ||
-                        (!curName.isEmpty && $0.name.localizedCaseInsensitiveCompare(curName) == .orderedSame)
-                    }) {
-                        upcoming = Array(PlaybackStateStore.shared.activeShuffledQueue[(foundIdx + 1)...])
-                        if foundIdx > 0 {
-                            history = Array(PlaybackStateStore.shared.activeShuffledQueue[0..<foundIdx].reversed().prefix(25))
+                    var sq = PlaybackStateStore.shared.activeShuffledQueue
+                    var sIdx = min(max(0, PlaybackStateStore.shared.activeShuffledIndex), sq.count - 1)
+                    if !matchesCur(sq[sIdx]) {
+                        if let tailPos = sq[(sIdx + 1)...].firstIndex(where: matchesCur) {
+                            let picked = sq.remove(at: tailPos)
+                            let newIdx = min(sIdx + 1, sq.count)
+                            sq.insert(picked, at: newIdx)
+                            sIdx = newIdx
+                        } else if let pastPos = sq[..<sIdx].firstIndex(where: matchesCur) {
+                            sIdx = pastPos
                         }
-                    } else {
-                        upcoming = PlaybackStateStore.shared.activeShuffledQueue.filter {
-                            ($0.numericId != nil && $0.numericId != curDbId) || (!curName.isEmpty && $0.name.localizedCaseInsensitiveCompare(curName) != .orderedSame)
+                        for i in 0..<sq.count {
+                            sq[i].index = i + 1
+                            sq[i].isCurrent = (i == sIdx)
                         }
+                        PlaybackStateStore.shared.activeShuffledQueue = sq
+                        PlaybackStateStore.shared.activeShuffledIndex = sIdx
+                    }
+                    formattedTracks = sq
+                    curIdx = sIdx
+                    if sIdx + 1 < sq.count {
+                        upcoming = Array(sq[(sIdx + 1)...])
+                    }
+                    if sIdx > 0 {
+                        history = Array(sq[0..<sIdx].reversed().prefix(100))
                     }
                 } else if !formattedTracks.isEmpty {
-                    var remaining = formattedTracks.filter {
-                        ($0.numericId != nil && $0.numericId != curDbId) || (!curName.isEmpty && $0.name.localizedCaseInsensitiveCompare(curName) != .orderedSame)
+                    let safeCurIdx = min(max(0, curIdx), formattedTracks.count - 1)
+                    let curItem = formattedTracks[safeCurIdx]
+                    var others = formattedTracks
+                    others.remove(at: safeCurIdx)
+                    others.shuffle()
+                    var sq = [curItem] + others
+                    for i in 0..<sq.count {
+                        sq[i].index = i + 1
+                        sq[i].isCurrent = (i == 0)
                     }
-                    remaining.shuffle()
-                    PlaybackStateStore.shared.activeShuffledQueue = remaining
+                    PlaybackStateStore.shared.activeShuffledQueue = sq
+                    PlaybackStateStore.shared.activeShuffledIndex = 0
                     PlaybackStateStore.shared.activeShuffledPlaylistName = effectivePlName
-                    upcoming = remaining
+                    formattedTracks = sq
+                    curIdx = 0
+                    upcoming = sq.count > 1 ? Array(sq[1...]) : []
+                    history = []
                 }
             }
-        }
-
-        if history.isEmpty {
-            history = getRecentlyPlayed(limit: 25)
         }
 
         if upcoming.isEmpty {
@@ -526,39 +578,11 @@ public final class QueueManager: @unchecked Sendable {
             }
         }
 
-        // Fast pass for artwork: preserve CDN URLs and query parameters so clients never trigger 69x blind AppleScript artwork lookups
-        for i in 0..<upcoming.count {
-            let t = upcoming[i]
-            if let cachedCloud = MusicKitManager.shared.getCachedTrackArtwork(name: t.name, artist: t.artist, album: t.album), !cachedCloud.isEmpty {
-                upcoming[i].artworkUrl = cachedCloud
-                upcoming[i].hasArtwork = true
-                continue
-            }
-            if t.artworkUrl.hasPrefix("http://") || t.artworkUrl.hasPrefix("https://") || t.artworkUrl.hasPrefix("data:") {
-                upcoming[i].hasArtwork = true
-                continue
-            }
-            let encN = t.name.amrQueryValueEncoded
-            let encA = t.artist.amrQueryValueEncoded
-            let encAl = t.album.amrQueryValueEncoded
-            if t.isLocal == true, let nid = t.numericId, nid > 0 {
-                if let cached = ArtworkService.shared.getCachedTrackArtwork(id: nid) {
-                    upcoming[i].artworkUrl = "data:image/jpeg;base64,\(cached.base64EncodedString())"
-                    upcoming[i].hasArtwork = true
-                    continue
-                }
-                upcoming[i].artworkUrl = "/api/artwork/track?id=\(nid)&name=\(encN)&artist=\(encA)&album=\(encAl)"
-                upcoming[i].hasArtwork = true
-                continue
-            }
-            if !t.name.isEmpty {
-                upcoming[i].artworkUrl = "/api/artwork/search?name=\(encN)&artist=\(encA)&album=\(encAl)"
-                upcoming[i].hasArtwork = true
-            }
-        }
+        enrichQueueTrackArtworks(&upcoming)
+        enrichQueueTrackArtworks(&history)
 
         // Only prefetch embedded artwork for genuinely local file tracks
-        let topLocalIds = Array(upcoming.prefix(6).filter { $0.isLocal == true }.compactMap { $0.numericId })
+        let topLocalIds = Array((upcoming.prefix(6) + history.prefix(4)).filter { $0.isLocal == true }.compactMap { $0.numericId })
         if !topLocalIds.isEmpty {
             ArtworkService.shared.queueNativeArtworkFetch(ids: topLocalIds)
         }
@@ -583,5 +607,38 @@ public final class QueueManager: @unchecked Sendable {
             }
         }
         return queueInfo
+    }
+
+    /// Non-blocking artwork URL enrichment for both upcoming and previous queue items.
+    private func enrichQueueTrackArtworks(_ tracks: inout [TrackInfo]) {
+        for i in 0..<tracks.count {
+            let t = tracks[i]
+            if let cachedCloud = MusicKitManager.shared.getCachedTrackArtwork(name: t.name, artist: t.artist, album: t.album), !cachedCloud.isEmpty {
+                tracks[i].artworkUrl = cachedCloud
+                tracks[i].hasArtwork = true
+                continue
+            }
+            if t.artworkUrl.hasPrefix("http://") || t.artworkUrl.hasPrefix("https://") || t.artworkUrl.hasPrefix("data:") {
+                tracks[i].hasArtwork = true
+                continue
+            }
+            let encN = t.name.amrQueryValueEncoded
+            let encA = t.artist.amrQueryValueEncoded
+            let encAl = t.album.amrQueryValueEncoded
+            if t.isLocal == true, let nid = t.numericId, nid > 0 {
+                if let cached = ArtworkService.shared.getCachedTrackArtwork(id: nid) {
+                    tracks[i].artworkUrl = "data:image/jpeg;base64,\(cached.base64EncodedString())"
+                    tracks[i].hasArtwork = true
+                    continue
+                }
+                tracks[i].artworkUrl = "/api/artwork/track?id=\(nid)&name=\(encN)&artist=\(encA)&album=\(encAl)"
+                tracks[i].hasArtwork = true
+                continue
+            }
+            if !t.name.isEmpty {
+                tracks[i].artworkUrl = "/api/artwork/search?name=\(encN)&artist=\(encA)&album=\(encAl)"
+                tracks[i].hasArtwork = true
+            }
+        }
     }
 }

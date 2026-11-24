@@ -8,6 +8,7 @@ import Foundation
 extension WebUIContent {
     public static let indexHTML: String = #"""
 <!DOCTYPE html>
+<!-- AUTO-ASSEMBLED FROM Web/src/html/*.html BY Tools/sync_web_ui.py — EDIT Web/src/html/ PARTIALS -->
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
@@ -30,12 +31,12 @@ extension WebUIContent {
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=278">
+  <link rel="stylesheet" href="/style.css?v=085e46b7">
   <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
 </head>
 <body>
   <!-- iOS Lock Screen & Background Media Keep-Alive -->
-  <audio id="bg-silent-audio" preload="auto" playsinline webkit-playsinline loop src="/assets/silence.m4a?v=2" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;"></audio>
+  <audio id="bg-silent-audio" preload="none" playsinline webkit-playsinline x-webkit-airplay="deny" loop src="/assets/silence.m4a?v=4" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;"></audio>
 
   <!-- Connection Lost Overlay -->
   <div id="connection-overlay" class="overlay-modal hidden" aria-hidden="true">
@@ -99,10 +100,10 @@ extension WebUIContent {
     <section id="view-now-playing" class="view-panel player-panel active">
       <header class="player-top-header">
         <button id="btn-brand-info" class="brand-pill brand-pill-btn" type="button" title="О версии и настройки устройства" aria-label="О версии и настройки устройства">
-          <span class="brand-dot"></span>
-          <span class="brand-title">AMR <span class="brand-ver" id="brand-ver">v2.5.0</span></span>
+          <span class="brand-title">AMR <span class="brand-ver" id="brand-ver">v3.0.0</span></span>
         </button>
         <div class="top-header-right-actions">
+          <button id="player-dr-badge" class="dr-pill-badge hidden" type="button" title="Динамический диапазон мастеринга (TT DR / EBU R128)">DR--</button>
           <button id="audio-quality-badge" class="quality-badge" type="button" title="Параметры потока и ЦАП">
             <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/>
@@ -169,6 +170,10 @@ extension WebUIContent {
         </div>
         <div class="scrubber-timestamps">
           <span id="time-elapsed" class="time-label">0:00</span>
+          <span id="player-loading-status" class="player-loading-pill hidden" role="status" aria-live="polite">
+            <span class="player-loading-spinner" aria-hidden="true"></span>
+            <span id="player-loading-text">Загрузка через буфер AMR…</span>
+          </span>
           <span id="time-remaining" class="time-label">-0:00</span>
         </div>
       </div>
@@ -248,6 +253,7 @@ extension WebUIContent {
       <nav class="desktop-nav-header">
         <div class="desktop-nav-tabs">
           <button class="nav-tab-btn active" data-target="home">Главная</button>
+          <button class="nav-tab-btn" data-target="playlists">Плейлисты</button>
           <button class="nav-tab-btn" data-target="library">Медиатека</button>
           <button class="nav-tab-btn" data-target="queue">Очередь</button>
           <button class="nav-tab-btn" data-target="search">Поиск</button>
@@ -276,9 +282,10 @@ extension WebUIContent {
       <header class="mobile-top-bar">
         <button id="mobile-btn-brand-info" class="brand-pill brand-pill-btn" type="button" title="О версии и настройки устройства" aria-label="О версии и настройки устройства">
           <span class="brand-dot"></span>
-          <span class="brand-title">AMR <span class="brand-ver">v2.5.0</span></span>
+          <span class="brand-title">AMR <span class="brand-ver">v3.0.0</span></span>
         </button>
         <div class="top-header-right-actions">
+          <button id="mobile-dr-badge" class="dr-pill-badge hidden" type="button" title="Динамический диапазон мастеринга (TT DR / EBU R128)">DR--</button>
           <button id="mobile-dac-badge" class="quality-badge mobile-dac-badge" type="button" title="Параметры потока и ЦАП">
             <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/>
@@ -294,7 +301,6 @@ extension WebUIContent {
           </button>
         </div>
       </header>
-
       <!-- Queue View -->
       <section id="view-queue" class="view-panel content-view">
         <header class="section-header">
@@ -315,6 +321,17 @@ extension WebUIContent {
         </header>
 
         <div class="scroll-pane">
+          <!-- Previous / History Section -->
+          <div id="queue-history-group" class="queue-group queue-history-group" style="display: none;">
+            <div class="queue-group-header">
+              <h3 class="group-title">ПРЕДЫДУЩИЕ</h3>
+              <button id="btn-toggle-queue-history" class="btn-queue-history-toggle hidden" type="button">Показать все</button>
+            </div>
+            <div id="queue-history-list" class="track-list">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
           <!-- Currently Playing Section -->
           <div id="queue-current-group" class="queue-group">
             <h3 class="group-title">СЕЙЧАС ИГРАЕТ</h3>
@@ -333,16 +350,17 @@ extension WebUIContent {
         </div>
       </section>
 
-      <!-- Library View -->
-      <section id="view-library" class="view-panel content-view">
-        <!-- Playlists List -->
-        <div id="playlists-browse-pane" class="library-pane">
-          <header class="section-header">
+      <!-- Playlists View -->
+      <section id="view-playlists" class="view-panel content-view">
+        <div id="playlists-only-pane" class="library-pane">
+          <header class="section-header library-section-header">
             <div>
-              <h2 class="section-title">Медиатека</h2>
-              <p class="section-subtitle">Плейлисты и альбомы</p>
+              <h2 class="section-title">Плейлисты</h2>
+              <p id="playlists-section-subtitle" class="section-subtitle">Плейлисты Apple Music</p>
             </div>
-            <button id="btn-refresh-library" class="btn-ghost" type="button" title="Обновить список">Обновить</button>
+            <div class="library-header-controls">
+              <button id="btn-refresh-playlists" class="btn-ghost" type="button" title="Обновить плейлисты">Обновить</button>
+            </div>
           </header>
 
           <div class="scroll-pane">
@@ -351,20 +369,164 @@ extension WebUIContent {
             </div>
           </div>
         </div>
+      </section>
 
-        <!-- Playlist Detail Pane (Drill-down) -->
+      <!-- Library View -->
+      <section id="view-library" class="view-panel content-view">
+        <!-- Library Browse Pane (4 Subtabs: Недавние / Артисты / Альбомы / Треки) -->
+        <div id="playlists-browse-pane" class="library-pane">
+          <header class="section-header library-section-header">
+            <div class="library-title-row">
+              <div>
+                <h2 class="section-title">Медиатека</h2>
+                <p id="library-section-subtitle" class="section-subtitle">Недавно добавленные</p>
+              </div>
+              <button id="btn-refresh-library" class="btn-ghost btn-refresh-library-mobile" type="button" title="Обновить медиатеку">Обновить</button>
+            </div>
+            <div class="library-header-controls">
+              <div class="library-segmented" role="tablist" aria-label="Раздел медиатеки">
+                <button id="library-seg-recent" class="library-seg-btn active" type="button" role="tab" aria-selected="true" data-subtab="recent">Недавние</button>
+                <button id="library-seg-artists" class="library-seg-btn" type="button" role="tab" aria-selected="false" data-subtab="artists">Артисты</button>
+                <button id="library-seg-albums" class="library-seg-btn" type="button" role="tab" aria-selected="false" data-subtab="albums">Альбомы</button>
+                <button id="library-seg-songs" class="library-seg-btn" type="button" role="tab" aria-selected="false" data-subtab="songs">Треки</button>
+              </div>
+              <button id="btn-refresh-library-desktop" class="btn-ghost btn-refresh-library-desktop" type="button" title="Обновить медиатеку">Обновить</button>
+            </div>
+          </header>
+
+          <div class="scroll-pane" id="library-scroll-pane">
+            <!-- Subtab 1: Недавние -->
+            <div id="library-recent-pane" class="library-subpane">
+              <div class="loading-state">Загрузка недавних...</div>
+            </div>
+
+            <!-- Subtab 2: Артисты -->
+            <div id="library-artists-pane" class="library-subpane hidden">
+              <div id="library-artists-toolbar" class="library-inline-toolbar hidden">
+                <div class="library-filter-box">
+                  <svg class="library-filter-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input type="search" id="library-artists-filter" placeholder="Поиск по артистам медиатеки..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                  <button id="btn-clear-artists-filter" class="library-filter-clear hidden" type="button" aria-label="Очистить">&times;</button>
+                </div>
+              </div>
+              <div id="library-artists-list" class="library-artists-list">
+                <div class="loading-state">Загрузка артистов...</div>
+              </div>
+            </div>
+
+            <!-- Subtab 3: Альбомы -->
+            <div id="library-albums-grid" class="playlists-grid hidden">
+              <div class="loading-state">Загрузка альбомов...</div>
+            </div>
+
+            <!-- Subtab 4: Треки -->
+            <div id="library-songs-pane" class="library-subpane hidden">
+              <div id="library-songs-toolbar" class="library-inline-toolbar hidden">
+                <div class="library-filter-box">
+                  <svg class="library-filter-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input type="search" id="library-songs-filter" placeholder="Фильтр треков медиатеки..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                  <button id="btn-clear-songs-filter" class="library-filter-clear hidden" type="button" aria-label="Очистить">&times;</button>
+                </div>
+                <div class="library-songs-quick-actions">
+                  <button id="btn-play-library-songs" class="btn-search-action btn-search-play-all" type="button">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                      <polygon points="6 3 20 12 6 21 6 3"/>
+                    </svg>
+                    <span>Слушать</span>
+                  </button>
+                  <button id="btn-shuffle-library-songs" class="btn-search-action btn-search-shuffle" type="button">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="16 3 21 3 21 8"/>
+                      <line x1="4" y1="20" x2="21" y2="3"/>
+                      <polyline points="21 16 21 21 16 21"/>
+                      <line x1="15" y1="15" x2="21" y2="21"/>
+                      <line x1="4" y1="4" x2="9" y2="9"/>
+                    </svg>
+                    <span>Перемешать</span>
+                  </button>
+                </div>
+              </div>
+              <div id="library-songs-list" class="track-list">
+                <div class="loading-state">Загрузка треков медиатеки...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Library Artist Detail Pane (Drill-down) -->
+        <div id="library-artist-detail-pane" class="library-pane hidden">
+          <header class="detail-header">
+            <button id="btn-back-to-artists" class="btn-back" type="button">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span>Артисты</span>
+            </button>
+          </header>
+
+          <div class="detail-hero artist-detail-hero">
+            <div class="artist-detail-avatar-wrap">
+              <img id="artist-detail-artwork" class="detail-art artist-detail-art hidden" src="apple-touch-icon.svg" alt="Исполнитель">
+              <div id="artist-detail-initials" class="artist-detail-initials">♪</div>
+            </div>
+            <div class="detail-info">
+              <span class="detail-badge">ИСПОЛНИТЕЛЬ В МЕДИАТЕКЕ</span>
+              <h2 id="artist-detail-title" class="detail-title">Исполнитель</h2>
+              <p id="artist-detail-meta" class="detail-meta">0 треков</p>
+              <div class="detail-actions">
+                <button id="btn-play-artist-library" class="btn-primary-action" type="button">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <polygon points="6 3 20 12 6 21 6 3"/>
+                  </svg>
+                  <span>Слушать</span>
+                </button>
+                <button id="btn-shuffle-artist-library" class="btn-secondary-action" type="button">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 3 21 3 21 8"/>
+                    <line x1="4" y1="20" x2="21" y2="3"/>
+                    <polyline points="21 16 21 21 16 21"/>
+                    <line x1="15" y1="15" x2="21" y2="21"/>
+                    <line x1="4" y1="4" x2="9" y2="9"/>
+                  </svg>
+                  <span>Перемешать</span>
+                </button>
+                <button id="btn-remove-artist-detail-library" class="btn-danger-ghost" type="button" title="Удалить исполнителя из медиатеки">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </svg>
+                  <span>Удалить из медиатеки</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="scroll-pane" id="artist-detail-content">
+            <div class="loading-state">Загрузка медиатеки артиста...</div>
+          </div>
+        </div>
+
+        <!-- Playlist / Album Detail Pane (Drill-down) -->
         <div id="playlist-detail-pane" class="library-pane hidden">
           <header class="detail-header">
             <button id="btn-back-to-playlists" class="btn-back" type="button">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
                 <polyline points="15 18 9 12 15 6"/>
               </svg>
-              <span>Плейлисты</span>
+              <span id="detail-back-label">Медиатека</span>
             </button>
           </header>
 
           <div class="detail-hero">
-            <img id="detail-artwork" class="detail-art" src="apple-touch-icon.svg" alt="Обложка плейлиста" onerror="this.src='apple-touch-icon.svg'">
+            <img id="detail-artwork" class="detail-art" src="apple-touch-icon.svg" alt="Обложка плейлиста" data-fallback-icon="apple-touch-icon.svg">
             <div class="detail-info">
               <span id="detail-badge" class="detail-badge">ПЛЕЙЛИСТ</span>
               <h2 id="detail-title" class="detail-title">Название</h2>
@@ -393,6 +555,15 @@ extension WebUIContent {
                   </svg>
                   <span id="btn-add-playlist-library-text">В медиатеку</span>
                 </button>
+                <button id="btn-remove-detail-library" class="btn-danger-ghost hidden" type="button" title="Удалить из медиатеки Apple Music">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </svg>
+                  <span id="btn-remove-detail-library-text">Удалить из медиатеки</span>
+                </button>
                 <button id="btn-detail-booklet" class="btn-secondary-action hidden" type="button" title="Открыть цифровой буклет альбома (PDF)">
                   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
@@ -408,10 +579,10 @@ extension WebUIContent {
             <div id="playlist-tracks-list" class="track-list">
               <div class="loading-state">Загрузка треков...</div>
             </div>
+            <div id="album-completeness-banner-slot"></div>
           </div>
         </div>
       </section>
-
       <!-- Home (Главная) View -->
       <section id="view-home" class="view-panel content-view active">
         <header class="section-header home-header">
@@ -604,6 +775,7 @@ extension WebUIContent {
         <div class="search-filters">
           <button class="filter-chip active" data-scope="all">Все</button>
           <button class="filter-chip filter-chip-ai" data-scope="ai">✨ AI Подбор</button>
+          <button class="filter-chip filter-chip-bridge" data-scope="bridge">🌉 Sonic Bridge</button>
           <button class="filter-chip" data-scope="songs">Песни</button>
           <button class="filter-chip" data-scope="albums">Альбомы</button>
           <button class="filter-chip" data-scope="playlists">Плейлисты</button>
@@ -676,7 +848,7 @@ extension WebUIContent {
         </button>
       </div>
       <!-- Mini Progress Line -->
-      <div class="mini-progress-track">
+      <div id="mini-progress-track" class="mini-progress-track">
         <div id="mini-progress-fill" class="mini-progress-fill" style="width: 0%;"></div>
       </div>
     </aside>
@@ -692,10 +864,21 @@ extension WebUIContent {
       </button>
 
       <button class="tab-item" data-view="view-home">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor">
           <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
         </svg>
         <span>Главная</span>
+      </button>
+
+      <button class="tab-item" data-view="view-playlists">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="15" y2="6"/>
+          <line x1="3" y1="11" x2="15" y2="11"/>
+          <line x1="3" y1="16" x2="11" y2="16"/>
+          <path d="M17 17V8l4-1v8"/>
+          <circle cx="15" cy="17" r="2"/>
+        </svg>
+        <span>Плейлисты</span>
       </button>
 
       <button class="tab-item" data-view="view-library">
@@ -730,7 +913,6 @@ extension WebUIContent {
     </nav>
 
   </div>
-
   <!-- Track Actions & Station Picker Modal (••• Menu) -->
   <div id="station-picker-modal" class="modal-backdrop hidden" aria-hidden="true" role="dialog">
     <div class="modal-card station-modal-card">
@@ -743,7 +925,42 @@ extension WebUIContent {
       </div>
 
       <div class="modal-body">
+        <div id="station-modal-track-banner" class="station-modal-track-banner hidden">
+          <img id="station-modal-track-art" class="station-modal-track-art" src="apple-touch-icon.svg" alt="">
+          <div class="station-modal-track-texts">
+            <span id="station-modal-track-title" class="station-modal-track-title">—</span>
+            <span id="station-modal-track-sub" class="station-modal-track-sub">—</span>
+          </div>
+        </div>
         <div class="station-options-list">
+          <button id="btn-add-track-library" class="station-option-btn hidden" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Добавить трек в медиатеку</span>
+              <span id="station-opt-add-lib-sub" class="station-opt-secondary">Сохранить композицию в Apple Music</span>
+            </div>
+          </button>
+
+          <button id="btn-remove-track-library" class="station-option-btn station-option-danger hidden" type="button">
+            <div class="station-opt-icon danger-opt-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Удалить трек из медиатеки</span>
+              <span id="station-opt-remove-lib-sub" class="station-opt-secondary">Удалить из медиатеки Apple Music</span>
+            </div>
+          </button>
+
           <button id="btn-go-to-album" class="station-option-btn" type="button">
             <div class="station-opt-icon">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -785,6 +1002,22 @@ extension WebUIContent {
             </div>
           </button>
 
+          <button id="btn-sonic-bridge-by-track" class="station-option-btn station-option-ai" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 17c3.5-6 6.5-9 9-9s5.5 3 9 9"/>
+                <line x1="2" y1="17" x2="22" y2="17"/>
+                <line x1="8" y1="11.5" x2="8" y2="17"/>
+                <line x1="12" y1="8" x2="12" y2="17"/>
+                <line x1="16" y1="11.5" x2="16" y2="17"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Sonic Bridge от этого трека</span>
+              <span id="station-opt-sonic-bridge-sub" class="station-opt-secondary">Плавный ИИ-маршрут к другому треку или артисту</span>
+            </div>
+          </button>
+
           <button id="btn-station-by-track" class="station-option-btn" type="button">
             <div class="station-opt-icon">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -812,6 +1045,34 @@ extension WebUIContent {
               <span id="station-opt-artist-name" class="station-opt-secondary">—</span>
             </div>
           </button>
+
+          <button id="btn-go-to-library-artist" class="station-option-btn hidden" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Перейти к артисту в медиатеке</span>
+              <span id="station-opt-lib-artist-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+
+          <button id="btn-remove-artist-library" class="station-option-btn station-option-danger hidden" type="button">
+            <div class="station-opt-icon danger-opt-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Удалить исполнителя из медиатеки</span>
+              <span id="station-opt-remove-artist-sub" class="station-opt-secondary">—</span>
+            </div>
+          </button>
         </div>
       </div>
     </div>
@@ -829,139 +1090,354 @@ extension WebUIContent {
       </div>
 
       <div class="modal-body signal-path-body">
-        <!-- Verified Bit-Perfect Card (Top Summary Banner) -->
-        <div class="signal-verified-card">
-          <div class="signal-verified-icon">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-          </div>
-          <div class="signal-verified-info">
-            <div class="signal-verified-title">Bit-Perfect Verified</div>
-            <div class="signal-verified-desc">Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.</div>
-          </div>
-        </div>
-
-        <div class="signal-path-chain">
-          <!-- Step 1: Audio Source -->
-          <div class="signal-node" id="signal-node-source">
-            <div class="signal-node-dot active"></div>
-            <div class="signal-node-main">
-              <div class="signal-node-top">
-                <span class="signal-node-badge">ИСТОЧНИК</span>
-                <span id="signal-source-badge" class="signal-node-format">ALAC Lossless</span>
-              </div>
-              <div id="signal-source-title" class="signal-node-name">Apple Music</div>
-              <div id="signal-source-details" class="signal-node-meta">24-bit / 192.0 kHz ALAC</div>
-            </div>
-          </div>
-
-          <div class="signal-connector">
-            <div class="signal-connector-line"></div>
-          </div>
-
-          <!-- Step 2: AMR Engine -->
-          <div class="signal-node" id="signal-node-engine">
-            <div class="signal-node-dot active"></div>
-            <div class="signal-node-main">
-              <div class="signal-node-top">
-                <span class="signal-node-badge">АУДИОДВИЖОК</span>
-                <span class="signal-node-format highlight-green">0.0 dB FS</span>
-              </div>
-              <div class="signal-node-name">AMR CoreAudio Engine</div>
-              <div class="signal-node-meta">Bit-Perfect 100% Lock • Zero DSP • Bypass микшера</div>
-            </div>
-          </div>
-
-          <div class="signal-connector">
-            <div class="signal-connector-line"></div>
-          </div>
-
-          <!-- Step 3: Hardware Output DAC -->
-          <div class="signal-node" id="signal-node-dac">
-            <div class="signal-node-dot active"></div>
-            <div class="signal-node-main">
-              <div class="signal-node-top">
-                <span class="signal-node-badge">ВЫХОДНОЙ ЦАП</span>
-                <span id="signal-dac-rate" class="signal-node-format">192.0 кГц</span>
-              </div>
-              <div id="signal-dac-name" class="signal-node-name">Аудиовыход</div>
-              <div id="signal-dac-details" class="signal-node-meta">Прямое подключение macOS CoreAudio</div>
-            </div>
-            <button id="btn-open-devices" class="btn-signal-action" type="button" title="Сменить устройство вывода">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        <div class="signal-split-col signal-split-left">
+          <!-- Verified Bit-Perfect Card (Top Summary Banner) -->
+          <div class="signal-verified-card">
+            <div class="signal-verified-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
               </svg>
-              <span>ЦАП</span>
-            </button>
+            </div>
+            <div class="signal-verified-info">
+              <div class="signal-verified-title">Bit-Perfect Verified</div>
+              <div class="signal-verified-desc">Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.</div>
+            </div>
           </div>
 
-          <div id="signal-connector-amp" class="signal-connector hidden">
-            <div class="signal-connector-line"></div>
-          </div>
-
-          <!-- Step 4: External Amplifier / Preamp (TCP Volume Control) -->
-          <div class="signal-node hidden" id="signal-node-amp">
-            <div id="signal-amp-dot" class="signal-node-dot active"></div>
-            <div class="signal-node-main">
-              <div class="signal-node-top">
-                <span class="signal-node-badge">УСИЛИТЕЛЬ</span>
-                <span id="signal-amp-volume-badge" class="signal-node-format">50%</span>
+          <div class="signal-path-chain">
+            <!-- Step 1: Audio Source -->
+            <div class="signal-node" id="signal-node-source">
+              <div class="signal-node-dot active"></div>
+              <div class="signal-node-main">
+                <div class="signal-node-top">
+                  <span class="signal-node-badge">ИСТОЧНИК</span>
+                  <span id="signal-source-badge" class="signal-node-format">ALAC Lossless</span>
+                </div>
+                <div id="signal-source-title" class="signal-node-name">Apple Music</div>
+                <div id="signal-source-details" class="signal-node-meta">24-bit / 192.0 kHz ALAC</div>
               </div>
-              <div id="signal-amp-name" class="signal-node-name">Rotel</div>
-              <div id="signal-amp-details" class="signal-node-meta">Управление громкостью по TCP • Лимит до 80%</div>
+            </div>
+
+            <div class="signal-connector">
+              <div class="signal-connector-line"></div>
+            </div>
+
+            <!-- Step 2: AMR Engine -->
+            <div class="signal-node" id="signal-node-engine">
+              <div class="signal-node-dot active"></div>
+              <div class="signal-node-main">
+                <div class="signal-node-top">
+                  <span class="signal-node-badge">АУДИОДВИЖОК</span>
+                  <span id="signal-engine-badge" class="signal-node-format highlight-green">0.0 dB FS</span>
+                </div>
+                <div id="signal-engine-name" class="signal-node-name">AMR CoreAudio Engine</div>
+                <div id="signal-engine-details" class="signal-node-meta">Bit-Perfect 100% Lock • Zero DSP • Bypass микшера</div>
+
+                <!-- Interactive Hybrid DSP Engine Preset Selector -->
+                <div id="signal-dsp-controls" class="signal-dsp-controls">
+                  <label id="dsp-preset-field" class="signal-dsp-field">
+                    <span class="signal-dsp-label">Пресет DSP</span>
+                    <select id="dsp-preset-select" class="top-settings-select signal-dsp-select">
+                      <option value="builtin_passthrough">Bit-Perfect Passthrough (Выкл)</option>
+                      <option value="builtin_dsd256_sacd">SACD Эталон (DSD256 • 7EC-Balanced)</option>
+                      <option value="builtin_dsd256_super_metal">Макс. сцена и воздух (DSD256 • 7EC-Super • Metal)</option>
+                      <option value="builtin_dsd128_transient">Атака и драйв (DSD128 • 7EC-Transient)</option>
+                      <option value="builtin_dsd64_spdif">Оптика / Коаксиал S/PDIF (DSD64 DoP)</option>
+                      <option value="builtin_hq_nos_r2r">Мультибит / R2R (HQ PCM NOS • LNS15)</option>
+                    </select>
+                  </label>
+                  <div id="dsp-preset-readonly-note" class="signal-dsp-readonly-note hidden"></div>
+                  <div id="dsp-preset-subtitle" class="signal-dsp-preset-subtitle">Прямая побитовая передача PCM без оверсэмплинга и модуляции</div>
+                  <div id="dsp-telemetry-pill" class="signal-dsp-telemetry hidden">
+                    <span id="dsp-telemetry-text">Hog Mode • Integer • CPU 0.0% • Буфер 50%</span>
+                  </div>
+
+                  <!-- 64-Bit Mastering De-Clipper (Loudness War Peak Restorer) -->
+                  <div id="signal-declip-controls" class="signal-drc-controls">
+                    <div class="signal-drc-header">
+                      <span id="signal-declip-label" class="signal-dsp-label">⚡️ Реставратор клиппинга (De-Clipper)</span>
+                      <span id="declip-gain-badge" class="signal-drc-badge">100% Bit-Perfect</span>
+                    </div>
+                    <div id="mastering-declip-field" class="late-night-profile-bar">
+                      <select id="mastering-declip-select" class="top-settings-select signal-dsp-select" aria-label="Реставратор клиппинга (De-Clipper)">
+                        <option value="off">Выкл (100% Bit-Perfect)</option>
+                        <option value="auto">Авто — Умная защита (DR ≤ 10)</option>
+                        <option value="gentle">Деликатный (до +2.8 дБ пиков)</option>
+                        <option value="studio">Студийная реставрация (до +4.2 дБ)</option>
+                      </select>
+                    </div>
+                    <div id="mastering-declip-readonly-note" class="signal-dsp-readonly-note hidden"></div>
+                    <div id="mastering-declip-subtitle" class="signal-dsp-preset-subtitle">Прямой 100% Bit-Perfect тракт без реконструкции срезанных верхушек волны.</div>
+                  </div>
+
+                  <!-- Weiss-Style Mastering Dynamic De-Esser -->
+                  <div id="signal-deesser-controls" class="signal-drc-controls">
+                    <div class="signal-drc-header">
+                      <span id="signal-deesser-label" class="signal-dsp-label">💎 Де-эссер (Weiss De-Esser)</span>
+                      <span id="deesser-gain-badge" class="signal-drc-badge">100% Bit-Perfect</span>
+                    </div>
+                    <div id="mastering-deesser-field" class="late-night-profile-bar">
+                      <select id="mastering-deesser-select" class="top-settings-select signal-dsp-select" aria-label="Де-эссер (Weiss De-Esser)">
+                        <option value="off">Выкл (100% Bit-Perfect)</option>
+                        <option value="gentle">Деликатный — Планары / Яркий ВЧ (до -3.5 дБ)</option>
+                        <option value="vocal">Студийный Weiss — Резкий вокал (до -6.0 дБ)</option>
+                      </select>
+                    </div>
+                    <div id="mastering-deesser-readonly-note" class="signal-dsp-readonly-note hidden"></div>
+                    <div id="mastering-deesser-subtitle" class="signal-dsp-preset-subtitle">Прямой 100% Bit-Perfect тракт без динамического подавления сибилянтов.</div>
+                  </div>
+
+                  <!-- Audiophile Late-Night Dynamic Range Control (Night Concert Mode) -->
+                  <div id="signal-late-night-controls" class="signal-drc-controls">
+                    <div class="signal-drc-header">
+                      <span class="signal-dsp-label">🌙 Ночной режим (DRC)</span>
+                      <span id="late-night-gain-badge" class="signal-drc-badge">100% Bit-Perfect</span>
+                    </div>
+                    <div id="late-night-drc-field" class="late-night-profile-bar">
+                      <select id="late-night-drc-select" class="top-settings-select signal-dsp-select" aria-label="Ночной режим (DRC)">
+                        <option value="off">Выкл (100% Bit-Perfect)</option>
+                        <option value="gentle">Деликатный — Джаз / Вокал (до +6 дБ)</option>
+                        <option value="concert">Ночной концерт — Симфония / OST (до +9.5 дБ)</option>
+                      </select>
+                    </div>
+                    <div id="late-night-drc-readonly-note" class="signal-dsp-readonly-note hidden"></div>
+                    <div id="late-night-drc-subtitle" class="signal-dsp-preset-subtitle">Прямой 100% Bit-Perfect тракт без динамической обработки сигнала.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="signal-connector">
+              <div class="signal-connector-line"></div>
+            </div>
+
+            <!-- Step 3: Hardware Output DAC -->
+            <div class="signal-node" id="signal-node-dac">
+              <div class="signal-node-dot active"></div>
+              <div class="signal-node-main">
+                <div class="signal-node-top">
+                  <span class="signal-node-badge">ВЫХОДНОЙ ЦАП</span>
+                  <span id="signal-dac-rate" class="signal-node-format">192.0 кГц</span>
+                </div>
+                <div id="signal-dac-name" class="signal-node-name">Аудиовыход</div>
+                <div id="signal-dac-details" class="signal-node-meta">Прямое подключение macOS CoreAudio</div>
+              </div>
+              <button id="btn-open-devices" class="btn-signal-action" type="button" title="Сменить устройство вывода">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                </svg>
+                <span>ЦАП</span>
+              </button>
+            </div>
+
+            <div id="signal-connector-amp" class="signal-connector hidden">
+              <div class="signal-connector-line"></div>
+            </div>
+
+            <!-- Step 4: External Amplifier / Preamp (TCP Volume Control) -->
+            <div class="signal-node hidden" id="signal-node-amp">
+              <div id="signal-amp-dot" class="signal-node-dot active"></div>
+              <div class="signal-node-main">
+                <div class="signal-node-top">
+                  <span class="signal-node-badge">УСИЛИТЕЛЬ</span>
+                  <span id="signal-amp-volume-badge" class="signal-node-format">50%</span>
+                </div>
+                <div id="signal-amp-name" class="signal-node-name">Rotel</div>
+                <div id="signal-amp-details" class="signal-node-meta">Управление громкостью по TCP • Лимит до 80%</div>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Spectral Integrity & Upsampling Detector (Accelerate vDSP FFT RTA) -->
-        <div id="signal-spectral-card" class="signal-spectral-card">
-          <div class="signal-spectral-header">
-            <div class="signal-spectral-top">
-              <span class="signal-node-badge">СПЕКТРАЛЬНЫЙ ВЕРИФИКАТОР • vDSP FFT</span>
-              <span id="spectral-verdict-badge" class="spectral-verdict-badge authentic">TRUE HI-RES</span>
+        <div class="signal-split-col signal-split-right">
+          <!-- Quick Room Frequency Response Measurement (iPhone / iPad Mic + Auto-PEQ 64-bit + Cloud Sync) -->
+          <div id="signal-room-eq-card" class="signal-spectral-card signal-room-eq-card">
+            <div class="signal-spectral-header">
+              <div class="signal-spectral-top">
+                <span class="signal-node-badge">АЧХ КОМНАТЫ • AUTO-PEQ 64-BIT • CLOUD</span>
+                <span id="room-eq-status-badge" class="spectral-verdict-badge neutral">ВЫКЛ</span>
+              </div>
+              <div class="room-eq-profile-bar">
+                <button id="btn-room-eq-toggle" class="room-eq-toggle-btn" type="button" aria-pressed="false" title="Включить или выключить коррекцию комнаты">Выкл</button>
+                <select id="room-profile-select" class="top-settings-select room-profile-select" aria-label="Профиль АЧХ комнаты">
+                  <option value="">Нет профилей замера</option>
+                </select>
+                <button id="btn-delete-room-profile" class="room-eq-icon-btn hidden" type="button" title="Удалить выбранный профиль АЧХ" aria-label="Удалить профиль АЧХ">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div id="spectral-verdict-title" class="signal-spectral-title">Verified True Hi-Res</div>
+
+            <div id="room-eq-chart-wrap" class="room-eq-chart-wrap">
+              <svg id="room-eq-svg" class="room-eq-svg" viewBox="0 0 360 112" preserveAspectRatio="none" aria-label="График АЧХ комнаты">
+                <line x1="0" y1="18" x2="360" y2="18" class="room-eq-grid-line"/>
+                <line x1="0" y1="56" x2="360" y2="56" class="room-eq-grid-zero"/>
+                <line x1="0" y1="94" x2="360" y2="94" class="room-eq-grid-line"/>
+                <line x1="84" y1="0" x2="84" y2="112" class="room-eq-grid-vline"/>
+                <line x1="204" y1="0" x2="204" y2="112" class="room-eq-grid-vline"/>
+                <line x1="324" y1="0" x2="324" y2="112" class="room-eq-grid-vline"/>
+                <polyline id="room-eq-line-target" class="room-eq-line-target" points="0,56 360,56"/>
+                <polyline id="room-eq-line-measured" class="room-eq-line-measured" points=""/>
+                <polyline id="room-eq-line-corrected" class="room-eq-line-corrected" points=""/>
+              </svg>
+              <div class="room-eq-legend">
+                <span class="room-eq-legend-item"><i class="dot target"></i>Целевая</span>
+                <span class="room-eq-legend-item"><i class="dot measured"></i>Замер микрофона</span>
+                <span class="room-eq-legend-item"><i class="dot corrected"></i>Auto-PEQ</span>
+              </div>
+              <div class="spectral-rta-axis">
+                <span>20 Гц</span>
+                <span>100 Гц</span>
+                <span>1 кГц</span>
+                <span>10 кГц</span>
+                <span>20 кГц</span>
+              </div>
+            </div>
+
+            <div id="room-eq-bands-list" class="room-eq-bands-list hidden"></div>
+
+            <div id="room-measure-progress-wrap" class="room-measure-progress-wrap hidden">
+              <div class="room-measure-progress-bar">
+                <div id="room-measure-progress-fill" class="room-measure-progress-fill"></div>
+              </div>
+              <div id="room-measure-status-text" class="room-measure-status-text">Калибровочный розовый шум...</div>
+            </div>
+
+            <div id="room-measure-actions" class="room-measure-actions">
+              <button id="btn-start-room-measure" class="btn-room-measure-primary" type="button">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+                <span id="btn-start-room-measure-label">Быстрый замер микрофоном</span>
+              </button>
+              <button id="btn-upload-room-audio" class="btn-room-measure-secondary" type="button" title="Нативная запись микрофоном iPhone / iPad (работает по LAN HTTP без HTTPS)">
+                <span>Запись iOS</span>
+              </button>
+              <button id="btn-stop-room-measure" class="btn-room-measure-stop hidden" type="button">Стоп</button>
+              <input type="file" id="room-mic-file-input" accept="audio/*" capture class="hidden">
+            </div>
+
+            <div id="room-measure-locked-note" class="signal-dsp-readonly-note hidden">
+              Быстрое измерение АЧХ комнаты отключено для этого устройства в системных настройках Mac.
+            </div>
+
+            <div id="room-eq-desc" class="signal-spectral-desc">
+              Сядьте в точку прослушивания с iPhone / iPad: Mac подаст эталонный розовый шум на АС и построит 64-bit Auto-PEQ фильтр с синхронизацией в iCloud.
+            </div>
           </div>
 
-          <div class="spectral-rta-wrap">
-            <div id="spectral-rta-bars" class="spectral-rta-bars" aria-label="RTA спектр аудиосигнала"></div>
-            <div id="spectral-cutoff-marker" class="spectral-cutoff-marker">
-              <span id="spectral-cutoff-marker-label" class="spectral-cutoff-marker-label">22.05 кГц CD</span>
+          <!-- Spectral Integrity & Upsampling Detector (Accelerate vDSP FFT RTA) -->
+          <div id="signal-spectral-card" class="signal-spectral-card">
+            <div class="signal-spectral-header">
+              <div class="signal-spectral-top">
+                <span class="signal-node-badge">СПЕКТРАЛЬНЫЙ ВЕРИФИКАТОР • vDSP FFT</span>
+                <span id="spectral-verdict-badge" class="spectral-verdict-badge authentic">TRUE HI-RES</span>
+              </div>
+              <div id="spectral-verdict-title" class="signal-spectral-title">Verified True Hi-Res</div>
             </div>
-          </div>
-          <div class="spectral-rta-axis">
-            <span>20 Гц</span>
-            <span>1 кГц</span>
-            <span>10 кГц</span>
-            <span id="spectral-axis-ref">22.05 кГц</span>
-            <span id="spectral-axis-nyquist">48.0 кГц</span>
+
+            <div class="spectral-rta-wrap">
+              <div id="spectral-rta-bars" class="spectral-rta-bars" aria-label="RTA спектр аудиосигнала"></div>
+              <div id="spectral-cutoff-marker" class="spectral-cutoff-marker">
+                <span id="spectral-cutoff-marker-label" class="spectral-cutoff-marker-label">22.05 кГц CD</span>
+              </div>
+            </div>
+            <div class="spectral-rta-axis">
+              <span>20 Гц</span>
+              <span>1 кГц</span>
+              <span>10 кГц</span>
+              <span id="spectral-axis-ref">22.05 кГц</span>
+              <span id="spectral-axis-nyquist">48.0 кГц</span>
+            </div>
+
+            <div class="spectral-metrics-grid">
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Полоса ВЧ</span>
+                <span id="spectral-metric-cutoff" class="spectral-metric-val">44.2 кГц</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Ультразвук (&gt;22k)</span>
+                <span id="spectral-metric-ultra" class="spectral-metric-val">-48 dBFS</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Разрядность LSB</span>
+                <span id="spectral-metric-bits" class="spectral-metric-val">24-бит (Честный)</span>
+              </div>
+            </div>
+
+            <div id="spectral-verdict-desc" class="signal-spectral-desc">
+              Подлинный студийный Hi-Res мастер: зафиксирована живая ультразвуковая составляющая и активность всех 24 бит.
+            </div>
           </div>
 
-          <div class="spectral-metrics-grid">
-            <div class="spectral-metric-pill">
-              <span class="spectral-metric-label">Полоса ВЧ</span>
-              <span id="spectral-metric-cutoff" class="spectral-metric-val">44.2 кГц</span>
+          <!-- Loudness War Detector (TT DR Meter) + EBU R128 (LUFS & 4x True Peak) + Stereo Phase Correlation Meter -->
+          <div id="signal-mastering-card" class="signal-spectral-card signal-mastering-card">
+            <div class="signal-spectral-header">
+              <div class="signal-spectral-top">
+                <span class="signal-node-badge">МАСТЕРИНГ И ДИНАМИКА • EBU R128 / TT DR</span>
+                <span id="mastering-dr-badge" class="spectral-verdict-badge neutral">DR АНАЛИЗ...</span>
+              </div>
+              <div id="mastering-verdict-title" class="signal-spectral-title">Анализ динамического диапазона...</div>
             </div>
-            <div class="spectral-metric-pill">
-              <span class="spectral-metric-label">Ультразвук (&gt;22k)</span>
-              <span id="spectral-metric-ultra" class="spectral-metric-val">-48 dBFS</span>
-            </div>
-            <div class="spectral-metric-pill">
-              <span class="spectral-metric-label">Разрядность LSB</span>
-              <span id="spectral-metric-bits" class="spectral-metric-val">24-бит (Честный)</span>
-            </div>
-          </div>
 
-          <div id="spectral-verdict-desc" class="signal-spectral-desc">
-            Подлинный студийный Hi-Res мастер: зафиксирована живая ультразвуковая составляющая и активность всех 24 бит.
+            <div class="spectral-metrics-grid mastering-metrics-grid">
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Integrated</span>
+                <span id="mastering-lufs-int" class="spectral-metric-val">— LUFS</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Short-Term (3s)</span>
+                <span id="mastering-lufs-st" class="spectral-metric-val">— LUFS</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">True Peak (4x)</span>
+                <span id="mastering-true-peak" class="spectral-metric-val">— dBTP</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Диапазон LRA</span>
+                <span id="mastering-lra" class="spectral-metric-val">— LU</span>
+              </div>
+            </div>
+
+            <div class="phase-meter-section">
+              <div class="phase-meter-header">
+                <span class="phase-meter-label">Фазовый коррелометр стереопанорамы</span>
+                <span id="phase-meter-val" class="phase-meter-readout">+1.00</span>
+              </div>
+              <div class="phase-corr-track" aria-label="Фазовая корреляция стереосигнала от -1 до +1">
+                <div class="phase-corr-neg-zone"></div>
+                <div class="phase-corr-zero-tick"></div>
+                <div id="phase-meter-fill" class="phase-corr-fill positive" style="left: 50%; width: 50%;"></div>
+                <div id="phase-meter-dot" class="phase-corr-dot" style="left: 100%;"></div>
+              </div>
+              <div class="phase-corr-axis">
+                <span>-1.0 Противофаза</span>
+                <span>0.0 Стерео</span>
+                <span>+1.0 Моно</span>
+              </div>
+              <div class="phase-stereo-subrow">
+                <span>Ширина M/S: <strong id="stereo-width-val">0%</strong></span>
+                <span>Баланс L/R: <strong id="stereo-balance-val">0.0 дБ</strong></span>
+                <span id="isp-clips-badge" class="isp-clips-pill hidden">ISP &gt;0 dBTP: 0</span>
+              </div>
+            </div>
+
+            <div id="mastering-verdict-desc" class="signal-spectral-desc">
+              Накопление 3-секундных блоков PCM для расчёта официального индекса TT Dynamic Range и громкости ITU-R BS.1770-4.
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-
   <!-- Audio Output Devices Modal -->
   <div id="devices-modal" class="modal-backdrop hidden" aria-hidden="true" role="dialog">
     <div class="modal-card devices-modal-card">
@@ -1102,6 +1578,18 @@ extension WebUIContent {
     </header>
 
     <div class="standby-content">
+      <div class="standby-badges-row">
+        <button id="standby-dac-badge" class="standby-dac-badge" type="button" title="Инспектор аудиопотока и спектральный верификатор">
+          <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
+          <span id="standby-dac-text">BIT-PERFECT · LOSSLESS</span>
+        </button>
+        <span id="standby-spectral-badge" class="standby-spectral-badge neutral" title="Статус спектрального верификатора vDSP FFT">FFT АНАЛИЗ...</span>
+        <span id="standby-dr-badge" class="standby-spectral-badge hidden" title="Динамический диапазон мастеринга (TT DR / EBU R128)">DR--</span>
+      </div>
+
       <div class="standby-artwork-col">
         <div id="standby-art-frame" class="standby-art-frame">
           <img id="standby-artwork" class="standby-artwork-img" src="apple-touch-icon.svg" alt="Обложка">
@@ -1110,28 +1598,13 @@ extension WebUIContent {
       </div>
 
       <div class="standby-meta-col">
-        <div class="standby-badges-row">
-          <button id="standby-dac-badge" class="standby-dac-badge" type="button" title="Инспектор аудиопотока и спектральный верификатор">
-            <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <polygon points="10 8 16 12 10 16 10 8"/>
-            </svg>
-            <span id="standby-dac-text">BIT-PERFECT · LOSSLESS</span>
-          </button>
-          <span id="standby-spectral-badge" class="standby-spectral-badge neutral" title="Статус спектрального верификатора vDSP FFT">FFT АНАЛИЗ...</span>
-          <button id="standby-booklet-btn" class="standby-booklet-btn hidden" type="button" title="Открыть цифровой буклет альбома Apple Music (PDF)">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-            <span>БУКЛЕТ PDF</span>
-          </button>
+        <div class="standby-headings">
+          <div class="title-marquee-viewport standby-title-viewport">
+            <h1 id="standby-title" class="standby-title">Не играет</h1>
+          </div>
+          <p id="standby-artist" class="standby-artist">Apple Music</p>
+          <p id="standby-album" class="standby-album"></p>
         </div>
-        <div class="title-marquee-viewport standby-title-viewport">
-          <h1 id="standby-title" class="standby-title">Не играет</h1>
-        </div>
-        <p id="standby-artist" class="standby-artist">Apple Music</p>
-        <p id="standby-album" class="standby-album"></p>
 
         <div class="standby-progress-section">
           <div class="standby-progress-track" id="standby-progress-track">
@@ -1141,6 +1614,10 @@ extension WebUIContent {
           </div>
           <div class="standby-time-row">
             <span id="standby-time-elapsed">0:00</span>
+            <span id="standby-loading-status" class="player-loading-pill standby-loading-pill hidden" role="status" aria-live="polite">
+              <span class="player-loading-spinner" aria-hidden="true"></span>
+              <span id="standby-loading-text">Загрузка через буфер AMR…</span>
+            </span>
             <span id="standby-time-remaining">-0:00</span>
           </div>
         </div>
@@ -1168,27 +1645,25 @@ extension WebUIContent {
             </svg>
           </button>
 
-          <div id="standby-volume-section" class="standby-volume-section hidden" aria-label="Регулировка громкости">
-            <button id="standby-btn-volume-mute" class="standby-vol-mute-btn" type="button" aria-label="Без звука" title="Без звука (Mute)">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                <path id="standby-vol-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                <path id="standby-vol-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          <div class="standby-right-actions">
+            <button id="standby-btn-shuffle" class="standby-fav-btn standby-shuffle-btn" type="button" aria-label="Перемешать" title="Перемешать">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 3 21 3 21 8"/>
+                <line x1="4" y1="20" x2="21" y2="3"/>
+                <polyline points="21 16 21 21 16 21"/>
+                <line x1="15" y1="15" x2="21" y2="21"/>
+                <line x1="4" y1="4" x2="9" y2="9"/>
               </svg>
             </button>
-            <div class="standby-vol-slider-wrap">
-              <div id="standby-vol-loupe" class="standby-vol-loupe" aria-hidden="true">
-                <span id="standby-vol-loupe-text">50%</span>
-              </div>
-              <div class="standby-vol-track">
-                <div id="standby-vol-fill" class="standby-vol-fill" style="width: 50%;"></div>
-              </div>
-              <div id="standby-vol-thumb" class="standby-vol-thumb" style="left: 50%;"></div>
-              <input id="standby-volume-input" class="standby-vol-input" type="range" min="0" max="100" value="50" aria-label="Громкость">
-            </div>
-          </div>
-
-          <div class="standby-right-actions">
+            <button id="standby-btn-repeat" class="standby-fav-btn standby-repeat-btn" type="button" aria-label="Режим повтора" title="Режим повтора (Выкл / Очередь / 1 трек)">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="17 1 21 5 17 9"/>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                <polyline points="7 23 3 19 7 15"/>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+              </svg>
+              <span id="standby-repeat-badge" class="standby-repeat-one-badge hidden">1</span>
+            </button>
             <button id="standby-btn-favorite" class="standby-fav-btn" type="button" aria-label="В избранное" title="В избранное">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -1200,7 +1675,34 @@ extension WebUIContent {
                 <path d="M5 3v4M3 5h4"/>
               </svg>
             </button>
+            <button id="standby-btn-booklet" class="standby-fav-btn standby-booklet-round-btn hidden" type="button" aria-label="Буклет альбома" title="Открыть цифровой буклет альбома Apple Music (PDF)">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+            </button>
           </div>
+        </div>
+
+        <div id="standby-volume-section" class="standby-volume-section hidden" aria-label="Регулировка громкости">
+          <button id="standby-btn-volume-mute" class="standby-vol-mute-btn" type="button" aria-label="Без звука" title="Без звука (Mute)">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path id="standby-vol-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path id="standby-vol-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+          </button>
+          <div class="standby-vol-slider-wrap">
+            <div id="standby-vol-loupe" class="standby-vol-loupe" aria-hidden="true">
+              <span id="standby-vol-loupe-text">50%</span>
+            </div>
+            <div class="standby-vol-track">
+              <div id="standby-vol-fill" class="standby-vol-fill" style="width: 50%;"></div>
+            </div>
+            <div id="standby-vol-thumb" class="standby-vol-thumb" style="left: 50%;"></div>
+            <input id="standby-volume-input" class="standby-vol-input" type="range" min="0" max="100" value="50" aria-label="Громкость">
+          </div>
+          <span id="standby-volume-text" class="standby-volume-text">100%</span>
         </div>
       </div>
     </div>
@@ -1210,7 +1712,7 @@ extension WebUIContent {
       <header class="standby-library-header">
         <div class="standby-library-header-left">
           <h2 class="standby-library-title">Медиатека</h2>
-          <span class="standby-library-subtitle">Станции, персональные миксы и плейлисты</span>
+          <span class="standby-library-subtitle">Станции, персональные миксы, плейлисты и альбомы</span>
         </div>
         <button id="btn-close-standby-library" class="standby-close-btn" type="button" title="Закрыть медиатеку" aria-label="Закрыть медиатеку">
           ✕
@@ -1253,14 +1755,13 @@ extension WebUIContent {
       </div>
     </div>
   </div>
-
   <!-- Top-Left AMR Version & Device Settings Modal (Signal Path Inspector Style) -->
   <div id="amr-info-popover" class="modal-backdrop hidden" aria-hidden="true" role="dialog" aria-label="О версии и настройки устройства">
     <div class="modal-card signal-path-card">
       <div class="modal-header">
         <div class="modal-title-wrap">
           <h3 class="modal-title">Система и Устройство</h3>
-          <span class="modal-tag">AMR v2.5.0</span>
+          <span class="modal-tag">AMR v3.0.0</span>
         </div>
         <button id="btn-close-amr-info" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
       </div>
@@ -1274,7 +1775,7 @@ extension WebUIContent {
             </svg>
           </div>
           <div class="signal-verified-info">
-            <div class="signal-verified-title">Apple Music Remote v2.5.0</div>
+            <div class="signal-verified-title">Apple Music Remote v3.0.0</div>
             <div class="signal-verified-desc">Авторизованный клиент • Bit-Perfect CoreAudio • vDSP FFT</div>
           </div>
         </div>
@@ -1373,11 +1874,15 @@ extension WebUIContent {
         <label class="top-settings-label" for="wled-mode-select">Режим работы</label>
         <select id="wled-mode-select" class="top-settings-select">
           <option value="off">Без подсветки</option>
-          <option value="breathing">Синусоида ритма (стоячая волна)</option>
-          <option value="spectrum">Спектральный эквалайзер (Бас · Вокал · Верх)</option>
           <option value="vu_center">Симметричный пульс (раскрытие от центра)</option>
+          <option value="shockwave">Ударная волна (кольца бита от центра)</option>
+          <option value="harmonic">Гармонический резонанс (волны цвета от центра)</option>
+          <option value="supernova">Сверхновая (ядро бита и корона от центра)</option>
+          <option value="prism_center">Призма от центра (перелив оттенков обложки)</option>
+          <option value="duet_wings">Встречный импульс (бас в центре · верх с краёв)</option>
+          <option value="spectrum">Спектральный эквалайзер (Бас · Вокал · Верх)</option>
+          <option value="breathing">Синусоида ритма (контрастная волна от центра)</option>
           <option value="ambilight">Живой Ambilight (16 зон + пульс музыки)</option>
-          <option value="harmonic">Гармонический резонанс (цвет + мелодия)</option>
           <option value="static">Статичная палитра обложки</option>
         </select>
       </div>
@@ -1401,6 +1906,26 @@ extension WebUIContent {
     </div>
   </div>
 
+  <!-- In-App Library Delete Confirmation Modal -->
+  <div id="library-delete-confirm-modal" class="modal-backdrop confirm-modal-backdrop hidden" aria-hidden="true" role="alertdialog" aria-modal="true">
+    <div class="modal-card confirm-modal-card">
+      <div class="confirm-modal-icon">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </div>
+      <h3 id="confirm-delete-title" class="confirm-modal-title">Удалить из медиатеки?</h3>
+      <p id="confirm-delete-message" class="confirm-modal-desc">Элемент будет удалён из вашей медиатеки Apple Music.</p>
+      <div class="confirm-modal-actions">
+        <button id="btn-confirm-delete-cancel" class="btn-secondary-action confirm-btn-cancel" type="button">Отмена</button>
+        <button id="btn-confirm-delete-ok" class="btn-danger-solid confirm-btn-ok" type="button">Удалить</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Busy / Action Loading Overlay -->
   <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
     <div class="busy-card">
@@ -1409,7 +1934,7 @@ extension WebUIContent {
     </div>
   </div>
 
-  <script src="/app.js?v=278"></script>
+  <script src="/app.js?v=353b399c"></script>
 </body>
 </html>
 """#

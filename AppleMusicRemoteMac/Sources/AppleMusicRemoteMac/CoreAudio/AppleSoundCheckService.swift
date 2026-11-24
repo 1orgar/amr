@@ -10,41 +10,80 @@ import Accelerate
 public final class AppleSoundCheckService: @unchecked Sendable {
     public static let shared = AppleSoundCheckService()
 
-    private struct CacheStore: Codable {
+    internal struct CacheStore: Codable {
         var entries: [String: Double] = [:]
     }
 
-    private let lock = NSLock()
-    private let localScanQueue = DispatchQueue(label: "com.amr.soundcheck.local", qos: .utility)
-    private var memoryCache: [String: Double] = [:]
-    private var liveDspProvisionalKeys: Set<String> = []
-    private var inFlightKeys: Set<String> = []
-    private var inFlightLocalKeys: Set<String> = []
-    private var lastTrackKey: String = ""
-    private var lastTrackId: String = ""
-    private var lastTrackCatalogId: String?
-    private var lastTrackName: String = ""
-    private var lastTrackArtist: String = ""
-    private var lastTrackAlbum: String = ""
-    private var lastTrackIsLocal: Bool = false
+    internal static let maxCacheEntries: Int = 5000
+    internal static let maxProvisionalKeys: Int = 512
 
-    private let urlSession: URLSession = {
+    internal let lock = NSLock()
+    internal let localScanQueue = DispatchQueue(label: "com.amr.soundcheck.local", qos: .utility)
+    internal let persistenceQueue = DispatchQueue(label: "com.amr.soundcheck.persistence", qos: .utility)
+    internal let usesCustomCacheFileForTesting: Bool
+    internal var memoryCache: [String: Double] = [:]
+    internal var liveDspProvisionalKeys: Set<String> = []
+    internal var liveDspProvisionalOrder: [String] = []
+    internal var inFlightKeys: Set<String> = []
+    internal var inFlightLocalKeys: Set<String> = []
+    internal var lastTrackKey: String = ""
+    internal var lastTrackId: String = ""
+    internal var lastTrackCatalogId: String?
+    internal var lastTrackName: String = ""
+    internal var lastTrackArtist: String = ""
+    internal var lastTrackAlbum: String = ""
+    internal var lastTrackIsLocal: Bool = false
+    internal var explicitTransitionLockUntil: Date = .distantPast
+
+    internal let urlSession: URLSession = {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.timeoutIntervalForRequest = 4.0
         sessionConfig.timeoutIntervalForResource = 5.0
         return URLSession(configuration: sessionConfig)
     }()
 
-    private let cacheFileURL: URL = {
-        let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let appDir = cachesDir.appendingPathComponent("AppleMusicRemoteMac", isDirectory: true)
-        try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
-        return appDir.appendingPathComponent("soundcheck_itunnorm_cache.json")
-    }()
+    internal let cacheFileURL: URL
 
-    private init() {
+    internal init(customCacheFileURL: URL? = nil) {
+        if let customURL = customCacheFileURL {
+            try? FileManager.default.createDirectory(at: customURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            self.cacheFileURL = customURL
+            self.usesCustomCacheFileForTesting = true
+        } else {
+            let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory())
+            let appDir = cachesDir.appendingPathComponent("AppleMusicRemoteMac", isDirectory: true)
+            try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
+            self.cacheFileURL = appDir.appendingPathComponent("soundcheck_itunnorm_cache.json")
+            self.usesCustomCacheFileForTesting = false
+        }
         loadCacheFromDisk()
+    }
+
+    internal func insertProvisionalKeyLocked(_ key: String) {
+        if liveDspProvisionalKeys.contains(key) {
+            return
+        }
+        if liveDspProvisionalKeys.count >= Self.maxProvisionalKeys {
+            while liveDspProvisionalKeys.count >= Self.maxProvisionalKeys && !liveDspProvisionalOrder.isEmpty {
+                let oldest = liveDspProvisionalOrder.removeFirst()
+                liveDspProvisionalKeys.remove(oldest)
+            }
+        }
+        liveDspProvisionalKeys.insert(key)
+        liveDspProvisionalOrder.append(key)
+    }
+
+    internal func removeProvisionalKeyLocked(_ key: String) {
+        if liveDspProvisionalKeys.remove(key) != nil {
+            if let idx = liveDspProvisionalOrder.firstIndex(of: key) {
+                liveDspProvisionalOrder.remove(at: idx)
+            }
+        }
+    }
+
+    internal func flushSyncForTesting() {
+        persistenceQueue.sync {}
     }
 
     // MARK: - Public API
@@ -164,7 +203,8 @@ public final class AppleSoundCheckService: @unchecked Sendable {
         name: String,
         artist: String,
         album: String,
-        isLocal: Bool
+        isLocal: Bool,
+        isExplicitTransition: Bool = false
     ) {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -173,7 +213,15 @@ public final class AppleSoundCheckService: @unchecked Sendable {
 
         let canonicalKey = Self.makeCanonicalKey(artist: cleanArtist, name: cleanName)
 
-        let (alreadySynced, cachedGain, shouldResolve) = lock.withLock { () -> (Bool, Double?, Bool) in
+        let (skipStalePoll, alreadySynced, cachedGain, shouldResolve) = lock.withLock { () -> (Bool, Bool, Double?, Bool) in
+            let now = Date()
+            if isExplicitTransition {
+                self.explicitTransitionLockUntil = now.addingTimeInterval(2.2)
+            } else if !self.lastTrackKey.isEmpty && self.lastTrackKey != canonicalKey && now < self.explicitTransitionLockUntil {
+                // Ignore stale outgoing Music.app poll while staging the newly requested queue track
+                return (true, true, nil, false)
+            }
+
             let isSameTrack = (self.lastTrackKey == canonicalKey)
             self.lastTrackKey = canonicalKey
             if !cleanTrackId.isEmpty && cleanTrackId != "0" {
@@ -188,7 +236,7 @@ public final class AppleSoundCheckService: @unchecked Sendable {
             self.lastTrackIsLocal = isLocal
 
             if let gain = self.lookupCachedGainLocked(canonicalKey: canonicalKey, trackId: cleanTrackId, catalogId: catalogId) {
-                return (isSameTrack, gain, false)
+                return (false, isSameTrack, gain, false)
             }
             let alreadyInFlight = isLocal
                 ? self.inFlightLocalKeys.contains(canonicalKey)
@@ -200,7 +248,11 @@ public final class AppleSoundCheckService: @unchecked Sendable {
                     self.inFlightKeys.insert(canonicalKey)
                 }
             }
-            return (isSameTrack, nil, !alreadyInFlight)
+            return (false, isSameTrack, nil, !alreadyInFlight)
+        }
+
+        if skipStalePoll {
+            return
         }
 
         if let cachedGain {
@@ -234,8 +286,13 @@ public final class AppleSoundCheckService: @unchecked Sendable {
                 return self.lastTrackKey == canonicalKey
             }
             if isStillCurrent {
-                ExternalAmpTCPController.shared.applyTrackSoundCheck(trackKey: canonicalKey, gainDb: resolvedGain)
-                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                if let gain = resolvedGain {
+                    ExternalAmpTCPController.shared.applyTrackSoundCheck(trackKey: canonicalKey, gainDb: gain)
+                    WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                } else if ExternalAmpTCPController.shared.currentTrackGainDb == nil {
+                    // Preserve existing comfortable volume offset while awaiting Tier-3 live PCM LUFS (~1.5s) instead of spiking to 0.00 dB!
+                    ExternalAmpTCPController.shared.applyTrackSoundCheck(trackKey: canonicalKey, gainDb: nil)
+                }
             }
         }
     }
@@ -256,7 +313,8 @@ public final class AppleSoundCheckService: @unchecked Sendable {
             name: snapshot.3,
             artist: snapshot.4,
             album: snapshot.5,
-            isLocal: snapshot.6
+            isLocal: snapshot.6,
+            isExplicitTransition: true
         )
     }
 
@@ -346,14 +404,14 @@ public final class AppleSoundCheckService: @unchecked Sendable {
         let cleanId = trackId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanKey.isEmpty && cleanKey != ":" else { return }
 
-        let (shouldApply, activeKey) = lock.withLock { () -> (Bool, String) in
+        let (shouldApply, activeKey, snapshotToSave) = lock.withLock { () -> (Bool, String, [String: Double]?) in
             // Do not overwrite an authoritative iTunNORM or finalized local file scan
             let existingByKey = memoryCache[cleanKey]
             let existingById = (!cleanId.isEmpty && cleanId != "0") ? memoryCache["id:\(cleanId.lowercased())"] : nil
             let isProvisional = liveDspProvisionalKeys.contains(cleanKey)
 
             if (existingByKey != nil || existingById != nil) && !isProvisional {
-                return (false, cleanKey)
+                return (false, cleanKey, nil)
             }
 
             memoryCache[cleanKey] = clamped
@@ -367,14 +425,18 @@ public final class AppleSoundCheckService: @unchecked Sendable {
             }
 
             if isRefined {
-                liveDspProvisionalKeys.remove(cleanKey)
+                removeProvisionalKeyLocked(cleanKey)
             } else {
-                liveDspProvisionalKeys.insert(cleanKey)
+                insertProvisionalKeyLocked(cleanKey)
             }
 
-            saveCacheToDiskLocked()
+            let snap = memoryCache
             let isCurrent = (lastTrackKey == cleanKey) || (ExternalAmpTCPController.shared.currentTrackKey == cleanKey)
-            return (isCurrent, cleanKey)
+            return (isCurrent, cleanKey, snap)
+        }
+
+        if let snap = snapshotToSave {
+            scheduleSaveCacheToDisk(snap)
         }
 
         if shouldApply {
@@ -424,7 +486,7 @@ public final class AppleSoundCheckService: @unchecked Sendable {
         let key = Self.makeCanonicalKey(artist: artist, name: name)
         let cleanId = trackId.trimmingCharacters(in: .whitespacesAndNewlines)
         lock.withLock {
-            liveDspProvisionalKeys.remove(key)
+            removeProvisionalKeyLocked(key)
             memoryCache[key] = gainDb
             if !cleanId.isEmpty && cleanId != "0" {
                 memoryCache["id:\(cleanId.lowercased())"] = gainDb
@@ -437,428 +499,15 @@ public final class AppleSoundCheckService: @unchecked Sendable {
     internal func clearCacheEntryForTesting(artist: String, name: String, trackId: String = "") {
         let key = Self.makeCanonicalKey(artist: artist, name: name)
         let cleanId = trackId.trimmingCharacters(in: .whitespacesAndNewlines)
-        lock.withLock {
-            liveDspProvisionalKeys.remove(key)
+        let snapshot: [String: Double] = lock.withLock {
+            removeProvisionalKeyLocked(key)
             memoryCache.removeValue(forKey: key)
             if !cleanId.isEmpty && cleanId != "0" {
                 memoryCache.removeValue(forKey: "id:\(cleanId.lowercased())")
                 memoryCache.removeValue(forKey: "id:\(cleanId)")
             }
-            saveCacheToDiskLocked()
+            return memoryCache
         }
-    }
-
-    // MARK: - Multi-Tier Resolution
-
-    private func resolveGainDb(
-        canonicalKey: String,
-        trackId: String,
-        catalogId: String?,
-        name: String,
-        artist: String,
-        album: String,
-        isLocal: Bool
-    ) async -> Double? {
-        if let cached = lock.withLock({ lookupCachedGainLocked(canonicalKey: canonicalKey, trackId: trackId, catalogId: catalogId) }) {
-            return cached
-        }
-
-        // Tier 1: If true local file in Music.app (without cloud catalogId), inspect local file header first (or scan local PCM slices if iTunNORM is absent)
-        let hasCloudCatalogId = Self.isValidCatalogId(catalogId)
-        if isLocal && !hasCloudCatalogId, !AppleScriptExecutor.shared.isBusy {
-            let localGain: Double? = await withCheckedContinuation { continuation in
-                localScanQueue.async { [weak self] in
-                    continuation.resume(returning: self?.readLocalCurrentTrackITunNorm(expectedName: name))
-                }
-            }
-            if let localGain {
-                storeGainInCache(localGain, canonicalKey: canonicalKey, trackId: trackId, catalogId: catalogId)
-                NSLog("[AppleSoundCheck] Local track loudness for '%@ - %@': %+.2f dB", artist, name, localGain)
-                return localGain
-            }
-        }
-
-        // Tier 2: Resolve previewUrl via Apple Music / iTunes Lookup or Search API and read first 48 KB of .m4a
-        if let previewURL = await fetchApplePreviewURL(catalogId: catalogId, name: name, artist: artist, album: album),
-           let streamGain = await fetchITunNormFromPreviewHeader(previewURL: previewURL) {
-            storeGainInCache(streamGain, canonicalKey: canonicalKey, trackId: trackId, catalogId: catalogId)
-            NSLog("[AppleSoundCheck] Apple iTunNORM for '%@ - %@': %+.2f dB", artist, name, streamGain)
-            return streamGain
-        }
-
-        // Tier 3: If track has no metadata anywhere, SpectralIntegrityAnalyzer's live PCM loudness matrix
-        // will automatically compute, apply, and cache the loudness gain by trackId + canonicalKey within ~2s of playback.
-        return nil
-    }
-
-    private func readLocalCurrentTrackITunNorm(expectedName: String) -> Double? {
-        guard !AppleScriptExecutor.shared.isBusy else { return nil }
-        let script = """
-        tell application "Music"
-            if player state is not stopped then
-                try
-                    with timeout of 1.2 seconds
-                        set trName to name of current track
-                        set loc to location of current track
-                        if loc is not missing value then
-                            return trName & "|||" & (POSIX path of loc)
-                        end if
-                    end timeout
-                end try
-            end if
-        end tell
-        return ""
-        """
-        let (ok, rawOut) = AppleScriptExecutor.shared.execute(script, maxWait: 1.3, reportTimeout: false)
-        guard ok, let out = rawOut, !out.isEmpty else {
-            return nil
-        }
-        let parts = out.components(separatedBy: "|||")
-        guard parts.count == 2 else { return nil }
-        let trName = parts[0].trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        let posixPath = parts[1].trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        guard !posixPath.isEmpty,
-              trName.caseInsensitiveCompare(expectedName) == .orderedSame else {
-            return nil
-        }
-
-        let fileURL = URL(fileURLWithPath: posixPath)
-        if let handle = try? FileHandle(forReadingFrom: fileURL) {
-            let headerData = try? handle.read(upToCount: 65536)
-            try? handle.close()
-            if let headerData, !headerData.isEmpty,
-               let tagGain = Self.extractITunNormGainDb(from: headerData) {
-                return tagGain
-            }
-        }
-        // Fallback for local files without iTunNORM metadata: compute multi-point acoustic loudness via AVAudioFile + vDSP
-        return computeLocalFileLoudnessGainDb(fileURL: fileURL)
-    }
-
-    /// Scans 8 evenly distributed 16384-frame slices of a local audio file (ALAC, FLAC, WAV, AIFF, MP3, AAC)
-    /// using `AVAudioFile` and `vDSP_measqv` to compute its gated SoundCheck gain when `iTunNORM` is missing.
-    internal func computeLocalFileLoudnessGainDb(fileURL: URL) -> Double? {
-        guard let audioFile = try? AVAudioFile(forReading: fileURL) else { return nil }
-        let totalFrames = audioFile.length
-        guard totalFrames > 4096 else { return nil }
-        let format = audioFile.processingFormat
-        let channelCount = Int(format.channelCount)
-        guard channelCount > 0 else { return nil }
-
-        let sliceFrames: AVAudioFrameCount = 16384
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: sliceFrames) else {
-            return nil
-        }
-
-        let slicePositions: [Double] = [0.12, 0.22, 0.32, 0.42, 0.52, 0.62, 0.72, 0.82]
-        var gatedPowerSum: Double = 0.0
-        var gatedSliceCount: Int = 0
-
-        for posRatio in slicePositions {
-            let startFrame = AVAudioFramePosition(Double(totalFrames) * posRatio)
-            guard startFrame + AVAudioFramePosition(sliceFrames) < totalFrames else { continue }
-            audioFile.framePosition = startFrame
-            buffer.frameLength = 0
-            guard (try? audioFile.read(into: buffer, frameCount: sliceFrames)) != nil else { continue }
-            let readCount = Int(buffer.frameLength)
-            guard readCount >= 512, let floatChannels = buffer.floatChannelData else { continue }
-
-            var slicePower: Double = 0.0
-            let chToRead = min(channelCount, 2)
-            for ch in 0..<chToRead {
-                var meanSq: Float = 0
-                vDSP_measqv(floatChannels[ch], 1, &meanSq, vDSP_Length(readCount))
-                slicePower += Double(meanSq)
-            }
-            slicePower /= Double(chToRead)
-            let sliceDb = 10.0 * log10(max(slicePower, 1e-10))
-            if sliceDb > -52.0 {
-                gatedPowerSum += slicePower
-                gatedSliceCount += 1
-            }
-        }
-
-        guard gatedSliceCount > 0 else { return nil }
-        let meanPower = gatedPowerSum / Double(gatedSliceCount)
-        let measuredDb = 10.0 * log10(max(meanPower, 1e-10))
-        let rawGainDb = -16.5 - measuredDb
-        guard rawGainDb.isFinite else { return nil }
-        let clamped = max(-18.0, min(12.0, rawGainDb))
-        return (clamped * 100.0).rounded() / 100.0
-    }
-
-    private func fetchApplePreviewURL(
-        catalogId: String?,
-        name: String,
-        artist: String,
-        album: String
-    ) async -> URL? {
-        let session = self.urlSession
-
-        var resolvedCid = Self.isValidCatalogId(catalogId) ? catalogId?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
-        if resolvedCid == nil {
-            if let cachedCid = MusicKitManager.shared.getCachedTrackCatalogId(name: name, artist: artist, album: album)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               Self.isValidCatalogId(cachedCid) {
-                resolvedCid = cachedCid
-            }
-        }
-
-        // 1. Try direct catalogId lookup if valid Apple Music Adam ID
-        if let cid = resolvedCid, Self.isValidCatalogId(cid) {
-            for storefront in ["RU", "US"] {
-                if let url = URL(string: "https://itunes.apple.com/lookup?id=\(cid)&country=\(storefront)"),
-                   let preview = await queryPreviewURLFromEndpoint(url: url, expectedArtist: nil, expectedName: nil, expectedAlbum: nil, session: session) {
-                    return preview.url
-                }
-            }
-        }
-
-        // 2. Search by artist + track name across storefronts, preferring exact studio/album match
-        let queryTerm = "\(artist) \(name)".trimmingCharacters(in: .whitespacesAndNewlines)
-        let encodedTerm = queryTerm.amrQueryValueEncoded
-        guard !encodedTerm.isEmpty else {
-            return nil
-        }
-        var bestCandidate: (url: URL, score: Int)?
-        for storefront in ["RU", "US"] {
-            if let url = URL(string: "https://itunes.apple.com/search?term=\(encodedTerm)&entity=song&limit=8&country=\(storefront)"),
-               let candidate = await queryPreviewURLFromEndpoint(url: url, expectedArtist: artist, expectedName: name, expectedAlbum: album, session: session) {
-                if candidate.score >= 95 {
-                    return candidate.url
-                }
-                if bestCandidate == nil || candidate.score > bestCandidate!.score {
-                    bestCandidate = candidate
-                }
-            }
-        }
-        return bestCandidate?.url
-    }
-
-    private func queryPreviewURLFromEndpoint(
-        url: URL,
-        expectedArtist: String?,
-        expectedName: String?,
-        expectedAlbum: String?,
-        session: URLSession
-    ) async -> (url: URL, score: Int)? {
-        do {
-            let (data, response) = try await session.data(from: url)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let results = json["results"] as? [[String: Any]], !results.isEmpty else {
-                return nil
-            }
-
-            if let expName = expectedName, !expName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return Self.selectBestPreviewCandidate(
-                    from: results,
-                    expectedArtist: expectedArtist ?? "",
-                    expectedName: expName,
-                    expectedAlbum: expectedAlbum ?? ""
-                )
-            }
-
-            // Direct catalogId lookup (expectedName == nil): return first result with a previewUrl
-            for item in results {
-                if let prevStr = item["previewUrl"] as? String, let prevURL = URL(string: prevStr) {
-                    return (prevURL, 100)
-                }
-            }
-        } catch {
-            return nil
-        }
-        return nil
-    }
-
-    internal static func selectBestPreviewCandidate(
-        from results: [[String: Any]],
-        expectedArtist: String,
-        expectedName: String,
-        expectedAlbum: String
-    ) -> (url: URL, score: Int)? {
-        let expName = expectedName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let expArtist = expectedArtist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let expAlbum = expectedAlbum.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let expBaseName = stripEditionSuffix(expName)
-        let expIsLive = expName.contains("live") || expAlbum.contains("live")
-        let expIsRemaster = expName.contains("remaster") || expAlbum.contains("remaster")
-
-        var best: (url: URL, score: Int)?
-        for item in results {
-            guard let prevStr = item["previewUrl"] as? String, let prevURL = URL(string: prevStr) else { continue }
-            let rName = (item["trackName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let rArtist = (item["artistName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let rAlbum = (item["collectionName"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard !rName.isEmpty else { continue }
-
-            // Reject tribute / karaoke covers when searching for an original artist
-            if !expArtist.contains("tribute") && (rName.contains("tribute") || rArtist.contains("tribute") || rAlbum.contains("tribute")) {
-                continue
-            }
-            if !expArtist.contains("karaoke") && (rName.contains("karaoke") || rArtist.contains("karaoke") || rAlbum.contains("karaoke")) {
-                continue
-            }
-
-            var score = 0
-            // 1. Artist match check
-            if !expArtist.isEmpty {
-                if rArtist == expArtist {
-                    score += 40
-                } else if rArtist.contains(expArtist) || expArtist.contains(rArtist) {
-                    score += 20
-                } else {
-                    continue
-                }
-            }
-
-            // 2. Track title match check
-            let rBaseName = stripEditionSuffix(rName)
-            if rName == expName {
-                score += 50
-            } else if !expBaseName.isEmpty && rBaseName == expBaseName {
-                score += 35
-            } else if rName.contains(expName) || expName.contains(rName) {
-                score += 18
-            } else {
-                continue
-            }
-
-            // 3. Album match bonus
-            if !expAlbum.isEmpty && !rAlbum.isEmpty {
-                let expBaseAlbum = stripEditionSuffix(expAlbum)
-                let rBaseAlbum = stripEditionSuffix(rAlbum)
-                if rAlbum == expAlbum {
-                    score += 35
-                } else if !expBaseAlbum.isEmpty && (rBaseAlbum == expBaseAlbum || rAlbum.contains(expBaseAlbum) || expAlbum.contains(rBaseAlbum)) {
-                    score += 20
-                }
-            }
-
-            // 4. Edition compatibility (Studio vs Live / Remaster)
-            let candIsLive = rName.contains("live") || rAlbum.contains("live")
-            if expIsLive != candIsLive {
-                score -= 45
-            }
-            let candIsRemaster = rName.contains("remaster") || rAlbum.contains("remaster")
-            if expIsRemaster == candIsRemaster {
-                score += 15
-            } else {
-                score -= 8
-            }
-
-            if score > 0, (best == nil || score > best!.score) {
-                best = (prevURL, score)
-            }
-        }
-        return best
-    }
-
-    private static func stripEditionSuffix(_ text: String) -> String {
-        var result = text
-        if let idx = result.firstIndex(of: "(") {
-            result = String(result[..<idx])
-        }
-        if let idx = result.firstIndex(of: "[") {
-            result = String(result[..<idx])
-        }
-        if let dashRange = result.range(of: " - ") {
-            result = String(result[..<dashRange.lowerBound])
-        }
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func fetchITunNormFromPreviewHeader(previewURL: URL) async -> Double? {
-        let session = self.urlSession
-
-        var request = URLRequest(url: previewURL)
-        request.setValue("bytes=0-98303", forHTTPHeaderField: "Range")
-
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse,
-                  (http.statusCode == 206 || http.statusCode == 200),
-                  !data.isEmpty else {
-                return nil
-            }
-            return Self.extractITunNormGainDb(from: data)
-        } catch {
-            return nil
-        }
-    }
-
-    // MARK: - Cache Helpers
-
-    private static func makeCanonicalKey(artist: String, name: String) -> String {
-        let a = artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let n = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return "\(a):\(n)"
-    }
-
-    private func lookupCachedGainLocked(canonicalKey: String, trackId: String = "", catalogId: String?) -> Double? {
-        let cleanTrackId = trackId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !cleanTrackId.isEmpty, cleanTrackId != "0" {
-            if let gain = memoryCache["id:\(cleanTrackId.lowercased())"] ?? memoryCache["id:\(cleanTrackId)"] {
-                if !canonicalKey.isEmpty && memoryCache[canonicalKey] == nil {
-                    memoryCache[canonicalKey] = gain
-                }
-                return gain
-            }
-        }
-        if let cid = catalogId?.trimmingCharacters(in: .whitespacesAndNewlines), !cid.isEmpty, cid != "0" {
-            if let gain = memoryCache["id:\(cid.lowercased())"] ?? memoryCache["id:\(cid)"] {
-                if !canonicalKey.isEmpty && memoryCache[canonicalKey] == nil {
-                    memoryCache[canonicalKey] = gain
-                }
-                return gain
-            }
-        }
-        if let gain = memoryCache[canonicalKey] {
-            if !cleanTrackId.isEmpty, cleanTrackId != "0", memoryCache["id:\(cleanTrackId.lowercased())"] == nil {
-                memoryCache["id:\(cleanTrackId.lowercased())"] = gain
-            }
-            return gain
-        }
-        return nil
-    }
-
-    private func storeGainInCache(_ gainDb: Double, canonicalKey: String, trackId: String = "", catalogId: String?) {
-        let cleanTrackId = trackId.trimmingCharacters(in: .whitespacesAndNewlines)
-        lock.withLock {
-            liveDspProvisionalKeys.remove(canonicalKey)
-            memoryCache[canonicalKey] = gainDb
-            if !cleanTrackId.isEmpty, cleanTrackId != "0" {
-                memoryCache["id:\(cleanTrackId.lowercased())"] = gainDb
-                memoryCache["id:\(cleanTrackId)"] = gainDb
-            }
-            if let cid = catalogId?.trimmingCharacters(in: .whitespacesAndNewlines), !cid.isEmpty, cid != "0" {
-                memoryCache["id:\(cid.lowercased())"] = gainDb
-                memoryCache["id:\(cid)"] = gainDb
-            }
-            saveCacheToDiskLocked()
-        }
-    }
-
-    private func loadCacheFromDisk() {
-        guard let data = try? Data(contentsOf: cacheFileURL),
-              let decoded = try? JSONDecoder().decode(CacheStore.self, from: data) else {
-            return
-        }
-        lock.withLock {
-            memoryCache = decoded.entries
-        }
-    }
-
-    private func saveCacheToDiskLocked() {
-        // Keep cache bounded to 5000 entries
-        if memoryCache.count > 5000 {
-            let keysToDrop = Array(memoryCache.keys.prefix(800))
-            for k in keysToDrop {
-                memoryCache.removeValue(forKey: k)
-            }
-        }
-        let store = CacheStore(entries: memoryCache)
-        if let data = try? JSONEncoder().encode(store) {
-            try? data.write(to: cacheFileURL, options: .atomic)
-        }
+        scheduleSaveCacheToDisk(snapshot)
     }
 }

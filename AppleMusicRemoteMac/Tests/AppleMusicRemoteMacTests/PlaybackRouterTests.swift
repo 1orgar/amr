@@ -511,5 +511,43 @@ final class PlaybackRouterTests: XCTestCase {
         )
         XCTAssertTrue(ok)
     }
+
+    func testMusicKitManagerExtractsNumericCatalogIdsForMusicAppCloudStaging() {
+        let getUpTrack1 = TrackInfo(
+            id: "1805405936",
+            name: "Smash the Speakers",
+            artist: "Kronos",
+            isLocal: false,
+            url: "https://music.apple.com/us/album/smash-the-speakers-single/1805405935?i=1805405936"
+        )
+        XCTAssertEqual(MusicKitManager.extractNumericCatalogId(from: getUpTrack1), "1805405936")
+
+        let urlOnlyTrack = TrackInfo(
+            id: "i.library-cloud-uuid",
+            name: "Intents Highscore (Official Intents Festival 2022 Anthem)",
+            artist: "Da Tweekaz & Warface",
+            isLocal: false,
+            url: "https://music.apple.com/us/album/intents-highscore/1622831438?i=1622831439"
+        )
+        XCTAssertEqual(MusicKitManager.extractNumericCatalogId(from: urlOnlyTrack), "1622831439")
+
+        let explicitCatalogTrack = TrackInfo(
+            id: "i.abc",
+            name: "名前を呼ぶよ",
+            artist: "SUPER BEAVER",
+            isLocal: false,
+            catalogId: "1570987654"
+        )
+        XCTAssertEqual(MusicKitManager.extractNumericCatalogId(from: explicitCatalogTrack), "1570987654")
+
+        let localDbTrack = TrackInfo(
+            id: "3648",
+            numericId: 3648,
+            name: "",
+            artist: "",
+            isLocal: true
+        )
+        XCTAssertNil(MusicKitManager.extractNumericCatalogId(from: localDbTrack))
+    }
 }
 

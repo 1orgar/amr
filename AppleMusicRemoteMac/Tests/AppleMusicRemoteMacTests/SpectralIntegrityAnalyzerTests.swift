@@ -489,4 +489,197 @@ final class SpectralIntegrityAnalyzerTests: XCTestCase {
             isLossless: true
         ))
     }
+
+    // MARK: - v2.6.0 TT DR Meter, EBU R128 Loudness, 4x Polyphase True Peak & Phase Correlation Tests
+
+    func testPhaseCorrelationMeterMonoOutOfPhaseAndOrthogonalStereo() {
+        let analyzer = SpectralIntegrityAnalyzer.shared
+        let sr = 48000
+        let frames = 48000 // 1.0 second
+
+        var monoSine = [Float](repeating: 0, count: frames)
+        var invertedSine = [Float](repeating: 0, count: frames)
+        var orthoLeft = [Float](repeating: 0, count: frames)
+        var orthoRight = [Float](repeating: 0, count: frames)
+
+        for n in 0..<frames {
+            let t = Double(n) / Double(sr)
+            let s997 = Float(0.5 * sin(2.0 * .pi * 997.0 * t))
+            let s440 = Float(0.5 * sin(2.0 * .pi * 440.0 * t))
+            monoSine[n] = s997
+            invertedSine[n] = -s997
+            orthoLeft[n] = s440
+            orthoRight[n] = s997
+        }
+
+        // 1. Pure Mono (L == R) -> correlation ~ +1.0, width ~ 0%, balance ~ 0 dB
+        let monoRes = analyzer.processStereoSamplesForTesting(
+            left: monoSine,
+            right: monoSine,
+            sampleRate: sr,
+            claimedBitDepth: 24,
+            isLossless: true
+        )
+        XCTAssertGreaterThan(monoRes.phaseCorrelation, 0.99)
+        XCTAssertLessThan(monoRes.stereoWidthPercent, 1.0)
+        XCTAssertLessThan(abs(monoRes.channelBalanceDb), 0.1)
+
+        // 2. Pure Out-of-Phase (R == -L) -> correlation ~ -1.0, width ~ 100%
+        let invRes = analyzer.processStereoSamplesForTesting(
+            left: monoSine,
+            right: invertedSine,
+            sampleRate: sr,
+            claimedBitDepth: 24,
+            isLossless: true
+        )
+        XCTAssertLessThan(invRes.phaseCorrelation, -0.99)
+        XCTAssertGreaterThan(invRes.stereoWidthPercent, 99.0)
+
+        // 3. Orthogonal Stereo Tones (440 Hz Left, 997 Hz Right) -> correlation ~ 0.0, Euclidean M/S width = 100/sqrt(2) ~ 70.71%
+        let orthoRes = analyzer.processStereoSamplesForTesting(
+            left: orthoLeft,
+            right: orthoRight,
+            sampleRate: sr,
+            claimedBitDepth: 24,
+            isLossless: true
+        )
+        XCTAssertLessThan(abs(orthoRes.phaseCorrelation), 0.08)
+        XCTAssertEqual(orthoRes.stereoWidthPercent, 70.71, accuracy: 2.0)
+    }
+
+    func testEBUR128KWeightedLoudnessAnd4xPolyphaseTruePeakISP() {
+        let analyzer = SpectralIntegrityAnalyzer.shared
+        let sr = 48000
+        let frames = sr * 4 // 4.0 seconds (> 3.0s short-term & TT DR block)
+
+        // 1. ITU-R BS.1770-4 Reference 997 Hz Stereo Full-Scale -23.0 dBFS Sine -> -23.0 LUFS & -23.0 dBTP
+        let ampMinus23dB = pow(10.0, -23.0 / 20.0)
+        var refSine = [Float](repeating: 0, count: frames)
+        for n in 0..<frames {
+            let t = Double(n) / Double(sr)
+            refSine[n] = Float(ampMinus23dB * sin(2.0 * .pi * 997.0 * t))
+        }
+
+        let refRes = analyzer.processStereoSamplesForTesting(
+            left: refSine,
+            right: refSine,
+            sampleRate: sr,
+            claimedBitDepth: 24,
+            isLossless: true
+        )
+        XCTAssertNotNil(refRes.integratedLufs)
+        XCTAssertNotNil(refRes.shortTermLufs)
+        XCTAssertNotNil(refRes.truePeakDbtp)
+        XCTAssertEqual(refRes.integratedLufs ?? 0.0, -23.0, accuracy: 0.45)
+        XCTAssertEqual(refRes.shortTermLufs ?? 0.0, -23.0, accuracy: 0.45)
+        XCTAssertEqual(refRes.truePeakDbtp ?? 0.0, -23.0, accuracy: 0.35)
+        XCTAssertEqual(refRes.ispClipCount, 0)
+
+        // 2. ITU-R BS.1770-4 Annex 2 Inter-Sample Peak (+3.0 dBTP) Signal:
+        //    fs/4 cosine sampled at pi/4 + n*pi/2 -> every integer sample is +/-0.998 (< 0.0 dBFS),
+        //    while reconstructed analog inter-sample peaks reach ~1.411 (+2.99 dBTP).
+        let ispFrames = 16384
+        var ispSignal = [Float](repeating: 0, count: ispFrames)
+        let invCosPi4 = 1.0 / cos(Double.pi / 4.0)
+        for n in 0..<ispFrames {
+            let v = 0.998 * cos((Double.pi / 4.0) + Double(n) * (Double.pi / 2.0)) * invCosPi4
+            ispSignal[n] = Float(v)
+        }
+
+        let ispRes = analyzer.processStereoSamplesForTesting(
+            left: ispSignal,
+            right: ispSignal,
+            sampleRate: sr,
+            claimedBitDepth: 24,
+            isLossless: true
+        )
+        XCTAssertNotNil(ispRes.truePeakDbtp)
+        XCTAssertGreaterThan(ispRes.truePeakDbtp ?? 0.0, 2.4, "4x Polyphase FIR must detect +3 dBTP inter-sample peak")
+        XCTAssertGreaterThan(ispRes.ispClipCount, 0, "ISP clip counter must increment when True Peak exceeds 0.0 dBTP")
+    }
+
+    func testTTDynamicRangeMeterDistinguishesAudiophileVsLoudnessWarMaster() {
+        let analyzer = SpectralIntegrityAnalyzer.shared
+        let sr = 48000
+        let frames = sr * 12 // 12.0 seconds = 4 blocks of 3.0s
+
+        // 1. Audiophile high-crest master: gentle musical bed + crisp 0.92 drum transients -> DR >= 12 ("dynamic")
+        var audiophile = [Float](repeating: 0, count: frames)
+        for n in 0..<frames {
+            let t = Double(n) / Double(sr)
+            let bed = 0.08 * sin(2.0 * .pi * 220.0 * t) + 0.05 * sin(2.0 * .pi * 880.0 * t)
+            let beatPhase = t.truncatingRemainder(dividingBy: 0.75)
+            let transient = beatPhase < 0.015 ? (0.82 * exp(-beatPhase * 180.0) * sin(2.0 * .pi * 120.0 * beatPhase)) : 0.0
+            audiophile[n] = Float(max(-0.98, min(0.98, bed + transient)))
+        }
+
+        let dynamicRes = analyzer.processStereoSamplesForTesting(
+            left: audiophile,
+            right: audiophile,
+            sampleRate: sr,
+            claimedBitDepth: 24,
+            isLossless: true
+        )
+        XCTAssertNotNil(dynamicRes.ttDrScore)
+        XCTAssertGreaterThanOrEqual(dynamicRes.ttDrScore ?? 0, 12)
+        XCTAssertEqual(dynamicRes.ttDrStatus, "dynamic")
+
+        // 2. Hyper-compressed "Loudness War" brickwall master -> DR <= 5 ("compressed")
+        var brickwall = [Float](repeating: 0, count: frames)
+        for n in 0..<frames {
+            let t = Double(n) / Double(sr)
+            let raw = 4.5 * sin(2.0 * .pi * 180.0 * t) + 3.0 * sin(2.0 * .pi * 1100.0 * t)
+            brickwall[n] = Float(max(-0.94, min(0.94, raw)))
+        }
+
+        let compressedRes = analyzer.processStereoSamplesForTesting(
+            left: brickwall,
+            right: brickwall,
+            sampleRate: sr,
+            claimedBitDepth: 16,
+            isLossless: true
+        )
+        XCTAssertNotNil(compressedRes.ttDrScore)
+        XCTAssertLessThanOrEqual(compressedRes.ttDrScore ?? 99, 5)
+        XCTAssertEqual(compressedRes.ttDrStatus, "compressed")
+    }
+
+    func testRealtimeRtaWarmupCompactPayloadAndGpuUiInvariants() {
+        let analyzer = SpectralIntegrityAnalyzer.shared
+        analyzer.clearValidationCache()
+        defer { analyzer.clearValidationCache() }
+
+        // 1. Live streaming warmup (1st 3072 samples = 2 overlapped hops < minMusicalFrames):
+        //    Verdict is still "analyzing", yet live rtaBands MUST immediately reflect the 250 Hz + 2 kHz energy!
+        analyzer.syncTrackContext(
+            trackKey: "massive attack:angel",
+            trackId: "9988776655",
+            isLocal: false,
+            sampleRate: 48000,
+            claimedBitDepth: 24,
+            isLossless: true,
+            isPlaying: true
+        )
+        var intro = [Float](repeating: 0, count: 3072)
+        for n in 0..<intro.count {
+            let t = Double(n) / 48000.0
+            intro[n] = Float(0.45 * sin(2.0 * .pi * 250.0 * t) + 0.25 * sin(2.0 * .pi * 2000.0 * t))
+        }
+        analyzer.ingestStereoAndMonoFrames(left: intro, right: intro, mono: intro, nonSilentCount: 1500, lsb24Count: 900)
+        let warmupSnap = analyzer.getCurrentAnalysis()
+        XCTAssertEqual(warmupSnap.verdict, "analyzing")
+        XCTAssertEqual(warmupSnap.rtaBands.count, 32)
+        XCTAssertGreaterThan(warmupSnap.rtaBands.max() ?? 0.0, 0.35, "Live RTA bands must update during analyzing warmup without idle decay crushing")
+
+        let compact = analyzer.getCompactRTAPayload()
+        XCTAssertEqual((compact["rta_bands"] as? [Double])?.count, 32)
+        XCTAssertEqual(compact["verdict"] as? String, "analyzing")
+
+        // 2. Web UI GPU compositor & non-throttled polling regression checks
+        let js = WebUIContent.appJS
+        let css = WebUIContent.styleCSS
+        XCTAssertTrue(js.contains("isRealtimeSpectralPoll"), "send() must exempt get_spectral_analysis / get_spectral_rta from 500ms deduplicator")
+        XCTAssertFalse(js.contains("bar.style.height = `${pct}%`"), "Signal Path RTA bars must use GPU scale3d instead of layout-thrashing style.height")
+        XCTAssertTrue(css.contains(".spectral-rta-bar") && css.contains("will-change: transform"), "Signal Path RTA bars must declare GPU transform compositing")
+    }
 }

@@ -1,0 +1,504 @@
+/* ==========================================================================
+   Apple Music Remote (AMR) - Ultra-Clean Monochrome Production Design
+   Color Palette:
+     - Pure OLED Black: #000000
+     - Deep Surfaces: #0e0e0e, #161616, #1c1c1e, #1f1f21
+     - Precision Borders: #262628, #38383a
+     - Monochrome Text: #ffffff (primary), #9e9ea3 (secondary), #5c5c60 (muted)
+   ========================================================================== */
+
+:root {
+  --bg-pure: #000000;
+  --surface-base: #0e0e0e;
+  --surface-card: #161616;
+  --surface-card-subtle: rgba(255, 255, 255, 0.04);
+  --surface-hover: #1f1f21;
+  --surface-active: #2a2a2d;
+
+  --border-subtle: #262628;
+  --border-bright: #38383a;
+  --border-hover: rgba(255, 255, 255, 0.22);
+  --border-focus: rgba(250, 36, 60, 0.55);
+
+  --text-primary: #ffffff;
+  --text-secondary: #9e9ea3;
+  --text-muted: #5c5c60;
+
+  --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+  --transition-fast: 0.15s cubic-bezier(0.2, 0.9, 0.4, 1);
+  --transition-smooth: 0.25s cubic-bezier(0.2, 0.9, 0.4, 1);
+
+  /* iOS Safe Area Insets with Robust Dynamic Island & Home Indicator Fallbacks */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --mobile-bottom-strip: clamp(7px, calc(env(safe-area-inset-bottom, 10px) * 0.3), 10px);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+html {
+  width: 100%;
+  height: 100%;
+  height: -webkit-fill-available;
+  min-height: 100%;
+  min-height: -webkit-fill-available;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-pure);
+  overflow: hidden;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  min-height: -webkit-fill-available;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-pure);
+  color: var(--text-primary);
+  font-family: var(--font-stack);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  outline: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea {
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Scrollbar Stylings */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-bright);
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Apple TV Style Dynamic Blurred Ambient Gradient Background
+   ========================================================================== */
+
+.ambient-backdrop {
+  position: fixed;
+  top: -20%;
+  left: -20%;
+  width: 140%;
+  height: 140%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+  background-color: var(--bg-pure);
+  opacity: 0;
+  transition: opacity 1.2s cubic-bezier(0.2, 0.9, 0.4, 1);
+  will-change: opacity;
+}
+
+.ambient-backdrop.active {
+  opacity: 1;
+}
+
+.ambient-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 1.5s cubic-bezier(0.2, 0.9, 0.4, 1);
+  will-change: opacity;
+}
+
+.ambient-layer.visible {
+  opacity: 1;
+}
+
+.ambient-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px) saturate(150%);
+  -webkit-filter: blur(90px) saturate(150%);
+  opacity: 0.82;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+/* 4 organic floating blobs positioned for dynamic mesh diffusion */
+.ambient-blob.blob-1 {
+  width: 55vw;
+  height: 55vw;
+  min-width: 450px;
+  min-height: 450px;
+  top: 15%;
+  left: 10%;
+  background: var(--blob-1, rgba(60, 30, 90, 0.6));
+  animation: ambientFloat1 24s ease-in-out infinite alternate;
+}
+
+.ambient-blob.blob-2 {
+  width: 60vw;
+  height: 60vw;
+  min-width: 500px;
+  min-height: 500px;
+  top: 25%;
+  right: 10%;
+  background: var(--blob-2, rgba(30, 60, 110, 0.55));
+  animation: ambientFloat2 28s ease-in-out infinite alternate;
+}
+
+.ambient-blob.blob-3 {
+  width: 50vw;
+  height: 50vw;
+  min-width: 400px;
+  min-height: 400px;
+  bottom: 15%;
+  left: 25%;
+  background: var(--blob-3, rgba(90, 40, 70, 0.5));
+  animation: ambientFloat3 22s ease-in-out infinite alternate;
+}
+
+.ambient-blob.blob-4 {
+  width: 45vw;
+  height: 45vw;
+  min-width: 350px;
+  min-height: 350px;
+  top: 40%;
+  left: 40%;
+  background: var(--blob-4, rgba(25, 75, 95, 0.45));
+  animation: ambientFloat4 26s ease-in-out infinite alternate;
+}
+
+/* Organic drifting keyframes in Apple TV style */
+@keyframes ambientFloat1 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(8%, -6%, 0) scale(1.12); }
+  100% { transform: translate3d(-6%, 8%, 0) scale(0.95); }
+}
+
+@keyframes ambientFloat2 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-10%, 8%, 0) scale(1.08); }
+  100% { transform: translate3d(6%, -8%, 0) scale(0.92); }
+}
+
+@keyframes ambientFloat3 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-8%, -10%, 0) scale(1.15); }
+  100% { transform: translate3d(10%, 6%, 0) scale(0.9); }
+}
+
+@keyframes ambientFloat4 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(10%, 10%, 0) scale(1.1); }
+  100% { transform: translate3d(-10%, -6%, 0) scale(0.95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-blob {
+    animation: none !important;
+  }
+}
+
+/* Apple TV Vignette / Scrim Overlay to protect OLED black, contrast & readability */
+.ambient-vignette {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(ellipse at 50% 35%, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.72) 65%, #000000 100%),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0.9) 100%);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Main Application Layout
+   ========================================================================== */
+
+.app-layout {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  background: transparent;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Desktop Dual Column: >= 768px and min-height 541px */
+@media (min-width: 768px) and (min-height: 541px) {
+  .app-layout {
+    flex-direction: row;
+  }
+
+  /* Left Panel: Fixed Sticky Player */
+  .player-panel {
+    width: 420px;
+    min-width: 380px;
+    max-width: 460px;
+    flex-shrink: 0;
+    height: 100%;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    display: flex !important;
+    flex-direction: column;
+    padding: calc(var(--safe-top) + 24px) 28px calc(var(--safe-bottom) + 24px) 28px;
+    overflow-y: auto;
+    z-index: 10;
+  }
+
+  /* Right Panel: Tab Content Wrapper */
+  .content-panel-wrapper {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: rgba(10, 10, 10, 0.72);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .desktop-nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: calc(var(--safe-top) + 20px) 32px 16px 32px;
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-subtle);
+    z-index: 5;
+  }
+
+  .desktop-nav-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .desktop-nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .desktop-dac-badge {
+    display: none !important;
+  }
+
+  .mobile-top-bar {
+    display: none !important;
+  }
+
+  .nav-tab-btn {
+    padding: 8px 16px;
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 20px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+  }
+
+  .nav-tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+  }
+
+  .nav-tab-btn.active {
+    color: var(--text-primary);
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* Content views on Desktop */
+  .content-view {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 24px 32px;
+    animation: viewFadeIn 0.2s cubic-bezier(0.2, 0.9, 0.4, 1);
+  }
+
+  .content-view.active {
+    display: flex;
+  }
+
+  /* Mini-player and bottom bar hidden on Desktop */
+  .mini-player,
+  .bottom-tab-bar {
+    display: none !important;
+  }
+}
+
+/* Mobile Single Column: < 768px or mobile landscape <= 540px height */
+@media (max-width: 767px), (max-height: 540px) {
+  .app-layout {
+    flex-direction: column;
+  }
+
+  .desktop-nav-header {
+    display: none !important;
+  }
+
+  .mobile-top-bar {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(var(--safe-top) + 8px) calc(var(--safe-left) + 16px) 10px calc(var(--safe-right) + 16px);
+    background: var(--bg-pure);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .mobile-dac-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    height: 32px;
+    border-radius: 16px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .mobile-dac-badge:hover,
+  .mobile-dac-badge:active {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+    border-color: var(--border-bright);
+  }
+
+  .player-panel {
+    display: none;
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: transparent;
+    flex-direction: column;
+    padding-top: calc(var(--safe-top) + 10px);
+    padding-left: calc(var(--safe-left) + 20px);
+    padding-right: calc(var(--safe-right) + 20px);
+    padding-bottom: calc(62px + var(--mobile-bottom-strip));
+    overflow-y: auto;
+    z-index: 20;
+    overscroll-behavior-y: contain;
+    animation: viewFadeIn 0.2s cubic-bezier(0.2, 0.9, 0.4, 1);
+  }
+
+  .player-panel.active {
+    display: flex;
+  }
+
+  .player-panel.active ~ .content-panel-wrapper {
+    display: none;
+  }
+
+  .content-panel-wrapper {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-pure);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .content-view {
+    display: none;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+    overflow: hidden;
+    padding-top: 10px;
+    padding-left: calc(var(--safe-left) + 16px);
+    padding-right: calc(var(--safe-right) + 16px);
+    padding-bottom: 0;
+    animation: viewFadeIn 0.2s cubic-bezier(0.2, 0.9, 0.4, 1);
+  }
+
+  .section-header,
+  .home-header {
+    margin-bottom: 12px;
+  }
+
+  .content-view.active {
+    display: flex;
+  }
+}
+
+@keyframes viewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+

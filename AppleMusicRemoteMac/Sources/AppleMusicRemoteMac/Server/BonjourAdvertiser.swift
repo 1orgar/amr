@@ -39,10 +39,10 @@ public final class BonjourAdvertiser: NSObject, NetServiceDelegate, @unchecked S
         )
 
         service.delegate = self
-        service.includesPeerToPeer = true
+        service.includesPeerToPeer = false
 
         var txtDict: [String: Data] = [:]
-        txtDict["version"] = "2.5.0".data(using: .utf8)
+        txtDict["version"] = "3.0.0".data(using: .utf8)
         txtDict["platform"] = "macOS".data(using: .utf8)
         txtDict["protocol"] = "amr-ws".data(using: .utf8)
         txtDict["host"] = (Host.current().name ?? "localhost").data(using: .utf8)
@@ -50,6 +50,7 @@ public final class BonjourAdvertiser: NSObject, NetServiceDelegate, @unchecked S
         txtDict["name"] = serviceName.data(using: .utf8)
 
         service.setTXTRecord(NetService.data(fromTXTRecord: txtDict))
+        service.schedule(in: .main, forMode: .common)
         service.publish(options: [])
 
         self.netService = service
@@ -67,6 +68,7 @@ public final class BonjourAdvertiser: NSObject, NetServiceDelegate, @unchecked S
     private func stopAdvertisingUnlocked() {
         if let service = netService {
             service.stop()
+            service.remove(from: .main, forMode: .common)
             self.netService = nil
         }
         self.isAdvertising = false

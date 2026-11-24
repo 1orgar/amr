@@ -4,68 +4,208 @@
 //
 //  High-Resolution CoreAudio Process Tap Service for Apple Music
 //  Captures real-time uncompressed PCM audio from Music.app (up to 24-bit / 192 kHz)
-//  and feeds it to network streamers (BluOS / DLNA / UPnP).
+//  and feeds it to network streamers (BluOS / DLNA / UPnP) and local DSP pipelines.
 //
 
 import Foundation
+import Accelerate
 import CoreAudio
 import AppKit
+import os
 
 public final class AudioProcessTapService: @unchecked Sendable {
     public static let shared = AudioProcessTapService()
 
-    private let queue = DispatchQueue(label: "org.ksholokhov.amr.audiotap", qos: .userInteractive)
-    
-    // CoreAudio objects
-    private var tapObjectID: AudioObjectID = 0
-    private var aggregateDeviceID: AudioObjectID = 0
-    private var ioProcID: AudioDeviceIOProcID?
-    
-    // Stream parameters
-    private let formatLock = NSLock()
-    private var _sampleRate: Int = 44100
-    private var _bitDepth: Int = 16
+    internal static let queueSpecificKey = DispatchSpecificKey<Void>()
+    internal static let streamScratchTileFrames: Int = 4096
+    internal static let streamPCMRingCapacity: Int = 524_288 // 512 KB power-of-two ring buffer (0 RT heap allocs)
+    internal static let streamPCMRingMask: Int = 524_287
+    internal static let streamDrainChunkBytes: Int = 65_536
+    internal static let passiveIdleSuspendTimeoutSec: Double = 45.0
+    internal let queue = DispatchQueue(label: "org.ksholokhov.amr.audiotap", qos: .userInteractive)
 
-    public private(set) var sampleRate: Int {
-        get { formatLock.withLock { _sampleRate } }
-        set { formatLock.withLock { _sampleRate = newValue } }
+    // CoreAudio objects
+    internal var tapObjectID: AudioObjectID = 0
+    internal var aggregateDeviceID: AudioObjectID = 0
+    internal var ioProcID: AudioDeviceIOProcID?
+
+    // Stream parameters (RT-safe spinlocks — never call Objective-C NSLock from CoreAudio IOProc)
+    internal var formatSpinLock = os_unfair_lock_s()
+    internal var _sampleRate: Int = 44100
+    internal var _bitDepth: Int = 16
+
+    public internal(set) var sampleRate: Int {
+        get {
+            os_unfair_lock_lock(&formatSpinLock)
+            let v = _sampleRate
+            os_unfair_lock_unlock(&formatSpinLock)
+            return v
+        }
+        set {
+            os_unfair_lock_lock(&formatSpinLock)
+            _sampleRate = newValue
+            os_unfair_lock_unlock(&formatSpinLock)
+        }
     }
     public let channels: Int = 2
-    public private(set) var bitDepth: Int {
-        get { formatLock.withLock { _bitDepth } }
-        set { formatLock.withLock { _bitDepth = newValue } }
+    public internal(set) var bitDepth: Int {
+        get {
+            os_unfair_lock_lock(&formatSpinLock)
+            let v = _bitDepth
+            os_unfair_lock_unlock(&formatSpinLock)
+            return v
+        }
+        set {
+            os_unfair_lock_lock(&formatSpinLock)
+            _bitDepth = newValue
+            os_unfair_lock_unlock(&formatSpinLock)
+        }
     }
     public var bitsPerSample: Int { bitDepth }
     public var bytesPerFrame: Int { channels * (bitDepth / 8) }
 
-    public private(set) var isCapturing: Bool = false
-    public var isRealTapActive: Bool { aggregateDeviceID != 0 && tapObjectID != 0 }
-    private var isTapMuted: Bool = false
-    private var isPassiveAnalysisActive: Bool = false
-    private var isMutingGuardZeroFill: Bool = false
-    private let mutingGuardLock = NSLock()
-    
+    internal var _isCapturing: Bool = false
+    internal var _isTapMuted: Bool = false
+    internal var _isRealTapActiveFlag: Bool = false
+
+    public internal(set) var isCapturing: Bool {
+        get {
+            os_unfair_lock_lock(&mutingGuardSpinLock)
+            let v = _isCapturing
+            os_unfair_lock_unlock(&mutingGuardSpinLock)
+            return v
+        }
+        set {
+            os_unfair_lock_lock(&mutingGuardSpinLock)
+            _isCapturing = newValue
+            os_unfair_lock_unlock(&mutingGuardSpinLock)
+        }
+    }
+
+    public var isRealTapActive: Bool {
+        os_unfair_lock_lock(&mutingGuardSpinLock)
+        let v = _isRealTapActiveFlag
+        os_unfair_lock_unlock(&mutingGuardSpinLock)
+        return v
+    }
+
+    internal var isTapMuted: Bool {
+        get {
+            os_unfair_lock_lock(&mutingGuardSpinLock)
+            let v = _isTapMuted
+            os_unfair_lock_unlock(&mutingGuardSpinLock)
+            return v
+        }
+        set {
+            os_unfair_lock_lock(&mutingGuardSpinLock)
+            _isTapMuted = newValue
+            os_unfair_lock_unlock(&mutingGuardSpinLock)
+        }
+    }
+
+    /// Lock-free / spinlock-safe check whether a real CoreAudio Process Tap is currently active and configured as `.muted`.
+    public var isTapCurrentlyMuted: Bool {
+        os_unfair_lock_lock(&mutingGuardSpinLock)
+        let v = _isRealTapActiveFlag && _isTapMuted
+        os_unfair_lock_unlock(&mutingGuardSpinLock)
+        return v
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func syncRealTapActiveFlag() {
+        let active = (aggregateDeviceID != 0 && tapObjectID != 0)
+        os_unfair_lock_lock(&mutingGuardSpinLock)
+        _isRealTapActiveFlag = active
+        os_unfair_lock_unlock(&mutingGuardSpinLock)
+    }
+
+    internal var isPassiveAnalysisActive: Bool = false
+    internal var isWLEDTapConsumerActive: Bool = false
+    internal var isPassiveTapIdleSuspended: Bool = false
+    internal var passivePausedSinceMono: Double? = nil
+    internal var isMutingGuardZeroFill: Bool = false
+    internal var mutingGuardSpinLock = os_unfair_lock_s()
+    internal var streamScratchSpinLock = os_unfair_lock_s()
+    internal let streamScratchL: UnsafeMutablePointer<Float>
+    internal let streamScratchR: UnsafeMutablePointer<Float>
+    internal let streamScratchPCMBytes: UnsafeMutablePointer<UInt8>
+
+    internal var streamPCMRingSpinLock = os_unfair_lock_s()
+    internal let streamPCMRingBuffer: UnsafeMutablePointer<UInt8>
+    internal var streamPCMRingReadIdx: Int = 0
+    internal var streamPCMRingWriteIdx: Int = 0
+    internal var streamPCMRingCount: Int = 0
+    internal var streamPCMRingBytesPerFrame: Int = 4
+    internal var streamDrainSignalSource: DispatchSourceUserDataAdd!
+    internal var streamDrainScratch: [UInt8] = []
+
     // Subscriber callbacks: (UUID, (Data) -> Void)
-    private var subscribers: [UUID: (Data) -> Void] = [:]
-    private var hasActiveSubscribersFlag: Bool = false
-    
+    internal var subscribers: [UUID: (Data) -> Void] = [:]
+    internal var hasActiveSubscribersFlag: Bool = false
+
     // Audio buffering & silence generation
-    private var chunkAccumulator = Data()
-    private var targetChunkFrameCount: Int {
+    internal var chunkAccumulator = Data()
+    internal var targetChunkFrameCount: Int {
         // Target ~50ms of audio at current sample rate
         return max(512, sampleRate / 20)
     }
-    private var lastAudioReceivedTime: Date = Date.distantPast
-    private var silenceTimer: DispatchSourceTimer?
-    private var silenceTickCount: Int = 0
-    private var autoHealCount: Int = 0
-    private let silenceLock = NSLock()
-    private let isTestingEnv: Bool = PlaybackRouter.shared.isTestingEnvironment
+    internal var lastAudioReceivedTimeMono: Double = -1.0e9
+    internal var lastNonZeroAudioTimeMono: Double = -1.0e9
+    internal var mutedZeroSignalAccumulatedSec: Double = 0.0
+    internal var silenceTimer: DispatchSourceTimer?
+    internal var silenceTickCount: Int = 0
+    internal var autoHealCount: Int = 0
+    internal var rateConvergenceGeneration: UInt64 = 0
+    internal var tappedProcessObjectIDs: Set<AudioObjectID> = []
+    internal var silenceSpinLock = os_unfair_lock_s()
+    internal let isTestingEnv: Bool = PlaybackRouter.shared.isTestingEnvironment
 
-    private init() {}
+    private init() {
+        queue.setSpecific(key: Self.queueSpecificKey, value: ())
+        streamScratchL = UnsafeMutablePointer<Float>.allocate(capacity: Self.streamScratchTileFrames)
+        streamScratchR = UnsafeMutablePointer<Float>.allocate(capacity: Self.streamScratchTileFrames)
+        streamScratchL.initialize(repeating: 0, count: Self.streamScratchTileFrames)
+        streamScratchR.initialize(repeating: 0, count: Self.streamScratchTileFrames)
+
+        let maxTilePCMBytes = Self.streamScratchTileFrames * 6
+        streamScratchPCMBytes = UnsafeMutablePointer<UInt8>.allocate(capacity: maxTilePCMBytes)
+        streamScratchPCMBytes.initialize(repeating: 0, count: maxTilePCMBytes)
+
+        streamPCMRingBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: Self.streamPCMRingCapacity)
+        streamPCMRingBuffer.initialize(repeating: 0, count: Self.streamPCMRingCapacity)
+        streamDrainScratch.reserveCapacity(Self.streamDrainChunkBytes)
+
+        let drainSource = DispatchSource.makeUserDataAddSource(queue: queue)
+        self.streamDrainSignalSource = drainSource
+        drainSource.setEventHandler { [weak self] in
+            self?.drainStreamPCMRingBufferOnQueue()
+        }
+        drainSource.resume()
+    }
 
     deinit {
-        stopCapture()
+        streamDrainSignalSource?.cancel()
+        runSyncOnQueue {
+            stopCaptureInternal()
+        }
+        streamScratchL.deinitialize(count: Self.streamScratchTileFrames)
+        streamScratchL.deallocate()
+        streamScratchR.deinitialize(count: Self.streamScratchTileFrames)
+        streamScratchR.deallocate()
+        let maxTilePCMBytes = Self.streamScratchTileFrames * 6
+        streamScratchPCMBytes.deinitialize(count: maxTilePCMBytes)
+        streamScratchPCMBytes.deallocate()
+        streamPCMRingBuffer.deinitialize(count: Self.streamPCMRingCapacity)
+        streamPCMRingBuffer.deallocate()
+    }
+
+    @inline(__always)
+    internal func runSyncOnQueue<T>(_ block: () -> T) -> T {
+        if DispatchQueue.getSpecific(key: Self.queueSpecificKey) != nil {
+            return block()
+        }
+        return queue.sync(execute: block)
     }
 
     // MARK: - Subscriber Management
@@ -74,9 +214,11 @@ public final class AudioProcessTapService: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self = self else { return }
             self.subscribers[id] = onAudioChunk
-            self.mutingGuardLock.lock()
+            self.isPassiveTapIdleSuspended = false
+            self.passivePausedSinceMono = nil
+            os_unfair_lock_lock(&self.mutingGuardSpinLock)
             self.hasActiveSubscribersFlag = !self.subscribers.isEmpty
-            self.mutingGuardLock.unlock()
+            os_unfair_lock_unlock(&self.mutingGuardSpinLock)
             NSLog("[AudioProcessTapService] 🎧 Added stream subscriber \(id). Total active: \(self.subscribers.count)")
             if !self.isRealTapActive {
                 self.startCaptureInternal()
@@ -88,15 +230,15 @@ public final class AudioProcessTapService: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self = self else { return }
             self.subscribers.removeValue(forKey: id)
-            self.mutingGuardLock.lock()
+            os_unfair_lock_lock(&self.mutingGuardSpinLock)
             self.hasActiveSubscribersFlag = !self.subscribers.isEmpty
-            self.mutingGuardLock.unlock()
+            os_unfair_lock_unlock(&self.mutingGuardSpinLock)
             NSLog("[AudioProcessTapService] 🔌 Removed stream subscriber \(id). Remaining: \(self.subscribers.count)")
-            if self.subscribers.isEmpty && !self.isPassiveAnalysisActive {
+            if self.subscribers.isEmpty && !self.isWLEDTapConsumerActive && !self.isPassiveAnalysisActive && !AudioEngineController.shared.isActivePipelineHook && !RoomAcousticService.shared.isLocalPassthroughEQActive {
                 // Keep capture running for a 3-second grace period in case streamer re-requests
                 self.queue.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                     guard let self = self else { return }
-                    if self.subscribers.isEmpty && !self.isPassiveAnalysisActive && self.isCapturing {
+                    if self.subscribers.isEmpty && !self.isWLEDTapConsumerActive && !self.isPassiveAnalysisActive && !AudioEngineController.shared.isActivePipelineHook && !RoomAcousticService.shared.isLocalPassthroughEQActive && self.isCapturing {
                         NSLog("[AudioProcessTapService] No subscribers remaining. Stopping tap capture.")
                         self.stopCaptureInternal()
                     }
@@ -105,29 +247,54 @@ public final class AudioProcessTapService: @unchecked Sendable {
         }
     }
 
+    public func setWLEDRealTimeTapConsumerActive(_ active: Bool) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.isWLEDTapConsumerActive = active
+            if active {
+                self.isPassiveTapIdleSuspended = false
+                self.passivePausedSinceMono = nil
+                if !self.isRealTapActive && !self.isTestingEnv {
+                    self.startCaptureInternal()
+                }
+            } else if self.subscribers.isEmpty && !self.isPassiveAnalysisActive && !AudioEngineController.shared.isActivePipelineHook && !RoomAcousticService.shared.isLocalPassthroughEQActive && self.isCapturing {
+                self.stopCaptureInternal()
+            }
+        }
+    }
+
     public var hasSubscribers: Bool {
-        return queue.sync { !subscribers.isEmpty }
+        return runSyncOnQueue { !subscribers.isEmpty }
+    }
+
+    public var subscriberCount: Int {
+        return runSyncOnQueue { subscribers.count }
     }
 
     // MARK: - Capture Control
 
     public func setMutingGuardZeroFill(_ active: Bool) {
-        mutingGuardLock.lock()
+        os_unfair_lock_lock(&mutingGuardSpinLock)
         isMutingGuardZeroFill = active
-        mutingGuardLock.unlock()
+        os_unfair_lock_unlock(&mutingGuardSpinLock)
     }
 
     public var isZeroFillingForMutingGuard: Bool {
-        mutingGuardLock.lock()
-        defer { mutingGuardLock.unlock() }
-        return isMutingGuardZeroFill
+        os_unfair_lock_lock(&mutingGuardSpinLock)
+        let v = isMutingGuardZeroFill
+        os_unfair_lock_unlock(&mutingGuardSpinLock)
+        return v
     }
 
     public func setPassiveAnalysisEnabled(_ enabled: Bool) {
         queue.async { [weak self] in
             guard let self = self else { return }
             self.isPassiveAnalysisActive = enabled
-            if !enabled && self.subscribers.isEmpty && self.isCapturing {
+            if !enabled {
+                self.isPassiveTapIdleSuspended = false
+                self.passivePausedSinceMono = nil
+            }
+            if !enabled && self.subscribers.isEmpty && !self.isWLEDTapConsumerActive && !AudioEngineController.shared.isActivePipelineHook && !RoomAcousticService.shared.isLocalPassthroughEQActive && self.isCapturing {
                 NSLog("[AudioProcessTapService] 🛑 Spectral analyzer disabled and no subscribers remaining. Stopping passive tap.")
                 self.stopCaptureInternal()
             }
@@ -138,28 +305,26 @@ public final class AudioProcessTapService: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self = self else { return }
             self.isPassiveAnalysisActive = true
-            var formatChanged = false
-            if sampleRate > 0 && sampleRate != self.sampleRate {
-                self.sampleRate = sampleRate
-                formatChanged = true
-                if !self.isTestingEnv && self.aggregateDeviceID != 0 {
-                    if let procID = self.ioProcID {
-                        AudioDeviceStop(self.aggregateDeviceID, procID)
-                    }
-                    var rateAddr = AudioObjectPropertyAddress(
-                        mSelector: kAudioDevicePropertyNominalSampleRate,
-                        mScope: kAudioObjectPropertyScopeGlobal,
-                        mElement: kAudioObjectPropertyElementMain
-                    )
-                    var newRate: Float64 = Float64(sampleRate)
-                    let rateSize = UInt32(MemoryLayout<Float64>.size)
-                    _ = AudioObjectSetPropertyData(self.aggregateDeviceID, &rateAddr, 0, nil, rateSize, &newRate)
-                    if let procID = self.ioProcID {
-                        AudioDeviceStart(self.aggregateDeviceID, procID)
-                    }
+            self.isPassiveTapIdleSuspended = false
+            self.passivePausedSinceMono = nil
+
+            var resolvedRate = sampleRate
+            if !self.isTestingEnv && !DLNADiscoveryManager.shared.hasActiveRenderer && !AudioEngineController.shared.isActivePipelineHook,
+               let defID = CoreAudioDeviceManager.shared.getDefaultOutputDeviceID(), defID != 0 {
+                let hwRate = HALDeviceManager.nominalSampleRate(deviceID: defID)
+                if hwRate >= 44_100.0 {
+                    resolvedRate = Int(hwRate.rounded())
                 }
             }
-            if bitDepth == 16 || bitDepth == 20 || bitDepth == 24 || bitDepth == 32 {
+
+            var formatChanged = false
+            // Only seed initial sample rate when tap is not yet running (or in headless tests);
+            // live sample-rate transitions are driven authoritatively via `setFormat(...)`.
+            if resolvedRate > 0 && resolvedRate != self.sampleRate && (self.isTestingEnv || !self.isRealTapActive) {
+                self.sampleRate = resolvedRate
+                formatChanged = true
+            }
+            if (bitDepth == 16 || bitDepth == 20 || bitDepth == 24 || bitDepth == 32) && (self.isTestingEnv || !self.isRealTapActive) {
                 let effectiveDepth = (bitDepth == 16) ? 16 : 24
                 if effectiveDepth != self.bitDepth {
                     self.bitDepth = effectiveDepth
@@ -170,7 +335,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
                 self.chunkAccumulator.removeAll()
             }
             guard !self.isTestingEnv else { return }
-            let shouldMute = DLNADiscoveryManager.shared.hasActiveRenderer
+            let shouldMute = DLNADiscoveryManager.shared.hasActiveRenderer || AudioEngineController.shared.isActivePipelineHook || RoomAcousticService.shared.isLocalPassthroughEQActive
             if self.isRealTapActive && self.isTapMuted != shouldMute {
                 NSLog("[AudioProcessTapService] 🔄 Recreating Process Tap to update muteBehavior (muted: \(shouldMute))")
                 self.stopCaptureInternal()
@@ -184,7 +349,9 @@ public final class AudioProcessTapService: @unchecked Sendable {
     public func startCapture() {
         queue.async { [weak self] in
             guard let self = self else { return }
-            let shouldMute = DLNADiscoveryManager.shared.hasActiveRenderer
+            self.isPassiveTapIdleSuspended = false
+            self.passivePausedSinceMono = nil
+            let shouldMute = DLNADiscoveryManager.shared.hasActiveRenderer || AudioEngineController.shared.isActivePipelineHook || RoomAcousticService.shared.isLocalPassthroughEQActive
             if self.isRealTapActive && self.isTapMuted != shouldMute {
                 self.stopCaptureInternal()
             }
@@ -194,52 +361,68 @@ public final class AudioProcessTapService: @unchecked Sendable {
 
     public func stopCapture() {
         queue.async { [weak self] in
+            self?.isPassiveTapIdleSuspended = false
+            self?.passivePausedSinceMono = nil
             self?.stopCaptureInternal()
+        }
+    }
+
+    /// Reconciles Process Tap state on `queue` after a route transition (e.g. DLNA disconnect or DSP teardown):
+    /// - Stops capture if no active consumers remain (`subscribers`, `isPassiveAnalysisActive`, `DLNADiscoveryManager`, `AudioEngineController`, `RoomAcousticService`).
+    /// - Otherwise ensures capture is running and recreates the tap if `muteBehavior` changed (e.g. `.muted` -> `.unmuted`).
+    public func reconcileCaptureAfterRouteChange() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            let hasActiveNonPassiveConsumer = !self.subscribers.isEmpty
+                || self.isWLEDTapConsumerActive
+                || DLNADiscoveryManager.shared.hasActiveRenderer
+                || AudioEngineController.shared.isActivePipelineHook
+                || RoomAcousticService.shared.isLocalPassthroughEQActive
+            let needsTap = hasActiveNonPassiveConsumer || self.isPassiveAnalysisActive
+            if !needsTap {
+                if self.isCapturing || self.isRealTapActive {
+                    self.stopCaptureInternal()
+                }
+                return
+            }
+            if !hasActiveNonPassiveConsumer && self.isPassiveTapIdleSuspended && !SpectralIntegrityAnalyzer.shared.isPlaying {
+                if self.isCapturing || self.isRealTapActive {
+                    self.stopCaptureInternal()
+                }
+                return
+            }
+            self.isPassiveTapIdleSuspended = false
+            self.passivePausedSinceMono = nil
+            let shouldMute = DLNADiscoveryManager.shared.hasActiveRenderer
+                || AudioEngineController.shared.isActivePipelineHook
+                || RoomAcousticService.shared.isLocalPassthroughEQActive
+            if self.isRealTapActive && self.isTapMuted != shouldMute {
+                NSLog("[AudioProcessTapService] 🔄 Recreating Process Tap on route change to update muteBehavior (muted: \(shouldMute))")
+                self.stopCaptureInternal()
+            }
+            if !self.isRealTapActive {
+                self.startCaptureInternal()
+            }
         }
     }
 
     public func setFormat(sampleRate: Int? = nil, bitDepth: Int? = nil) {
         queue.async { [weak self] in
-            guard let self = self else { return }
-            var formatChanged = false
-            if let r = sampleRate, r > 0, r != self.sampleRate {
-                NSLog("[AudioProcessTapService] 🎛️ Switching tap sample rate to \(r) Hz (was \(self.sampleRate) Hz)")
-                self.sampleRate = r
-                formatChanged = true
+            self?.applyFormatOnQueue(sampleRate: sampleRate, bitDepth: bitDepth)
+        }
+    }
 
-                if self.aggregateDeviceID != 0 {
-                    if let procID = self.ioProcID {
-                        AudioDeviceStop(self.aggregateDeviceID, procID)
-                    }
-                    var rateAddr = AudioObjectPropertyAddress(
-                        mSelector: kAudioDevicePropertyNominalSampleRate,
-                        mScope: kAudioObjectPropertyScopeGlobal,
-                        mElement: kAudioObjectPropertyElementMain
-                    )
-                    var newRate: Float64 = Float64(r)
-                    let rateSize = UInt32(MemoryLayout<Float64>.size)
-                    let status = AudioObjectSetPropertyData(self.aggregateDeviceID, &rateAddr, 0, nil, rateSize, &newRate)
-                    if status == noErr {
-                        NSLog("[AudioProcessTapService] ✅ Aggregate device nominal sample rate switched to \(r) Hz")
-                    } else {
-                        NSLog("[AudioProcessTapService] ⚠️ Failed to set nominal sample rate on aggregate device: \(status)")
-                    }
-                    if let procID = self.ioProcID {
-                        AudioDeviceStart(self.aggregateDeviceID, procID)
-                    }
-                }
-            }
-            if let b = bitDepth, (b == 16 || b == 20 || b == 24 || b == 32) {
-                let effectiveDepth = (b == 16) ? 16 : 24
-                if effectiveDepth != self.bitDepth {
-                    NSLog("[AudioProcessTapService] 🎛️ Switching tap bit depth to \(effectiveDepth)-bit (requested \(b)-bit, was \(self.bitDepth)-bit)")
-                    self.bitDepth = effectiveDepth
-                    formatChanged = true
-                }
-            }
-            if formatChanged {
-                self.chunkAccumulator.removeAll()
-            }
+    @discardableResult
+    public func setFormatSync(sampleRate: Int? = nil, bitDepth: Int? = nil) -> (sampleRate: Int, bitDepth: Int) {
+        return runSyncOnQueue {
+            self.applyFormatOnQueue(sampleRate: sampleRate, bitDepth: bitDepth)
+            return (self.sampleRate, self.bitDepth)
+        }
+    }
+
+    public func currentFormatSync() -> (sampleRate: Int, bitDepth: Int) {
+        return runSyncOnQueue {
+            (self.sampleRate, self.bitDepth)
         }
     }
 
@@ -249,454 +432,6 @@ public final class AudioProcessTapService: @unchecked Sendable {
 
     public func setBitDepth(_ depth: Int) {
         setFormat(bitDepth: depth)
-    }
-
-    private func startCaptureInternal() {
-        guard !isTestingEnv else { return }
-        guard !isRealTapActive else { return }
-
-        guard #available(macOS 14.2, *) else {
-            NSLog("[AudioProcessTapService] ⚠️ CoreAudio Process Tap requires macOS 14.2+. Running silence generator fallback.")
-            startSilenceGenerator()
-            isCapturing = true
-            return
-        }
-
-        // Find Music.app PID
-        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music")
-        guard let musicApp = apps.first else {
-            NSLog("[AudioProcessTapService] ⚠️ Music.app is not running. Cannot create process tap.")
-            startSilenceGenerator()
-            isCapturing = true
-            return
-        }
-
-        let pid = musicApp.processIdentifier
-        NSLog("[AudioProcessTapService] 🔍 Found Music.app (PID: \(pid)). Querying CoreAudio process objects...")
-
-        var musicAudioObjectID: AudioObjectID? = nil
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyProcessObjectList,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var dataSize: UInt32 = 0
-        var status = AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize)
-        if status == noErr && dataSize > 0 {
-            let count = Int(dataSize) / MemoryLayout<AudioObjectID>.size
-            var processIDs = [AudioObjectID](repeating: 0, count: count)
-            status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize, &processIDs)
-            if status == noErr {
-                for objID in processIDs {
-                    var pidAddr = AudioObjectPropertyAddress(
-                        mSelector: kAudioProcessPropertyPID,
-                        mScope: kAudioObjectPropertyScopeGlobal,
-                        mElement: kAudioObjectPropertyElementMain
-                    )
-                    var objPID: pid_t = 0
-                    var pidSize = UInt32(MemoryLayout<pid_t>.size)
-                    if AudioObjectGetPropertyData(objID, &pidAddr, 0, nil, &pidSize, &objPID) == noErr {
-                        if objPID == pid {
-                            musicAudioObjectID = objID
-                            break
-                        }
-                    }
-                }
-            }
-        }
-
-        guard let objID = musicAudioObjectID else {
-            NSLog("[AudioProcessTapService] ⚠️ Music.app audio object not found in HAL list yet. Running silence generator fallback.")
-            startSilenceGenerator()
-            isCapturing = true
-            return
-        }
-
-        NSLog("[AudioProcessTapService] 🎯 Found CoreAudio process object ID: \(objID) for Music.app")
-        let tapDesc = CATapDescription(stereoMixdownOfProcesses: [objID])
-        tapDesc.name = "AMR Live Tap"
-        let shouldMute = DLNADiscoveryManager.shared.hasActiveRenderer
-        tapDesc.muteBehavior = shouldMute ? .muted : .unmuted
-        self.isTapMuted = shouldMute
-
-        var newTapID: AudioObjectID = 0
-        let tapStatus = AudioHardwareCreateProcessTap(tapDesc, &newTapID)
-        guard tapStatus == noErr else {
-            NSLog("[AudioProcessTapService] ❌ AudioHardwareCreateProcessTap failed with OSStatus \(tapStatus)")
-            startSilenceGenerator()
-            isCapturing = true
-            return
-        }
-        self.tapObjectID = newTapID
-        NSLog("[AudioProcessTapService] ✅ Process Tap created successfully (AudioObjectID: \(newTapID))")
-
-        // Retrieve Tap UID
-        var uidAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioTapPropertyUID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var tapUIDRef: Unmanaged<CFString>?
-        var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        let uidStatus = AudioObjectGetPropertyData(newTapID, &uidAddr, 0, nil, &uidSize, &tapUIDRef)
-        guard uidStatus == noErr, let tapUID = tapUIDRef?.takeRetainedValue() as String? else {
-            NSLog("[AudioProcessTapService] ❌ Failed to get tap UID: \(uidStatus)")
-            AudioHardwareDestroyProcessTap(newTapID)
-            self.tapObjectID = 0
-            return
-        }
-
-        // Create Private Aggregate Device
-        let aggDict: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "AMR Tap Aggregate",
-            kAudioAggregateDeviceUIDKey: "AMR-Tap-Aggregate-\(UUID().uuidString)",
-            kAudioAggregateDeviceIsPrivateKey: true,
-            kAudioAggregateDeviceTapListKey: [
-                [
-                    kAudioSubTapUIDKey: tapUID
-                ]
-            ]
-        ]
-
-        var newAggID: AudioObjectID = 0
-        let aggStatus = AudioHardwareCreateAggregateDevice(aggDict as CFDictionary, &newAggID)
-        guard aggStatus == noErr else {
-            NSLog("[AudioProcessTapService] ❌ AudioHardwareCreateAggregateDevice failed: \(aggStatus)")
-            AudioHardwareDestroyProcessTap(newTapID)
-            self.tapObjectID = 0
-            return
-        }
-        self.aggregateDeviceID = newAggID
-        NSLog("[AudioProcessTapService] ✅ Aggregate Device created (AudioObjectID: \(newAggID))")
-
-        // Configure Aggregate Nominal Sample Rate
-        var rateAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var targetRate = Float64(self.sampleRate)
-        let rateSize = UInt32(MemoryLayout<Float64>.size)
-        let rateStatus = AudioObjectSetPropertyData(newAggID, &rateAddr, 0, nil, rateSize, &targetRate)
-        if rateStatus == noErr {
-            NSLog("[AudioProcessTapService] ✅ Aggregate device nominal sample rate set to \(self.sampleRate) Hz")
-        } else {
-            NSLog("[AudioProcessTapService] ⚠️ Failed to set aggregate nominal sample rate to \(self.sampleRate) Hz: \(rateStatus)")
-        }
-
-        var actualRate: Float64 = 0
-        var actualSize = UInt32(MemoryLayout<Float64>.size)
-        if AudioObjectGetPropertyData(newAggID, &rateAddr, 0, nil, &actualSize, &actualRate) == noErr && actualRate > 0 {
-            self.sampleRate = Int(round(actualRate))
-        }
-        NSLog("[AudioProcessTapService] 🎛️ Tap active rate: \(self.sampleRate) Hz, channels: \(self.channels), bits: \(self.bitsPerSample)")
-
-        // Setup IOProc Callback
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        let ioCallback: AudioDeviceIOProc = { (deviceID, inNow, inInputData, inInputTime, outOutputData, inOutputTime, inClientData) -> OSStatus in
-            guard let clientData = inClientData else { return noErr }
-            let service = Unmanaged<AudioProcessTapService>.fromOpaque(clientData).takeUnretainedValue()
-            service.processCoreAudioInput(inInputData: inInputData)
-            return noErr
-        }
-
-        var newProcID: AudioDeviceIOProcID?
-        let procStatus = AudioDeviceCreateIOProcID(newAggID, ioCallback, selfPtr, &newProcID)
-        guard procStatus == noErr, let procID = newProcID else {
-            NSLog("[AudioProcessTapService] ❌ AudioDeviceCreateIOProcID failed: \(procStatus)")
-            AudioHardwareDestroyAggregateDevice(newAggID)
-            AudioHardwareDestroyProcessTap(newTapID)
-            self.aggregateDeviceID = 0
-            self.tapObjectID = 0
-            return
-        }
-        self.ioProcID = procID
-
-        let startStatus = AudioDeviceStart(newAggID, procID)
-        if startStatus == noErr {
-            self.isCapturing = true
-            self.silenceLock.lock()
-            self.lastAudioReceivedTime = Date()
-            self.silenceLock.unlock()
-            NSLog("[AudioProcessTapService] 🚀 Audio capture started successfully at \(self.sampleRate) Hz 24-bit")
-        } else {
-            NSLog("[AudioProcessTapService] ❌ AudioDeviceStart failed: \(startStatus)")
-            AudioDeviceDestroyIOProcID(newAggID, procID)
-            AudioHardwareDestroyAggregateDevice(newAggID)
-            AudioHardwareDestroyProcessTap(newTapID)
-            self.ioProcID = nil
-            self.aggregateDeviceID = 0
-            self.tapObjectID = 0
-            return
-        }
-
-        startSilenceGenerator()
-    }
-
-    private func stopCaptureInternal() {
-        guard isCapturing || isRealTapActive else { return }
-        stopSilenceGenerator()
-        silenceTickCount = 0
-
-        if let procID = ioProcID, aggregateDeviceID != 0 {
-            AudioDeviceStop(aggregateDeviceID, procID)
-            AudioDeviceDestroyIOProcID(aggregateDeviceID, procID)
-            self.ioProcID = nil
-        }
-
-        if aggregateDeviceID != 0 {
-            AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
-            self.aggregateDeviceID = 0
-        }
-
-        if #available(macOS 14.2, *) {
-            if tapObjectID != 0 {
-                AudioHardwareDestroyProcessTap(tapObjectID)
-                self.tapObjectID = 0
-            }
-        }
-
-        self.isCapturing = false
-        self.chunkAccumulator.removeAll()
-        NSLog("[AudioProcessTapService] 🛑 Audio capture stopped and resources released.")
-    }
-
-    // MARK: - CoreAudio Audio Processing
-
-    private func processCoreAudioInput(inInputData: UnsafePointer<AudioBufferList>) {
-        let bufferList = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inInputData))
-        guard !bufferList.isEmpty else { return }
-
-        let hasStreamSubscribers: Bool = {
-            mutingGuardLock.lock()
-            defer { mutingGuardLock.unlock() }
-            return hasActiveSubscribersFlag
-        }()
-
-        let currentDepth = self.bitDepth
-        let currentBytesPerFrame = self.channels * (currentDepth / 8)
-
-        var convertedData: Data?
-
-        if bufferList.count >= 2, let leftData = bufferList[0].mData, let rightData = bufferList[1].mData {
-            // Non-interleaved stereo (Buffer 0: Left, Buffer 1: Right)
-            let frameCount = min(Int(bufferList[0].mDataByteSize), Int(bufferList[1].mDataByteSize)) / MemoryLayout<Float>.size
-            guard frameCount > 0 else { return }
-
-            let leftPtr = leftData.assumingMemoryBound(to: Float.self)
-            let rightPtr = rightData.assumingMemoryBound(to: Float.self)
-
-            SpectralIntegrityAnalyzer.shared.processNonInterleavedFloatFrames(
-                left: leftPtr,
-                right: rightPtr,
-                frameCount: frameCount
-            )
-
-            if hasStreamSubscribers {
-                var pcmData = Data(count: frameCount * currentBytesPerFrame)
-                pcmData.withUnsafeMutableBytes { (rawBuf: UnsafeMutableRawBufferPointer) in
-                    guard let dstPtr = rawBuf.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
-                    var dstIdx = 0
-                    if currentDepth == 16 {
-                        for i in 0..<frameCount {
-                            // Left channel
-                            let leftFloat = max(-1.0, min(1.0, leftPtr[i]))
-                            let leftInt16 = Int16(round(leftFloat * 32767.0))
-                            dstPtr[dstIdx] = UInt8(leftInt16 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((leftInt16 >> 8) & 0xFF)
-                            dstIdx += 2
-
-                            // Right channel
-                            let rightFloat = max(-1.0, min(1.0, rightPtr[i]))
-                            let rightInt16 = Int16(round(rightFloat * 32767.0))
-                            dstPtr[dstIdx] = UInt8(rightInt16 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((rightInt16 >> 8) & 0xFF)
-                            dstIdx += 2
-                        }
-                    } else {
-                        for i in 0..<frameCount {
-                            // Left channel
-                            let leftFloat = max(-1.0, min(1.0, leftPtr[i]))
-                            let leftInt32 = Int32(round(leftFloat * 8388607.0))
-                            dstPtr[dstIdx] = UInt8(leftInt32 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((leftInt32 >> 8) & 0xFF)
-                            dstPtr[dstIdx + 2] = UInt8((leftInt32 >> 16) & 0xFF)
-                            dstIdx += 3
-
-                            // Right channel
-                            let rightFloat = max(-1.0, min(1.0, rightPtr[i]))
-                            let rightInt32 = Int32(round(rightFloat * 8388607.0))
-                            dstPtr[dstIdx] = UInt8(rightInt32 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((rightInt32 >> 8) & 0xFF)
-                            dstPtr[dstIdx + 2] = UInt8((rightInt32 >> 16) & 0xFF)
-                            dstIdx += 3
-                        }
-                    }
-                }
-                convertedData = pcmData
-            }
-        } else if let firstBuffer = bufferList.first, let rawData = firstBuffer.mData {
-            // Interleaved audio (Buffer 0: L, R, ... or mono/multichannel)
-            let floatCount = Int(firstBuffer.mDataByteSize) / MemoryLayout<Float>.size
-            let srcChannels = max(1, Int(firstBuffer.mNumberChannels))
-            let frameCount = floatCount / srcChannels
-            guard frameCount > 0 else { return }
-
-            let floatPtr = rawData.assumingMemoryBound(to: Float.self)
-
-            SpectralIntegrityAnalyzer.shared.processInterleavedFloatFrames(
-                interleaved: floatPtr,
-                floatCount: frameCount * srcChannels,
-                channels: srcChannels
-            )
-
-            if hasStreamSubscribers {
-                var pcmData = Data(count: frameCount * currentBytesPerFrame)
-                pcmData.withUnsafeMutableBytes { (rawBuf: UnsafeMutableRawBufferPointer) in
-                    guard let dstPtr = rawBuf.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
-                    var dstIdx = 0
-                    if currentDepth == 16 {
-                        for f in 0..<frameCount {
-                            let left = max(-1.0, min(1.0, floatPtr[f * srcChannels]))
-                            let right = max(-1.0, min(1.0, srcChannels >= 2 ? floatPtr[f * srcChannels + 1] : left))
-                            let leftInt16 = Int16(round(left * 32767.0))
-                            dstPtr[dstIdx] = UInt8(leftInt16 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((leftInt16 >> 8) & 0xFF)
-                            dstIdx += 2
-                            let rightInt16 = Int16(round(right * 32767.0))
-                            dstPtr[dstIdx] = UInt8(rightInt16 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((rightInt16 >> 8) & 0xFF)
-                            dstIdx += 2
-                        }
-                    } else {
-                        for f in 0..<frameCount {
-                            let left = max(-1.0, min(1.0, floatPtr[f * srcChannels]))
-                            let right = max(-1.0, min(1.0, srcChannels >= 2 ? floatPtr[f * srcChannels + 1] : left))
-                            let leftInt32 = Int32(round(left * 8388607.0))
-                            dstPtr[dstIdx] = UInt8(leftInt32 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((leftInt32 >> 8) & 0xFF)
-                            dstPtr[dstIdx + 2] = UInt8((leftInt32 >> 16) & 0xFF)
-                            dstIdx += 3
-                            let rightInt32 = Int32(round(right * 8388607.0))
-                            dstPtr[dstIdx] = UInt8(rightInt32 & 0xFF)
-                            dstPtr[dstIdx + 1] = UInt8((rightInt32 >> 8) & 0xFF)
-                            dstPtr[dstIdx + 2] = UInt8((rightInt32 >> 16) & 0xFF)
-                            dstIdx += 3
-                        }
-                    }
-                }
-                convertedData = pcmData
-            }
-        } else {
-            return
-        }
-
-        silenceLock.lock()
-        lastAudioReceivedTime = Date()
-        autoHealCount = 0
-        silenceLock.unlock()
-
-        guard var pcmToDispatch = convertedData else { return }
-        if isZeroFillingForMutingGuard {
-            pcmToDispatch = Data(repeating: 0, count: pcmToDispatch.count)
-        }
-
-        dispatchAudioChunk(pcmToDispatch, bytesPerFrame: currentBytesPerFrame)
-    }
-
-    private func dispatchAudioChunk(_ data: Data, bytesPerFrame chunkBytesPerFrame: Int? = nil) {
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.subscribers.isEmpty else {
-                if !self.chunkAccumulator.isEmpty {
-                    self.chunkAccumulator.removeAll()
-                }
-                return
-            }
-            let bpf = max(1, self.bytesPerFrame)
-            let incomingBPF = chunkBytesPerFrame ?? bpf
-            if incomingBPF != bpf || data.count % bpf != 0 || self.chunkAccumulator.count % bpf != 0 {
-                self.chunkAccumulator.removeAll(keepingCapacity: true)
-                if incomingBPF != bpf || data.count % bpf != 0 {
-                    return
-                }
-            }
-            self.chunkAccumulator.append(data)
-
-            // When accumulated ~50ms of audio, dispatch to subscribers
-            let targetBytes = self.targetChunkFrameCount * bpf
-            var extracted = false
-            while self.chunkAccumulator.count >= targetBytes {
-                let chunk = self.chunkAccumulator.prefix(targetBytes)
-                self.chunkAccumulator.removeFirst(targetBytes)
-                extracted = true
-                for callback in self.subscribers.values {
-                    callback(Data(chunk))
-                }
-            }
-            if extracted {
-                if self.chunkAccumulator.isEmpty {
-                    self.chunkAccumulator = Data()
-                } else {
-                    self.chunkAccumulator = Data(self.chunkAccumulator)
-                }
-            }
-        }
-    }
-
-    // MARK: - Silence Fallback Generator
-
-    private func startSilenceGenerator() {
-        stopSilenceGenerator()
-        silenceTickCount = 0
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        // Fire every 50ms
-        timer.schedule(deadline: .now() + 0.05, repeating: 0.05)
-        timer.setEventHandler { [weak self] in
-            guard let self = self else { return }
-            let now = Date()
-            self.silenceLock.lock()
-            let timeSinceLastAudio = now.timeIntervalSince(self.lastAudioReceivedTime)
-            self.silenceLock.unlock()
-
-            self.silenceTickCount += 1
-            // Every 20 ticks (~1 second), if real tap is not yet active and we have subscribers or passive analysis,
-            // retry attaching the real Process Tap to Music.app
-            if self.silenceTickCount % 20 == 0 && !self.isRealTapActive && (!self.subscribers.isEmpty || self.isPassiveAnalysisActive) {
-                self.startCaptureInternal()
-            } else if self.silenceTickCount % 80 == 0 && self.isRealTapActive && (!self.subscribers.isEmpty || self.isPassiveAnalysisActive) && SpectralIntegrityAnalyzer.shared.isPlaying && timeSinceLastAudio > 4.5 {
-                self.silenceLock.lock()
-                let attempts = self.autoHealCount
-                if attempts < 1 {
-                    self.autoHealCount = attempts + 1
-                }
-                self.silenceLock.unlock()
-                if attempts < 1 {
-                    NSLog("[AudioProcessTapService] 🔄 No CoreAudio frames received for >4.5s while playing; auto-healing Process Tap (attempt 1/1)...")
-                    self.stopCaptureInternal()
-                    self.startCaptureInternal()
-                }
-            }
-
-            // If no real CoreAudio frames received for > 200ms (paused or stopped),
-            // inject 50ms of silence frames so connected streamers don't buffer-underrun.
-            if timeSinceLastAudio > 0.20 && !self.subscribers.isEmpty {
-                let silenceFrameCount = self.sampleRate / 20 // 50ms
-                let silenceBytes = silenceFrameCount * self.bytesPerFrame
-                let silenceData = Data(repeating: 0, count: silenceBytes)
-                for callback in self.subscribers.values {
-                    callback(silenceData)
-                }
-            }
-        }
-        timer.resume()
-        self.silenceTimer = timer
-    }
-
-    private func stopSilenceGenerator() {
-        silenceTimer?.cancel()
-        silenceTimer = nil
     }
 
     // MARK: - WAV Header Helper

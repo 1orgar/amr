@@ -2,12 +2,13 @@
 //  SSDPService.swift
 //  AppleMusicRemoteMac
 //
-//  Simple Service Discovery Protocol (SSDP) for UPnP / DLNA MediaRenderer
-//  Listens on UDP 239.255.255.250:1900 and announces MediaRenderer to Home Assistant
+//  Simple Service Discovery Protocol (SSDP) for UPnP / DLNA MediaRenderer.
+//  Listens on UDP 239.255.255.250:1900 with same-subnet unicast reply verification,
+//  privileged source-port filtering, and per-IP rate limiting.
 //
 
-import Foundation
 import Darwin
+import Foundation
 
 public final class SSDPService: @unchecked Sendable {
     public static let shared = SSDPService()
@@ -19,7 +20,26 @@ public final class SSDPService: @unchecked Sendable {
     private let queue = DispatchQueue(label: "org.ksholokhov.amr.upnp.ssdp", qos: .utility)
     private var announceTimer: DispatchSourceTimer?
 
-    public var httpPort: UInt16 = 8090
+    private let portLock = NSLock()
+    private var _httpPort: UInt16 = 8090
+
+    /// Executed exclusively on `queue`
+    private var msearchReplyTimestampsByIP: [String: [TimeInterval]] = [:]
+    private static let maxMSearchRepliesPerWindow = 8
+    private static let msearchRateWindowSeconds: TimeInterval = 10.0
+
+    public var httpPort: UInt16 {
+        get {
+            portLock.lock()
+            defer { portLock.unlock() }
+            return _httpPort
+        }
+        set {
+            portLock.lock()
+            _httpPort = newValue
+            portLock.unlock()
+        }
+    }
 
     public let deviceUUID: String
 
@@ -59,7 +79,9 @@ public final class SSDPService: @unchecked Sendable {
     public func start(httpPort: UInt16 = 8090) {
         self.httpPort = httpPort
         queue.async { [weak self] in
-            self?.startInternal()
+            guard let self = self else { return }
+            self.httpPort = httpPort
+            self.startInternal()
         }
     }
 
@@ -91,7 +113,6 @@ public final class SSDPService: @unchecked Sendable {
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
         setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
-        // Bind to 0.0.0.0:1900
         var bindAddr = sockaddr_in()
         bindAddr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         bindAddr.sin_family = sa_family_t(AF_INET)
@@ -110,7 +131,6 @@ public final class SSDPService: @unchecked Sendable {
             return
         }
 
-        // Join multicast group 239.255.255.250 on INADDR_ANY and all active LAN interfaces
         var mreqAny = ip_mreq()
         mreqAny.imr_multiaddr.s_addr = inet_addr(multicastAddress)
         mreqAny.imr_interface.s_addr = in_addr_t(INADDR_ANY)
@@ -124,28 +144,25 @@ public final class SSDPService: @unchecked Sendable {
             _ = setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, socklen_t(MemoryLayout<ip_mreq>.size))
         }
 
-        // Enable multicast loopback so local consumers (Home Assistant, tests) receive multicasts
         var loop: u_char = 1
         setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, socklen_t(MemoryLayout<u_char>.size))
 
-        // Set TTL to 4 for local subnet traversal
         var ttl: u_char = 4
         setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, socklen_t(MemoryLayout<u_char>.size))
 
-        // Set default outbound multicast interface if LAN IP available
         if let primaryIP = lanIPs.first {
             var ifAddr = in_addr()
             ifAddr.s_addr = inet_addr(primaryIP)
             setsockopt(fd, IPPROTO_IP, IP_MULTICAST_IF, &ifAddr, socklen_t(MemoryLayout<in_addr>.size))
         }
 
-        // Make socket non-blocking so we can drain all packets cleanly
         let flags = fcntl(fd, F_GETFL, 0)
-        _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+        if flags >= 0 {
+            _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+        }
 
         self.socketFD = fd
 
-        // Dispatch source for async packet reading
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
         source.setEventHandler { [weak self] in
             self?.readPackets()
@@ -158,10 +175,8 @@ public final class SSDPService: @unchecked Sendable {
 
         NSLog("[SSDPService] 📡 SSDP Multicast Listener active on 239.255.255.250:1900 (UDN: %@)", deviceUDN)
 
-        // Broadcast initial alive notification
         sendNotifications(subType: "ssdp:alive")
 
-        // Setup repeating announcement every 60 seconds for reliable discovery without LAN noise (CACHE-CONTROL: max-age=1800)
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 2.0, repeating: 60.0)
         timer.setEventHandler { [weak self] in
@@ -176,6 +191,7 @@ public final class SSDPService: @unchecked Sendable {
 
         announceTimer?.cancel()
         announceTimer = nil
+        msearchReplyTimestampsByIP.removeAll()
 
         if let src = readSource {
             src.cancel()
@@ -204,10 +220,9 @@ public final class SSDPService: @unchecked Sendable {
 
             guard bytesRead > 0 else { break }
 
-            if let packetString = String(bytes: buffer.prefix(bytesRead), encoding: .utf8) {
-                if packetString.hasPrefix("M-SEARCH") {
-                    handleMSearch(packetString, clientAddr: clientAddr)
-                }
+            if let packetString = String(bytes: buffer.prefix(bytesRead), encoding: .utf8),
+               packetString.hasPrefix("M-SEARCH") {
+                handleMSearch(packetString, clientAddr: clientAddr)
             }
         }
     }
@@ -239,6 +254,7 @@ public final class SSDPService: @unchecked Sendable {
     }
 
     public func buildMSearchResponse(target: String, lanIP: String) -> String {
+        let currentPort = self.httpPort
         let usn: String
         if target == deviceUDN {
             usn = deviceUDN
@@ -253,7 +269,7 @@ public final class SSDPService: @unchecked Sendable {
         CACHE-CONTROL: max-age=1800\r
         DATE: \(httpDate())\r
         EXT:\r
-        LOCATION: http://\(lanIP):\(httpPort)/description.xml\r
+        LOCATION: http://\(lanIP):\(currentPort)/description.xml\r
         SERVER: macOS/14.0 UPnP/1.0 AppleMusicRemote/2.0\r
         ST: \(target)\r
         USN: \(usn)\r
@@ -264,6 +280,32 @@ public final class SSDPService: @unchecked Sendable {
     }
 
     private func handleMSearch(_ request: String, clientAddr: sockaddr_in) {
+        let sourcePort = UInt16(bigEndian: clientAddr.sin_port)
+        guard sourcePort >= 1024 else { return }
+
+        var sinAddr = clientAddr.sin_addr
+        var ipBuf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+        guard inet_ntop(AF_INET, &sinAddr, &ipBuf, socklen_t(INET_ADDRSTRLEN)) != nil else {
+            return
+        }
+        let peerIP = String(cString: ipBuf)
+        guard LANSubnetGuard.isPrivateLANOrLoopbackPeer(peerIP) else {
+            return
+        }
+
+        let now = Date().timeIntervalSince1970
+        if msearchReplyTimestampsByIP.count > 128 {
+            msearchReplyTimestampsByIP = msearchReplyTimestampsByIP.compactMapValues { list in
+                let active = list.filter { now - $0 < Self.msearchRateWindowSeconds }
+                return active.isEmpty ? nil : active
+            }
+        }
+        var recent = (msearchReplyTimestampsByIP[peerIP] ?? []).filter { now - $0 < Self.msearchRateWindowSeconds }
+        guard recent.count < Self.maxMSearchRepliesPerWindow else {
+            msearchReplyTimestampsByIP[peerIP] = recent
+            return
+        }
+
         let lines = request.components(separatedBy: "\r\n")
         var headers: [String: String] = [:]
         for line in lines {
@@ -275,16 +317,15 @@ public final class SSDPService: @unchecked Sendable {
         }
 
         guard let st = headers["ST"] else { return }
-
         let targetsToRespond = matchingTargets(for: st)
         guard !targetsToRespond.isEmpty else { return }
 
-        // Find primary LAN IP
-        let lanIP = getLANIP()
+        recent.append(now)
+        msearchReplyTimestampsByIP[peerIP] = recent
 
+        let lanIP = getLANIP()
         for target in targetsToRespond {
             let response = buildMSearchResponse(target: target, lanIP: lanIP)
-
             sendUDPResponse(response, to: clientAddr)
         }
     }
@@ -320,8 +361,8 @@ public final class SSDPService: @unchecked Sendable {
         guard socketFD >= 0 else { return }
 
         let lanIP = getLANIP()
+        let currentPort = self.httpPort
 
-        // Keep outbound multicast interface aligned with active LAN IP
         var ifAddr = in_addr()
         ifAddr.s_addr = inet_addr(lanIP)
         setsockopt(socketFD, IPPROTO_IP, IP_MULTICAST_IF, &ifAddr, socklen_t(MemoryLayout<in_addr>.size))
@@ -347,7 +388,7 @@ public final class SSDPService: @unchecked Sendable {
             NOTIFY * HTTP/1.1\r
             HOST: \(multicastAddress):\(multicastPort)\r
             CACHE-CONTROL: max-age=1800\r
-            LOCATION: http://\(lanIP):\(httpPort)/description.xml\r
+            LOCATION: http://\(lanIP):\(currentPort)/description.xml\r
             NT: \(target)\r
             NTS: \(subType)\r
             SERVER: macOS/14.0 UPnP/1.0 AppleMusicRemote/2.0\r

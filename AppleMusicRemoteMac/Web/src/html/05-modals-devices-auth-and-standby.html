@@ -1,0 +1,318 @@
+  <!-- Audio Output Devices Modal -->
+  <div id="devices-modal" class="modal-backdrop hidden" aria-hidden="true" role="dialog">
+    <div class="modal-card devices-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Аудиоустройства вывода</h3>
+          <span class="modal-tag">COREAUDIO &amp; DLNA</span>
+        </div>
+        <button id="btn-close-devices" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Выберите активный ЦАП, аудиовыход macOS или сетевой стример</p>
+        <div id="audio-devices-list" class="audio-devices-list">
+          <div class="loading-state">Загрузка устройств...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mandatory Apple ID Auth Modal -->
+  <div id="modal-apple-auth" class="modal-backdrop auth-modal-backdrop hidden" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card auth-modal-card">
+      <div class="auth-modal-logo">
+        <svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor">
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 1.01-2.87-.94.04-2.08.63-2.75 1.41-.58.68-1.09 1.76-1.04 2.81 1.05.08 2.16-.57 2.78-1.35z"/>
+        </svg>
+      </div>
+      <h2 class="auth-modal-title">Подключите Apple ID</h2>
+      <p class="auth-modal-desc">
+        Для работы с каталогом, воспроизведения очередей в iCloud и персональных рекомендаций требуется авторизация в Apple Music.
+      </p>
+      <div class="auth-modal-features">
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Bit-Perfect звук в исходном качестве (ALAC / Hi-Res)</span>
+        </div>
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Синхронизация результатов поиска в iCloud-очереди</span>
+        </div>
+        <div class="auth-feature-item">
+          <span class="auth-feature-icon">✓</span>
+          <span>Персональная «Моя станция» и музыкальные открытия</span>
+        </div>
+      </div>
+      <div class="auth-modal-actions">
+        <button id="btn-auth-modal-login" class="btn-primary auth-btn-login" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 1.01-2.87-.94.04-2.08.63-2.75 1.41-.58.68-1.09 1.76-1.04 2.81 1.05.08 2.16-.57 2.78-1.35z"/>
+          </svg>
+          <span>Войти через Apple ID</span>
+        </button>
+      </div>
+      <div id="auth-modal-status" class="auth-modal-status hidden">
+        <div class="spinner-sm"></div>
+        <span>Инициализация MusicKit...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account Diagnostic Modal -->
+  <div id="modal-account-diag" class="modal-backdrop hidden" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card account-diag-modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Apple ID & Медиатека</h3>
+        <button id="btn-close-account-diag" class="btn-close-modal" type="button" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="diag-details-list">
+        <div class="diag-detail-item">
+          <span class="diag-label">Учетная запись Mac:</span>
+          <span class="diag-value" id="diag-val-account">Apple ID</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Статус синхронизации:</span>
+          <span class="diag-value green" id="diag-val-status">Синхронизировано с Mac</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Регион Apple Music:</span>
+          <span class="diag-value" id="diag-val-storefront">US</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Подписка Apple Music:</span>
+          <span class="diag-value green" id="diag-val-sub">Активна</span>
+        </div>
+        <div class="diag-detail-item">
+          <span class="diag-label">Bit-Perfect CoreAudio:</span>
+          <span class="diag-value" id="diag-val-dac">Lossless / Hi-Res (100% Volume Lock)</span>
+        </div>
+      </div>
+      <div class="diag-modal-actions">
+        <button id="btn-refresh-account-diag" class="btn-secondary" type="button">Проверить заново</button>
+        <button id="btn-done-account-diag" class="btn-primary" type="button">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen StandBy / TV Mode Overlay -->
+  <div id="standby-tv-overlay" class="standby-tv-overlay hidden" aria-hidden="true">
+    <div id="standby-ambient-bg" class="standby-ambient-bg"></div>
+    <div class="standby-vignette"></div>
+    <div id="standby-rta-backdrop" class="standby-rta-backdrop" aria-hidden="true">
+      <div id="standby-rta-bars" class="standby-rta-bars"></div>
+    </div>
+
+    <header class="standby-top-bar">
+      <div class="standby-top-left">
+        <span id="standby-clock" class="standby-clock">00:00</span>
+        <span id="standby-motion-badge" class="standby-pill-badge standby-motion-badge hidden">✦ ЖИВАЯ ОБЛОЖКА</span>
+        <span id="standby-wled-badge" class="standby-pill-badge standby-wled-badge hidden">💡 WLED DDP</span>
+      </div>
+      <div class="standby-top-right">
+        <button id="standby-btn-ai-curator" class="standby-library-pill-btn standby-ai-pill-btn" type="button" title="ИИ Подбор по атмосфере (Apple Neural Engine)">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+            <path d="M5 3v4M3 5h4"/>
+          </svg>
+          <span>ИИ Подбор</span>
+        </button>
+        <button id="standby-btn-library" class="standby-library-pill-btn" type="button" title="Медиатека и станции">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+          <span>Медиатека</span>
+        </button>
+        <button id="standby-btn-wled-toggle" class="standby-action-btn hidden" type="button" title="Настройки WLED DDP">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+        <button id="btn-close-standby" class="standby-close-btn" type="button" title="Выйти из StandBy / TV Mode (Esc)" aria-label="Закрыть StandBy Mode">
+          ✕
+        </button>
+      </div>
+    </header>
+
+    <div class="standby-content">
+      <div class="standby-badges-row">
+        <button id="standby-dac-badge" class="standby-dac-badge" type="button" title="Инспектор аудиопотока и спектральный верификатор">
+          <svg class="icon-dac" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
+          <span id="standby-dac-text">BIT-PERFECT · LOSSLESS</span>
+        </button>
+        <span id="standby-spectral-badge" class="standby-spectral-badge neutral" title="Статус спектрального верификатора vDSP FFT">FFT АНАЛИЗ...</span>
+        <span id="standby-dr-badge" class="standby-spectral-badge hidden" title="Динамический диапазон мастеринга (TT DR / EBU R128)">DR--</span>
+      </div>
+
+      <div class="standby-artwork-col">
+        <div id="standby-art-frame" class="standby-art-frame">
+          <img id="standby-artwork" class="standby-artwork-img" src="apple-touch-icon.svg" alt="Обложка">
+          <video id="standby-motion-video" class="standby-motion-video hidden" autoplay loop muted playsinline></video>
+        </div>
+      </div>
+
+      <div class="standby-meta-col">
+        <div class="standby-headings">
+          <div class="title-marquee-viewport standby-title-viewport">
+            <h1 id="standby-title" class="standby-title">Не играет</h1>
+          </div>
+          <p id="standby-artist" class="standby-artist">Apple Music</p>
+          <p id="standby-album" class="standby-album"></p>
+        </div>
+
+        <div class="standby-progress-section">
+          <div class="standby-progress-track" id="standby-progress-track">
+            <div id="standby-progress-fill" class="standby-progress-fill"></div>
+            <div id="standby-progress-thumb" class="standby-progress-thumb"></div>
+            <input type="range" id="standby-progress-input" class="standby-progress-input" min="0" max="100" step="0.1" value="0" aria-label="Позиция трека">
+          </div>
+          <div class="standby-time-row">
+            <span id="standby-time-elapsed">0:00</span>
+            <span id="standby-loading-status" class="player-loading-pill standby-loading-pill hidden" role="status" aria-live="polite">
+              <span class="player-loading-spinner" aria-hidden="true"></span>
+              <span id="standby-loading-text">Загрузка через буфер AMR…</span>
+            </span>
+            <span id="standby-time-remaining">-0:00</span>
+          </div>
+        </div>
+
+        <div class="standby-controls">
+          <button id="standby-btn-prev" class="standby-ctrl-btn" type="button" aria-label="Предыдущий">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+              <polygon points="19 20 9 12 19 4 19 20"/>
+              <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button id="standby-btn-play-pause" class="standby-ctrl-btn standby-ctrl-play" type="button" aria-label="Воспроизведение / Пауза">
+            <svg id="standby-icon-play" viewBox="0 0 24 24" width="38" height="38" fill="currentColor">
+              <polygon points="6 3 20 12 6 21 6 3"/>
+            </svg>
+            <svg id="standby-icon-pause" class="hidden" viewBox="0 0 24 24" width="38" height="38" fill="currentColor">
+              <rect x="5" y="4" width="4.5" height="16" rx="1.5"/>
+              <rect x="14.5" y="4" width="4.5" height="16" rx="1.5"/>
+            </svg>
+          </button>
+          <button id="standby-btn-next" class="standby-ctrl-btn" type="button" aria-label="Следующий">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+              <polygon points="5 4 15 12 5 20 5 4"/>
+              <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <div class="standby-right-actions">
+            <button id="standby-btn-shuffle" class="standby-fav-btn standby-shuffle-btn" type="button" aria-label="Перемешать" title="Перемешать">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 3 21 3 21 8"/>
+                <line x1="4" y1="20" x2="21" y2="3"/>
+                <polyline points="21 16 21 21 16 21"/>
+                <line x1="15" y1="15" x2="21" y2="21"/>
+                <line x1="4" y1="4" x2="9" y2="9"/>
+              </svg>
+            </button>
+            <button id="standby-btn-repeat" class="standby-fav-btn standby-repeat-btn" type="button" aria-label="Режим повтора" title="Режим повтора (Выкл / Очередь / 1 трек)">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="17 1 21 5 17 9"/>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                <polyline points="7 23 3 19 7 15"/>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+              </svg>
+              <span id="standby-repeat-badge" class="standby-repeat-one-badge hidden">1</span>
+            </button>
+            <button id="standby-btn-favorite" class="standby-fav-btn" type="button" aria-label="В избранное" title="В избранное">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
+            <button id="standby-btn-ai-track-vibe" class="standby-fav-btn standby-ai-vibe-btn" type="button" aria-label="ИИ-подбор по треку" title="ИИ-подбор по вайбу текущего трека">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+                <path d="M5 3v4M3 5h4"/>
+              </svg>
+            </button>
+            <button id="standby-btn-booklet" class="standby-fav-btn standby-booklet-round-btn hidden" type="button" aria-label="Буклет альбома" title="Открыть цифровой буклет альбома Apple Music (PDF)">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="standby-volume-section" class="standby-volume-section hidden" aria-label="Регулировка громкости">
+          <button id="standby-btn-volume-mute" class="standby-vol-mute-btn" type="button" aria-label="Без звука" title="Без звука (Mute)">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path id="standby-vol-wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path id="standby-vol-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+          </button>
+          <div class="standby-vol-slider-wrap">
+            <div id="standby-vol-loupe" class="standby-vol-loupe" aria-hidden="true">
+              <span id="standby-vol-loupe-text">50%</span>
+            </div>
+            <div class="standby-vol-track">
+              <div id="standby-vol-fill" class="standby-vol-fill" style="width: 50%;"></div>
+            </div>
+            <div id="standby-vol-thumb" class="standby-vol-thumb" style="left: 50%;"></div>
+            <input id="standby-volume-input" class="standby-vol-input" type="range" min="0" max="100" value="50" aria-label="Громкость">
+          </div>
+          <span id="standby-volume-text" class="standby-volume-text">100%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fullscreen TV Library & Stations Grid Overlay -->
+    <div id="standby-library-modal" class="standby-library-modal hidden" aria-hidden="true" role="dialog" aria-label="Медиатека и станции">
+      <header class="standby-library-header">
+        <div class="standby-library-header-left">
+          <h2 class="standby-library-title">Медиатека</h2>
+          <span class="standby-library-subtitle">Станции, персональные миксы, плейлисты и альбомы</span>
+        </div>
+        <button id="btn-close-standby-library" class="standby-close-btn" type="button" title="Закрыть медиатеку" aria-label="Закрыть медиатеку">
+          ✕
+        </button>
+      </header>
+      <div class="standby-library-scroll">
+        <div id="standby-library-grid" class="standby-library-grid"></div>
+      </div>
+    </div>
+
+    <!-- Fullscreen TV AI Sonic Curator Tag Cloud Overlay -->
+    <div id="standby-ai-modal" class="standby-library-modal standby-ai-modal hidden" aria-hidden="true" role="dialog" aria-label="ИИ Подбор по атмосфере">
+      <header class="standby-library-header">
+        <div class="standby-library-header-left">
+          <div class="standby-ai-header-badge-row">
+            <span class="ai-curator-engine-pill">✨ APPLE NEURAL ENGINE • ON-DEVICE AI</span>
+          </div>
+          <h2 class="standby-library-title">ИИ Подбор</h2>
+          <span class="standby-library-subtitle">Нажмите на тег для мгновенного воспроизведения • Листайте вниз для бесконечной подгрузки</span>
+        </div>
+        <div class="standby-ai-header-actions">
+          <button id="btn-standby-ai-refresh" class="standby-library-pill-btn standby-ai-pill-btn" type="button" title="Сгенерировать другие варианты промптов">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            <span>Другие варианты</span>
+          </button>
+          <button id="btn-close-standby-ai" class="standby-close-btn" type="button" title="Закрыть ИИ Подбор" aria-label="Закрыть ИИ Подбор">
+            ✕
+          </button>
+        </div>
+      </header>
+      <div id="standby-ai-scroll" class="standby-library-scroll standby-ai-scroll">
+        <div id="standby-ai-tag-cloud" class="standby-ai-tag-cloud"></div>
+        <div id="standby-ai-sentinel" class="standby-ai-sentinel">
+          <button id="btn-standby-ai-load-more" class="standby-ai-load-more-btn" type="button">Подгрузить ещё варианты ↓</button>
+        </div>
+      </div>
+    </div>
+  </div>
+

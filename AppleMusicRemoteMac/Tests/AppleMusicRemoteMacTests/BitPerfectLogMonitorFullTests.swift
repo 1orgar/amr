@@ -16,6 +16,8 @@ final class BitPerfectLogMonitorFullTests: XCTestCase {
 
     override func tearDown() {
         BitPerfectLogMonitor.shared.onFormatChanged = nil
+        BitPerfectLogMonitor.shared.onSmartTransitionScheduleDetected = nil
+        BitPerfectLogMonitor.shared.onSmartTransitionBegan = nil
         BitPerfectLogMonitor.shared.resetTrackStateSyncForTesting()
         super.tearDown()
     }
@@ -275,5 +277,55 @@ final class BitPerfectLogMonitorFullTests: XCTestCase {
         engine.seedStaticMetadataForTesting(meta)
         PlaybackStateStore.shared.invalidateStatusCache()
         XCTAssertFalse(engine.shouldUseLightweightPulse(rawState: "playing", rawPosition: 20.0))
+    }
+
+    func testSmartTransitionObservabilityAndPreOverlapCutoff() {
+        let monitor = BitPerfectLogMonitor.shared
+        monitor.resetTrackStateSyncForTesting(trackKey: "coldrain:vengeance")
+        XCTAssertNil(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart })
+
+        var capturedSchedule: Double?
+        var beganCount = 0
+        monitor.onSmartTransitionScheduleDetected = { sec in
+            capturedSchedule = sec
+        }
+        monitor.onSmartTransitionBegan = {
+            beganCount += 1
+        }
+
+        // 1. MediaPlaybackCore logs "Observe transition start: 236.0" 11s before Vengeance (238.534s) ends
+        monitor.processLogMessageForTesting("Observe transition start: 236.0")
+        XCTAssertEqual(capturedSchedule ?? 0.0, 236.0, accuracy: 0.001)
+        XCTAssertEqual(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart } ?? 0.0, 236.0, accuracy: 0.001)
+
+        // 2. Also parses overlapStartSourceTime even if the message contains ignored substrings like "itemoverlap" or "pts"
+        monitor.processLogMessageForTesting("Transition controller itemoverlap pts did finish: <overlapStartSourceTime: 235.95; transitionEndSourceTime: 238.534>")
+        XCTAssertEqual(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart } ?? 0.0, 235.95, accuracy: 0.001)
+
+        // 3. Seeking before smartStart preserves the cutoff; seeking past smartStart clears it
+        PlaybackStateStore.shared.setSeekTarget(position: 231.0)
+        XCTAssertEqual(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart } ?? 0.0, 235.95, accuracy: 0.001)
+        PlaybackStateStore.shared.setSeekTarget(position: 237.2)
+        XCTAssertNil(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart })
+        PlaybackStateStore.shared.clearSeekTarget()
+
+        // 4. Immediate smartTransitionWillBegin / overlappedPlaybackWillBegin triggers callback without altering locked ALAC format,
+        //    while /usr/bin/log's startup banner ("Filtering the log data using ...") is strictly ignored!
+        monitor.processLogMessageForTesting(#"Filtering the log data using "(process == \"Music\") AND (composedMessage CONTAINS \"smartTransitionWillBegin\" OR composedMessage CONTAINS \"Observe transition start: 236.0\")""#)
+        XCTAssertEqual(beganCount, 0, "log stream startup banner must never trigger smartTransitionBegan")
+        XCTAssertNil(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart })
+
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:251   Input format:  2 ch,  48000 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        monitor.processLogMessageForTesting("PlaybackEngine smartTransitionWillBegin for itemoverlap")
+        monitor.processLogMessageForTesting("PlaybackEngine overlappedPlaybackWillBegin")
+        XCTAssertEqual(beganCount, 2)
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 48000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+
+        // 5. Track change clears scheduledSmartTransitionStart
+        monitor.processLogMessageForTesting("Observe transition start: 236.0")
+        XCTAssertNotNil(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart })
+        monitor.resetTrackStateSyncForTesting(trackKey: "mindaryn:like flames")
+        XCTAssertNil(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart })
     }
 }

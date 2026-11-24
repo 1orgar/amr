@@ -36,6 +36,8 @@ AuthKey_*.p8
 *.pem
 *.key
 *.p12
+*.jwt
+musickit_dev_token.jwt
 
 # Release artifacts & packages
 *.dmg

@@ -3,40 +3,210 @@
 //  AppleMusicRemoteMac
 //
 //  High-performance artwork extraction, JPEG downscaling, memory caching (NSCache),
-//  and Base64 Data URI formatting for tracks and playlists.
+//  SSRF-safe Apple CDN fetching, and Base64 Data URI formatting for tracks and playlists.
 //
 
 import AppKit
 import Foundation
 import ImageIO
 import ScriptingBridge
-import Vision
+
+// MARK: - SSRF-Safe Apple CDN Artwork Session
+
+final class SafeArtworkFetcher: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate, @unchecked Sendable {
+    private final class TaskState {
+        let maxBytes: Int
+        var buffer = Data()
+        var statusCode: Int = 0
+        var exceededLimit = false
+        var continuation: CheckedContinuation<Data?, Never>?
+
+        init(maxBytes: Int, continuation: CheckedContinuation<Data?, Never>) {
+            self.maxBytes = maxBytes
+            self.continuation = continuation
+        }
+    }
+
+    private let stateLock = NSLock()
+    private var tasks: [Int: TaskState] = [:]
+    private lazy var session: URLSession = {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = 6.0
+        cfg.timeoutIntervalForResource = 15.0
+        cfg.httpShouldSetCookies = false
+        cfg.httpCookieAcceptPolicy = .never
+        cfg.urlCredentialStorage = nil
+        return URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
+    }()
+
+    func fetch(
+        url: URL,
+        timeout: TimeInterval = 4.0,
+        maxBytes: Int = 10 * 1024 * 1024,
+        userAgent: String? = nil
+    ) async -> Data? {
+        guard ArtworkService.isAllowedRemoteArtworkURL(url) else { return nil }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = timeout
+        if let ua = userAgent {
+            req.setValue(ua, forHTTPHeaderField: "User-Agent")
+        }
+
+        return await withCheckedContinuation { continuation in
+            let task = session.dataTask(with: req)
+            let state = TaskState(maxBytes: maxBytes, continuation: continuation)
+            stateLock.lock()
+            tasks[task.taskIdentifier] = state
+            stateLock.unlock()
+            task.resume()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        if let nextURL = request.url, ArtworkService.isAllowedRemoteArtworkURL(nextURL) {
+            completionHandler(request)
+        } else {
+            completionHandler(nil)
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let http = response as? HTTPURLResponse,
+              (200...299).contains(http.statusCode),
+              let finalURL = http.url,
+              ArtworkService.isAllowedRemoteArtworkURL(finalURL) else {
+            completionHandler(.cancel)
+            return
+        }
+
+        let maxBytes: Int = stateLock.withLock {
+            tasks[dataTask.taskIdentifier]?.statusCode = http.statusCode
+            return tasks[dataTask.taskIdentifier]?.maxBytes ?? (10 * 1024 * 1024)
+        }
+        if http.expectedContentLength > Int64(maxBytes) {
+            stateLock.withLock { tasks[dataTask.taskIdentifier]?.exceededLimit = true }
+            completionHandler(.cancel)
+            return
+        }
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        var shouldCancel = false
+        stateLock.lock()
+        if let state = tasks[dataTask.taskIdentifier] {
+            if state.buffer.count + data.count > state.maxBytes {
+                state.exceededLimit = true
+                state.buffer.removeAll(keepingCapacity: false)
+                shouldCancel = true
+            } else {
+                state.buffer.append(data)
+            }
+        }
+        stateLock.unlock()
+        if shouldCancel {
+            dataTask.cancel()
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        stateLock.lock()
+        let state = tasks.removeValue(forKey: task.taskIdentifier)
+        let cont = state?.continuation
+        state?.continuation = nil
+        let validData: Data? = {
+            guard let state,
+                  error == nil,
+                  !state.exceededLimit,
+                  (200...299).contains(state.statusCode),
+                  !state.buffer.isEmpty else {
+                return nil
+            }
+            return state.buffer
+        }()
+        stateLock.unlock()
+        cont?.resume(returning: validData)
+    }
+}
+
+// MARK: - ArtworkService
 
 public final class ArtworkService: @unchecked Sendable {
     public static let shared = ArtworkService()
 
-    private final class PaletteResultBox: @unchecked Sendable {
+    final class PaletteResultBox: @unchecked Sendable {
         let value: [String: Any]?
         init(_ value: [String: Any]?) { self.value = value }
     }
 
-    private let lock = NSLock()
-    private let visionLock = NSLock()
-    private let visionQueue = DispatchQueue(label: "com.amr.artwork.vision", qos: .utility)
-    private let artworkFetchQueue = DispatchQueue(label: "com.amr.artwork.local", qos: .utility)
-    private let artworkCache = NSCache<NSString, NSData>()
-    private var playlistArtworkUrlCache: [String: String] = [:]
-    private var paletteCache: [String: [String: Any]] = [:]
-    private var inFlightPaletteTasks: [String: Task<PaletteResultBox, Never>] = [:]
-    private var negativeArtworkIds = Set<Int>()
-    private var fetchingArtworkIds = Set<Int>()
-    private var negativePlaylistArtworks: [String: Date] = [:]
+    let lock = NSLock()
+    let visionLock = NSLock()
+    let visionQueue = DispatchQueue(label: "com.amr.artwork.vision", qos: .utility)
+    let artworkFetchQueue = DispatchQueue(label: "com.amr.artwork.local", qos: .utility)
+    let artworkCache = NSCache<NSString, NSData>()
+    let safeArtworkFetcher = SafeArtworkFetcher()
 
-    private var cachedCurArtworkKey: String = ""
-    private var cachedCurArtworkUri: String = ""
+    var playlistArtworkUrlCache: [String: String] = [:]
+    var paletteCache: [String: (palette: [String: Any], accessedAt: TimeInterval)] = [:]
+    let maxPaletteCacheEntries = 160
+    var inFlightPaletteTasks: [String: Task<PaletteResultBox, Never>] = [:]
+    var negativeArtworkIds = Set<Int>()
+    var negativeLocalAlbums: [String: Date] = [:]
+    var fetchingArtworkIds = Set<Int>()
+    var negativePlaylistArtworks: [String: Date] = [:]
+
+    var cachedCurArtworkKey: String = ""
+    var cachedCurArtworkUri: String = ""
 
     private init() {
-        artworkCache.countLimit = 200
+        artworkCache.countLimit = 400
+    }
+
+    /// Strict SSRF guard: only permits Apple Music / iTunes / mzstatic CDN hosts (`https`, or `http` strictly on `.mzstatic.com`).
+    public static func isAllowedRemoteArtworkURL(_ url: URL) -> Bool {
+        guard url.user == nil, url.password == nil else { return false }
+        let scheme = (url.scheme ?? "").lowercased()
+        guard scheme == "https" || scheme == "http" else { return false }
+        if let port = url.port {
+            let validPort = (scheme == "https" && port == 443) || (scheme == "http" && port == 80)
+            guard validPort else { return false }
+        }
+        guard let rawHost = url.host?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !rawHost.isEmpty else {
+            return false
+        }
+        let host = rawHost.hasSuffix(".") ? String(rawHost.dropLast()) : rawHost
+        guard !host.isEmpty,
+              !host.contains(".."),
+              host != "localhost",
+              !host.hasSuffix(".local"),
+              !host.hasPrefix("[") else {
+            return false
+        }
+        // Reject raw IPv4 / IPv6 literals
+        if host.allSatisfy({ $0.isNumber || $0 == "." || $0 == ":" }) {
+            return false
+        }
+
+        let isMzstatic = (host == "mzstatic.com" || host.hasSuffix(".mzstatic.com"))
+        let isApple = (host == "apple.com" || host.hasSuffix(".apple.com"))
+        guard isMzstatic || isApple else { return false }
+
+        if scheme == "http" {
+            return isMzstatic
+        }
+        return true
     }
 
     // MARK: - Current Track Artwork
@@ -113,6 +283,7 @@ public final class ArtworkService: @unchecked Sendable {
             artworkCache.removeAllObjects()
             ArtworkDiskCache.shared.clear()
             negativeArtworkIds.removeAll()
+            negativeLocalAlbums.removeAll()
             cachedCurArtworkKey = ""
             cachedCurArtworkUri = ""
         }
@@ -122,6 +293,32 @@ public final class ArtworkService: @unchecked Sendable {
         guard id > 0 else { return nil }
         let cacheKey = "track_\(id)" as NSString
         return artworkCache.object(forKey: cacheKey) as Data?
+    }
+
+    static func localAlbumCacheKey(album: String, artist: String) -> String? {
+        let normAlbum = MusicKitManager.normalizedAlbumTitle(album)
+        guard !normAlbum.isEmpty else { return nil }
+        var baseArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let ampIdx = baseArtist.range(of: " & ") {
+            baseArtist = String(baseArtist[..<ampIdx.lowerBound]).trimmingCharacters(in: .whitespaces)
+        } else if let featIdx = baseArtist.range(of: " feat", options: .caseInsensitive) {
+            baseArtist = String(baseArtist[..<featIdx.lowerBound]).trimmingCharacters(in: .whitespaces)
+        }
+        let normArtist = MusicKitManager.normalizedAlbumTitle(baseArtist)
+        return "local_alb_\(normAlbum)_\(normArtist)"
+    }
+
+    public func getCachedLocalAlbumArtwork(album: String, artist: String) -> Data? {
+        guard let albKey = Self.localAlbumCacheKey(album: album, artist: artist) else { return nil }
+        let nsKey = albKey as NSString
+        if let mem = artworkCache.object(forKey: nsKey) as Data? {
+            return mem
+        }
+        if let disk = ArtworkDiskCache.shared.get(key: albKey) {
+            artworkCache.setObject(disk as NSData, forKey: nsKey)
+            return disk
+        }
+        return nil
     }
 
     // MARK: - Track Artwork by Database ID
@@ -135,7 +332,12 @@ public final class ArtworkService: @unchecked Sendable {
         return PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.stagedTemporaryTrackDbIds.contains(id) }
     }
 
-    public func getTrackArtwork(id: Int) -> Data? {
+    public func getTrackArtwork(
+        id: Int,
+        album: String = "",
+        artist: String = "",
+        skipIfContended: Bool = false
+    ) -> Data? {
         // Local Music.app database IDs are small integers (< 10,000,000); 10-digit Apple Music catalog IDs are never local
         guard id > 0 && id < 10_000_000 else { return nil }
 
@@ -144,14 +346,48 @@ public final class ArtworkService: @unchecked Sendable {
             return cached
         }
 
-        // Fast path 0: Check persistent disk LRU cache
+        // Fast path 0: Check persistent disk LRU cache by track ID
         if let diskData = ArtworkDiskCache.shared.get(key: "track_\(id)") {
             artworkCache.setObject(diskData as NSData, forKey: cacheKey)
             return diskData
         }
 
+        let meta = (album.isEmpty || artist.isEmpty) ? PlaybackStateStore.shared.getTrackMetadata(id: id) : nil
+        let effAlbum = !album.isEmpty ? album : (meta?.album ?? "")
+        let effArtist = !artist.isEmpty ? artist : (meta?.artist ?? "")
+        let albCacheKey = Self.localAlbumCacheKey(album: effAlbum, artist: effArtist)
+
+        // Fast path 1: Check local album-level memory/disk cache so tracks 2..N of the same album never repeat AppleScript
+        if let albKey = albCacheKey {
+            let nsAlbKey = albKey as NSString
+            if let memAlb = artworkCache.object(forKey: nsAlbKey) as Data? {
+                artworkCache.setObject(memAlb as NSData, forKey: cacheKey)
+                return memAlb
+            }
+            if let diskAlb = ArtworkDiskCache.shared.get(key: albKey) {
+                artworkCache.setObject(diskAlb as NSData, forKey: nsAlbKey)
+                artworkCache.setObject(diskAlb as NSData, forKey: cacheKey)
+                return diskAlb
+            }
+        }
+
         // Fast negative-cache & staged-cloud-track check BEFORE touching Music.app IPC
         if isKnownMissingTrackArtwork(id: id) {
+            return nil
+        }
+        if let albKey = albCacheKey {
+            let albNeg: Bool = lock.withLock {
+                if let ts = negativeLocalAlbums[albKey], Date().timeIntervalSince(ts) < 600.0 {
+                    return true
+                }
+                return false
+            }
+            if albNeg {
+                return nil
+            }
+        }
+
+        if skipIfContended && AppleScriptExecutor.shared.isBusy {
             return nil
         }
 
@@ -159,7 +395,7 @@ public final class ArtworkService: @unchecked Sendable {
         let script = """
         tell application "Music"
             try
-                with timeout of 1.2 seconds
+                with timeout of 1.0 seconds
                     set t to (first track of library playlist 1 whose database ID is \(id))
                     if (location of t) is not missing value and (count of artworks of t) > 0 then
                         return raw data of artwork 1 of t
@@ -169,25 +405,33 @@ public final class ArtworkService: @unchecked Sendable {
             return missing value
         end tell
         """
-        guard let desc = AppleScriptExecutor.shared.executeDescriptor(script, maxWait: 1.3, reportTimeout: false) else {
-            // Executor was contended or timed out — do not poison negative cache if merely contended, just return nil
+        let waitBudget: TimeInterval = skipIfContended ? 0.45 : 1.4
+        guard let desc = AppleScriptExecutor.shared.executeDescriptor(script, maxWait: waitBudget, reportTimeout: false) else {
             return nil
         }
         if !desc.data.isEmpty {
             let d = desc.data
+            let finalBytes: Data
             if let img = NSImage(data: d), let jpeg = jpegData(from: img, maxDimension: 600) {
-                artworkCache.setObject(jpeg as NSData, forKey: cacheKey)
-                ArtworkDiskCache.shared.set(key: "track_\(id)", data: jpeg)
-                return jpeg
+                finalBytes = jpeg
+            } else {
+                finalBytes = d
             }
-            artworkCache.setObject(d as NSData, forKey: cacheKey)
-            ArtworkDiskCache.shared.set(key: "track_\(id)", data: d)
-            return d
+            artworkCache.setObject(finalBytes as NSData, forKey: cacheKey)
+            ArtworkDiskCache.shared.set(key: "track_\(id)", data: finalBytes)
+            if let albKey = albCacheKey {
+                artworkCache.setObject(finalBytes as NSData, forKey: albKey as NSString)
+                ArtworkDiskCache.shared.set(key: albKey, data: finalBytes)
+            }
+            return finalBytes
         }
 
-        lock.lock()
-        negativeArtworkIds.insert(id)
-        lock.unlock()
+        lock.withLock {
+            negativeArtworkIds.insert(id)
+            if let albKey = albCacheKey {
+                negativeLocalAlbums[albKey] = Date()
+            }
+        }
         return nil
     }
 
@@ -281,7 +525,7 @@ public final class ArtworkService: @unchecked Sendable {
         end tell
         """
 
-        guard let desc = AppleScriptExecutor.shared.executeDescriptor(script) else {
+        guard let desc = AppleScriptExecutor.shared.executeDescriptor(script, maxWait: 3.0) else {
             return nil
         }
         guard desc.descriptorType != typeNull else {
@@ -344,6 +588,17 @@ public final class ArtworkService: @unchecked Sendable {
         return playlistArtworkUrlCache[name]
     }
 
+    public func clearPlaylistArtworkCache(name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        lock.lock()
+        artworkCache.removeObject(forKey: "playlist_\(trimmed)" as NSString)
+        playlistArtworkUrlCache.removeValue(forKey: trimmed)
+        negativePlaylistArtworks.removeValue(forKey: trimmed)
+        lock.unlock()
+        ArtworkDiskCache.shared.remove(key: "playlist_\(trimmed)")
+    }
+
     // MARK: - Batch Enrichment
 
     public func enrichTracksArtwork(_ tracks: [TrackInfo], limit: Int = 75) async -> [TrackInfo] {
@@ -355,22 +610,18 @@ public final class ArtworkService: @unchecked Sendable {
             for i in missingIndices {
                 let t = enriched[i]
                 group.addTask {
-                    // 1. In-memory cache by numericId
                     if let nid = t.numericId, nid > 0 {
                         let cacheKey = "track_\(nid)" as NSString
                         if let cached = self.artworkCache.object(forKey: cacheKey) as Data? {
                             return (i, "data:image/jpeg;base64,\(cached.base64EncodedString())")
                         }
                     }
-                    // 2. Local artwork file cache
                     if let local = self.findLocalTrackArtwork(name: t.name, artist: t.artist) {
                         return (i, local)
                     }
-                    // 3. Cached MusicKit artwork
                     if let cachedCloud = MusicKitManager.shared.getCachedTrackArtwork(name: t.name, artist: t.artist, album: t.album), !cachedCloud.isEmpty {
                         return (i, cachedCloud)
                     }
-                    // 4. Apple Music Catalog search via MusicKit HTTP
                     if let cloudArt = await MusicKitManager.shared.searchTrackArtwork(name: t.name, artist: t.artist, album: t.album), !cloudArt.isEmpty {
                         return (i, cloudArt)
                     }
@@ -443,474 +694,5 @@ public final class ArtworkService: @unchecked Sendable {
             return jpegData(from: tiff, maxDimension: maxDimension)
         }
         return nil
-    }
-
-    // MARK: - Apple Neural Engine Vision Saliency Palette (TV Ambient & WLED 16-Zone)
-
-    /// Preloads and compiles the `VNGenerateAttentionBasedSaliencyImageRequest` graph on Apple Neural Engine at app launch.
-    public func prewarmVisionSaliencyModel() {
-        guard NativeMusicCuratorService.shared.isAppleSilicon else { return }
-        let size = 32
-        var pixels = [UInt8](repeating: 128, count: size * size * 4)
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let ctx = CGContext(
-            data: &pixels,
-            width: size,
-            height: size,
-            bitsPerComponent: 8,
-            bytesPerRow: size * 4,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ), let cgImage = ctx.makeImage() else {
-            return
-        }
-        let request = VNGenerateAttentionBasedSaliencyImageRequest()
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        try? handler.perform([request])
-    }
-
-    /// Analyzes album artwork on the Apple Neural Engine using `VNGenerateAttentionBasedSaliencyImageRequest`
-    /// to locate visually salient objects (ignoring wide black/white/grey borders) and extracts:
-    /// - `ambient_rgb`: 4 vibrant RGB colors (`[[Int]]`) for TV `#standby-ambient-bg`, RTA backdrop, and player ambient glow
-    /// - `wled_zones`: 16 spatial RGB zones (`[[Int]]`) weighted by neural saliency for `WLEDDDPController`
-    public func extractVisionSaliencyPalette(
-        from imageData: Data,
-        useNeuralSaliency: Bool = NativeMusicCuratorService.shared.isEnabled
-    ) -> [String: Any]? {
-        guard !imageData.isEmpty,
-              let source = CGImageSourceCreateWithData(imageData as CFData, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            return nil
-        }
-
-        let gridSize = 64
-        var pixelData = [UInt8](repeating: 0, count: gridSize * gridSize * 4)
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let ctx = CGContext(
-            data: &pixelData,
-            width: gridSize,
-            height: gridSize,
-            bitsPerComponent: 8,
-            bytesPerRow: gridSize * 4,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            return nil
-        }
-        ctx.interpolationQuality = .medium
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: gridSize, height: gridSize))
-
-        // 1. Run Apple Neural Engine Attention-Based Saliency if enabled
-        var saliencyGrid = [Float](repeating: 0.0, count: gridSize * gridSize)
-        var salientBoxes: [[Double]] = []
-        var usedNeuralSaliency = false
-
-        if useNeuralSaliency && NativeMusicCuratorService.shared.isAppleSilicon {
-            let smallCgImage = ctx.makeImage() ?? cgImage
-            visionLock.lock()
-            defer { visionLock.unlock() }
-            let request = VNGenerateAttentionBasedSaliencyImageRequest()
-            let handler = VNImageRequestHandler(cgImage: smallCgImage, options: [:])
-            do {
-                try handler.perform([request])
-                if let observation = request.results?.first as? VNSaliencyImageObservation {
-                    usedNeuralSaliency = true
-
-                    // Record normalized bounding boxes (top-left origin [x, y, width, height])
-                    if let objects = observation.salientObjects {
-                        for obj in objects {
-                            let bb = obj.boundingBox
-                            let topY = max(0.0, min(1.0, 1.0 - bb.origin.y - bb.size.height))
-                            salientBoxes.append([
-                                Double(bb.origin.x),
-                                Double(topY),
-                                Double(bb.size.width),
-                                Double(bb.size.height)
-                            ])
-                        }
-                    }
-
-                    // Sample the 68x68 Float32 heatmap buffer + salient bounding boxes into our 64x64 grid
-                    let pb = observation.pixelBuffer
-                    CVPixelBufferLockBaseAddress(pb, .readOnly)
-                    defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
-
-                    let pbWidth = CVPixelBufferGetWidth(pb)
-                    let pbHeight = CVPixelBufferGetHeight(pb)
-                    let bytesPerRow = CVPixelBufferGetBytesPerRow(pb)
-                    let basePtr = CVPixelBufferGetBaseAddress(pb)
-
-                    for gy in 0..<gridSize {
-                        let normX_YTop = Double(gy) / Double(gridSize - 1)
-                        let visionY = 1.0 - normX_YTop
-                        let py = min(pbHeight - 1, max(0, Int(visionY * Double(pbHeight - 1))))
-
-                        for gx in 0..<gridSize {
-                            let normX = Double(gx) / Double(gridSize - 1)
-                            let px = min(pbWidth - 1, max(0, Int(normX * Double(pbWidth - 1))))
-                            var heatVal: Float = 0.0
-
-                            if let base = basePtr {
-                                let rowPtr = base.advanced(by: py * bytesPerRow).assumingMemoryBound(to: Float.self)
-                                heatVal = max(0.0, min(1.0, rowPtr[px]))
-                            }
-
-                            // Boost pixels that fall inside any salient object bounding box
-                            for box in salientBoxes {
-                                if normX >= box[0] && normX <= (box[0] + box[2]) &&
-                                   normX_YTop >= box[1] && normX_YTop <= (box[1] + box[3]) {
-                                    heatVal = max(heatVal, 0.75)
-                                }
-                            }
-                            saliencyGrid[gy * gridSize + gx] = heatVal
-                        }
-                    }
-                }
-            } catch {
-                usedNeuralSaliency = false
-            }
-        }
-
-        // 2. Build 14 perceptual color clusters (12 hue bins + 2 warm/cool midtone bins) weighted by Saliency × Saturation
-        struct ColorBucket {
-            var rSum: Double = 0
-            var gSum: Double = 0
-            var bSum: Double = 0
-            var weightSum: Double = 0
-        }
-        var buckets = [ColorBucket](repeating: ColorBucket(), count: 14)
-
-        var fallbackR: Double = 0
-        var fallbackG: Double = 0
-        var fallbackB: Double = 0
-        var fallbackW: Double = 0
-
-        for gy in 0..<gridSize {
-            for gx in 0..<gridSize {
-                let idx = (gy * gridSize + gx) * 4
-                let r = Double(pixelData[idx])
-                let g = Double(pixelData[idx + 1])
-                let b = Double(pixelData[idx + 2])
-                let a = Double(pixelData[idx + 3])
-                if a < 128 { continue }
-
-                let maxC = max(r, g, b)
-                let minC = min(r, g, b)
-                let delta = maxC - minC
-                let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-                let sat = maxC > 0 ? (delta / maxC) : 0.0
-                let sal = Double(saliencyGrid[gy * gridSize + gx])
-
-                // Track global saliency-weighted average for monochrome fallback
-                let baseW = 1.0 + sal * 6.0
-                fallbackR += r * baseW
-                fallbackG += g * baseW
-                fallbackB += b * baseW
-                fallbackW += baseW
-
-                // Ignore pitch-black margins and pure-white borders when picking vibrant ambient colors
-                if lum < 16.0 || lum > 246.0 { continue }
-
-                // Center bias (light) + strong Neural Saliency boost (up to 9x) + saturation preference
-                let cx = abs(Double(gx) / Double(gridSize - 1) - 0.5) * 2.0
-                let cy = abs(Double(gy) / Double(gridSize - 1) - 0.5) * 2.0
-                let centerFactor = max(0.4, 1.15 - 0.35 * (cx * cx + cy * cy))
-                let salFactor = usedNeuralSaliency ? (1.0 + sal * 8.5) : centerFactor
-                let satFactor = 0.15 + pow(sat, 1.25) * 3.2
-                let lumWindow = (lum > 35.0 && lum < 225.0) ? 1.2 : 0.65
-
-                let weight = salFactor * satFactor * lumWindow
-
-                let bucketIdx: Int
-                if sat < 0.12 {
-                    bucketIdx = (r >= b) ? 12 : 13
-                } else {
-                    var hue: Double = 0.0
-                    if delta > 0.0001 {
-                        if maxC == r {
-                            hue = ((g - b) / delta).truncatingRemainder(dividingBy: 6.0)
-                        } else if maxC == g {
-                            hue = ((b - r) / delta) + 2.0
-                        } else {
-                            hue = ((r - g) / delta) + 4.0
-                        }
-                        hue *= 60.0
-                        if hue < 0 { hue += 360.0 }
-                    }
-                    bucketIdx = min(11, max(0, Int(hue / 30.0)))
-                }
-
-                buckets[bucketIdx].rSum += r * weight
-                buckets[bucketIdx].gSum += g * weight
-                buckets[bucketIdx].bSum += b * weight
-                buckets[bucketIdx].weightSum += weight
-            }
-        }
-
-        struct RankedColor {
-            let r: Int
-            let g: Int
-            let b: Int
-            let weight: Double
-        }
-
-        var rankedColors: [RankedColor] = []
-        for b in buckets where b.weightSum > 0.01 {
-            let avgR = b.rSum / b.weightSum
-            let avgG = b.gSum / b.weightSum
-            let avgB = b.bSum / b.weightSum
-            let (vr, vg, vb) = Self.enhanceAmbientColor(r: avgR, g: avgG, b: avgB)
-            rankedColors.append(RankedColor(r: vr, g: vg, b: vb, weight: b.weightSum))
-        }
-        rankedColors.sort { $0.weight > $1.weight }
-
-        var ambientRGB: [[Int]] = []
-        for cand in rankedColors {
-            let isDistinct = ambientRGB.allSatisfy { existing in
-                let dr = Double(existing[0] - cand.r)
-                let dg = Double(existing[1] - cand.g)
-                let db = Double(existing[2] - cand.b)
-                return sqrt(dr * dr + dg * dg + db * db) >= 36.0
-            }
-            if isDistinct {
-                ambientRGB.append([cand.r, cand.g, cand.b])
-                if ambientRGB.count == 4 { break }
-            }
-        }
-
-        // Fill remaining slots if the cover is minimalist/monochromatic
-        if ambientRGB.isEmpty {
-            let mr = fallbackW > 0 ? Int((fallbackR / fallbackW).rounded()) : 38
-            let mg = fallbackW > 0 ? Int((fallbackG / fallbackW).rounded()) : 34
-            let mb = fallbackW > 0 ? Int((fallbackB / fallbackW).rounded()) : 52
-            ambientRGB.append([max(18, min(230, mr)), max(18, min(230, mg)), max(18, min(230, mb))])
-        }
-        while ambientRGB.count < 4 {
-            let base = ambientRGB[ambientRGB.count - 1]
-            let scale = (ambientRGB.count % 2 == 1) ? 0.78 : 1.18
-            let nr = max(14, min(242, Int((Double(base[0]) * scale).rounded())))
-            let ng = max(14, min(242, Int((Double(base[1]) * scale).rounded())))
-            let nb = max(14, min(242, Int((Double(base[2]) * scale).rounded())))
-            ambientRGB.append([nr, ng, nb])
-        }
-
-        // 3. Build 16-zone WLED Ambilight palette weighted by Neural Saliency
-        let primarySalient = ambientRGB[0]
-        var wledZones: [[Int]] = []
-        let colsPerZone = max(1, gridSize / 16)
-
-        for z in 0..<16 {
-            let startX = z * colsPerZone
-            let endX = (z == 15) ? gridSize : min(gridSize, (z + 1) * colsPerZone)
-            var zr: Double = 0
-            var zg: Double = 0
-            var zb: Double = 0
-            var zw: Double = 0
-
-            for gy in 0..<gridSize {
-                for gx in startX..<endX {
-                    let idx = (gy * gridSize + gx) * 4
-                    let r = Double(pixelData[idx])
-                    let g = Double(pixelData[idx + 1])
-                    let b = Double(pixelData[idx + 2])
-                    let maxC = max(r, g, b)
-                    let minC = min(r, g, b)
-                    let sat = maxC > 0 ? ((maxC - minC) / maxC) : 0.0
-                    let lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-                    let sal = Double(saliencyGrid[gy * gridSize + gx])
-
-                    let borderPenalty = (lum < 14.0 || lum > 245.0) ? 0.15 : 1.0
-                    let w = (1.0 + sal * 7.5) * (0.25 + sat * 2.4) * borderPenalty
-                    zr += r * w
-                    zg += g * w
-                    zb += b * w
-                    zw += w
-                }
-            }
-
-            if zw > 0.01 {
-                var rVal = zr / zw
-                var gVal = zg / zw
-                var bVal = zb / zw
-                let zoneLum = 0.2126 * rVal + 0.7152 * gVal + 0.0722 * bVal
-                // If an edge zone is mostly dark/white margin, blend 35% of the primary salient color so WLED stays alive
-                if zoneLum < 22.0 || zoneLum > 240.0 {
-                    rVal = rVal * 0.65 + Double(primarySalient[0]) * 0.35
-                    gVal = gVal * 0.65 + Double(primarySalient[1]) * 0.35
-                    bVal = bVal * 0.65 + Double(primarySalient[2]) * 0.35
-                }
-                let (er, eg, eb) = Self.enhanceAmbientColor(r: rVal, g: gVal, b: bVal)
-                wledZones.append([er, eg, eb])
-            } else {
-                wledZones.append(primarySalient)
-            }
-        }
-
-        return [
-            "status": "ok",
-            "ambient_rgb": ambientRGB,
-            "wled_zones": wledZones,
-            "salient_boxes": salientBoxes,
-            "neural_saliency": usedNeuralSaliency,
-            "engine": usedNeuralSaliency ? "Apple Neural Engine • Vision Saliency" : "Standard Grid Sampler"
-        ]
-    }
-
-    private static func enhanceAmbientColor(r: Double, g: Double, b: Double) -> (Int, Int, Int) {
-        let maxC = max(r, g, b)
-        let minC = min(r, g, b)
-        let mid = (maxC + minC) * 0.5
-        let sat = maxC > 0 ? ((maxC - minC) / maxC) : 0.0
-        // Gently boost saturation for vivid TV & WLED glow without clipping
-        let boost = (sat > 0.08 && sat < 0.75) ? 1.22 : 1.05
-        let nr = max(12, min(248, Int((mid + (r - mid) * boost).rounded())))
-        let ng = max(12, min(248, Int((mid + (g - mid) * boost).rounded())))
-        let nb = max(12, min(248, Int((mid + (b - mid) * boost).rounded())))
-        return (nr, ng, nb)
-    }
-
-    /// Resolves artwork bytes from Data URI, remote HTTP(S) URL, relative `/api/artwork/...` URL, or local track database ID
-    /// and extracts the Neural Engine Vision Saliency palette (cached + single-flight deduplicated across clients).
-    public func resolveArtworkPalette(url: String?, trackId: Int?) async -> [String: Any]? {
-        let aiEnabled = NativeMusicCuratorService.shared.isEnabled
-        let rawUrl = (url ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let tid = trackId ?? 0
-
-        let cacheKey: String
-        if !rawUrl.isEmpty && !rawUrl.hasPrefix("data:") {
-            cacheKey = "url|\(rawUrl)|ai:\(aiEnabled)"
-        } else if tid > 0 {
-            cacheKey = "tid|\(tid)|ai:\(aiEnabled)"
-        } else if !rawUrl.isEmpty {
-            cacheKey = "data|\(rawUrl.prefix(96).hashValue)|ai:\(aiEnabled)"
-        } else {
-            cacheKey = "current|ai:\(aiEnabled)"
-        }
-
-        if let cached = lock.withLock({ paletteCache[cacheKey] }) {
-            return cached
-        }
-
-        let (existingTask, createdTask): (Task<PaletteResultBox, Never>?, Task<PaletteResultBox, Never>?) = lock.withLock {
-            if let existing = inFlightPaletteTasks[cacheKey] {
-                return (existing, nil)
-            }
-            let task = Task<PaletteResultBox, Never> { [weak self] in
-                guard let self = self else { return PaletteResultBox(nil) }
-                let computed = await self.computeArtworkPalette(rawUrl: rawUrl, tid: tid, aiEnabled: aiEnabled, cacheKey: cacheKey)
-                _ = self.lock.withLock {
-                    self.inFlightPaletteTasks.removeValue(forKey: cacheKey)
-                }
-                return PaletteResultBox(computed)
-            }
-            inFlightPaletteTasks[cacheKey] = task
-            return (nil, task)
-        }
-
-        let box = await (existingTask ?? createdTask!).value
-        return box.value
-    }
-
-    private func fetchRemotePaletteImageData(from urlStr: String) async -> Data? {
-        if let diskData = ArtworkDiskCache.shared.get(key: urlStr) {
-            return diskData
-        }
-        let fetchUrlStr = urlStr
-            .replacingOccurrences(of: "1200x1200bb", with: "300x300bb")
-            .replacingOccurrences(of: "600x600bb", with: "300x300bb")
-        if let diskSmall = ArtworkDiskCache.shared.get(key: fetchUrlStr) {
-            return diskSmall
-        }
-        guard let remoteUrl = URL(string: fetchUrlStr) else { return nil }
-        var req = URLRequest(url: remoteUrl)
-        req.timeoutInterval = 4.0
-        if let (data, resp) = try? await URLSession.shared.data(for: req),
-           let http = resp as? HTTPURLResponse,
-           (200...299).contains(http.statusCode),
-           !data.isEmpty {
-            ArtworkDiskCache.shared.set(key: fetchUrlStr, data: data)
-            return data
-        }
-        return nil
-    }
-
-    private func computeArtworkPalette(rawUrl: String, tid: Int, aiEnabled: Bool, cacheKey: String) async -> [String: Any]? {
-        var imageData: Data? = nil
-
-        // 1. Data URI
-        if rawUrl.hasPrefix("data:image/"), let commaRange = rawUrl.range(of: ",") {
-            let b64 = String(rawUrl[commaRange.upperBound...])
-            imageData = Data(base64Encoded: b64, options: .ignoreUnknownCharacters)
-        }
-
-        // 2. Remote HTTP/HTTPS URL FIRST (never touch AppleScript when CDN URL is already supplied!)
-        if imageData == nil, rawUrl.hasPrefix("http://") || rawUrl.hasPrefix("https://") {
-            imageData = await fetchRemotePaletteImageData(from: rawUrl)
-        }
-
-        // 3. Relative /api/artwork/search or /api/artwork/track URL -> check memory/disk/MusicKit CDN BEFORE AppleScript
-        if imageData == nil, rawUrl.hasPrefix("/api/artwork") {
-            if let comps = URLComponents(string: "http://localhost\(rawUrl)") {
-                let items = comps.queryItems ?? []
-                let qId = items.first(where: { $0.name == "id" })?.value.flatMap(Int.init) ?? tid
-                let qName = items.first(where: { $0.name == "name" })?.value ?? ""
-                let qArtist = items.first(where: { $0.name == "artist" })?.value ?? ""
-                let qAlbum = items.first(where: { $0.name == "album" })?.value ?? ""
-
-                if qId > 0 {
-                    imageData = getCachedTrackArtwork(id: qId) ?? ArtworkDiskCache.shared.get(key: "track_\(qId)")
-                }
-                if imageData == nil && !qName.isEmpty {
-                    var cdnUrl = MusicKitManager.shared.getCachedTrackArtwork(name: qName, artist: qArtist, album: qAlbum)
-                    if (cdnUrl ?? "").isEmpty {
-                        cdnUrl = await MusicKitManager.shared.searchTrackArtwork(name: qName, artist: qArtist, album: qAlbum)
-                    }
-                    if let validCdn = cdnUrl, !validCdn.isEmpty {
-                        imageData = await fetchRemotePaletteImageData(from: validCdn)
-                    }
-                }
-            }
-        }
-
-        // 4. Local track ID (offloaded to background queue so Swift's cooperative pool never blocks on IPC)
-        if imageData == nil, tid > 0, !rawUrl.hasPrefix("http://"), !rawUrl.hasPrefix("https://"), !isKnownMissingTrackArtwork(id: tid) {
-            imageData = await withCheckedContinuation { continuation in
-                artworkFetchQueue.async { [weak self] in
-                    continuation.resume(returning: self?.getTrackArtwork(id: tid))
-                }
-            }
-        }
-
-        // 5. Fallback to current playing local track artwork only when no URL was provided
-        if imageData == nil && rawUrl.isEmpty {
-            imageData = await withCheckedContinuation { continuation in
-                artworkFetchQueue.async { [weak self] in
-                    continuation.resume(returning: self?.getCurrentTrackArtwork())
-                }
-            }
-        }
-
-        guard let finalData = imageData else {
-            return nil
-        }
-
-        // Run Vision ANE saliency on dedicated serial queue without blocking Swift's 8-thread cooperative pool
-        let palette: [String: Any]? = await withCheckedContinuation { continuation in
-            visionQueue.async { [weak self] in
-                let extracted = self?.extractVisionSaliencyPalette(from: finalData, useNeuralSaliency: aiEnabled)
-                continuation.resume(returning: extracted)
-            }
-        }
-
-        guard let palette else { return nil }
-
-        lock.withLock {
-            if paletteCache.count > 120 {
-                paletteCache.removeAll()
-            }
-            paletteCache[cacheKey] = palette
-        }
-
-        return palette
     }
 }

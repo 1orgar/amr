@@ -7,14 +7,11 @@ import Foundation
 
 extension WebUIContent {
     public static let appJS: String = #"""
-/**
- * Apple Music Remote (AMR) - Client Application
- * Pure Vanilla JS (ES6+), Zero Dependencies.
- */
+/* AUTO-ASSEMBLED FROM Web/src/js/*.js BY Tools/sync_web_ui.py — EDIT Web/src/js/ MODULES */
+(() => {
+"use strict";
 
-(function () {
-  'use strict';
-
+// === MODULE: 01-i18n-dictionary.js ===
   // --- Automatic English (EN) Localization for Non-Russian Device Locales ---
   function detectIsEnglishLocale() {
     try {
@@ -46,6 +43,10 @@ extension WebUIContent {
     'Подборки': 'Collections',
     'Очередь воспроизведения': 'Playing Next',
     'Очистить далее': 'Clear',
+    'ПРЕДЫДУЩИЕ': 'PREVIOUS',
+    'Показать все': 'Show All',
+    'Свернуть': 'Show Less',
+    'История пуста': 'No previous tracks',
     'СЕЙЧАС ИГРАЕТ': 'NOW PLAYING',
     'ДАЛЕЕ В ОЧЕРЕДИ': 'UP NEXT',
     'Нет предстоящих треков': 'No upcoming tracks',
@@ -67,11 +68,18 @@ extension WebUIContent {
     'Перемешать': 'Shuffle',
     'В медиатеку': 'Add to Library',
     'В медиатеке ✓': 'In Library ✓',
+    'В плейлисты': 'Add to Playlists',
+    'В плейлистах ✓': 'In Playlists ✓',
+    'Добавить в плейлисты Apple Music': 'Add to Apple Music Playlists',
+    'Добавить в медиатеку Apple Music': 'Add to Apple Music Library',
+    '★ Плейлист добавлен в плейлисты Apple Music': '★ Playlist added to Apple Music Playlists',
+    'Не удалось добавить в плейлисты': 'Failed to add to playlists',
     'Добавлено ✓': 'Added ✓',
     'Добавление...': 'Adding...',
     'Буклет PDF': 'Booklet PDF',
     'БУКЛЕТ PDF': 'BOOKLET PDF',
     'Загрузка треков...': 'Loading tracks...',
+    'Загрузка через буфер AMR…': 'Loading via AMR Buffer…',
     'Загрузка треков альбома...': 'Loading album tracks...',
     'Нет треков': 'No tracks',
     'Плейлист пуст': 'Playlist is empty',
@@ -157,6 +165,20 @@ extension WebUIContent {
     'Следующий трек': 'Next Track',
     'Повтор': 'Repeat',
     'Режим повтора': 'Repeat Mode',
+    'Режим повтора (Выкл / Очередь / 1 трек)': 'Repeat Mode (Off / Queue / One Track)',
+    'Зациклить текущий трек': 'Loop Current Track',
+    'Бесконечный повтор одного трека (Выкл)': 'Infinite single-track loop (Off)',
+    'Бесконечный повтор одного трека (Активен)': 'Infinite single-track loop (Active)',
+    'Динамический диапазон мастеринга (TT DR / EBU R128)': 'Mastering Dynamic Range (TT DR / EBU R128)',
+    'МАСТЕРИНГ И ДИНАМИКА • EBU R128 / TT DR': 'MASTERING & DYNAMICS • EBU R128 / TT DR',
+    'DR АНАЛИЗ...': 'DR ANALYZING...',
+    'Анализ динамического диапазона...': 'Analyzing dynamic range...',
+    'Диапазон LRA': 'LRA Range',
+    'Фазовый коррелометр стереопанорамы': 'Stereo Phase Correlation Meter',
+    '-1.0 Противофаза': '-1.0 Out of Phase',
+    '0.0 Стерео': '0.0 Wide Stereo',
+    '+1.0 Моно': '+1.0 Mono',
+    'Накопление 3-секундных блоков PCM для расчёта официального индекса TT Dynamic Range и громкости ITU-R BS.1770-4.': 'Accumulating 3-second PCM windows for official TT Dynamic Range and ITU-R BS.1770-4 loudness.',
     'Отключить звук': 'Mute',
     'Без звука': 'Mute',
     'Громкость': 'Volume',
@@ -241,8 +263,14 @@ extension WebUIContent {
     'Режим подсветки WLED DDP': 'WLED DDP Lighting Mode',
     'Без подсветки': 'Off',
     'Синусоида ритма (стоячая волна)': 'Rhythm Sine Wave',
+    'Синусоида ритма (контрастная волна от центра)': 'Rhythm Sine Wave (Center Contrast)',
     'Спектральный эквалайзер (Бас · Вокал · Верх)': 'Spectral Equalizer (Bass · Mids · Highs)',
     'Симметричный пульс (раскрытие от центра)': 'Symmetric Center VU Pulse',
+    'Ударная волна (кольца бита от центра)': 'Shockwave (Beat Rings from Center)',
+    'Гармонический резонанс (волны цвета от центра)': 'Harmonic Resonance (Center Color Waves)',
+    'Сверхновая (ядро бита и корона от центра)': 'Supernova (Core Flash & Corona)',
+    'Призма от центра (перелив оттенков обложки)': 'Center Prism (Flowing Cover Hues)',
+    'Встречный импульс (бас в центре · верх с краёв)': 'Counter-Pulse (Center Bass · Edge Highs)',
     'Живой Ambilight (16 зон + пульс музыки)': 'Live Ambilight (16 Zones + Audio Pulse)',
     'Гармонический резонанс (цвет + мелодия)': 'Harmonic Resonance (Color + Melody)',
     'Статичная палитра обложки': 'Static Artwork Palette',
@@ -392,9 +420,105 @@ extension WebUIContent {
     'Еженедельный микс': 'Weekly Mix',
     'Недавно прослушано': 'Recently Played',
     'Нет элементов для отображения': 'No items to display',
-    'Поделиться': 'Share'
+    'Поделиться': 'Share',
+    'Пресет DSP': 'DSP Preset',
+    'Пользовательский режим': 'Custom Configuration',
+    'Bit-Perfect Passthrough (Выкл)': 'Bit-Perfect Passthrough (Off)',
+    'Прямая побитовая передача PCM без оверсэмплинга и модуляции': 'Direct bit-perfect PCM output without oversampling or modulation',
+    'SACD Эталон (DSD256 • 7EC-Balanced)': 'SACD Reference (DSD256 • 7EC-Balanced)',
+    'Макс. сцена и воздух (DSD256 • 7EC-Super • Metal)': 'Max Stage & Air (DSD256 • 7EC-Super • Metal)',
+    'Атака и драйв (DSD128 • 7EC-Transient)': 'Attack & Drive (DSD128 • 7EC-Transient)',
+    'Оптика / Коаксиал S/PDIF (DSD64 DoP)': 'Optical / Coax S/PDIF (DSD64 DoP)',
+    'Мультибит / R2R (HQ PCM NOS • LNS15)': 'Multibit / R2R (HQ PCM NOS • LNS15)',
+    'Локальный USB DSP приостановлен: активен сетевой Bit-Perfect PCM поток (DLNA / BluOS)': 'Local USB DSP paused: Bit-Perfect network PCM stream active (DLNA / BluOS)',
+    '🌙 Ночной режим (DRC)': '🌙 Late-Night Mode (DRC)',
+    'Включить или выключить ночной режим (Late-Night DRC)': 'Enable or disable Late-Night Mode (DRC)',
+    'Профиль ночного режима (DRC)': 'Late-Night Mode (DRC) Profile',
+    'Выкл (100% Bit-Perfect)': 'Off (100% Bit-Perfect)',
+    'Деликатный — Джаз / Вокал (до +6 дБ)': 'Gentle — Jazz / Vocal (up to +6 dB)',
+    'Ночной концерт — Симфония / OST (до +9.5 дБ)': 'Night Concert — Symphony / OST (up to +9.5 dB)',
+    'Деликатный (Джаз / Вокал)': 'Gentle (Jazz / Vocal)',
+    'Ночной концерт (Симфония / OST)': 'Night Concert (Symphony / OST)',
+    'Прямой 100% Bit-Perfect тракт без динамической обработки сигнала.': 'Direct 100% Bit-Perfect signal path with zero dynamic processing.',
+    'Мягкий подъём тихих деталей (до +6 дБ) с гейтом шума -63 dBFS для джаза, вокала и акустики.': 'Gentle micro-detail lift (up to +6 dB) with -63 dBFS noise-floor gate for jazz, vocals & acoustic.',
+    'Глубокий контроль оркестровых пианиссимо и тутти (до +9.5 дБ, -1.0 dBTP) для классики и саундтреков.': 'Deep symphonic pianissimo lift & crescendo control (up to +9.5 dB, -1.0 dBTP) for classical & OST.',
+    'Sonic Bridge от этого трека': 'Sonic Bridge from This Track',
+    'Плавный ИИ-маршрут к другому треку или артисту': 'Smooth AI trajectory to another track or artist',
+    'Точка А (откуда)': 'Point A (Origin)',
+    'Точка Б (куда)': 'Point B (Destination)',
+    '🎵 Текущий трек': '🎵 Current Track',
+    'Длина маршрута:': 'Route Steps:',
+    'Построить маршрут': 'Build Route',
+    'Сразу включить': 'Play Immediately',
+    'Запустить маршрут': 'Play Bridge Route',
+    'МАРШРУТ ПЕРЕХОДА': 'SONIC BRIDGE TRAJECTORY',
+    'Альбомы': 'Albums',
+    'Плейлисты': 'Playlists',
+    'Медиатека': 'Library',
+    'Плейлисты и альбомы': 'Playlists & Albums',
+    'Альбомы в медиатеке': 'Albums in Library',
+    'Плейлисты в медиатеке': 'Playlists in Library',
+    'Раздел медиатеки': 'Library Section',
+    'Загрузка альбомов...': 'Loading albums...',
+    'Альбомы в медиатеке не найдены': 'No albums found in library',
+    'Станции, персональные миксы, плейлисты и альбомы': 'Stations, Personal Mixes, Playlists & Albums',
+    'Главная': 'Home',
+    'Поиск': 'Search',
+    'Плеер': 'Player',
+    'Плейлисты Apple Music': 'Apple Music Playlists',
+    'Обновить плейлисты': 'Refresh playlists',
+    'Обновить медиатеку': 'Refresh library',
+    'Недавние': 'Recent',
+    'Треки': 'Songs',
+    'Недавно добавленные': 'Recently Added',
+    'НЕДАВНО ДОБАВЛЕННЫЕ АЛЬБОМЫ': 'RECENTLY ADDED ALBUMS',
+    'НЕДАВНО ДОБАВЛЕННЫЕ ТРЕКИ': 'RECENTLY ADDED SONGS',
+    'Недавние в медиатеке': 'Recently Added in Library',
+    'Треки медиатеки': 'Library Songs',
+    'В медиатеке пока нет недавно добавленных альбомов и треков': 'No recently added albums or songs in your library',
+    'Поиск по артистам медиатеки...': 'Filter library artists...',
+    'Фильтр треков медиатеки...': 'Filter library songs...',
+    'Исполнители в медиатеке': 'Artists in Library',
+    'Исполнители в медиатеке не найдены': 'No artists found in library',
+    'Треки в медиатеке': 'Songs in Library',
+    'Треки в медиатеке не найдены': 'No songs found in library',
+    'Загрузка недавних...': 'Loading recently added...',
+    'Загрузка артистов...': 'Loading artists...',
+    'Загрузка треков медиатеки...': 'Loading library songs...',
+    'Загрузка медиатеки артиста...': 'Loading artist library...',
+    'ИСПОЛНИТЕЛЬ В МЕДИАТЕКЕ': 'ARTIST IN LIBRARY',
+    'АЛЬБОМЫ В МЕДИАТЕКЕ': 'ALBUMS IN LIBRARY',
+    'ТРЕКИ В МЕДИАТЕКЕ': 'SONGS IN LIBRARY',
+    'В медиатеке целиком': 'Complete in Library',
+    '✓ В медиатеке': '✓ In Library',
+    'Добавить весь альбом': 'Add Complete Album',
+    '+ Дополнить альбом': '+ Complete Album',
+    'Из медиатеки': 'Remove',
+    'Удалить из медиатеки': 'Remove from Library',
+    'Удалить из медиатеки Apple Music': 'Remove from Apple Music Library',
+    'Удалить трек из медиатеки': 'Remove Song from Library',
+    'Добавить трек в медиатеку': 'Add Song to Library',
+    'Сохранить композицию в Apple Music': 'Save song to Apple Music Library',
+    'Удалить альбом из медиатеки': 'Remove Album from Library',
+    'Удалить исполнителя из медиатеки': 'Remove Artist from Library',
+    'Перейти к артисту в медиатеке': 'Go to Artist in Library',
+    'Удалить из медиатеки?': 'Remove from Library?',
+    'Удалить альбом из медиатеки?': 'Remove Album from Library?',
+    'Удалить исполнителя из медиатеки?': 'Remove Artist from Library?',
+    'Удалить трек из медиатеки?': 'Remove Song from Library?',
+    'Удалить плейлист': 'Delete Playlist',
+    'Удалить плейлист?': 'Delete Playlist?',
+    'Удалить плейлист из медиатеки': 'Delete Playlist',
+    'Элемент будет удалён из вашей медиатеки Apple Music.': 'This item will be removed from your Apple Music Library.',
+    'Отмена': 'Cancel',
+    'Удалить': 'Remove',
+    'Удаление...': 'Removing...',
+    'Показать ещё': 'Show More',
+    'Все плашки скрыты в настройках Mac (Основные → ТВ-режим)': 'All tiles are hidden in Mac Settings (General → TV Mode)',
+    '★ Трек добавлен в медиатеку Apple Music': '★ Song added to Apple Music Library'
   };
 
+// === MODULE: 02-i18n-identity-and-state.js ===
   function translateTextToEn(raw) {
     if (!IS_EN || !raw || typeof raw !== 'string') return raw;
     const trimmed = raw.trim();
@@ -446,6 +570,11 @@ extension WebUIContent {
       .replace(/Частота ЦАП \(([^)]+)\) аппаратно синхронизирована с потоком\.\s*Деградация разрядности исключена\./i, 'DAC sample rate ($1) is hardware-locked to the stream. Zero bit-depth degradation.')
       .replace(/Hi-Res PCM поток \(([^)]+)\) захватывается напрямую из Music\.app и передается на сетевой рендерер без передискретизации\./i, 'Hi-Res PCM stream ($1) is captured directly from Music.app and streamed bit-perfectly to the network renderer.')
       .replace(/Воспроизводится сжатый поток AAC 256 kbps \(полоса до ~19\.5 кГц\)\.\s*Для Bit-Perfect переключитесь на ALAC Lossless\./i, 'Playing compressed AAC 256 kbps stream (~19.5 kHz bandwidth). Switch to ALAC Lossless for Bit-Perfect output.')
+      .replace(/64-bit DSP • Синхронная частота \(([^)]+)\)/i, '64-bit DSP • Synced Clock ($1)')
+      .replace(/Частота ЦАП \(([^)]+)\) синхронизирована 1:1 с потоком без передискретизации\.\s*Активна 64-битная обработка \(([^)]+)\)\./i, 'DAC clock ($1) is synced 1:1 with the source stream without resampling. Active 64-bit processing ($2).')
+      .replace(/Системный микшер macOS \(([^)]+)\)/i, 'macOS System Mixer ($1)')
+      .replace(/Частота и разрядность совпадают \(([^)]+)\), но поток проходит через микшер macOS CoreAudio\./i, 'Sample rate and bit depth match ($1), routed through macOS CoreAudio mixer.')
+      .replace(/Внешний USB ЦАП не подключён:\s*DSD и HQ NOS доступны только для USB ЦАП\s*\(([^)]+)\)/i, 'No external USB DAC connected: DSD and HQ NOS are available only for USB DACs ($1)')
       .replace(/Передискретизация \(([^)]+)\)/i, 'Resampling ($1)')
       .replace(/Частота или разрядность источника \(([^)]+)\) отличается от текущего режима вывода \(([^)]+)\)\./i, 'Source format ($1) differs from current output mode ($2).')
       .replace(/Прямое подключение macOS CoreAudio HAL \(([^)]+)\)/i, 'Direct macOS CoreAudio HAL ($1)')
@@ -468,13 +597,34 @@ extension WebUIContent {
       .replace(/(\d+)\s*Гц/gi, '$1 Hz')
       .replace(/(\d+)\s*мс/gi, '$1 ms')
       .replace(/(\d+)\s*трек(?:ов|а)?/gi, '$1 tracks')
+      .replace(/(\d+)\s*альбом(?:ов|а)?/gi, '$1 albums')
+      .replace(/(\d+)\s*исполнител(?:ей|я|ь)/gi, '$1 artists')
+      .replace(/^Плейлисты Apple Music\s*•\s*(\d+)$/i, 'Apple Music Playlists • $1')
+      .replace(/^Альбомы в медиатеке\s*•\s*(\d+)$/i, 'Albums in Library • $1')
+      .replace(/^Исполнители в медиатеке\s*•\s*(\d+)$/i, 'Artists in Library • $1')
+      .replace(/^Треки в медиатеке\s*•\s*(\d+)$/i, 'Songs in Library • $1')
+      .replace(/^Недавно добавленные\s*•\s*(.+)$/i, 'Recently Added • $1')
+      .replace(/В медиатеке сохранено\s*(\d+)\s*из\s*(\d+)\s*(?:трек(?:ов|а)?|tracks)\s*этого альбома/gi, '$1 of $2 tracks from this album saved in Library')
+      .replace(/^Показать полный альбом\s*\((\d+)\)\s*→$/i, 'Show Complete Album ($1) →')
+      .replace(/(\d+)\s*из\s*(\d+)\s*(?:трек(?:ов|а)?|tracks)\s*в медиатеке/gi, '$1 of $2 tracks in Library')
+      .replace(/(\d+)\s*из\s*(\d+)\s*в медиатеке/gi, '$1 of $2 in Library')
+      .replace(/^Удалено из медиатеки:\s*(.+)$/i, 'Removed from Library: $1')
       .replace(/(\d+)\s*стр\./gi, '$1 pp.')
       .replace(/Страница\s*(\d+)/gi, 'Page $1');
     return out;
   }
 
-  function localizeDomNode(root) {
+  const DYNAMIC_USER_CONTENT_SELECTOR = '.track-title, .track-artist, .track-album, .track-row-title, .track-row-artist, .mini-title, .mini-artist, .standby-title, .standby-artist, .standby-album, .playlist-title, .playlist-card-title, .card-title, .card-subtitle, .media-card-title, .media-card-sub, .collection-tile-title, .collection-tile-sub, .artist-row-name, [data-dynamic-text]';
+
+  function isInsideDynamicUserContent(node) {
+    if (!node) return false;
+    const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return Boolean(el && typeof el.closest === 'function' && el.closest(DYNAMIC_USER_CONTENT_SELECTOR));
+  }
+
+  function localizeDomNode(root, skipDynamic = false) {
     if (!IS_EN || !root) return;
+    if (skipDynamic && isInsideDynamicUserContent(root)) return;
     if (root.nodeType === Node.TEXT_NODE) {
       const val = root.nodeValue;
       if (val && /[А-Яа-яЁё]/.test(val)) {
@@ -485,24 +635,38 @@ extension WebUIContent {
     }
     if (root.nodeType !== Node.ELEMENT_NODE) return;
     const attrs = ['title', 'placeholder', 'aria-label', 'alt'];
-    for (let i = 0; i < attrs.length; i++) {
-      const attr = attrs[i];
-      if (root.hasAttribute && root.hasAttribute(attr)) {
-        const cur = root.getAttribute(attr);
-        if (cur && /[А-Яа-яЁё]/.test(cur)) {
-          const next = translateTextToEn(cur);
-          if (next !== cur) root.setAttribute(attr, next);
+    if (!(skipDynamic && root.matches && root.matches(DYNAMIC_USER_CONTENT_SELECTOR))) {
+      for (let i = 0; i < attrs.length; i++) {
+        const attr = attrs[i];
+        if (root.hasAttribute && root.hasAttribute(attr)) {
+          const cur = root.getAttribute(attr);
+          if (cur && /[А-Яа-яЁё]/.test(cur)) {
+            const next = translateTextToEn(cur);
+            if (next !== cur) root.setAttribute(attr, next);
+          }
         }
       }
     }
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false);
+    const filter = skipDynamic
+      ? {
+          acceptNode(candidate) {
+            if (candidate.nodeType === Node.ELEMENT_NODE && candidate.matches && candidate.matches(DYNAMIC_USER_CONTENT_SELECTOR)) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        }
+      : null;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, filter, false);
     let node = walker.nextNode();
     while (node) {
       if (node.nodeType === Node.TEXT_NODE) {
-        const val = node.nodeValue;
-        if (val && /[А-Яа-яЁё]/.test(val)) {
-          const next = translateTextToEn(val);
-          if (next !== val) node.nodeValue = next;
+        if (!skipDynamic || !isInsideDynamicUserContent(node)) {
+          const val = node.nodeValue;
+          if (val && /[А-Яа-яЁё]/.test(val)) {
+            const next = translateTextToEn(val);
+            if (next !== val) node.nodeValue = next;
+          }
         }
       } else if (node.nodeType === Node.ELEMENT_NODE) {
         for (let i = 0; i < attrs.length; i++) {
@@ -520,44 +684,82 @@ extension WebUIContent {
     }
   }
 
+  const I18N_OBSERVE_OPTS = {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['title', 'placeholder', 'aria-label', 'alt']
+  };
+
   if (IS_EN) {
     const authDescEl = document.querySelector('#device-auth-overlay .overlay-desc');
     if (authDescEl) {
       authDescEl.innerHTML = 'Open <strong>Apple Music Remote Settings</strong> on your Mac ("General" tab) and click <strong>"Authorize"</strong> next to this device.';
     }
-    localizeDomNode(document.body);
+    localizeDomNode(document.body, false);
+    let isApplyingI18n = false;
     const i18nObserver = new MutationObserver((mutations) => {
-      for (let i = 0; i < mutations.length; i++) {
-        const m = mutations[i];
-        if (m.type === 'characterData') {
-          localizeDomNode(m.target);
-        } else if (m.type === 'attributes') {
-          const el = m.target;
-          const attr = m.attributeName;
-          if (el && attr && el.hasAttribute(attr)) {
-            const cur = el.getAttribute(attr);
-            if (cur && /[А-Яа-яЁё]/.test(cur)) {
-              const next = translateTextToEn(cur);
-              if (next !== cur) el.setAttribute(attr, next);
+      if (isApplyingI18n) return;
+      isApplyingI18n = true;
+      i18nObserver.disconnect();
+      try {
+        for (let i = 0; i < mutations.length; i++) {
+          const m = mutations[i];
+          if (m.type === 'characterData') {
+            if (!isInsideDynamicUserContent(m.target)) {
+              localizeDomNode(m.target, true);
+            }
+          } else if (m.type === 'attributes') {
+            const el = m.target;
+            const attr = m.attributeName;
+            if (el && attr && !isInsideDynamicUserContent(el) && el.hasAttribute(attr)) {
+              const cur = el.getAttribute(attr);
+              if (cur && /[А-Яа-яЁё]/.test(cur)) {
+                const next = translateTextToEn(cur);
+                if (next !== cur) el.setAttribute(attr, next);
+              }
+            }
+          } else if (m.type === 'childList') {
+            for (let j = 0; j < m.addedNodes.length; j++) {
+              localizeDomNode(m.addedNodes[j], true);
             }
           }
-        } else if (m.type === 'childList') {
-          for (let j = 0; j < m.addedNodes.length; j++) {
-            localizeDomNode(m.addedNodes[j]);
-          }
         }
+      } finally {
+        i18nObserver.takeRecords();
+        if (document.body) {
+          i18nObserver.observe(document.body, I18N_OBSERVE_OPTS);
+        }
+        isApplyingI18n = false;
       }
     });
     if (document.body) {
-      i18nObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-        attributes: true,
-        attributeFilter: ['title', 'placeholder', 'aria-label', 'alt']
-      });
+      i18nObserver.observe(document.body, I18N_OBSERVE_OPTS);
     }
   }
+
+  // --- Global CSP-Safe Image Fallback Handler (Eliminates Inline onerror & Offline Loops) ---
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    if (!img || img.tagName !== 'IMG' || img.dataset.fallbackApplied) return;
+    if (img.dataset.fallbackIcon) {
+      img.dataset.fallbackApplied = '1';
+      img.src = img.dataset.fallbackIcon;
+    } else if (img.dataset.fallbackMode === 'next-flex') {
+      img.dataset.fallbackApplied = '1';
+      img.style.display = 'none';
+      if (img.nextElementSibling) {
+        img.nextElementSibling.style.display = 'flex';
+      }
+    } else if (img.dataset.fallbackMode === 'parent-fallback') {
+      img.dataset.fallbackApplied = '1';
+      img.style.display = 'none';
+      if (img.parentElement) {
+        img.parentElement.classList.add('has-fallback');
+      }
+    }
+  }, true);
 
   // --- PWA Service Worker Registration ---
   if ('serviceWorker' in navigator) {
@@ -585,8 +787,46 @@ extension WebUIContent {
 
   function writePersistentCookie(name, val) {
     try {
-      document.cookie = `${name}=${encodeURIComponent(val)}; path=/; max-age=315360000; SameSite=Lax`;
+      document.cookie = `${name}=${encodeURIComponent(val)}; path=/; max-age=315360000; SameSite=Strict`;
     } catch (e) {}
+  }
+
+  function persistDeviceSecret(secret) {
+    const clean = String(secret || '').trim();
+    if (!clean) return;
+    if (typeof state !== 'undefined' && state) {
+      state.deviceSecret = clean;
+    }
+    writePersistentCookie('amr_device_secret', clean);
+    try { localStorage.setItem('amr_device_secret', clean); } catch (e) {}
+    if (typeof window !== 'undefined' && 'caches' in window && window.caches && typeof window.caches.open === 'function') {
+      Promise.resolve()
+        .then(() => window.caches.open('amr-device-secure-store-v1'))
+        .then((cache) => {
+          if (cache && typeof cache.put === 'function' && typeof Response === 'function') {
+            return cache.put('/__amr_device_secret', new Response(clean, { headers: { 'Content-Type': 'text/plain' } }));
+          }
+        })
+        .catch(() => {});
+    }
+  }
+
+  function clearInviteTokenFromClient() {
+    if (typeof state !== 'undefined' && state) {
+      state.inviteToken = '';
+    }
+    try { sessionStorage.removeItem('amr_invite_token'); } catch (e) {}
+  }
+
+  function buildDeviceAuthHeaders(extraHeaders = {}) {
+    const headers = {
+      'X-AMR-Device-ID': (typeof state !== 'undefined' && state && state.deviceId) ? state.deviceId : '',
+      ...extraHeaders
+    };
+    if (typeof state !== 'undefined' && state && state.deviceSecret) {
+      headers['X-AMR-Device-Secret'] = state.deviceSecret;
+    }
+    return headers;
   }
 
   function generateUUIDv4() {
@@ -706,8 +946,18 @@ extension WebUIContent {
       }
     } catch (e) {}
 
+    let lsSecret = '';
+    try { lsSecret = (localStorage.getItem('amr_device_secret') || '').trim(); } catch (_) {}
+    const cookieSecret = readCookieValue('amr_device_secret');
+    const deviceSecret = lsSecret || cookieSecret || '';
+    if (deviceSecret) {
+      writePersistentCookie('amr_device_secret', deviceSecret);
+      try { localStorage.setItem('amr_device_secret', deviceSecret); } catch (_) {}
+    }
+
     return {
       deviceId: uid,
+      deviceSecret,
       shortId: computeShortDeviceId(uid),
       deviceIdWasFreshlyGenerated: uidWasFreshlyGenerated,
       deviceName,
@@ -723,6 +973,7 @@ extension WebUIContent {
   const state = {
     connected: false,
     deviceId: initialDeviceProfile.deviceId,
+    deviceSecret: initialDeviceProfile.deviceSecret || '',
     deviceShortId: initialDeviceProfile.shortId,
     deviceIdWasFreshlyGenerated: Boolean(initialDeviceProfile.deviceIdWasFreshlyGenerated),
     supersededFreshDeviceId: '',
@@ -733,6 +984,45 @@ extension WebUIContent {
     inviteToken: initialDeviceProfile.inviteToken || '',
     shareAccessUrl: '',
     lockScreenControls: initialDeviceProfile.lockScreenControls,
+    allowDacSelection: true,
+    allowDspPresetSelection: true,
+    allowRoomMeasurement: true,
+    allowLateNightMode: true,
+    allowLibraryModification: true,
+    isDlnaActive: false,
+    lateNightDrcEnabled: false,
+    lateNightDrcProfile: 'gentle',
+    lateNightDrcMode: 'off',
+    lateNightDrcGainDb: 0,
+    lateNightDrcSubtitle: '',
+    masteringDeclipMode: 'off',
+    masteringDeclipRestoredDb: 0,
+    masteringDeclipClipsCount: 0,
+    masteringDeclipAutoBypassed: false,
+    masteringDeclipSubtitle: '',
+    masteringDeesserMode: 'off',
+    masteringDeesserGainDb: 0,
+    masteringDeesserSubtitle: '',
+    sonicBridgeFrom: '',
+    sonicBridgeTo: '',
+    sonicBridgeSteps: 12,
+    sonicBridgeAutoPlay: false,
+    roomCorrectionActive: false,
+    roomProfileName: '',
+    isMeasuringRoom: false,
+    roomIsPlayingTestSignal: false,
+    roomActiveProfileId: '',
+    awaitingNativeRoomFilePicker: false,
+    nativePickerOpenedAt: 0,
+    lastDspSettings: null,
+    roomAcoustic: {
+      enabled: false,
+      is_test_signal_playing: false,
+      active_profile_id: '',
+      active_profile: null,
+      profiles: [],
+      bands_hz: []
+    },
     aiCuratorEnabled: true,
     pinnedAiPrompts: [],
     activeAiCuratedPrompt: '',
@@ -781,9 +1071,39 @@ extension WebUIContent {
       playlist: ''
     },
     playlists: [],
+    libraryAlbums: [],
+    libraryRecent: {
+      albums: [],
+      songs: [],
+      loaded: false
+    },
+    libraryArtists: [],
+    libraryArtistsLoaded: false,
+    libraryArtistFilter: '',
+    currentLibraryArtistDetail: null,
+    librarySongs: [],
+    librarySongsLoaded: false,
+    librarySongsFilter: '',
+    librarySongsRenderLimit: 250,
+    libraryTab: 'recent',
     currentPlaylistDetail: null,
+    currentAlbumDetail: null,
+    currentAlbumSource: 'catalog',
+    actionTargetTrack: null,
+    tvLibraryConfigLoaded: false,
+    tvLibraryConfig: {
+      show_my_station: true,
+      show_discovery_station: true,
+      show_favorites_mix: true,
+      show_heavy_rotation: true,
+      playlists_mode: 'all',
+      selected_playlist_names: [],
+      albums_mode: 'recent',
+      selected_albums: [],
+      selected_album_keys: []
+    },
     trends: {
-      country: 'ru',
+      country: '',
       topSongs: [],
       stations: [],
       topAlbums: [],
@@ -804,71 +1124,101 @@ extension WebUIContent {
     dacMutingGuardMs: 100,
     audioDevices: [],
 
-    // Apple MusicKit & User Token
+    // Apple MusicKit & User Token (region & locale resolved dynamically from account)
     hasUserToken: false,
     developerToken: '',
-    userStorefront: 'us',
+    userStorefront: '',
+    userLocale: '',
     isAccountSynced: false,
     accountHealth: null,
 
     // Scrubber local tracking & watchdog timestamps
     isScrubbing: false,
     scrubValue: 0,
+    isBuffering: false,
+    isStreamStalled: false,
+    isStagingBuffer: false,
+    loadingStage: null,
+    loadingStartedAtMs: 0,
+    hasStartedAdvancingForTrack: false,
     lastSyncPos: 0,
     lastSyncTime: performance.now(),
     lastServerMessageAt: Date.now(),
+    lastClientCommandAt: 0,
+    pendingPingSentAt: 0,
     lastSpectralUpdateAt: performance.now(),
     lastEndOfTrackPollAt: 0
   };
-  window.__amr_state = state;
 
+// === MODULE: 03-dom-cache-and-websocket.js ===
   function recoverOrPersistDeviceUidBeforeConnect() {
-    const hasCacheStorage = typeof window !== 'undefined' && 'caches' in window && Boolean(window.caches);
-    if (!state.deviceIdWasFreshlyGenerated) {
+    const hasCacheStorage = typeof window !== 'undefined' && 'caches' in window && Boolean(window.caches) && typeof window.caches.open === 'function';
+    const needUidRecovery = Boolean(state.deviceIdWasFreshlyGenerated);
+    const needSecretRecovery = !state.deviceSecret;
+    if (!needUidRecovery && !needSecretRecovery) {
       persistUidToSecureStore(state.deviceId);
+      persistDeviceSecret(state.deviceSecret);
       return Promise.resolve();
     }
-    if (!hasCacheStorage || typeof window.caches.open !== 'function') {
+    if (!hasCacheStorage) {
       state.deviceIdWasFreshlyGenerated = false;
       persistUidToSecureStore(state.deviceId);
+      if (state.deviceSecret) persistDeviceSecret(state.deviceSecret);
       return Promise.resolve();
     }
     const freshlyGeneratedUid = state.deviceId;
     const cacheLookupPromise = Promise.resolve()
       .then(() => window.caches.open('amr-device-secure-store-v1'))
-      .then((cache) => (cache && typeof cache.match === 'function' ? cache.match('/__amr_device_uid') : null))
-      .then((resp) => (resp && typeof resp.text === 'function' ? resp.text() : null))
-      .catch(() => null);
+      .then(async (cache) => {
+        if (!cache || typeof cache.match !== 'function') return { rawUid: null, rawSecret: null };
+        const [uidResp, secResp] = await Promise.all([
+          needUidRecovery ? cache.match('/__amr_device_uid').catch(() => null) : Promise.resolve(null),
+          needSecretRecovery ? cache.match('/__amr_device_secret').catch(() => null) : Promise.resolve(null)
+        ]);
+        const rawUid = uidResp && typeof uidResp.text === 'function' ? await uidResp.text().catch(() => null) : null;
+        const rawSecret = secResp && typeof secResp.text === 'function' ? await secResp.text().catch(() => null) : null;
+        return { rawUid, rawSecret };
+      })
+      .catch(() => ({ rawUid: null, rawSecret: null }));
     const timeoutPromise = new Promise((resolve) => {
-      setTimeout(() => resolve(null), 250);
+      setTimeout(() => resolve({ rawUid: null, rawSecret: null }), 250);
     });
     return Promise.race([cacheLookupPromise, timeoutPromise])
-      .then((rawCachedUid) => {
-        let candidate = String(rawCachedUid || '').trim();
-        if (candidate.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(candidate);
-            if (parsed && parsed.uid) candidate = String(parsed.uid).trim();
-          } catch (_) {}
-        }
-        const cachedUid = candidate.toLowerCase();
-        if (cachedUid && /^[A-Za-z0-9._-]{8,128}$/.test(cachedUid)) {
-          state.deviceId = cachedUid;
-          state.deviceShortId = computeShortDeviceId(cachedUid);
-          state.deviceIdWasFreshlyGenerated = false;
-          state.supersededFreshDeviceId = freshlyGeneratedUid;
-          persistUidToSecureStore(cachedUid);
-          if (typeof syncDeviceInfoUI === 'function') {
-            syncDeviceInfoUI();
+      .then(({ rawUid, rawSecret }) => {
+        if (needUidRecovery) {
+          let candidate = String(rawUid || '').trim();
+          if (candidate.startsWith('{')) {
+            try {
+              const parsed = JSON.parse(candidate);
+              if (parsed && parsed.uid) candidate = String(parsed.uid).trim();
+            } catch (_) {}
           }
-        } else {
+          const cachedUid = candidate.toLowerCase();
+          if (cachedUid && /^[A-Za-z0-9._-]{8,128}$/.test(cachedUid)) {
+            state.deviceId = cachedUid;
+            state.deviceShortId = computeShortDeviceId(cachedUid);
+            state.supersededFreshDeviceId = freshlyGeneratedUid;
+          }
           state.deviceIdWasFreshlyGenerated = false;
-          persistUidToSecureStore(state.deviceId);
+        }
+        if (needSecretRecovery) {
+          const cachedSecret = String(rawSecret || '').trim();
+          if (cachedSecret && /^[A-Za-z0-9._-]{16,256}$/.test(cachedSecret)) {
+            state.deviceSecret = cachedSecret;
+          }
+        }
+        persistUidToSecureStore(state.deviceId);
+        if (state.deviceSecret) {
+          persistDeviceSecret(state.deviceSecret);
+        }
+        if (typeof syncDeviceInfoUI === 'function') {
+          syncDeviceInfoUI();
         }
       })
       .catch(() => {
         state.deviceIdWasFreshlyGenerated = false;
         persistUidToSecureStore(state.deviceId);
+        if (state.deviceSecret) persistDeviceSecret(state.deviceSecret);
       });
   }
 
@@ -881,6 +1231,7 @@ extension WebUIContent {
     // Views
     viewNowPlaying: document.getElementById('view-now-playing'),
     viewQueue: document.getElementById('view-queue'),
+    viewPlaylists: document.getElementById('view-playlists'),
     viewLibrary: document.getElementById('view-library'),
     viewHome: document.getElementById('view-home') || document.getElementById('view-trends'),
     viewTrends: document.getElementById('view-home') || document.getElementById('view-trends'),
@@ -962,6 +1313,7 @@ extension WebUIContent {
     miniIconPlay: document.getElementById('mini-icon-play'),
     miniIconPause: document.getElementById('mini-icon-pause'),
     miniBtnNext: document.getElementById('mini-btn-next'),
+    miniProgressTrack: document.getElementById('mini-progress-track') || document.querySelector('.mini-progress-track'),
     miniProgressFill: document.getElementById('mini-progress-fill'),
 
     // Ambient Backdrop Elements
@@ -990,8 +1342,20 @@ extension WebUIContent {
     // Station Picker / Track Actions Modal (•••)
     stationPickerModal: document.getElementById('station-picker-modal'),
     btnCloseStationModal: document.getElementById('btn-close-station-modal'),
+    stationModalTrackBanner: document.getElementById('station-modal-track-banner'),
+    stationModalTrackArt: document.getElementById('station-modal-track-art'),
+    stationModalTrackTitle: document.getElementById('station-modal-track-title'),
+    stationModalTrackSub: document.getElementById('station-modal-track-sub'),
+    btnAddTrackLibrary: document.getElementById('btn-add-track-library'),
+    btnRemoveTrackLibrary: document.getElementById('btn-remove-track-library'),
+    btnGoToLibraryArtist: document.getElementById('btn-go-to-library-artist'),
+    stationOptLibArtistName: document.getElementById('station-opt-lib-artist-name'),
+    btnRemoveArtistLibrary: document.getElementById('btn-remove-artist-library'),
+    stationOptRemoveArtistSub: document.getElementById('station-opt-remove-artist-sub'),
     btnAiMixByTrack: document.getElementById('btn-ai-mix-by-track'),
     stationOptAiVibeSub: document.getElementById('station-opt-ai-vibe-sub'),
+    btnSonicBridgeByTrack: document.getElementById('btn-sonic-bridge-by-track'),
+    stationOptSonicBridgeSub: document.getElementById('station-opt-sonic-bridge-sub'),
     btnStationByTrack: document.getElementById('btn-station-by-track'),
     btnStationByArtist: document.getElementById('btn-station-by-artist'),
     stationOptAlbumName: document.getElementById('station-opt-album-name'),
@@ -1006,6 +1370,12 @@ extension WebUIContent {
     scrubberInput: document.getElementById('scrubber-input'),
     timeElapsed: document.getElementById('time-elapsed'),
     timeRemaining: document.getElementById('time-remaining'),
+    playerLoadingStatus: document.getElementById('player-loading-status'),
+    playerLoadingText: document.getElementById('player-loading-text'),
+    standbyProgressTrack: document.getElementById('standby-progress-track'),
+    standbyLoadingStatus: document.getElementById('standby-loading-status'),
+    standbyLoadingText: document.getElementById('standby-loading-text'),
+    standbyBtnPlayPause: document.getElementById('standby-btn-play-pause'),
 
     // Transport Controls
     btnShuffle: document.getElementById('btn-shuffle'),
@@ -1019,6 +1389,9 @@ extension WebUIContent {
 
     // Queue Elements
     queueSubtitle: document.getElementById('queue-subtitle'),
+    queueHistoryGroup: document.getElementById('queue-history-group'),
+    queueHistoryList: document.getElementById('queue-history-list'),
+    btnToggleQueueHistory: document.getElementById('btn-toggle-queue-history'),
     queueCurrentGroup: document.getElementById('queue-current-group'),
     queueCurrentTrack: document.getElementById('queue-current-track'),
     queueUpcomingList: document.getElementById('queue-upcoming-list'),
@@ -1026,12 +1399,45 @@ extension WebUIContent {
     btnSaveQueueText: document.getElementById('btn-save-queue-text'),
     btnClearQueue: document.getElementById('btn-clear-queue'),
 
-    // Library Elements
+    // Playlists & Library Elements
+    playlistsSectionSubtitle: document.getElementById('playlists-section-subtitle'),
+    btnRefreshPlaylists: document.getElementById('btn-refresh-playlists'),
     playlistsBrowsePane: document.getElementById('playlists-browse-pane'),
     playlistsGrid: document.getElementById('playlists-grid'),
+    libraryRecentPane: document.getElementById('library-recent-pane'),
+    libraryArtistsPane: document.getElementById('library-artists-pane'),
+    libraryArtistsToolbar: document.getElementById('library-artists-toolbar'),
+    libraryArtistsFilter: document.getElementById('library-artists-filter'),
+    btnClearArtistsFilter: document.getElementById('btn-clear-artists-filter'),
+    libraryArtistsList: document.getElementById('library-artists-list'),
+    libraryAlbumsGrid: document.getElementById('library-albums-grid'),
+    librarySongsPane: document.getElementById('library-songs-pane'),
+    librarySongsToolbar: document.getElementById('library-songs-toolbar'),
+    librarySongsFilter: document.getElementById('library-songs-filter'),
+    btnClearSongsFilter: document.getElementById('btn-clear-songs-filter'),
+    btnPlayLibrarySongs: document.getElementById('btn-play-library-songs'),
+    btnShuffleLibrarySongs: document.getElementById('btn-shuffle-library-songs'),
+    librarySongsList: document.getElementById('library-songs-list'),
+    librarySectionSubtitle: document.getElementById('library-section-subtitle'),
+    librarySegRecent: document.getElementById('library-seg-recent'),
+    librarySegArtists: document.getElementById('library-seg-artists'),
+    librarySegAlbums: document.getElementById('library-seg-albums'),
+    librarySegSongs: document.getElementById('library-seg-songs'),
     btnRefreshLibrary: document.getElementById('btn-refresh-library'),
+    btnRefreshLibraryDesktop: document.getElementById('btn-refresh-library-desktop'),
+    libraryArtistDetailPane: document.getElementById('library-artist-detail-pane'),
+    btnBackToArtists: document.getElementById('btn-back-to-artists'),
+    artistDetailArtwork: document.getElementById('artist-detail-artwork'),
+    artistDetailInitials: document.getElementById('artist-detail-initials'),
+    artistDetailTitle: document.getElementById('artist-detail-title'),
+    artistDetailMeta: document.getElementById('artist-detail-meta'),
+    btnPlayArtistLibrary: document.getElementById('btn-play-artist-library'),
+    btnShuffleArtistLibrary: document.getElementById('btn-shuffle-artist-library'),
+    btnRemoveArtistDetailLibrary: document.getElementById('btn-remove-artist-detail-library'),
+    artistDetailContent: document.getElementById('artist-detail-content'),
     playlistDetailPane: document.getElementById('playlist-detail-pane'),
     btnBackToPlaylists: document.getElementById('btn-back-to-playlists'),
+    detailBackLabel: document.getElementById('detail-back-label'),
     detailArtwork: document.getElementById('detail-artwork'),
     detailTitle: document.getElementById('detail-title'),
     detailBadge: document.getElementById('detail-badge'),
@@ -1040,7 +1446,15 @@ extension WebUIContent {
     btnShufflePlaylist: document.getElementById('btn-shuffle-playlist'),
     btnAddPlaylistLibrary: document.getElementById('btn-add-playlist-library'),
     btnAddPlaylistLibraryText: document.getElementById('btn-add-playlist-library-text'),
+    btnRemoveDetailLibrary: document.getElementById('btn-remove-detail-library'),
+    btnRemoveDetailLibraryText: document.getElementById('btn-remove-detail-library-text'),
     playlistTracksList: document.getElementById('playlist-tracks-list'),
+    albumCompletenessBannerSlot: document.getElementById('album-completeness-banner-slot'),
+    confirmDeleteModal: document.getElementById('library-delete-confirm-modal'),
+    confirmDeleteTitle: document.getElementById('confirm-delete-title'),
+    confirmDeleteMessage: document.getElementById('confirm-delete-message'),
+    btnConfirmDeleteCancel: document.getElementById('btn-confirm-delete-cancel'),
+    btnConfirmDeleteOk: document.getElementById('btn-confirm-delete-ok'),
 
     // Search Elements
     searchInput: document.getElementById('search-input'),
@@ -1215,9 +1629,19 @@ extension WebUIContent {
     return `${protocol}//${host}`;
   }
 
+  const recentGetRpcSentAt = new Map();
+  const pendingPreOpenQueue = [];
+
+  function flushPendingPreOpenQueue() {
+    if (!socket || socket.readyState !== WebSocket.OPEN || !state.deviceAuthorized) return;
+    while (pendingPreOpenQueue.length > 0) {
+      const queuedMsg = pendingPreOpenQueue.shift();
+      if (queuedMsg) send(queuedMsg);
+    }
+  }
+
   function connectWebSocket() {
     clearTimeout(reconnectTimer);
-    state.initialViewSelected = false;
 
     if (socket) {
       try {
@@ -1240,10 +1664,12 @@ extension WebUIContent {
     socket.onopen = function () {
       state.connected = true;
       state.lastServerMessageAt = Date.now();
+      state.pendingPingSentAt = 0;
       state.lastPlayerStateReceivedAt = 0;
       state.lastQueueReceivedAt = 0;
       state.lastAiSettingsReceivedAt = 0;
       state.initialAuthFetched = false;
+      recentGetRpcSentAt.clear();
       trendsInFlightCountry = '';
       trendsInFlightSince = 0;
       reconnectAttempt = 0;
@@ -1252,15 +1678,19 @@ extension WebUIContent {
 
       // Step 1: Register this PWA device UID & verify device authorization FIRST.
       // Apple ID / MusicKit / catalog checks run ONLY after the device is authorized on Mac.
+      const regParams = {
+        device_id: state.deviceId,
+        device_name: state.deviceName,
+        device_type: state.deviceType,
+        lock_screen_controls: state.lockScreenControls,
+        invite_token: state.inviteToken || ''
+      };
+      if (state.deviceSecret) {
+        regParams.device_secret = state.deviceSecret;
+      }
       send({
         action: 'register_device',
-        params: {
-          device_id: state.deviceId,
-          device_name: state.deviceName,
-          device_type: state.deviceType,
-          lock_screen_controls: state.lockScreenControls,
-          invite_token: state.inviteToken || ''
-        }
+        params: regParams
       });
     };
 
@@ -1275,7 +1705,11 @@ extension WebUIContent {
 
     socket.onclose = function () {
       state.connected = false;
-      state.initialViewSelected = false;
+      state.pendingPingSentAt = 0;
+      recentGetRpcSentAt.clear();
+      if (state.isMeasuringRoom) {
+        stopRoomMeasurementSession(false);
+      }
       dom.overlay.classList.remove('hidden');
       syncSilentAudio(false);
       syncMotionVideoPlaybackState();
@@ -1285,7 +1719,7 @@ extension WebUIContent {
 
     socket.onerror = function () {
       state.connected = false;
-      state.initialViewSelected = false;
+      state.pendingPingSentAt = 0;
       dom.overlay.classList.remove('hidden');
       syncSilentAudio(false);
       syncMotionVideoPlaybackState();
@@ -1302,11 +1736,46 @@ extension WebUIContent {
   }
 
   function send(msgObj) {
+    const act = (msgObj && msgObj.action) ? msgObj.action.toLowerCase() : '';
+    const isAiCurateAction = (
+      act === 'ai_curate' ||
+      act === 'ai_curate_from_track' ||
+      act === 'play_ai_track_vibe' ||
+      act === 'build_sonic_bridge' ||
+      act === 'sonic_bridge'
+    );
     if (!socket || socket.readyState !== WebSocket.OPEN) {
+      if (isAiCurateAction) {
+        if (state.aiCurateTimeoutId) {
+          clearTimeout(state.aiCurateTimeoutId);
+          state.aiCurateTimeoutId = null;
+        }
+        state.isAiCurating = false;
+        state.pendingStandbyAiAutoPlay = false;
+        state.sonicBridgeAutoPlay = false;
+      } else if (act.startsWith('get_') && pendingPreOpenQueue.length < 16) {
+        if (!pendingPreOpenQueue.some((item) => item && item.action === msgObj.action)) {
+          pendingPreOpenQueue.push(msgObj);
+        }
+      }
       return false;
     }
-    const act = (msgObj && msgObj.action) ? msgObj.action.toLowerCase() : '';
-    if (act === 'ai_curate' || act === 'ai_curate_from_track' || act === 'play_ai_track_vibe') {
+    const isRealtimeSpectralPoll = (act === 'get_spectral_analysis' || act === 'get_spectral_rta');
+    if (act.startsWith('get_') && !isRealtimeSpectralPoll && !(msgObj.params && msgObj.params.refresh === true)) {
+      const nowMs = Date.now();
+      const dedupeKey = `${act}|${msgObj.params ? JSON.stringify(msgObj.params) : ''}`;
+      const prevAt = recentGetRpcSentAt.get(dedupeKey) || 0;
+      if (nowMs - prevAt < 500) {
+        return true;
+      }
+      recentGetRpcSentAt.set(dedupeKey, nowMs);
+      if (recentGetRpcSentAt.size > 120) {
+        for (const [k, ts] of recentGetRpcSentAt.entries()) {
+          if (nowMs - ts >= 500) recentGetRpcSentAt.delete(k);
+        }
+      }
+    }
+    if (isAiCurateAction) {
       if (!msgObj.params || typeof msgObj.params !== 'object') {
         msgObj.params = {};
       }
@@ -1324,6 +1793,7 @@ extension WebUIContent {
         if (state.aiCurateReqSeq === reqId) {
           state.isAiCurating = false;
           state.pendingStandbyAiAutoPlay = false;
+          state.sonicBridgeAutoPlay = false;
           state.aiCurateTimeoutId = null;
         }
       }, 25000);
@@ -1350,19 +1820,24 @@ extension WebUIContent {
       state.activeAiCuratedPrompt = '';
     }
     if (act === 'play' || act.startsWith('play_') || act.includes('play') || act === 'next' || act === 'previous') {
+      state.lastClientCommandAt = Date.now();
       syncSilentAudio(true);
     } else if (act === 'pause' || act === 'stop') {
+      state.lastClientCommandAt = Date.now();
       syncSilentAudio(false);
     }
     socket.send(JSON.stringify(msgObj));
     return true;
   }
 
+// === MODULE: 04-server-message-dispatcher.js ===
   // --- Server Message Dispatcher ---
   function handleServerMessage(msg) {
     if (!msg || typeof msg !== 'object') return;
     state.lastServerMessageAt = Date.now();
+    state.pendingPingSentAt = 0;
     const type = (msg.event || msg.action || msg.type || '').toLowerCase();
+    if (type === 'ping' || type === 'pong') return;
     const data = msg.data !== undefined ? msg.data : msg;
 
     if (msg.status === 'cancelled' || (data && typeof data === 'object' && data.status === 'cancelled')) {
@@ -1379,6 +1854,7 @@ extension WebUIContent {
       }
       state.isAiCurating = false;
       state.pendingStandbyAiAutoPlay = false;
+      state.sonicBridgeAutoPlay = false;
       setUIBusy(false);
       return;
     }
@@ -1390,6 +1866,8 @@ extension WebUIContent {
       type === 'get_artwork' ||
       type === 'get_lyrics' ||
       type === 'get_booklet_info' ||
+      type === 'get_tv_library_config' ||
+      type === 'tv_library_config' ||
       type === 'client_log'
     );
 
@@ -1399,7 +1877,9 @@ extension WebUIContent {
         type === 'ai_curate_from_track' ||
         type === 'play_ai_track_vibe' ||
         type === 'curate_music' ||
-        type === 'ai_curate_result'
+        type === 'ai_curate_result' ||
+        type === 'build_sonic_bridge' ||
+        type === 'sonic_bridge'
       );
       if (isAiErrorType) {
         const errReqId = msg.request_id !== undefined ? msg.request_id : (data && data.request_id);
@@ -1412,6 +1892,7 @@ extension WebUIContent {
         }
         state.isAiCurating = false;
         state.pendingStandbyAiAutoPlay = false;
+        state.sonicBridgeAutoPlay = false;
         setUIBusy(false);
       }
       if (!isSilentErrorType) {
@@ -1428,14 +1909,42 @@ extension WebUIContent {
           }
         }
         const errText = translateTextToEn(msg.error || (msg.data && msg.data.message) || 'Ошибка выполнения команды');
+        if (type === 'select_room_profile' || type === 'set_room_correction_enabled') {
+          updateRoomAcousticUI(state.roomAcoustic);
+        }
         if (type === 'get_album' || type === 'album' || type === 'get_playlist_tracks' || type === 'playlist_tracks') {
           if (dom.playlistTracksList) {
             dom.playlistTracksList.innerHTML = `<div class="empty-state">${escapeHtml(errText || translateTextToEn('Не удалось загрузить треки'))}</div>`;
           }
+        } else if (type === 'get_library_recent' || type === 'library_recent') {
+          if (dom.libraryRecentPane && dom.libraryRecentPane.querySelector('.loading-state')) {
+            dom.libraryRecentPane.innerHTML = `<div class="empty-state">${escapeHtml(errText)}</div>`;
+          }
+        } else if (type === 'get_library_artists' || type === 'library_artists') {
+          if (dom.libraryArtistsList && dom.libraryArtistsList.querySelector('.loading-state')) {
+            dom.libraryArtistsList.innerHTML = `<div class="empty-state">${escapeHtml(errText)}</div>`;
+          }
+        } else if (type === 'get_library_artist_detail' || type === 'library_artist_detail') {
+          if (dom.artistDetailContent && dom.artistDetailContent.querySelector('.loading-state')) {
+            dom.artistDetailContent.innerHTML = `<div class="empty-state">${escapeHtml(errText)}</div>`;
+          }
+        } else if (type === 'get_library_songs' || type === 'library_songs') {
+          if (dom.librarySongsList && dom.librarySongsList.querySelector('.loading-state')) {
+            dom.librarySongsList.innerHTML = `<div class="empty-state">${escapeHtml(errText)}</div>`;
+          }
         } else if (isAiErrorType) {
           isSearchLoadingMore = false;
           if (dom.searchResults && dom.searchResults.querySelector('.loading-state')) {
-            dom.searchResults.innerHTML = `<div class="empty-state">${escapeHtml(errText)}</div>`;
+            if ((type === 'build_sonic_bridge' || type === 'sonic_bridge') && state.searchScope === 'bridge') {
+              dom.searchResults.innerHTML = '';
+              dom.searchResults.appendChild(buildSonicBridgeCardElement(true));
+              const emptyEl = document.createElement('div');
+              emptyEl.className = 'empty-state';
+              emptyEl.textContent = errText;
+              dom.searchResults.appendChild(emptyEl);
+            } else {
+              dom.searchResults.innerHTML = `<div class="empty-state">${escapeHtml(errText)}</div>`;
+            }
           }
         } else if (type === 'search' || type === 'search_result') {
           const errReqId = msg.request_id !== undefined ? msg.request_id : (data && data.request_id);
@@ -1452,9 +1961,12 @@ extension WebUIContent {
             : state.lastLibraryAddTarget;
           if (!targetSource || targetSource === 'detail') {
             state.isAddingDetailToLibrary = false;
+            const isAlbErr = (type === 'add_album_to_library') || Boolean(state.currentPlaylistDetail && state.currentPlaylistDetail.isAlbum);
             if (dom.btnAddPlaylistLibrary && !dom.btnAddPlaylistLibrary.classList.contains('added')) {
               dom.btnAddPlaylistLibrary.disabled = false;
-              if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+              if (dom.btnAddPlaylistLibraryText) {
+                dom.btnAddPlaylistLibraryText.textContent = translateTextToEn(isAlbErr ? 'В медиатеку' : 'В плейлисты');
+              }
             }
           }
           if (!targetSource || targetSource === 'ai' || targetSource === 'hero') {
@@ -1462,7 +1974,7 @@ extension WebUIContent {
             const aiSaveText = dom.btnAiCuratedSaveText || document.getElementById('btn-ai-curated-save-text');
             if (aiSaveBtn && !aiSaveBtn.classList.contains('added')) {
               aiSaveBtn.disabled = false;
-              if (aiSaveText) aiSaveText.textContent = translateTextToEn('В медиатеку');
+              if (aiSaveText) aiSaveText.textContent = translateTextToEn('В плейлисты');
             }
           }
         } else if (type === 'save_queue_to_playlist') {
@@ -1489,6 +2001,15 @@ extension WebUIContent {
         handleDeviceAuthStatus(data);
         break;
 
+      case 'toast':
+        if (data && typeof data === 'object') {
+          const toastMsg = IS_EN
+            ? (data.message_en || data.message || '')
+            : (data.message_ru || data.message || '');
+          if (toastMsg) showToast(toastMsg, 2400);
+        }
+        break;
+
       case 'share_access_qr':
       case 'get_share_access_qr':
       case 'generate_share_access_qr':
@@ -1504,6 +2025,14 @@ extension WebUIContent {
           data.request_id = msg.request_id;
         }
         updateAiCuratedResults(data, type);
+        break;
+
+      case 'build_sonic_bridge':
+      case 'sonic_bridge':
+        if (data && typeof data === 'object' && data.request_id === undefined && msg.request_id !== undefined) {
+          data.request_id = msg.request_id;
+        }
+        updateSonicBridgeResults(data);
         break;
 
       case 'ai_curator_settings':
@@ -1536,6 +2065,48 @@ extension WebUIContent {
       case 'get_playlists':
       case 'playlists_result':
         updatePlaylists(data);
+        break;
+
+      case 'albums':
+      case 'get_albums':
+      case 'get_library_albums':
+      case 'albums_result':
+        updateLibraryAlbums(data);
+        break;
+
+      case 'library_recent':
+      case 'get_library_recent':
+        updateLibraryRecent(data);
+        break;
+
+      case 'library_artists':
+      case 'get_library_artists':
+        updateLibraryArtists(data);
+        break;
+
+      case 'library_artist_detail':
+      case 'get_library_artist_detail':
+        updateLibraryArtistDetail(data);
+        break;
+
+      case 'library_songs':
+      case 'get_library_songs':
+        updateLibrarySongs(data);
+        break;
+
+      case 'remove_from_library':
+      case 'delete_from_library':
+      case 'remove_playlist_from_library':
+      case 'delete_playlist_from_library':
+      case 'library_changed':
+        handleLibraryRemovedOrChanged(data, type, msg);
+        break;
+
+      case 'tv_library_config':
+      case 'get_tv_library_config':
+      case 'set_tv_library_config':
+      case 'tv_library_config_changed':
+        handleTvLibraryConfig(data);
         break;
 
       case 'playlist_tracks':
@@ -1598,18 +2169,81 @@ extension WebUIContent {
         updateWledSettingsUI(data);
         break;
 
+      case 'dsp_settings':
+      case 'get_dsp_settings':
+      case 'set_dsp_settings':
+      case 'select_dsp_preset':
+      case 'update_dsp_settings':
+        updateDSPSettingsUI(data);
+        break;
+
+      case 'room_acoustic_settings':
+      case 'get_room_acoustic_settings':
+      case 'start_room_test_signal':
+      case 'stop_room_test_signal':
+      case 'submit_room_measurement':
+      case 'set_room_correction_enabled':
+      case 'select_room_profile':
+      case 'rename_room_profile':
+      case 'delete_room_profile':
+        updateRoomAcousticUI(data);
+        break;
+
+      case 'late_night_drc_settings':
+      case 'get_late_night_drc_settings':
+      case 'set_late_night_drc':
+      case 'set_late_night_drc_mode':
+      case 'set_late_night_drc_enabled':
+      case 'set_late_night_drc_profile':
+        updateLateNightDRCUI(data);
+        break;
+
+      case 'mastering_restoration_settings':
+      case 'get_mastering_restoration_settings':
+      case 'set_mastering_restoration':
+      case 'set_mastering_declip_mode':
+      case 'set_mastering_deesser_mode':
+        updateMasteringRestorationUI(data);
+        break;
+
+      case 'set_repeat':
+      case 'repeat': {
+        if (data && (data.repeat !== undefined || data.repeatMode !== undefined || data.repeat_mode !== undefined)) {
+          const ackRepeat = normalizeRepeatMode(data.repeat || data.repeat_mode || data.repeatMode);
+          if (!state.pendingRepeatUntil || Date.now() >= state.pendingRepeatUntil) {
+            state.repeatMode = ackRepeat;
+            renderNowPlaying();
+          } else if (ackRepeat === state.repeatMode) {
+            state.pendingRepeatUntil = 0;
+          }
+        }
+        break;
+      }
+
+      case 'set_shuffle':
+      case 'shuffle': {
+        if (data && data.shuffle !== undefined) {
+          const ackShuf = Boolean(data.shuffle);
+          if (!state.pendingShuffleUntil || Date.now() >= state.pendingShuffleUntil) {
+            state.shuffle = ackShuf;
+            renderNowPlaying();
+          } else if (ackShuf === state.shuffle) {
+            state.pendingShuffleUntil = 0;
+          }
+        }
+        break;
+      }
+
       case 'motion_artwork':
       case 'get_motion_artwork':
         applyMotionArtwork(data);
         break;
 
+      case 'get_spectral_rta':
+      case 'spectral_rta':
       case 'get_spectral_analysis':
       case 'spectral_analysis':
-        if (data && data.verdict) {
-          state.spectralAnalysis = data;
-          state.lastSpectralUpdateAt = performance.now();
-          updateSignalPathDetails();
-        }
+        handleSpectralAnalysisMessage(data);
         break;
 
       case 'get_info':
@@ -1632,14 +2266,17 @@ extension WebUIContent {
         break;
 
       case 'add_playlist_to_library':
-      case 'add_album_to_library': {
+      case 'add_album_to_library':
+      case 'add_track_to_library':
+      case 'add_to_library': {
         const ok = (data && typeof data.status === 'string') ? (data.status === 'ok') : (msg.status === 'ok');
         const targetSource = (state.lastLibraryAddTarget && typeof state.lastLibraryAddTarget === 'object')
           ? state.lastLibraryAddTarget.source
           : state.lastLibraryAddTarget;
-        const isAlb = (data && typeof data.is_album === 'boolean')
+        const isTrackTarget = (targetSource === 'track' || type === 'add_track_to_library');
+        const isAlb = !isTrackTarget && ((data && typeof data.is_album === 'boolean')
           ? data.is_album
-          : (type === 'add_album_to_library' || Boolean(targetSource === 'detail' && state.currentPlaylistDetail && state.currentPlaylistDetail.isAlbum));
+          : (type === 'add_album_to_library' || Boolean(targetSource === 'detail' && state.currentPlaylistDetail && state.currentPlaylistDetail.isAlbum)));
         const aiSaveBtn = dom.btnAiCuratedSave || document.getElementById('btn-ai-curated-save');
         const aiSaveText = dom.btnAiCuratedSaveText || document.getElementById('btn-ai-curated-save-text');
         const isAiTarget = targetSource === 'ai' || Boolean(data && data.name && state.activeAiCuratedTitle && data.name === state.activeAiCuratedTitle);
@@ -1650,6 +2287,7 @@ extension WebUIContent {
         const respId = (data && data.id) ? String(data.id).trim().toLowerCase() : '';
         const respName = (data && data.name) ? String(data.name).trim().toLowerCase() : '';
         const matchesDetailTarget = Boolean(
+          !isTrackTarget &&
           curDet &&
           (
             (respId && curId)
@@ -1674,30 +2312,108 @@ extension WebUIContent {
           state.isAddingDetailToLibrary = false;
         }
         if (ok) {
+          if (isTrackTarget) {
+            state.lastLibraryAddTarget = '';
+            if (state.actionTargetTrack) state.actionTargetTrack.is_local = true;
+            if (state.track && state.actionTargetTrack && state.track.name === state.actionTargetTrack.name) {
+              state.track.is_local = true;
+            }
+            state.libraryRecent.loaded = false;
+            state.libraryArtistsLoaded = false;
+            state.librarySongsLoaded = false;
+            send({ action: 'get_library_songs' });
+            send({ action: 'get_library_recent' });
+            send({ action: 'get_library_albums' });
+            showToast(translateTextToEn('★ Трек добавлен в медиатеку Apple Music'));
+            break;
+          }
           if (targetSource !== 'ai' && matchesDetailTarget && dom.btnAddPlaylistLibrary && (!dom.playlistDetailPane || !dom.playlistDetailPane.classList.contains('hidden'))) {
             dom.btnAddPlaylistLibrary.disabled = true;
-            if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
             dom.btnAddPlaylistLibrary.classList.add('added');
+            dom.btnAddPlaylistLibrary.classList.add('hidden');
             if (state.currentPlaylistDetail) {
               state.currentPlaylistDetail.is_local = true;
+              state.currentPlaylistDetail.in_library = true;
+              state.currentPlaylistDetail.is_complete_in_library = true;
             }
+            if (isAlb && state.currentAlbumDetail) {
+              state.currentAlbumDetail.in_library = true;
+              state.currentAlbumDetail.is_complete_in_library = true;
+              const tot = Number(state.currentAlbumDetail.catalog_track_count || (state.currentAlbumDetail.tracks && state.currentAlbumDetail.tracks.length) || 0);
+              if (tot > 0) state.currentAlbumDetail.library_track_count = tot;
+              if (Array.isArray(state.currentAlbumDetail.tracks)) {
+                state.currentAlbumDetail.tracks.forEach(tr => { tr.is_local = true; });
+              }
+              if (dom.albumCompletenessBannerSlot) dom.albumCompletenessBannerSlot.innerHTML = '';
+              if (dom.btnRemoveDetailLibrary) dom.btnRemoveDetailLibrary.classList.remove('hidden');
+              updateAlbumDetails(state.currentAlbumDetail);
+            } else if (!isAlb && dom.btnRemoveDetailLibrary) {
+              const curPlName = (state.currentPlaylistDetail && (state.currentPlaylistDetail.name || state.currentPlaylistDetail.title)) || '';
+              if (!isProtectedSystemPlaylistClient(curPlName)) {
+                if (dom.btnRemoveDetailLibraryText) {
+                  dom.btnRemoveDetailLibraryText.textContent = translateTextToEn('Удалить плейлист');
+                }
+                dom.btnRemoveDetailLibrary.classList.remove('hidden');
+              }
+            }
+          }
+          if (isAlb) {
+            const addedSrc = state.currentAlbumDetail || state.currentPlaylistDetail || {};
+            const addedName = (data && data.name) || addedSrc.name || addedSrc.title || '';
+            if (addedName) {
+              const optimisticAlb = {
+                id: String((data && data.id) || addedSrc.id || ''),
+                name: addedName,
+                artist: addedSrc.artist || addedSrc.sub || addedSrc.subtitle || '',
+                artwork: addedSrc.artwork || addedSrc.artwork_url || '',
+                track_count: (data && data.track_count) || addedSrc.track_count || addedSrc.trackCount || ((addedSrc.tracks && addedSrc.tracks.length) || 0),
+                in_library: true
+              };
+              upsertOptimisticLibraryAlbum(optimisticAlb);
+            }
+            state.libraryRecent.loaded = false;
+            state.libraryArtistsLoaded = false;
+            state.librarySongsLoaded = false;
+            send({ action: 'get_library_albums' });
+            if (state.libraryTab === 'recent') send({ action: 'get_library_recent' });
+            else if (state.libraryTab === 'artists') send({ action: 'get_library_artists' });
+            else if (state.libraryTab === 'songs') send({ action: 'get_library_songs' });
+          } else {
+            const plSrc = (!isAiTarget && state.currentPlaylistDetail && !state.currentPlaylistDetail.isAlbum)
+              ? state.currentPlaylistDetail
+              : {};
+            const addedPlName = (data && (data.name || data.playlist)) || (isAiTarget ? state.activeAiCuratedTitle : (plSrc.name || plSrc.title || ''));
+            if (addedPlName) {
+              upsertOptimisticPlaylist({
+                id: String((data && data.id) || plSrc.id || ''),
+                name: addedPlName,
+                artwork_url: (data && data.artwork_url) || plSrc.artwork_url || plSrc.artworkUrl || plSrc.artwork || '',
+                track_count: Number((data && data.track_count) || plSrc.track_count || plSrc.trackCount || (state.currentPlaylistTracks && state.currentPlaylistTracks.length) || 0)
+              });
+            }
+            send({ action: 'get_playlists', params: { refresh: true } });
           }
           if (isAiTarget && aiSaveBtn) {
             aiSaveBtn.disabled = true;
             aiSaveBtn.classList.add('added');
-            if (aiSaveText) aiSaveText.textContent = translateTextToEn('В медиатеке ✓');
+            if (aiSaveText) aiSaveText.textContent = translateTextToEn('В плейлистах ✓');
           }
-          showToast(isAlb ? '★ Альбом добавлен в медиатеку Apple Music' : '★ Плейлист добавлен в медиатеку Apple Music');
+          showToast(translateTextToEn(isAlb ? '★ Альбом добавлен в медиатеку Apple Music' : '★ Плейлист добавлен в плейлисты Apple Music'));
         } else {
+          if (isTrackTarget) {
+            state.lastLibraryAddTarget = '';
+          }
           if ((!targetSource || targetSource === 'detail') && matchesDetailTarget && dom.btnAddPlaylistLibrary && !dom.btnAddPlaylistLibrary.classList.contains('added')) {
             dom.btnAddPlaylistLibrary.disabled = false;
-            if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+            if (dom.btnAddPlaylistLibraryText) {
+              dom.btnAddPlaylistLibraryText.textContent = translateTextToEn(isAlb ? 'В медиатеку' : 'В плейлисты');
+            }
           }
           if ((!targetSource || targetSource === 'ai' || targetSource === 'hero') && aiSaveBtn && !aiSaveBtn.classList.contains('added')) {
             aiSaveBtn.disabled = false;
-            if (aiSaveText) aiSaveText.textContent = translateTextToEn('В медиатеку');
+            if (aiSaveText) aiSaveText.textContent = translateTextToEn('В плейлисты');
           }
-          showToast(translateTextToEn((data && data.message) || msg.error || 'Не удалось добавить в медиатеку'));
+          showToast(translateTextToEn((data && data.message) || msg.error || (isAlb ? 'Не удалось добавить в медиатеку' : 'Не удалось добавить в плейлисты')));
         }
         break;
       }
@@ -1705,14 +2421,28 @@ extension WebUIContent {
       case 'save_queue_to_playlist': {
         const ok = (data && typeof data.status === 'string') ? (data.status === 'ok') : (msg.status === 'ok');
         if (ok) {
+          const savedPlName = (data && (data.name || data.playlist)) || '';
+          if (savedPlName) {
+            upsertOptimisticPlaylist({
+              id: String((data && data.id) || ''),
+              name: savedPlName,
+              artwork_url: (data && data.artwork_url) || '',
+              track_count: Number((data && data.track_count) || 0)
+            });
+          }
+          send({ action: 'get_playlists', params: { refresh: true } });
           if (dom.btnSaveQueuePlaylist) {
             dom.btnSaveQueuePlaylist.disabled = true;
             dom.btnSaveQueuePlaylist.classList.add('saved');
           }
           if (dom.btnSaveQueueText) {
-            dom.btnSaveQueueText.textContent = translateTextToEn('В медиатеке ✓');
+            dom.btnSaveQueueText.textContent = translateTextToEn('В плейлистах ✓');
           }
-          showToast(translateTextToEn('★ Очередь сохранена в плейлисты Apple Music'));
+          showToast(
+            savedPlName
+              ? (IS_EN ? `★ Saved to playlist «${savedPlName}»` : `★ Сохранено в плейлист «${savedPlName}»`)
+              : translateTextToEn('★ Очередь сохранена в плейлисты Apple Music')
+          );
           setTimeout(() => {
             if (dom.btnSaveQueuePlaylist) {
               dom.btnSaveQueuePlaylist.disabled = false;
@@ -1789,6 +2519,7 @@ extension WebUIContent {
     }
   }
 
+// === MODULE: 05-player-state-sync.js ===
   function updatePlayerState(data) {
     if (!data) return;
 
@@ -1805,6 +2536,7 @@ extension WebUIContent {
     const incomingTrack = data.track || null;
     const incomingSig = (incomingTrack && incomingTrack.name) ? `${incomingTrack.name}:${incomingTrack.artist || ''}` : '';
     const isRadioNow = Boolean(data.is_radio || data.isRadio || (data.playlist && data.playlist.includes('Станция')));
+    state.isRadio = isRadioNow;
 
     if (incomingState !== 'playing') {
       state.pendingPauseUntil = 0;
@@ -1865,21 +2597,54 @@ extension WebUIContent {
     }
     state.playbackState = state.playerState;
 
-    // Dynamic initial view: on first player state / status message after connection
+    // Dynamic initial view: on first player state / status message after initial page load
     if (!state.initialViewSelected) {
       state.initialViewSelected = true;
-      if (state.playbackState === 'playing') {
+      if (isDesktopLayout()) {
+        const detailOpen = Boolean(
+          (dom.playlistDetailPane && !dom.playlistDetailPane.classList.contains('hidden')) ||
+          (dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden'))
+        );
+        switchDesktopTab(state.desktopActiveTab || 'home', detailOpen);
+      } else if (state.playbackState === 'playing') {
         switchMobileView('view-now-playing');
       } else {
         switchMobileView('view-home');
-        switchDesktopTab('home');
       }
     }
 
     state.duration = Number(data.duration) || 0;
     const reportedPos = Math.max(0, Number(data.position) || 0);
+    if (data.is_buffering !== undefined || data.isBuffering !== undefined) {
+      state.isBuffering = Boolean(data.is_buffering !== undefined ? data.is_buffering : data.isBuffering);
+    } else if (state.playerState !== 'playing' || reportedPos > 0.08) {
+      state.isBuffering = false;
+    }
+    if (data.is_stream_stalled !== undefined || data.isStreamStalled !== undefined) {
+      state.isStreamStalled = Boolean(data.is_stream_stalled !== undefined ? data.is_stream_stalled : data.isStreamStalled);
+    } else if (state.playerState !== 'playing' || reportedPos > 0.08) {
+      state.isStreamStalled = false;
+    }
+    const rawStagingBuffer = data.is_staging_buffer !== undefined ? data.is_staging_buffer : data.isStagingBuffer;
+    if (rawStagingBuffer !== undefined) {
+      state.isStagingBuffer = Boolean(rawStagingBuffer) && state.playerState === 'playing' && reportedPos <= 0.08;
+    } else if (state.playerState !== 'playing' || reportedPos > 0.08 || !state.isBuffering) {
+      state.isStagingBuffer = false;
+    }
+    const rawLoadingStage = data.loading_stage !== undefined ? data.loading_stage : data.loadingStage;
+    if (state.playerState !== 'playing' || (!state.isBuffering && !state.isStagingBuffer) || reportedPos > 0.08) {
+      state.loadingStage = null;
+      state.loadingStartedAtMs = 0;
+    } else {
+      const nextStage = state.isStagingBuffer ? 'buffer' : (rawLoadingStage || 'cloud');
+      if (isNewTrack || !state.loadingStartedAtMs || (nextStage === 'buffer' && state.loadingStage !== 'buffer')) {
+        state.loadingStartedAtMs = Date.now();
+      }
+      state.loadingStage = nextStage;
+    }
 
     if (isNewTrack) {
+      state.hasStartedAdvancingForTrack = reportedPos > 0.08;
       state.lastSyncPos = reportedPos;
       state.position = reportedPos;
       state.lastSyncTime = performance.now();
@@ -1888,8 +2653,12 @@ extension WebUIContent {
         updateScrubberUI(reportedPos, state.duration);
       }
     } else if (!state.isScrubbing) {
+      if (reportedPos > 0.08) {
+        state.hasStartedAdvancingForTrack = true;
+      }
       const now = performance.now();
-      if (state.playerState !== 'playing') {
+      const waitingForFirstAudioFrame = state.isBuffering || (!state.hasStartedAdvancingForTrack && reportedPos <= 0.08);
+      if (state.playerState !== 'playing' || waitingForFirstAudioFrame) {
         state.lastSyncPos = reportedPos;
         state.position = reportedPos;
         state.lastSyncTime = now;
@@ -1921,8 +2690,29 @@ extension WebUIContent {
       }
     }
 
-    state.shuffle = Boolean(data.shuffle);
-    state.repeatMode = data.repeat || data.repeatMode || 'off';
+    const incomingShuffle = isRadioNow ? false : Boolean(data.shuffle);
+    if (isRadioNow) {
+      state.shuffle = false;
+      state.pendingShuffleUntil = 0;
+    } else if (!state.pendingShuffleUntil || Date.now() >= state.pendingShuffleUntil) {
+      state.shuffle = incomingShuffle;
+    } else if (incomingShuffle === state.shuffle) {
+      state.pendingShuffleUntil = 0;
+    }
+
+    let incomingRepeat = normalizeRepeatMode(data.repeat || data.repeat_mode || data.repeatMode || 'off');
+    if (isRadioNow && incomingRepeat === 'all') {
+      incomingRepeat = 'off';
+    }
+    if (!state.pendingRepeatUntil || Date.now() >= state.pendingRepeatUntil) {
+      state.repeatMode = incomingRepeat;
+    } else if (incomingRepeat === state.repeatMode) {
+      state.pendingRepeatUntil = 0;
+    }
+    if (isRadioNow && state.repeatMode === 'all') {
+      state.repeatMode = 'off';
+      state.pendingRepeatUntil = 0;
+    }
     state.audioQuality = data.audio_quality || data.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
     if (newTrack && state.pendingFavoriteUntil && Date.now() < state.pendingFavoriteUntil) {
       const incomingKey = `${newTrack.artist || ''}|${newTrack.name || ''}`;
@@ -1951,17 +2741,98 @@ extension WebUIContent {
     if (data.dac_muting_guard_ms !== undefined || data.dacMutingGuardMs !== undefined) {
       state.dacMutingGuardMs = Number(data.dac_muting_guard_ms || data.dacMutingGuardMs) || 100;
     }
+    const prevDlnaActive = Boolean(state.isDlnaActive);
+    if (data.is_dlna_active !== undefined || data.isDlnaActive !== undefined) {
+      state.isDlnaActive = Boolean(data.is_dlna_active !== undefined ? data.is_dlna_active : data.isDlnaActive);
+    }
+    const dlnaActiveChanged = (Boolean(state.isDlnaActive) !== prevDlnaActive);
+    if (data.room_correction_active !== undefined || data.roomCorrectionActive !== undefined) {
+      state.roomCorrectionActive = Boolean(data.room_correction_active !== undefined ? data.room_correction_active : data.roomCorrectionActive);
+    }
+    if (data.room_profile_name !== undefined || data.roomProfileName !== undefined) {
+      state.roomProfileName = String(data.room_profile_name || data.roomProfileName || '');
+    }
+    if (data.late_night_drc_profile !== undefined || data.lateNightDrcProfile !== undefined) {
+      const nextProf = String(data.late_night_drc_profile !== undefined ? data.late_night_drc_profile : data.lateNightDrcProfile || 'gentle');
+      if (nextProf === 'gentle' || nextProf === 'concert') {
+        state.lateNightDrcProfile = nextProf;
+      }
+    }
+    if (data.late_night_drc_enabled !== undefined || data.lateNightDrcEnabled !== undefined) {
+      state.lateNightDrcEnabled = Boolean(data.late_night_drc_enabled !== undefined ? data.late_night_drc_enabled : data.lateNightDrcEnabled);
+    }
+    if (data.late_night_drc_mode !== undefined || data.lateNightDrcMode !== undefined) {
+      const nextDrc = String(data.late_night_drc_mode !== undefined ? data.late_night_drc_mode : data.lateNightDrcMode || 'off');
+      state.lateNightDrcMode = nextDrc;
+      if (nextDrc === 'gentle' || nextDrc === 'concert') {
+        state.lateNightDrcProfile = nextDrc;
+        if (data.late_night_drc_enabled === undefined && data.lateNightDrcEnabled === undefined) {
+          state.lateNightDrcEnabled = true;
+        }
+      } else if (data.late_night_drc_enabled === undefined && data.lateNightDrcEnabled === undefined) {
+        state.lateNightDrcEnabled = false;
+      }
+    } else if (data.late_night_drc_enabled !== undefined || data.lateNightDrcEnabled !== undefined || data.late_night_drc_profile !== undefined || data.lateNightDrcProfile !== undefined) {
+      state.lateNightDrcMode = state.lateNightDrcEnabled ? (state.lateNightDrcProfile || 'gentle') : 'off';
+    }
+    if (data.late_night_drc_gain_db !== undefined || data.lateNightDrcGainDb !== undefined) {
+      state.lateNightDrcGainDb = Number(data.late_night_drc_gain_db !== undefined ? data.late_night_drc_gain_db : data.lateNightDrcGainDb) || 0;
+    }
+    syncLateNightBadgeOnly();
+    if (data.mastering_declip_mode !== undefined || data.masteringDeclipMode !== undefined) {
+      const nextDc = String(data.mastering_declip_mode !== undefined ? data.mastering_declip_mode : data.masteringDeclipMode || 'off');
+      state.masteringDeclipMode = (nextDc === 'auto' || nextDc === 'gentle' || nextDc === 'studio') ? nextDc : 'off';
+    }
+    if (data.mastering_declip_restored_db !== undefined || data.masteringDeclipRestoredDb !== undefined) {
+      state.masteringDeclipRestoredDb = Number(data.mastering_declip_restored_db !== undefined ? data.mastering_declip_restored_db : data.masteringDeclipRestoredDb) || 0;
+    }
+    if (data.mastering_deesser_mode !== undefined || data.masteringDeesserMode !== undefined) {
+      const nextDe = String(data.mastering_deesser_mode !== undefined ? data.mastering_deesser_mode : data.masteringDeesserMode || 'off');
+      state.masteringDeesserMode = (nextDe === 'gentle' || nextDe === 'vocal') ? nextDe : 'off';
+    }
+    if (data.mastering_deesser_gain_db !== undefined || data.masteringDeesserGainDb !== undefined) {
+      state.masteringDeesserGainDb = Number(data.mastering_deesser_gain_db !== undefined ? data.mastering_deesser_gain_db : data.masteringDeesserGainDb) || 0;
+    }
+    syncMasteringRestorationBadgesOnly();
+    if (data.dsp_mode !== undefined || data.dspMode !== undefined) {
+      state.dspMode = data.dsp_mode || data.dspMode || 'passthrough';
+    }
+    if (data.dsp_badge !== undefined || data.dspBadge !== undefined) {
+      state.dspBadge = data.dsp_badge || data.dspBadge || '';
+    }
+    if (data.dsp_profile !== undefined || data.dspProfile !== undefined) {
+      state.dspProfile = data.dsp_profile || data.dspProfile || '7EC-Balanced';
+    }
+    if (data.dsp_output_sample_rate !== undefined || data.dspOutputSampleRate !== undefined) {
+      state.dspOutputSampleRate = Number(data.dsp_output_sample_rate || data.dspOutputSampleRate) || 0;
+    }
+    if (data.dsp_dop_carrier_rate !== undefined || data.dspDoPCarrierRate !== undefined) {
+      state.dspDoPCarrierRate = Number(data.dsp_dop_carrier_rate || data.dspDoPCarrierRate) || 0;
+    }
+    if (data.dsp_is_hog_mode !== undefined || data.dspIsHogMode !== undefined) {
+      state.dspIsHogMode = Boolean(data.dsp_is_hog_mode !== undefined ? data.dsp_is_hog_mode : data.dspIsHogMode);
+    }
+    if (data.dsp_is_integer_mode !== undefined || data.dspIsIntegerMode !== undefined) {
+      state.dspIsIntegerMode = Boolean(data.dsp_is_integer_mode !== undefined ? data.dsp_is_integer_mode : data.dspIsIntegerMode);
+    }
+    if (data.dsp_cpu_load_percent !== undefined || data.dspCpuLoadPercent !== undefined) {
+      state.dspCpuLoadPercent = Number(data.dsp_cpu_load_percent !== undefined ? data.dsp_cpu_load_percent : data.dspCpuLoadPercent) || 0;
+    }
+    if (data.dsp_ring_buffer_fill_percent !== undefined || data.dspRingBufferFillPercent !== undefined) {
+      state.dspRingBufferFillPercent = Number(data.dsp_ring_buffer_fill_percent !== undefined ? data.dsp_ring_buffer_fill_percent : data.dspRingBufferFillPercent) || 0;
+    }
     const hasTrackSwitched = Boolean(
       oldTrack && newTrack && (newTrack.name !== oldTrack.name || newTrack.artist !== oldTrack.artist)
     );
     const incomingSa = data.spectral_analysis || data.spectralAnalysis;
     if (hasTrackSwitched) {
+      spectralPollTickCount = 0;
       const prevEnabled = incomingSa && incomingSa.is_enabled !== undefined
         ? Boolean(incomingSa.is_enabled)
         : (state.spectralAnalysis ? (state.spectralAnalysis.is_enabled !== false && state.spectralAnalysis.isEnabled !== false) : true);
       state.spectralAnalysis = Object.assign({}, incomingSa || {}, {
         is_enabled: prevEnabled,
-        verdict: prevEnabled ? 'analyzing' : 'disabled',
+        verdict: (incomingSa && (incomingSa.is_cached || incomingSa.isCached) && incomingSa.verdict) ? incomingSa.verdict : (prevEnabled ? 'analyzing' : 'disabled'),
         analyzed_frames_count: 0
       });
     } else if (incomingSa) {
@@ -2018,8 +2889,17 @@ extension WebUIContent {
         state.previousVolume = state.volume;
       }
     }
-    if (!state.isDraggingVolume && state.initialViewSelected && (state.volume !== prevVol || state.ampMuted !== prevMute)) {
+    if (!state.isDraggingVolume && !(state.lockVolume100 && !state.ampVolumeControlEnabled) && state.initialViewSelected && (state.volume !== prevVol || state.ampMuted !== prevMute)) {
       triggerStandbyVolumePulse();
+    }
+
+    if (dlnaActiveChanged) {
+      if (state.lastDspSettings && typeof state.lastDspSettings === 'object') {
+        state.lastDspSettings = Object.assign({}, state.lastDspSettings, { is_dlna_active: state.isDlnaActive });
+        updateDSPSettingsUI(state.lastDspSettings);
+      } else {
+        applyDeviceCapabilityPermissionsUI();
+      }
     }
 
     renderNowPlaying();
@@ -2038,39 +2918,42 @@ extension WebUIContent {
   function getArtworkSrc(track) {
     if (!track) return 'apple-touch-icon.svg';
     if (track.artworkUrl && track.artworkUrl.length > 5) {
-      return track.artworkUrl;
+      return appendDeviceIdToUrl(track.artworkUrl);
     }
     if (track.artwork_url && track.artwork_url.length > 5) {
-      return track.artwork_url;
+      return appendDeviceIdToUrl(track.artwork_url);
     }
     if (track.artwork && track.artwork.length > 5) {
-      return track.artwork;
+      return appendDeviceIdToUrl(track.artwork);
     }
     if (track.artwork_data_base64) {
       return `data:image/jpeg;base64,${track.artwork_data_base64}`;
     }
     if (track.is_local && track.id && Number(track.id) > 0) {
-      return `/api/artwork/track?id=${track.id}`;
+      return appendDeviceIdToUrl(`/api/artwork/track?id=${track.id}`);
     }
     if (track.name) {
       const q = new URLSearchParams();
       q.set('name', track.name);
       if (track.artist) q.set('artist', track.artist);
       if (track.album) q.set('album', track.album);
-      return `/api/artwork/search?${q.toString()}`;
+      return appendDeviceIdToUrl(`/api/artwork/search?${q.toString()}`);
     }
     if (track.id && Number(track.id) > 0) {
-      return `/api/artwork/track?id=${track.id}`;
+      return appendDeviceIdToUrl(`/api/artwork/track?id=${track.id}`);
     }
-    return '/api/artwork';
+    return appendDeviceIdToUrl('/api/artwork');
   }
 
+// === MODULE: 06-ambient-backdrop-and-artwork.js ===
   // ==========================================================================
   // Apple TV Style Dynamic Blurred Ambient Gradient Background Manager
   // ==========================================================================
   const AmbientBackgroundManager = {
     activeLayer: 'a', // 'a' or 'b'
     currentPaletteKey: '',
+    lastRequestedPaletteUrl: '',
+    serverPaletteAppliedForUrl: '',
     offscreenCanvas: null,
     offscreenCtx: null,
 
@@ -2315,6 +3198,23 @@ extension WebUIContent {
         return;
       }
 
+      // Request Apple Neural Engine Vision Saliency palette at most ONCE per artwork URL
+      if (state.aiCuratorEnabled && this.lastRequestedPaletteUrl !== artUrl) {
+        this.lastRequestedPaletteUrl = artUrl;
+        send({
+          action: 'get_artwork_palette',
+          params: {
+            url: artUrl,
+            track_id: Number(state.currentTrackId || 0) || 0
+          }
+        });
+      }
+
+      // Do not overwrite an already-applied Vision ANE palette for this exact cover URL
+      if (this.serverPaletteAppliedForUrl === artUrl) {
+        return;
+      }
+
       const palette = this.extractPalette(img);
       const paletteKey = palette.join('|');
       if (paletteKey === this.currentPaletteKey) return;
@@ -2346,7 +3246,9 @@ extension WebUIContent {
         const m = rgbaStr.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
         return m ? [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)] : [250, 35, 59];
       });
-      if (state.wledEnabled) {
+      // Only send fallback client-canvas WLED zones when Mac Vision Neural Engine palette is disabled;
+      // otherwise Mac server authoritatively applies the Vision Saliency cover palette without dual-source flicker.
+      if (state.wledEnabled && !state.aiCuratorEnabled) {
         const wledZones = this.extractWledZones(img);
         send({
           action: 'update_wled_palette',
@@ -2356,17 +3258,6 @@ extension WebUIContent {
       const standbyBg = document.getElementById('standby-ambient-bg');
       if (standbyBg && rgbColors.length >= 3) {
         this.applyStandbyAmbientColors(rgbColors);
-      }
-
-      // When Native AI (Apple Neural Engine) is enabled, request Vision Saliency palette from macOS
-      if (state.aiCuratorEnabled) {
-        send({
-          action: 'get_artwork_palette',
-          params: {
-            url: artUrl,
-            track_id: Number(state.currentTrackId || 0) || 0
-          }
-        });
       }
     },
 
@@ -2414,6 +3305,7 @@ extension WebUIContent {
         this.tuneColor({ r: rgbList[3][0], g: rgbList[3][1], b: rgbList[3][2] }, 1.20, 0.32)
       ];
       const serverKey = 'vision|' + tunedBlobs.join('|');
+      this.serverPaletteAppliedForUrl = this.lastRequestedPaletteUrl || currentLoadedArtworkUrl || '';
       if (serverKey === this.currentPaletteKey) return;
       this.currentPaletteKey = serverKey;
 
@@ -2443,12 +3335,14 @@ extension WebUIContent {
       if (dom.ambientLayerA) dom.ambientLayerA.classList.remove('visible');
       if (dom.ambientLayerB) dom.ambientLayerB.classList.remove('visible');
       this.currentPaletteKey = '';
+      this.lastRequestedPaletteUrl = '';
+      this.serverPaletteAppliedForUrl = '';
     }
   };
 
   let currentLoadedArtworkUrl = '';
   function setPlayerArtwork(artUrl) {
-    if (!artUrl) artUrl = 'apple-touch-icon.svg';
+    artUrl = artUrl ? appendDeviceIdToUrl(artUrl) : 'apple-touch-icon.svg';
     if (dom.playerArtwork.dataset.targetSrc === artUrl) {
       return;
     }
@@ -2472,32 +3366,50 @@ extension WebUIContent {
       if (dom.miniArt) dom.miniArt.style.opacity = '0.3';
     }
 
-    // Preload image to prevent showing old track's image if new image fails or loads slowly
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      if (dom.playerArtwork.dataset.targetSrc === artUrl) {
-        dom.playerArtwork.src = artUrl;
-        dom.playerArtwork.style.opacity = '1';
-        currentLoadedArtworkUrl = artUrl;
-        if (dom.miniArt) {
-          dom.miniArt.src = artUrl;
-          dom.miniArt.style.opacity = '1';
-        }
-        AmbientBackgroundManager.updateFromImage(img, artUrl);
+    const applyLoadedImage = (loadedImg) => {
+      if (dom.playerArtwork.dataset.targetSrc !== artUrl) return;
+      dom.playerArtwork.src = artUrl;
+      dom.playerArtwork.style.opacity = '1';
+      currentLoadedArtworkUrl = artUrl;
+      if (dom.miniArt) {
+        dom.miniArt.src = artUrl;
+        dom.miniArt.style.opacity = '1';
       }
+      AmbientBackgroundManager.updateFromImage(loadedImg, artUrl);
     };
-    img.onerror = () => {
-      if (dom.playerArtwork.dataset.targetSrc === artUrl) {
-        dom.playerArtwork.src = 'apple-touch-icon.svg';
-        dom.playerArtwork.style.opacity = '1';
-        currentLoadedArtworkUrl = 'apple-touch-icon.svg';
-        if (dom.miniArt) {
-          dom.miniArt.src = 'apple-touch-icon.svg';
-          dom.miniArt.style.opacity = '1';
-        }
-        AmbientBackgroundManager.clear();
+
+    const applyFallbackIcon = () => {
+      if (dom.playerArtwork.dataset.targetSrc !== artUrl) return;
+      dom.playerArtwork.src = 'apple-touch-icon.svg';
+      dom.playerArtwork.style.opacity = '1';
+      currentLoadedArtworkUrl = 'apple-touch-icon.svg';
+      if (dom.miniArt) {
+        dom.miniArt.src = 'apple-touch-icon.svg';
+        dom.miniArt.style.opacity = '1';
       }
+      AmbientBackgroundManager.clear();
+    };
+
+    // Only set crossOrigin='anonymous' for external http(s) URLs when client-side canvas readback is needed;
+    // same-origin /api/artwork/... images are already non-tainted and omit CORS mode so cookies & auth work reliably.
+    const isExternalHttp = /^https?:\/\//i.test(artUrl) && !artUrl.startsWith(window.location.origin);
+    const useCors = isExternalHttp && (!state.aiCuratorEnabled || state.wledEnabled);
+
+    const img = new Image();
+    if (useCors) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = () => applyLoadedImage(img);
+    img.onerror = () => {
+      // If Safari/WebKit cached a non-CORS response from a queue/standby <img>, retry once without crossOrigin
+      if (useCors) {
+        const retryImg = new Image();
+        retryImg.onload = () => applyLoadedImage(retryImg);
+        retryImg.onerror = applyFallbackIcon;
+        retryImg.src = artUrl;
+        return;
+      }
+      applyFallbackIcon();
     };
     img.src = artUrl;
   }
@@ -2572,15 +3484,16 @@ extension WebUIContent {
     setTimeout(() => refreshAllTitleMarquees(true), 120);
   });
 
+// === MODULE: 07-now-playing-volume-and-haptics.js ===
   function renderNowPlaying() {
     const isPlaying = state.playerState === 'playing';
     const t = state.track;
 
     // Track Meta
     if (t) {
-      const titleText = t.name || 'Без названия';
+      const titleText = t.name || translateTextToEn('Без названия');
       const albumText = (t.album || '').trim();
-      const artistText = t.artist || 'Неизвестный исполнитель';
+      const artistText = t.artist || translateTextToEn('Неизвестный исполнитель');
       if (dom.playerTitle.textContent !== titleText) {
         dom.playerTitle.textContent = titleText;
       }
@@ -2618,10 +3531,11 @@ extension WebUIContent {
         dom.miniArtist.textContent = miniArtistText;
       }
     } else {
-      if (dom.playerTitle.textContent !== 'Не играет') {
-        dom.playerTitle.textContent = 'Не играет';
+      const notPlayingText = translateTextToEn('Не играет');
+      if (dom.playerTitle.textContent !== notPlayingText) {
+        dom.playerTitle.textContent = notPlayingText;
       }
-      dom.playerTitle.title = 'Не играет';
+      dom.playerTitle.title = notPlayingText;
       if (dom.playerArtist.textContent !== 'Apple Music') {
         dom.playerArtist.textContent = 'Apple Music';
       }
@@ -2632,7 +3546,7 @@ extension WebUIContent {
       dom.playerAlbum.title = '';
       if (dom.btnGoToAlbum) {
         dom.btnGoToAlbum.disabled = true;
-        dom.btnGoToAlbum.title = 'Перейти к альбому';
+        dom.btnGoToAlbum.title = translateTextToEn('Перейти к альбому');
       }
       if (dom.btnAiTrackVibe) {
         dom.btnAiTrackVibe.disabled = true;
@@ -2643,8 +3557,8 @@ extension WebUIContent {
       dom.btnFavorite.classList.remove('active');
       if (dom.miniBtnFavorite) dom.miniBtnFavorite.classList.remove('active');
 
-      if (dom.miniTitle.textContent !== 'Не играет') {
-        dom.miniTitle.textContent = 'Не играет';
+      if (dom.miniTitle.textContent !== notPlayingText) {
+        dom.miniTitle.textContent = notPlayingText;
       }
       if (dom.miniArtist.textContent !== 'Apple Music') {
         dom.miniArtist.textContent = 'Apple Music';
@@ -2665,16 +3579,31 @@ extension WebUIContent {
     }
 
     // Shuffle & Repeat buttons
-    dom.btnShuffle.classList.toggle('active', state.shuffle);
-    if (state.repeatMode === 'one') {
+    const isRadioMode = Boolean(state.isRadio);
+    dom.btnShuffle.disabled = isRadioMode;
+    dom.btnShuffle.classList.toggle('disabled-control', isRadioMode);
+    dom.btnShuffle.classList.toggle('active', !isRadioMode && Boolean(state.shuffle));
+    dom.btnShuffle.title = isRadioMode
+      ? (IS_EN ? 'Shuffle unavailable on Radio' : 'Перемешивание недоступно для радио')
+      : (state.shuffle
+        ? (IS_EN ? 'Shuffle: On' : 'Перемешать: Вкл')
+        : (IS_EN ? 'Shuffle: Off' : 'Перемешать'));
+
+    const effectiveRepeat = (isRadioMode && state.repeatMode === 'all') ? 'off' : state.repeatMode;
+    if (effectiveRepeat === 'one') {
       dom.btnRepeat.classList.add('active');
       dom.repeatBadge.classList.remove('hidden');
-    } else if (state.repeatMode === 'all') {
+      dom.btnRepeat.title = IS_EN ? 'Repeat Mode: One Track (1)' : 'Повтор: Зациклен 1 трек';
+    } else if (effectiveRepeat === 'all') {
       dom.btnRepeat.classList.add('active');
       dom.repeatBadge.classList.add('hidden');
+      dom.btnRepeat.title = IS_EN ? 'Repeat Mode: Queue' : 'Повтор: Вся очередь';
     } else {
       dom.btnRepeat.classList.remove('active');
       dom.repeatBadge.classList.add('hidden');
+      dom.btnRepeat.title = isRadioMode
+        ? (IS_EN ? 'Repeat Mode: Off (tap to repeat track)' : 'Повтор трека: Выкл')
+        : (IS_EN ? 'Repeat Mode: Off' : 'Режим повтора: Выкл');
     }
 
     // Audio Quality & Permanent DAC Badge Sync
@@ -2700,11 +3629,12 @@ extension WebUIContent {
       updateSignalPathDetails();
     }
 
-    // Only update scrubber UI here if stopped or paused.
-    // When playing, the 60fps scrubberAnimationLoop handles smooth rendering without jitter!
-    if (!state.isScrubbing && state.playerState !== 'playing') {
+    // Only update scrubber UI here if stopped, paused, or buffering at 0:00.
+    // When actively playing, the 60fps scrubberAnimationLoop handles smooth rendering without jitter!
+    if (!state.isScrubbing && (state.playerState !== 'playing' || !(state.duration > 0) || state.isBuffering || state.isStagingBuffer || (!state.hasStartedAdvancingForTrack && state.lastSyncPos <= 0.08))) {
       updateScrubberUI(state.lastSyncPos, state.duration);
     }
+    syncTrackLoadingIndicatorUI();
     ensureScrubberLoopRunning();
 
     renderVolumeUI();
@@ -2816,13 +3746,16 @@ extension WebUIContent {
 
   function renderVolumeUI() {
     const isExtAmpMode = Boolean(state.lockVolume100 && state.ampVolumeControlEnabled);
+    const isDlnaHardwareVol = Boolean(state.isDlnaActive && !state.lockVolume100 && !isExtAmpMode);
     syncSignalPathAmpNode();
 
     if (state.lockVolume100 && !isExtAmpMode) {
       if (dom.volumeSection) dom.volumeSection.classList.add('hidden');
       if (dom.standbyVolumeSection) dom.standbyVolumeSection.classList.add('hidden');
       if (dom.playerBottomNotice) {
-        dom.playerBottomNotice.textContent = 'Прямой вывод CoreAudio (Bit-Perfect DAC • 100%)';
+        dom.playerBottomNotice.textContent = state.isDlnaActive
+          ? translateTextToEn('Сетевой вывод BluOS / DLNA (Bit-Perfect PCM • 100%)')
+          : translateTextToEn('Прямой вывод CoreAudio (Bit-Perfect DAC • 100%)');
       }
       return;
     }
@@ -2885,7 +3818,9 @@ extension WebUIContent {
     } else {
       const labelStr = `${state.volume}%`;
       if (dom.playerBottomNotice) {
-        dom.playerBottomNotice.textContent = 'Прямой вывод CoreAudio (Регулируемая громкость)';
+        dom.playerBottomNotice.textContent = isDlnaHardwareVol
+          ? 'Сетевой вывод BluOS / DLNA (Bit-Perfect PCM 100% • Аппаратная громкость плеера)'
+          : 'Прямой вывод CoreAudio (Регулируемая громкость)';
       }
       if (dom.volumeInput) {
         dom.volumeInput.max = '100';
@@ -2937,24 +3872,15 @@ extension WebUIContent {
     if (sbWave2) sbWave2.style.display = show2;
   }
 
-  // --- Tactile & Haptic Engine ---
-  let hapticAudioCtx = null;
-  function getHapticAudioContext() {
-    if (!hapticAudioCtx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
-        hapticAudioCtx = new AudioCtx();
-      }
-    }
-    if (hapticAudioCtx && hapticAudioCtx.state === 'suspended') {
-      hapticAudioCtx.resume().catch(() => {});
-    }
-    return hapticAudioCtx;
-  }
-
+  // --- Tactile & Haptic Engine (Mobile Vibration API Only — Zero Audio/DAC Pulses) ---
   function triggerHaptic(type = 'light') {
-    // 1. Native Vibration API (Android, Chrome, supported browsers)
-    if ('vibrate' in navigator) {
+    if (
+      'vibrate' in navigator &&
+      typeof navigator.vibrate === 'function' &&
+      (navigator.maxTouchPoints || 0) > 0 &&
+      window.matchMedia &&
+      window.matchMedia('(hover: none) and (pointer: coarse)').matches
+    ) {
       try {
         if (type === 'light') navigator.vibrate(15);
         else if (type === 'medium') navigator.vibrate(28);
@@ -2962,87 +3888,41 @@ extension WebUIContent {
         else if (type === 'toggle') navigator.vibrate([15, 30, 25]);
       } catch (e) {}
     }
-
-    // 2. iOS Speaker Transducer Micro-Thump (Physical recoil pulse in iPhone chassis)
-    try {
-      const ctx = getHapticAudioContext();
-      if (!ctx) return;
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-      }
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.onended = () => {
-        try { osc.disconnect(); } catch (_) {}
-        try { gain.disconnect(); } catch (_) {}
-      };
-
-      osc.type = 'sine';
-      if (type === 'light') {
-        // Fast subtle tap (75Hz down to 25Hz, 18ms, gain 0.85)
-        osc.frequency.setValueAtTime(75, now);
-        osc.frequency.exponentialRampToValueAtTime(25, now + 0.018);
-        gain.gain.setValueAtTime(0.85, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.018);
-      } else if (type === 'medium') {
-        // Firm mechanical thump (85Hz down to 25Hz, 30ms, gain 1.0)
-        osc.frequency.setValueAtTime(85, now);
-        osc.frequency.exponentialRampToValueAtTime(25, now + 0.03);
-        gain.gain.setValueAtTime(1.0, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.03);
-      } else if (type === 'toggle') {
-        // Double-click toggle (like switch / like button)
-        osc.frequency.setValueAtTime(95, now);
-        osc.frequency.exponentialRampToValueAtTime(30, now + 0.018);
-        gain.gain.setValueAtTime(0.85, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.018);
-
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        osc2.onended = () => {
-          try { osc2.disconnect(); } catch (_) {}
-          try { gain2.disconnect(); } catch (_) {}
-        };
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(110, now + 0.026);
-        osc2.frequency.exponentialRampToValueAtTime(35, now + 0.046);
-        gain2.gain.setValueAtTime(0.9, now + 0.026);
-        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.046);
-        osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-        osc2.start(now + 0.026);
-        osc2.stop(now + 0.046);
-      }
-    } catch (e) {}
   }
 
   // --- Silent Audio Loop for iOS Background & Lock Screen Keep-Alive ---
   let silentAudioEl = null;
   let silentAudioUnlocked = false;
+  let mediaSessionHandlersBound = false;
+  let mediaSessionPlatformActivated = false;
+  let allowAmrMediaSessionMutation = false;
+
+  if (typeof navigator !== 'undefined' && 'mediaSession' in navigator && navigator.mediaSession) {
+    try {
+      const msProto = Object.getPrototypeOf(navigator.mediaSession);
+      const msTarget = (msProto && typeof msProto.setActionHandler === 'function') ? msProto : navigator.mediaSession;
+      const nativeSetActionHandler = msTarget.setActionHandler;
+      if (typeof nativeSetActionHandler === 'function' && !nativeSetActionHandler._amrGuarded) {
+        const guardedSetActionHandler = function (action, handler) {
+          if (!allowAmrMediaSessionMutation) return;
+          return nativeSetActionHandler.call(this, action, handler);
+        };
+        guardedSetActionHandler._amrGuarded = true;
+        msTarget.setActionHandler = guardedSetActionHandler;
+      }
+    } catch (_) {}
+  }
 
   function attachSilentAudioListeners(el) {
     if (!el || el._amrListenersAttached) return;
     el._amrListenersAttached = true;
 
     const onAudioStateChange = () => {
-      setupMediaSession();
+      setupMediaSession(true);
       updateMediaSession();
     };
 
-    ['play', 'playing', 'pause', 'canplay', 'loadedmetadata'].forEach((evt) => {
+    ['play', 'playing', 'pause', 'canplay', 'loadedmetadata', 'seeked'].forEach((evt) => {
       el.addEventListener(evt, onAudioStateChange, { passive: true });
     });
 
@@ -3050,7 +3930,7 @@ extension WebUIContent {
       const curSrc = el.getAttribute('src') || '';
       if (curSrc.includes('silence.m4a') && !el._amrWavFallbackTried) {
         el._amrWavFallbackTried = true;
-        el.src = '/assets/silence.wav?v=2';
+        el.src = '/assets/silence.wav?v=4';
         try { el.load(); } catch (_) {}
         if (state.playerState === 'playing' && state.lockScreenControls && state.deviceAuthorized) {
           try {
@@ -3080,17 +3960,19 @@ extension WebUIContent {
       silentAudioEl.loop = true;
       silentAudioEl.setAttribute('playsinline', '');
       silentAudioEl.setAttribute('webkit-playsinline', '');
+      silentAudioEl.setAttribute('x-webkit-airplay', 'deny');
       silentAudioEl.preload = 'auto';
       silentAudioEl.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;';
       attachSilentAudioListeners(silentAudioEl);
-      silentAudioEl.src = '/assets/silence.m4a?v=2';
+      silentAudioEl.src = '/assets/silence.m4a?v=4';
       document.body.appendChild(silentAudioEl);
     } else {
       silentAudioEl.preload = 'auto';
+      silentAudioEl.setAttribute('x-webkit-airplay', 'deny');
       attachSilentAudioListeners(silentAudioEl);
       if (!silentAudioEl.getAttribute('src') && !silentAudioEl.querySelector('source')) {
         silentAudioEl._amrWavFallbackTried = false;
-        silentAudioEl.src = '/assets/silence.m4a?v=2';
+        silentAudioEl.src = '/assets/silence.m4a?v=4';
       }
     }
     return silentAudioEl;
@@ -3109,17 +3991,23 @@ extension WebUIContent {
       } catch (e) {}
     }
     silentAudioUnlocked = false;
+    mediaSessionHandlersBound = false;
+    mediaSessionPlatformActivated = false;
     lastMediaSessionKey = '';
     bindUnlockAudioGestureListeners();
 
     if ('mediaSession' in navigator) {
+      allowAmrMediaSessionMutation = true;
       try {
         navigator.mediaSession.playbackState = 'none';
         navigator.mediaSession.metadata = null;
         ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto', 'seekbackward', 'seekforward', 'stop'].forEach((act) => {
           try { navigator.mediaSession.setActionHandler(act, null); } catch (e) {}
         });
-      } catch (e) {}
+      } catch (e) {
+      } finally {
+        allowAmrMediaSessionMutation = false;
+      }
     }
   }
 
@@ -3137,20 +4025,20 @@ extension WebUIContent {
         if (p !== undefined) {
           p.then(() => {
             silentAudioUnlocked = true;
-            setupMediaSession();
+            setupMediaSession(true);
             updateMediaSession();
+            setTimeout(() => {
+              if (state.lockScreenControls && state.deviceAuthorized) {
+                setupMediaSession(true);
+              }
+            }, 150);
           }).catch((err) => {
             console.warn('[AudioKeepAlive] play error:', err);
           });
         }
-      } else {
-        setupMediaSession();
       }
-    } else {
-      if (!el.paused) {
-        el.pause();
-      }
-      setupMediaSession();
+    } else if (!el.paused) {
+      el.pause();
     }
   }
 
@@ -3173,13 +4061,8 @@ extension WebUIContent {
     });
   }
 
-  // Synchronously unlock audio & Web Audio on user gesture until unlocked
+  // Synchronously unlock silent keep-alive audio on user gesture until unlocked
   function unlockAudioOnUserGesture() {
-    const ctx = getHapticAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-
     if (!state.lockScreenControls || !state.deviceAuthorized) {
       return;
     }
@@ -3199,8 +4082,9 @@ extension WebUIContent {
           if (state.playerState !== 'playing') {
             el.pause();
           }
-          setupMediaSession();
+          setupMediaSession(true);
           updateMediaSession();
+          setTimeout(() => { if (state.lockScreenControls && state.deviceAuthorized) setupMediaSession(true); }, 150);
         }).catch(() => {});
       }
     }
@@ -3208,11 +4092,11 @@ extension WebUIContent {
 
   bindUnlockAudioGestureListeners();
 
-  // Re-bind MediaSession on app wake, unlock, or tab switch
+  // Re-bind MediaSession on BOTH screen lock (document.hidden === true, when WebKit enables NowPlaying visibility) and wake/unlock
   ['visibilitychange', 'pageshow', 'focus'].forEach((evt) => {
     window.addEventListener(evt, () => {
-      if (!document.hidden) {
-        setupMediaSession();
+      if (state.lockScreenControls && state.deviceAuthorized) {
+        setupMediaSession(true);
         updateMediaSession();
       }
     }, { passive: true });
@@ -3230,6 +4114,31 @@ extension WebUIContent {
     }
   }, { passive: true });
 
+  // Track iPhone Landscape StandBy media query (strictly matching CSS 12-landscape-controls-and-booklet.css)
+  const standbyLandscapeMq = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+    ? window.matchMedia('(max-height: 540px) and (min-width: 568px) and (orientation: landscape) and (hover: none) and (pointer: coarse)')
+    : null;
+
+  function syncStandbyLandscapeBodyClass() {
+    const isLandscapeStandby = Boolean(standbyLandscapeMq && standbyLandscapeMq.matches && !document.body.classList.contains('keyboard-open'));
+    document.body.classList.toggle('standby-landscape-open', isLandscapeStandby);
+  }
+
+  if (standbyLandscapeMq) {
+    syncStandbyLandscapeBodyClass();
+    const onStandbyMqChange = () => {
+      syncStandbyLandscapeBodyClass();
+      ensureScrubberLoopRunning();
+      if (typeof syncActiveMotionVideoTarget === 'function') syncActiveMotionVideoTarget();
+      if (typeof syncSpectralPolling === 'function') syncSpectralPolling();
+    };
+    if (typeof standbyLandscapeMq.addEventListener === 'function') {
+      standbyLandscapeMq.addEventListener('change', onStandbyMqChange);
+    } else if (typeof standbyLandscapeMq.addListener === 'function') {
+      standbyLandscapeMq.addListener(onStandbyMqChange);
+    }
+  }
+
   // Track text-input keyboard focus so landscape TV Mode does not hide when buttons/sliders receive focus
   const TEXT_ENTRY_SELECTOR = 'input[type="text"], input[type="search"], input[type="url"], input[type="number"], input:not([type]), textarea, [contenteditable="true"]';
   function syncKeyboardFocusClass() {
@@ -3246,7 +4155,9 @@ extension WebUIContent {
     );
     const hadClass = document.body.classList.contains('keyboard-open');
     document.body.classList.toggle('keyboard-open', isTextFocused);
+    syncStandbyLandscapeBodyClass();
     if (hadClass !== isTextFocused) {
+      ensureScrubberLoopRunning();
       if (typeof syncActiveMotionVideoTarget === 'function') syncActiveMotionVideoTarget();
       if (typeof syncSpectralPolling === 'function') syncSpectralPolling();
     }
@@ -3262,88 +4173,125 @@ extension WebUIContent {
     setTimeout(syncKeyboardFocusClass, 0);
   }, { passive: true });
 
+// === MODULE: 08-silent-audio-and-media-session.js ===
   // --- MediaSession (Lock Screen, Dynamic Island, AirPods, Control Center) ---
   let lastMediaSessionKey = '';
-  function setupMediaSession() {
+
+  const msPlayHandler = () => {
+    triggerHaptic('medium');
+    syncSilentAudio(true);
+    optimisticPlay();
+    updateMediaSession();
+    send({ action: 'play' });
+  };
+
+  const msPauseHandler = () => {
+    triggerHaptic('medium');
+    syncSilentAudio(false);
+    state.pendingPlayUntil = 0;
+    state.pendingPauseUntil = Date.now() + 2500;
+    const now = performance.now();
+    if (state.playerState === 'playing' && state.duration > 0) {
+      state.lastSyncPos = Math.min(state.duration, state.lastSyncPos + Math.max(0, (now - state.lastSyncTime) / 1000));
+      state.position = state.lastSyncPos;
+    }
+    state.lastSyncTime = now;
+    state.lastSyncPerf = now;
+    state.playerState = 'paused';
+    state.playbackState = 'paused';
+    renderNowPlaying();
+    updateMediaSession();
+    send({ action: 'pause' });
+  };
+
+  const keepSilentAudioAliveForTrackSkip = () => {
+    if (silentAudioEl && silentAudioEl.paused && state.lockScreenControls && state.deviceAuthorized && state.playerState === 'playing') {
+      try {
+        const p = silentAudioEl.play();
+        if (p !== undefined) p.catch(() => {});
+      } catch (_) {}
+    }
+  };
+
+  const msPrevHandler = () => {
+    triggerHaptic('medium');
+    keepSilentAudioAliveForTrackSkip();
+    sendThrottledTransport('previous');
+  };
+
+  const msNextHandler = () => {
+    triggerHaptic('medium');
+    keepSilentAudioAliveForTrackSkip();
+    sendThrottledTransport('next');
+  };
+
+  const msSeekToHandler = (details) => {
+    if (details && details.seekTime != null && !isNaN(details.seekTime)) {
+      triggerHaptic('light');
+      sendSeek(details.seekTime);
+    }
+  };
+
+  const msStopHandler = () => {
+    triggerHaptic('medium');
+    syncSilentAudio(false);
+    state.pendingPlayUntil = 0;
+    state.playerState = 'stopped';
+    state.playbackState = 'stopped';
+    state.lastSyncPos = 0;
+    state.position = 0;
+    state.lastSyncTime = performance.now();
+    state.lastSyncPerf = state.lastSyncTime;
+    renderNowPlaying();
+    updateMediaSession();
+    send({ action: 'stop' });
+  };
+
+  function ensureMediaSessionPlatformActive(isPlaying) {
+    if (!('mediaSession' in navigator) || !navigator.mediaSession) return;
+    try {
+      if (!mediaSessionPlatformActivated) {
+        // WebKit C++ (NowPlayingManager.cpp:130, MediaSession.cpp:292):
+        // m_remoteCommandListener is nullptr until playbackState = 'playing' activates
+        // m_platformSession->setActive(true) -> MediaSessionManagerCocoa::addSession().
+        navigator.mediaSession.playbackState = 'playing';
+        mediaSessionPlatformActivated = true;
+      }
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    } catch (_) {}
+  }
+
+  function setupMediaSession(forceFlush = true) {
     if (!('mediaSession' in navigator)) return;
     if (!state.lockScreenControls || !state.deviceAuthorized) {
       teardownMediaSessionAndSilentAudio();
       return;
     }
 
+    ensureMediaSessionPlatformActive(state.playerState === 'playing');
+
+    allowAmrMediaSessionMutation = true;
     try {
-      navigator.mediaSession.setActionHandler('play', () => {
-        triggerHaptic('medium');
-        syncSilentAudio(true);
-        optimisticPlay();
-        setupMediaSession();
-        updateMediaSession();
-        send({ action: 'play' });
-      });
-
-      navigator.mediaSession.setActionHandler('pause', () => {
-        triggerHaptic('medium');
-        syncSilentAudio(false);
-        state.pendingPlayUntil = 0;
-        state.pendingPauseUntil = Date.now() + 2500;
-        const now = performance.now();
-        if (state.playerState === 'playing' && state.duration > 0) {
-          state.lastSyncPos = Math.min(state.duration, state.lastSyncPos + Math.max(0, (now - state.lastSyncTime) / 1000));
-          state.position = state.lastSyncPos;
-        }
-        state.lastSyncTime = now;
-        state.lastSyncPerf = now;
-        state.playerState = 'paused';
-        state.playbackState = 'paused';
-        renderNowPlaying();
-        setupMediaSession();
-        updateMediaSession();
-        send({ action: 'pause' });
-      });
-
-      navigator.mediaSession.setActionHandler('previoustrack', () => {
-        triggerHaptic('medium');
-        sendThrottledTransport('previous');
-      });
-
-      navigator.mediaSession.setActionHandler('nexttrack', () => {
-        triggerHaptic('medium');
-        sendThrottledTransport('next');
-      });
-
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (details.seekTime != null && !isNaN(details.seekTime)) {
-          triggerHaptic('light');
-          const curPos = Math.max(0, details.seekTime);
-          if (silentAudioEl && Number.isFinite(silentAudioEl.duration) && silentAudioEl.duration > 0) {
-            try { silentAudioEl.currentTime = curPos % silentAudioEl.duration; } catch (e) {}
-          }
-          sendSeek(details.seekTime);
-        }
-      });
-
-      // Disable seekbackward & seekforward so iOS Lock Screen, Dynamic Island,
-      // and Control Center display Previous / Next Track buttons (⏮ / ⏭) instead of ±10s/±15s buttons.
+      // Ensure WebKit RemoteCommandListenerCocoa registers ONLY Play, Pause, PreviousTrack,
+      // NextTrack, and SeekToPlaybackPosition — never defaultCommands() (±15s Skip/Rewind).
       try { navigator.mediaSession.setActionHandler('seekbackward', null); } catch (e) {}
       try { navigator.mediaSession.setActionHandler('seekforward', null); } catch (e) {}
+      try { navigator.mediaSession.setActionHandler('stop', null); } catch (e) {}
+      if (forceFlush) {
+        try { navigator.mediaSession.setActionHandler('previoustrack', null); } catch (e) {}
+        try { navigator.mediaSession.setActionHandler('nexttrack', null); } catch (e) {}
+      }
+      navigator.mediaSession.setActionHandler('play', msPlayHandler);
+      navigator.mediaSession.setActionHandler('pause', msPauseHandler);
+      navigator.mediaSession.setActionHandler('previoustrack', msPrevHandler);
+      navigator.mediaSession.setActionHandler('nexttrack', msNextHandler);
+      navigator.mediaSession.setActionHandler('seekto', msSeekToHandler);
 
-      navigator.mediaSession.setActionHandler('stop', () => {
-        triggerHaptic('medium');
-        syncSilentAudio(false);
-        state.pendingPlayUntil = 0;
-        state.playerState = 'stopped';
-        state.playbackState = 'stopped';
-        state.lastSyncPos = 0;
-        state.position = 0;
-        state.lastSyncTime = performance.now();
-        state.lastSyncPerf = state.lastSyncTime;
-        renderNowPlaying();
-        setupMediaSession();
-        updateMediaSession();
-        send({ action: 'stop' });
-      });
+      mediaSessionHandlersBound = true;
     } catch (err) {
       console.warn('[MediaSession] Handler setup:', err);
+    } finally {
+      allowAmrMediaSessionMutation = false;
     }
   }
 
@@ -3354,13 +4302,10 @@ extension WebUIContent {
       return;
     }
 
-    // Ensure action handlers are persistently bound to the active WebKit MediaSession
-    setupMediaSession();
-
     const isPlaying = state.playerState === 'playing';
+    ensureMediaSessionPlatformActive(isPlaying);
     syncSilentAudio(isPlaying);
-
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    setupMediaSession(false);
 
     const t = state.track;
     if (!t || !t.name) return;
@@ -3391,40 +4336,43 @@ extension WebUIContent {
             { src: fullArt, sizes: '512x512', type: artType }
           ]
         });
+        setupMediaSession(true);
       } catch (e) {
         console.warn('[MediaSession] Metadata update error:', e);
       }
     }
 
     if ('setPositionState' in navigator.mediaSession) {
-      if (state.duration > 0) {
-        try {
+      try {
+        // WebKit MediaSession::setPositionState (MediaSession.cpp:459) throws TypeError if playbackRate == 0;
+        // WebKit automatically computes actualPlaybackRate = (playbackState == Playing ? playbackRate : 0).
+        if (state.duration > 0) {
           const nowPerf = performance.now();
           const syncBase = state.lastSyncPerf || state.lastSyncTime || nowPerf;
           const livePos = (state.lastSyncPos || 0) + (isPlaying ? Math.max(0, (nowPerf - syncBase) / 1000) : 0);
           const curPos = Math.min(Math.max(0, livePos), state.duration);
           navigator.mediaSession.setPositionState({
             duration: Math.max(state.duration, 0.1),
-            playbackRate: isPlaying ? 1.0 : 0.0,
+            playbackRate: 1.0,
             position: curPos
           });
-          if (silentAudioEl && !silentAudioEl.paused && curPos >= 0 && Number.isFinite(silentAudioEl.duration) && silentAudioEl.duration > 0) {
-            const targetLoopPos = curPos % silentAudioEl.duration;
-            const drift = Math.abs(silentAudioEl.currentTime - targetLoopPos);
-            if (drift > 3.0) {
-              try { silentAudioEl.currentTime = targetLoopPos; } catch (e) {}
-            }
-          }
-        } catch (e) {}
-      } else {
-        try { navigator.mediaSession.setPositionState(null); } catch (e) {}
-      }
+        } else {
+          navigator.mediaSession.setPositionState({
+            duration: 240,
+            playbackRate: 1.0,
+            position: 0
+          });
+        }
+      } catch (e) {}
     }
   }
 
   function cleanAudioQualityLabel(raw) {
     if (!raw) return 'LOSSLESS';
     const up = raw.toUpperCase();
+    if (up.includes('ОЖИДАНИЕ CDN')) return IS_EN ? 'CDN TIMEOUT' : 'ОЖИДАНИЕ CDN';
+    if (up.includes('БУФЕРИЗАЦИЯ')) return IS_EN ? 'BUFFERING…' : 'БУФЕРИЗАЦИЯ…';
+    if (up.includes('ОПРЕДЕЛЕНИЕ')) return IS_EN ? 'DETECTING…' : 'ФОРМАТ…';
     if (up.includes('HI-RES')) return 'HI-RES LOSSLESS';
     if (up.includes('LOSSLESS')) return 'LOSSLESS';
     if (up.includes('AAC')) return 'AAC 256';
@@ -3433,8 +4381,20 @@ extension WebUIContent {
   }
 
   function formatDacPill(raw) {
+    const up = String(raw || '').toUpperCase();
+    if (state.isStreamStalled || up.includes('ОЖИДАНИЕ CDN') || up.includes('WAITING FOR APPLE MUSIC CDN')) {
+      return IS_EN ? 'CDN Timeout • 0 kbps' : 'Ожидание CDN • 0 кбит/с';
+    }
+    if (state.isBuffering || up.includes('ЗАПУСК ИЗ ОБЛАКА') || up.includes('STARTING CLOUD STREAM') || up.includes('БУФЕРИЗАЦИЯ') || up.includes('BUFFERING STREAM')) {
+      return IS_EN ? 'Starting Cloud Stream…' : 'Запуск из облака…';
+    }
+    if (up.includes('ОПРЕДЕЛЕНИЕ') || up.includes('DETECTING FORMAT')) {
+      return IS_EN ? 'Detecting Format…' : 'Определение формата…';
+    }
+    if ((state.dspMode === 'sdm_dop' || state.dspMode === 'hq_nos_pcm') && state.dspBadge) {
+      return state.dspBadge;
+    }
     if (!raw) return 'Bit-Perfect DAC';
-    const up = raw.toUpperCase();
     if (up.includes('192')) return 'Bit-Perfect • 192 kHz / 24-bit';
     if (up.includes('96')) return 'Bit-Perfect • 96 kHz / 24-bit';
     if (up.includes('48')) return 'Lossless • 48 kHz / 24-bit';
@@ -3516,87 +4476,279 @@ extension WebUIContent {
     }
   }
 
-  // --- Optimistic Scrubber Loop (throttled to ~20fps normally, 4fps in TV Mode) ---
+  let lastLoadingPillKey = '';
+  let lastLoadingTickCheckMs = 0;
+
+  function syncTrackLoadingIndicatorUI() {
+    const isPlaying = state.playerState === 'playing';
+    const isCloudLoading = Boolean(isPlaying && state.isBuffering);
+    const elapsedLoadingMs = state.loadingStartedAtMs ? Math.max(0, Date.now() - state.loadingStartedAtMs) : 0;
+    const showLoadingUI = isCloudLoading && elapsedLoadingMs >= 200;
+    const showShimmer = isCloudLoading;
+
+    let statusText = '';
+    if (showLoadingUI) {
+      if (state.isStreamStalled) {
+        statusText = IS_EN ? 'Waiting for Apple Music CDN…' : 'Ожидание CDN Apple Music…';
+      } else {
+        statusText = IS_EN ? 'Starting Cloud Stream…' : 'Запуск из облака…';
+      }
+    }
+
+    const t = state.track;
+    const miniText = t ? (t.artist || 'Apple Music') : 'Apple Music';
+
+    const renderKey = `${showLoadingUI ? 1 : 0}|${showShimmer ? 1 : 0}|${statusText}|${miniText}`;
+    if (renderKey === lastLoadingPillKey) {
+      return;
+    }
+    lastLoadingPillKey = renderKey;
+
+    if (dom.playerLoadingStatus) {
+      dom.playerLoadingStatus.classList.toggle('hidden', !showLoadingUI);
+      dom.playerLoadingStatus.classList.remove('is-buffer');
+    }
+    if (dom.playerLoadingText && statusText) {
+      dom.playerLoadingText.textContent = statusText;
+    }
+    if (dom.standbyLoadingStatus) {
+      dom.standbyLoadingStatus.classList.toggle('hidden', !showLoadingUI);
+      dom.standbyLoadingStatus.classList.remove('is-buffer');
+    }
+    if (dom.standbyLoadingText && statusText) {
+      dom.standbyLoadingText.textContent = statusText;
+    }
+
+    if (dom.scrubberContainer) {
+      dom.scrubberContainer.classList.toggle('is-loading-stream', showShimmer);
+      dom.scrubberContainer.classList.remove('is-buffer-staging');
+    }
+    if (dom.miniProgressTrack) {
+      dom.miniProgressTrack.classList.toggle('is-loading-stream', showShimmer);
+      dom.miniProgressTrack.classList.remove('is-buffer-staging');
+    }
+    const sbTrack = dom.standbyProgressTrack || document.getElementById('standby-progress-track');
+    if (sbTrack) {
+      sbTrack.classList.toggle('is-loading-stream', showShimmer);
+      sbTrack.classList.remove('is-buffer-staging');
+    }
+
+    if (dom.btnPlayPause) {
+      dom.btnPlayPause.classList.toggle('is-loading-ring', showLoadingUI);
+      dom.btnPlayPause.classList.remove('is-buffer-ring');
+    }
+    if (dom.miniBtnPlayPause) {
+      dom.miniBtnPlayPause.classList.toggle('is-loading-ring', showLoadingUI);
+      dom.miniBtnPlayPause.classList.remove('is-buffer-ring');
+    }
+    const sbPlayBtn = dom.standbyBtnPlayPause || document.getElementById('standby-btn-play-pause');
+    if (sbPlayBtn) {
+      sbPlayBtn.classList.toggle('is-loading-ring', showLoadingUI);
+      sbPlayBtn.classList.remove('is-buffer-ring');
+    }
+
+    if (dom.audioQualityBadge) {
+      dom.audioQualityBadge.classList.remove('is-loading-stream');
+    }
+    const sbDacBadge = document.getElementById('standby-dac-badge');
+    if (sbDacBadge) {
+      sbDacBadge.classList.remove('is-loading-stream');
+    }
+
+    if (dom.miniArtist) {
+      dom.miniArtist.classList.remove('is-loading-stream');
+      if (dom.miniArtist.textContent !== miniText) {
+        dom.miniArtist.textContent = miniText;
+      }
+    }
+  }
+
+  // --- Optimistic Scrubber Loop (rAF normally when duration > 0; 250ms setInterval in StandBy/TV Mode) ---
   let scrubberRafId = 0;
+  let standbyScrubberTimerId = null;
+
+  function stopStandbyScrubberInterval() {
+    if (standbyScrubberTimerId) {
+      clearInterval(standbyScrubberTimerId);
+      standbyScrubberTimerId = null;
+    }
+  }
+
+  function stepScrubberFrame(tsFrame) {
+    if ((state.isStagingBuffer || state.isBuffering) && (tsFrame - lastLoadingTickCheckMs >= 250)) {
+      lastLoadingTickCheckMs = tsFrame;
+      syncTrackLoadingIndicatorUI();
+    }
+    if (!state.isScrubbing && state.duration > 0) {
+      const waitingForFirstAudioFrame = state.isBuffering || state.isStagingBuffer || (!state.hasStartedAdvancingForTrack && state.lastSyncPos <= 0.08);
+      const deltaSec = waitingForFirstAudioFrame ? 0 : ((tsFrame - state.lastSyncTime) / 1000);
+      const rawPos = state.lastSyncPos + deltaSec;
+      const currentPos = Math.min(state.duration, rawPos);
+      state.position = currentPos;
+      updateScrubberUI(currentPos, state.duration);
+
+      // If spectral data went stale (>1.2s) while RTA bars are still raised above floor, wake up RTA decay loop
+      if (!standbyRtaRafId && (tsFrame - (state.lastSpectralUpdateAt || 0)) > 1200 && isStandbyOrLandscapeVisible()) {
+        for (let i = 0; i < standbyRtaBarCount; i++) {
+          if (standbyRtaCurrent[i] > 0.035 || standbyRtaTarget[i] > 0.035) {
+            ensureStandbyRtaAnimLoop();
+            break;
+          }
+        }
+      }
+
+      // Watchdog: if seek bar has been pinned at 100% for > 1.5s without a track transition event,
+      // actively poll status & queue from the server to recover immediately.
+      if (rawPos >= state.duration + 1.5 && state.connected && state.deviceAuthorized) {
+        const nowWall = Date.now();
+        if (nowWall - (state.lastEndOfTrackPollAt || 0) >= 2500) {
+          state.lastEndOfTrackPollAt = nowWall;
+          send({ action: 'get_status' });
+          send({ action: 'get_queue' });
+          send({
+            action: 'client_log',
+            params: {
+              level: 'warn',
+              message: `Scrubber pinned at 100% (${Math.round(state.duration)}s) for ${(rawPos - state.duration).toFixed(1)}s on track "${(state.track && state.track.name) || ''}" — polling status & queue`
+            }
+          });
+          ensureStandbyRtaAnimLoop();
+        }
+      }
+    }
+  }
 
   function ensureScrubberLoopRunning() {
-    if (!scrubberRafId && state.connected && state.playerState === 'playing' && !document.hidden) {
+    const shouldAnimate = Boolean(state.connected && state.playerState === 'playing' && (state.duration > 0) && !document.hidden);
+    if (!shouldAnimate) {
+      if (scrubberRafId) {
+        cancelAnimationFrame(scrubberRafId);
+        scrubberRafId = 0;
+      }
+      stopStandbyScrubberInterval();
+      return;
+    }
+
+    if (isStandbyOrLandscapeVisible()) {
+      if (scrubberRafId) {
+        cancelAnimationFrame(scrubberRafId);
+        scrubberRafId = 0;
+      }
+      if (!standbyScrubberTimerId) {
+        standbyScrubberTimerId = setInterval(() => {
+          if (!state.connected || state.playerState !== 'playing' || !(state.duration > 0) || document.hidden || !isStandbyOrLandscapeVisible()) {
+            stopStandbyScrubberInterval();
+            ensureScrubberLoopRunning();
+            return;
+          }
+          const ts = performance.now();
+          lastScrubberFrameMs = ts;
+          stepScrubberFrame(ts);
+        }, 250);
+      }
+      return;
+    }
+
+    stopStandbyScrubberInterval();
+    if (!scrubberRafId) {
       scrubberRafId = requestAnimationFrame(scrubberAnimationLoop);
     }
   }
 
   function scrubberAnimationLoop(nowMs) {
     scrubberRafId = 0;
-    if (!state.connected || state.playerState !== 'playing' || document.hidden) {
+    if (!state.connected || state.playerState !== 'playing' || !(state.duration > 0) || document.hidden) {
       return;
     }
-    if (!state.isScrubbing && state.duration > 0) {
-      const ts = nowMs || performance.now();
-      const intervalMs = isStandbyOrLandscapeVisible() ? 250 : 50;
-      if (ts - lastScrubberFrameMs >= intervalMs) {
-        lastScrubberFrameMs = ts;
-        const deltaSec = (ts - state.lastSyncTime) / 1000;
-        const rawPos = state.lastSyncPos + deltaSec;
-        const currentPos = Math.min(state.duration, rawPos);
-        state.position = currentPos;
-        updateScrubberUI(currentPos, state.duration);
-
-        // If spectral data went stale (>1.2s) while RTA bars are still raised above floor, wake up RTA decay loop
-        if (!standbyRtaRafId && (ts - (state.lastSpectralUpdateAt || 0)) > 1200 && isStandbyOrLandscapeVisible()) {
-          for (let i = 0; i < standbyRtaBarCount; i++) {
-            if (standbyRtaCurrent[i] > 0.035 || standbyRtaTarget[i] > 0.035) {
-              ensureStandbyRtaAnimLoop();
-              break;
-            }
-          }
-        }
-
-        // Watchdog: if seek bar has been pinned at 100% for > 1.5s without a track transition event,
-        // actively poll status & queue from the server to recover immediately.
-        if (rawPos >= state.duration + 1.5 && state.connected && state.deviceAuthorized) {
-          const nowWall = Date.now();
-          if (nowWall - (state.lastEndOfTrackPollAt || 0) >= 2500) {
-            state.lastEndOfTrackPollAt = nowWall;
-            send({ action: 'get_status' });
-            send({ action: 'get_queue' });
-            send({
-              action: 'client_log',
-              params: {
-                level: 'warn',
-                message: `Scrubber pinned at 100% (${Math.round(state.duration)}s) for ${(rawPos - state.duration).toFixed(1)}s on track "${(state.track && state.track.name) || ''}" — polling status & queue`
-              }
-            });
-            ensureStandbyRtaAnimLoop();
-          }
-        }
-      }
+    if (isStandbyOrLandscapeVisible()) {
+      ensureScrubberLoopRunning();
+      return;
+    }
+    const tsFrame = nowMs || performance.now();
+    if (tsFrame - lastScrubberFrameMs >= 50) {
+      lastScrubberFrameMs = tsFrame;
+      stepScrubberFrame(tsFrame);
     }
     scrubberRafId = requestAnimationFrame(scrubberAnimationLoop);
   }
   ensureScrubberLoopRunning();
 
+  // --- WebSocket Liveness, Ping/Pong Probe & Half-Open Watchdog ---
+  function checkSocketLiveness(isResumeProbe = false) {
+    if (document.hidden && !isResumeProbe) return;
+
+    if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+      if (isResumeProbe) {
+        reconnectAttempt = 0;
+        connectWebSocket();
+      }
+      return;
+    }
+    if (socket.readyState !== WebSocket.OPEN) return;
+
+    const now = Date.now();
+    const lastRx = state.lastServerMessageAt || now;
+    const silenceMs = now - lastRx;
+
+    if (state.pendingPingSentAt > 0) {
+      if (lastRx >= state.pendingPingSentAt) {
+        state.pendingPingSentAt = 0;
+      } else if (now - state.pendingPingSentAt >= 4000) {
+        state.pendingPingSentAt = 0;
+        connectWebSocket();
+        return;
+      }
+    }
+
+    if (state.pendingPingSentAt === 0) {
+      if (isResumeProbe && silenceMs >= 3000) {
+        state.pendingPingSentAt = now;
+        send({ action: 'ping' });
+        if (state.deviceAuthorized) {
+          send({ action: 'get_status' });
+        }
+        return;
+      }
+      if (silenceMs >= 15000) {
+        state.pendingPingSentAt = now;
+        send({ action: 'ping' });
+        return;
+      }
+    }
+
+    if (state.playerState === 'playing' && state.deviceAuthorized && silenceMs >= 4500 && state.pendingPingSentAt === 0) {
+      send({ action: 'get_status' });
+      send({ action: 'get_queue' });
+      if (silenceMs >= 11000) {
+        state.pendingPingSentAt = now;
+        send({ action: 'ping' });
+      }
+    }
+  }
+
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
+    if (document.visibilityState === 'visible') {
+      ensureScrubberLoopRunning();
+      checkSocketLiveness(true);
+    } else {
       ensureScrubberLoopRunning();
     }
     syncSpectralPolling();
   });
 
-  // --- WebSocket Half-Open & Track Transition Watchdog ---
+  window.addEventListener('pageshow', () => {
+    ensureScrubberLoopRunning();
+    checkSocketLiveness(true);
+  }, { passive: true });
+
+  window.addEventListener('online', () => {
+    reconnectAttempt = 0;
+    checkSocketLiveness(true);
+  }, { passive: true });
+
   setInterval(() => {
-    if (!state.connected || !state.deviceAuthorized) return;
-    if (document.hidden) return;
-    const silenceMs = Date.now() - (state.lastServerMessageAt || Date.now());
-    if (state.playerState === 'playing') {
-      if (silenceMs >= 9000) {
-        // Half-open TCP/WebSocket connection stalled for >9s during active playback: force reconnect
-        connectWebSocket();
-      } else if (silenceMs >= 4500) {
-        send({ action: 'get_status' });
-        send({ action: 'get_queue' });
-      }
-    }
-  }, 2500);
+    checkSocketLiveness(false);
+  }, 2000);
 
   // --- Scrubber User Interaction ---
   dom.scrubberInput.addEventListener('input', function (e) {
@@ -3620,11 +4772,17 @@ extension WebUIContent {
 
   function sendSeek(position) {
     const targetPos = Math.max(0, Math.min(state.duration || 0, position));
+    state.isBuffering = false;
+    state.isStagingBuffer = false;
+    state.loadingStage = null;
+    state.loadingStartedAtMs = 0;
+    state.hasStartedAdvancingForTrack = targetPos > 0.08;
     state.lastSyncPos = targetPos;
     state.lastSyncTime = performance.now();
     state.lastSyncPerf = state.lastSyncTime;
     state.position = targetPos;
     updateScrubberUI(targetPos, state.duration);
+    syncTrackLoadingIndicatorUI();
     send({
       action: 'seek',
       params: { position: targetPos }
@@ -3642,6 +4800,7 @@ extension WebUIContent {
   function optimisticPlay() {
     state.pendingPauseUntil = 0;
     state.pendingPlayUntil = Date.now() + 3000;
+    state.lastClientCommandAt = Date.now();
     state.lastSyncTime = performance.now();
     state.lastSyncPerf = state.lastSyncTime;
     state.playerState = 'playing';
@@ -3659,6 +4818,10 @@ extension WebUIContent {
     syncSilentAudio(!isPlaying);
     if (isPlaying) {
       state.pendingPlayUntil = 0;
+      state.isBuffering = false;
+      state.isStagingBuffer = false;
+      state.loadingStage = null;
+      state.loadingStartedAtMs = 0;
       const now = performance.now();
       state.lastSyncPos = Math.min(state.duration, state.lastSyncPos + (now - state.lastSyncTime) / 1000);
       state.position = state.lastSyncPos;
@@ -3685,6 +4848,7 @@ extension WebUIContent {
     transportLoadingTimer = setTimeout(clearTransportLoading, 2000);
   }
 
+// === MODULE: 09-transport-and-signal-path.js ===
   function clearTransportLoading() {
     if (transportLoadingTimer) {
       clearTimeout(transportLoadingTimer);
@@ -3739,24 +4903,67 @@ extension WebUIContent {
 
   dom.btnPrev.addEventListener('click', () => sendThrottledTransport('previous'));
 
-  dom.btnShuffle.addEventListener('click', () => {
+  function normalizeRepeatMode(val) {
+    const m = String(val || '').trim().toLowerCase();
+    if (m === 'one' || m === '1' || m === 'track') return 'one';
+    if (m === 'all') return 'all';
+    return 'off';
+  }
+
+  function toggleShuffleOptimistic() {
+    if (state.isRadio) {
+      showToast(IS_EN ? 'Shuffle is unavailable on Radio' : 'Перемешивание недоступно для радио');
+      return;
+    }
     triggerHaptic('toggle');
+    const nextShuffle = !state.shuffle;
+    state.shuffle = nextShuffle;
+    state.pendingShuffleUntil = Date.now() + 3000;
+    renderNowPlaying();
+    if (isStandbyOrLandscapeVisible()) updateStandbyUI();
     send({
       action: 'set_shuffle',
-      params: { enabled: !state.shuffle }
+      params: { enabled: nextShuffle }
     });
-  });
+    showToast(nextShuffle
+      ? (IS_EN ? '🔀 Shuffle Enabled' : '🔀 Перемешивание включено')
+      : (IS_EN ? 'Shuffle Off' : 'Перемешивание выключено'));
+  }
 
-  dom.btnRepeat.addEventListener('click', () => {
-    triggerHaptic('toggle');
-    const modes = ['off', 'all', 'one'];
-    const nextIdx = (modes.indexOf(state.repeatMode) + 1) % modes.length;
-    const nextMode = modes[nextIdx];
+  dom.btnShuffle.addEventListener('click', toggleShuffleOptimistic);
+
+  function applyRepeatModeOptimistic(nextMode) {
+    let cleanMode = normalizeRepeatMode(nextMode);
+    if (state.isRadio && cleanMode === 'all') {
+      cleanMode = 'off';
+    }
+    state.repeatMode = cleanMode;
+    state.pendingRepeatUntil = Date.now() + 3000;
+    renderNowPlaying();
+    if (isStandbyOrLandscapeVisible()) updateStandbyUI();
     send({
       action: 'set_repeat',
-      params: { mode: nextMode }
+      params: { mode: cleanMode }
     });
-  });
+    if (cleanMode === 'one') {
+      showToast(IS_EN ? '🔂 Repeat One Track' : '🔂 Зациклен 1 трек');
+    } else if (cleanMode === 'all') {
+      showToast(IS_EN ? '🔁 Repeat Queue' : '🔁 Повтор очереди');
+    } else {
+      showToast(IS_EN ? 'Repeat Off' : 'Повтор выключен');
+    }
+  }
+
+  function cycleRepeatMode() {
+    triggerHaptic('toggle');
+    const modes = state.isRadio ? ['off', 'one'] : ['off', 'all', 'one'];
+    const curMode = normalizeRepeatMode(state.repeatMode);
+    const curIdx = modes.indexOf(curMode);
+    const nextIdx = ((curIdx >= 0 ? curIdx : 0) + 1) % modes.length;
+    applyRepeatModeOptimistic(modes[nextIdx]);
+  }
+
+  dom.btnRepeat.addEventListener('click', cycleRepeatMode);
 
   let toastTimerId = 0;
 
@@ -3832,13 +5039,19 @@ extension WebUIContent {
     const t = state.track;
     const quality = state.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
     const up = quality.toUpperCase();
+    const isCdnStall = Boolean(state.isStreamStalled) || up.includes('ОЖИДАНИЕ CDN');
+    const isBufferingStream = !isCdnStall && (Boolean(state.isBuffering) || up.includes('ЗАПУСК ИЗ ОБЛАКА') || up.includes('STARTING CLOUD STREAM') || up.includes('БУФЕРИЗАЦИЯ') || up.includes('ОПРЕДЕЛЕНИЕ'));
     const isLossy = up.includes('AAC') || up.includes('MP3');
     const devRateHz = state.audioDeviceSampleRate || 44100;
     const rateKhz = (devRateHz / 1000).toFixed(1).replace(/\.0$/, '');
     const outBitDepth = isLossy ? 16 : (state.audioDeviceBitDepth || (devRateHz >= 48000 ? 24 : 16));
 
     let formatBadge = 'ALAC Lossless';
-    if (up.includes('192') || up.includes('HI-RES')) {
+    if (isCdnStall) {
+      formatBadge = IS_EN ? 'CDN Timeout' : 'Таймаут CDN';
+    } else if (isBufferingStream) {
+      formatBadge = IS_EN ? 'Buffering…' : 'Буферизация…';
+    } else if (up.includes('192') || up.includes('HI-RES')) {
       formatBadge = 'ALAC Hi-Res';
     } else if (isLossy) {
       formatBadge = 'AAC 256k';
@@ -3846,15 +5059,55 @@ extension WebUIContent {
       formatBadge = 'ALAC Lossless';
     }
 
-    // Parse source sample rate and bit depth for Bit-Perfect verification
+    // Parse source sample rate and bit depth for Bit-Perfect & DSP verification
     const rateMatch = quality.match(/(\d+(?:\.\d+)?)\s*(?:kHz|кГц)/i);
     const sourceRateHz = rateMatch ? Math.round(parseFloat(rateMatch[1]) * 1000) : (t && (t.sample_rate || t.sampleRate) ? Number(t.sample_rate || t.sampleRate) : null);
     const depthMatch = quality.match(/(\d+)-(?:bit|бит)/i);
     const sourceBitDepth = depthMatch ? parseInt(depthMatch[1], 10) : (t && (t.bit_depth || t.bitDepth) ? Number(t.bit_depth || t.bitDepth) : null);
 
+    const activeDev = (state.audioDevices || []).find(d => d.name === state.audioDeviceName || d.isDefault || d.is_default);
+    const isNetworkRenderer = Boolean(
+      state.isDlnaActive ||
+      (activeDev && (activeDev.type === 'dlna' || activeDev.isNetwork || activeDev.is_network || activeDev.protocol === 'dlna' || activeDev.protocol === 'bluos'))
+    );
+    const isLocalDspActive = !isNetworkRenderer && (state.dspMode === 'sdm_dop' || state.dspMode === 'hq_nos_pcm');
+    const srcRateVal = sourceRateHz || 44100;
+    const srcBitsVal = sourceBitDepth || (isLossy ? 16 : (srcRateVal >= 48000 ? 24 : 16));
+    const srcBitratePerCh = srcRateVal * srcBitsVal;
+    const outDspRateHz = Number(state.dspOutputSampleRate) || 0;
+    const badgeDsdMatch = String(state.dspBadge || '').match(/DSD(\d+)/i);
+    const dsdMult = outDspRateHz >= 2822400
+      ? Math.round(outDspRateHz / ((outDspRateHz % 48000 === 0) ? 48000 : 44100))
+      : (badgeDsdMatch ? Number(badgeDsdMatch[1]) : (Number(state.dspRate) || 256));
+    const dsdBaseGrid = (srcRateVal % 48000 === 0 && state.dspClockPolicy !== 'strict_sacd_44k1') ? 48000 : 44100;
+    const dsdClockHz = outDspRateHz >= 2822400 ? outDspRateHz : (dsdMult * dsdBaseGrid);
+    const dsdFallbackToPcm = state.dspMode === 'sdm_dop' && outDspRateHz > 0 && outDspRateHz < 2822400;
+    const isInsufficientDsd = Boolean(
+      isLocalDspActive &&
+      state.dspMode === 'sdm_dop' &&
+      !isLossy &&
+      (
+        dsdFallbackToPcm ||
+        dsdClockHz < srcBitratePerCh ||
+        (dsdClockHz / srcRateVal) < 32 ||
+        (dsdMult <= 64 && srcRateVal > 48000)
+      )
+    );
+
     const ratesMatch = !sourceRateHz || Math.abs(sourceRateHz - devRateHz) <= 500;
     const depthsMatch = !sourceBitDepth || outBitDepth >= sourceBitDepth;
-    const isHardwareMatched = (state.isBitPerfect !== false) && ratesMatch && depthsMatch;
+    const isPreDspActive = Boolean(
+      (state.lateNightDrcMode && state.lateNightDrcMode !== 'off') ||
+      state.lateNightDrcEnabled ||
+      (state.masteringDeclipMode && state.masteringDeclipMode !== 'off') ||
+      (state.masteringDeesserMode && state.masteringDeesserMode !== 'off') ||
+      state.roomCorrectionActive ||
+      (state.roomAcoustic && state.roomAcoustic.enabled && state.roomAcoustic.active_profile)
+    );
+    const isClockSynced64BitDsp = !isLocalDspActive && !isLossy && isPreDspActive && ratesMatch && depthsMatch;
+    const isHardwareMatched = isLocalDspActive
+      ? !isInsufficientDsd
+      : (isClockSynced64BitDsp || ((state.isBitPerfect !== false) && ratesMatch && depthsMatch));
     const isVerified = isHardwareMatched && !isLossy;
 
     const sa = state.spectralAnalysis || {};
@@ -3871,11 +5124,21 @@ extension WebUIContent {
     const qualityBadges = [dom.audioQualityBadge, dom.mobileDacBadge, dom.desktopDacBadge, sbDacBadge].filter(Boolean);
     qualityBadges.forEach(badge => {
       badge.classList.remove('quality-ok', 'quality-warn', 'quality-bad');
-      if (!isPendingValidation) {
-        const badgeQualityClass = isSpectralFake
-          ? 'quality-bad'
-          : ((isSpectralZeroPad || (!isLossy && !isHardwareMatched)) ? 'quality-warn' : 'quality-ok');
-        badge.classList.add(badgeQualityClass);
+      if (isCdnStall) {
+        badge.classList.add('quality-warn');
+        badge.title = IS_EN
+          ? 'Music.app receives 0 bytes from Apple Music CDN (aod.itunes.apple.com) — check DNS (1.1.1.1 / 8.8.8.8) or network route'
+          : 'Music.app не получает аудиопоток с CDN Apple Music (aod.itunes.apple.com) — проверьте DNS (1.1.1.1 / 8.8.8.8) или маршрут сети';
+      } else if (!isBufferingStream) {
+        badge.title = IS_EN ? 'Stream & DAC Signal Path' : 'Параметры потока и ЦАП';
+        if (!isPendingValidation) {
+          const badgeQualityClass = isSpectralFake
+            ? 'quality-bad'
+            : ((isSpectralZeroPad || (!isLossy && !isHardwareMatched)) ? 'quality-warn' : 'quality-ok');
+          badge.classList.add(badgeQualityClass);
+        }
+      } else {
+        badge.title = IS_EN ? 'Buffering Apple Music stream…' : 'Буферизация потока Apple Music…';
       }
     });
 
@@ -3921,13 +5184,21 @@ extension WebUIContent {
       dom.signalSourceTitle.textContent = t ? `${t.name} — ${t.artist}` : 'Apple Music';
     }
     if (dom.signalSourceDetails) {
-      dom.signalSourceDetails.textContent = isLossy ? 'AAC 256 kbps → Декодирование в PCM 16-бит / 44.1 кГц' : quality;
+      if (isCdnStall) {
+        dom.signalSourceDetails.textContent = IS_EN
+          ? 'HLS stream timeout from Apple Music CDN (aod.itunes.apple.com) — 0 PCM frames in CoreAudio'
+          : 'Таймаут загрузки HLS-потока с CDN Apple Music (aod.itunes.apple.com) — 0 кадров PCM в CoreAudio';
+      } else if (isBufferingStream) {
+        dom.signalSourceDetails.textContent = IS_EN
+          ? 'Buffering Apple Music stream (waiting for decoder start)…'
+          : 'Буферизация потока Apple Music (ожидание старта декодера)…';
+      } else {
+        dom.signalSourceDetails.textContent = isLossy ? 'AAC 256 kbps → Декодирование в PCM 16-бит / 44.1 кГц' : quality;
+      }
     }
     if (dom.signalDacRate) {
       dom.signalDacRate.textContent = `${rateKhz} кГц`;
     }
-    const activeDev = (state.audioDevices || []).find(d => d.name === state.audioDeviceName || d.isDefault);
-    const isNetworkRenderer = (activeDev && activeDev.type === 'dlna') || (state.audioDeviceName && (state.audioDeviceName.includes('(') || state.audioDeviceName.includes('NODE') || state.audioDeviceName.includes('Bluesound') || state.audioDeviceName.includes('DLNA')));
 
     const dacBadge = document.querySelector('#signal-node-dac .signal-node-badge');
     if (dacBadge) {
@@ -3957,32 +5228,119 @@ extension WebUIContent {
         dom.signalDacDetails.textContent = `Прямое подключение macOS CoreAudio HAL (${outBitDepth}-бит / ${rateKhz} кГц)`;
       }
     }
-    const signalEngineMeta = document.querySelector('#signal-node-engine .signal-node-meta');
-    if (signalEngineMeta) {
+    const signalEngineBadge = document.getElementById('signal-engine-badge');
+    const signalEngineName = document.getElementById('signal-engine-name');
+    const signalEngineMeta = document.getElementById('signal-engine-details') || document.querySelector('#signal-node-engine .signal-node-meta');
+    const dspTelemPill = document.getElementById('dsp-telemetry-pill');
+    const dspTelemText = document.getElementById('dsp-telemetry-text');
+
+    const dspPresetSubEl = document.getElementById('dsp-preset-subtitle');
+    if (dspPresetSubEl) {
       if (isNetworkRenderer) {
-        signalEngineMeta.textContent = isLossy
-          ? 'CoreAudio Process Tap • Декодирование AAC → PCM 16-бит / 44.1 кГц'
-          : 'CoreAudio Process Tap (Bit-Perfect) • Бесконечный PCM поток';
-      } else {
-        const guardLabel = state.dacMutingGuardEnabled === true
-          ? `DAC Muting Guard (${state.dacMutingGuardMs || 100} мс)`
-          : 'Bypass микшера';
-        const ampLabel = (state.lockVolume100 && state.ampVolumeControlEnabled)
-          ? `${state.ampBrandName || 'AMP'} TCP Vol ${state.ampMuted ? 'MUTE' : state.volume}`
-          : 'Zero DSP';
-        signalEngineMeta.textContent = isLossy
-          ? 'CoreAudio HAL • Декодирование AAC → PCM 16-бит / 44.1 кГц'
-          : `Bit-Perfect 100% Lock • ${guardLabel} • ${ampLabel}`;
+        dspPresetSubEl.textContent = IS_EN
+          ? 'External network streamer active: Bit-Perfect PCM (DSD/NOS presets unavailable)'
+          : 'Активен внешний сетевой плеер BluOS / DLNA: передаётся Bit-Perfect PCM (DSD/NOS не поддерживаются)';
+      } else if (state.dspActivePresetSubtitle) {
+        dspPresetSubEl.textContent = translateTextToEn(state.dspActivePresetSubtitle);
       }
     }
-    const signalVerifiedCard = document.querySelector('.signal-verified-card');
-    const signalVerifiedTitle = document.querySelector('.signal-verified-title');
-    const signalVerifiedDesc = document.querySelector('.signal-verified-desc');
-    const hasTopWarning = !isVerified || isSpectralFake || isSpectralZeroPad;
+
+    const isDeClipActive = Boolean(state.masteringDeclipMode && state.masteringDeclipMode !== 'off');
+    const deClipShort = state.masteringDeclipMode === 'studio'
+      ? (IS_EN ? 'Studio De-Clip' : 'Студийный De-Clip')
+      : (state.masteringDeclipMode === 'gentle'
+        ? (IS_EN ? 'Gentle De-Clip' : 'Деликатный De-Clip')
+        : (IS_EN ? 'Smart De-Clip' : 'Авто De-Clip'));
+    const deClipSuffix = isDeClipActive ? ` • ⚡️ ${deClipShort}` : '';
+
+    const isDeEsserActive = Boolean(state.masteringDeesserMode && state.masteringDeesserMode !== 'off');
+    const deEsserShort = state.masteringDeesserMode === 'vocal'
+      ? 'Weiss De-Esser'
+      : (IS_EN ? 'Gentle De-Esser' : 'Деликатный De-Esser');
+    const deEsserSuffix = isDeEsserActive ? ` • 💎 ${deEsserShort}` : '';
+
+    const roomEqSuffix = (state.roomCorrectionActive || (state.roomAcoustic && state.roomAcoustic.enabled && state.roomAcoustic.active_profile))
+      ? ` • Room EQ (${state.roomProfileName || (state.roomAcoustic.active_profile && state.roomAcoustic.active_profile.name) || 'Auto-PEQ'})`
+      : '';
+    const isDrcActive = Boolean(state.lateNightDrcMode && state.lateNightDrcMode !== 'off');
+    const drcModeShort = state.lateNightDrcMode === 'concert'
+      ? (IS_EN ? 'Night Concert' : 'Ночной концерт')
+      : (IS_EN ? 'Gentle DRC' : 'Деликатный DRC');
+    const drcSuffix = isDrcActive ? ` • 🌙 ${drcModeShort}` : '';
+    const allPreDspSuffixes = `${deClipSuffix}${deEsserSuffix}${roomEqSuffix}${drcSuffix}`;
+    const anyPreDspNodeActive = Boolean(isDeClipActive || isDeEsserActive || roomEqSuffix || isDrcActive);
+    syncMasteringRestorationBadgesOnly();
+    syncLateNightBadgeOnly();
+
+    if (!isNetworkRenderer && (state.dspMode === 'sdm_dop' || state.dspMode === 'hq_nos_pcm')) {
+      const isDSD = (state.dspMode === 'sdm_dop');
+      const mhz = ((state.dspOutputSampleRate || 11289600) / 1000000).toFixed(2);
+      const dopKhz = ((state.dspDoPCarrierRate || 705600) / 1000).toFixed(1).replace(/\.0$/, '');
+      if (signalEngineBadge) {
+        signalEngineBadge.textContent = isDSD ? `${mhz} МГц · 1-Bit` : `${dopKhz} кГц · NOS`;
+      }
+      if (signalEngineName) {
+        const presetLabel = (state.dspActivePresetName && state.dspActivePresetId !== 'unsaved_custom')
+          ? state.dspActivePresetName
+          : (isDSD ? `AMR 7th-Order SDM (${state.dspProfile || '7EC-Balanced'})` : 'AMR HQ NOS PCM Engine (LNS15 Shaper)');
+        signalEngineName.textContent = translateTextToEn(presetLabel);
+      }
+      if (signalEngineMeta) {
+        const kernLabel = (state.dspOversamplerBackend === 'metalOverlapSave') ? 'Metal GPU df64' : 'AMX FP64';
+        const phaseLabel = (state.dspPhaseMode === 'minimumPhase') ? 'Min-Phase' : 'Lin-Phase';
+        const baseMeta = isDSD
+          ? `${kernLabel} (${phaseLabel}) → Trellis M=${state.dspTrellisOrder || 8} (${state.dspProfile || '7EC-Balanced'}) → DoP (${dopKhz} кГц)`
+          : `${kernLabel} (${phaseLabel}) → 15-Order LNS15 Shaper (${dopKhz} кГц / 24-бит)`;
+        signalEngineMeta.textContent = `${baseMeta}${allPreDspSuffixes}`;
+      }
+      if (dom.signalDacRate) {
+        dom.signalDacRate.textContent = isDSD ? `DoP ${dopKhz} кГц` : `${dopKhz} кГц`;
+      }
+      if (dspTelemPill && dspTelemText) {
+        dspTelemPill.classList.remove('hidden');
+        const hogTxt = state.dspIsHogMode ? 'Hog Mode' : 'Shared';
+        const intTxt = state.dspIsIntegerMode ? 'Integer' : 'Float';
+        const cpuTxt = Number(state.dspCpuLoadPercent || 0).toFixed(1);
+        const bufTxt = Math.round(Number(state.dspRingBufferFillPercent || 0));
+        dspTelemText.textContent = `🟢 ${hogTxt} • ${intTxt} • CPU ${cpuTxt}% • Буфер ${bufTxt}%`;
+      }
+    } else {
+      if (signalEngineBadge) signalEngineBadge.textContent = '0.0 dB FS';
+      if (signalEngineName) signalEngineName.textContent = 'AMR CoreAudio Engine';
+      if (dspTelemPill) dspTelemPill.classList.add('hidden');
+      if (signalEngineMeta) {
+        if (isNetworkRenderer) {
+          const baseDlna = isLossy
+            ? 'CoreAudio Process Tap • Декодирование AAC → PCM 16-бит / 44.1 кГц'
+            : (anyPreDspNodeActive
+              ? 'CoreAudio Process Tap (64-bit Pre-DSP) • Бесконечный PCM поток'
+              : 'CoreAudio Process Tap (Bit-Perfect) • Бесконечный PCM поток');
+          signalEngineMeta.textContent = `${baseDlna}${allPreDspSuffixes}`;
+        } else {
+          const guardLabel = state.dacMutingGuardEnabled === true
+            ? `DAC Muting Guard (${state.dacMutingGuardMs || 100} мс)`
+            : 'Bypass микшера';
+          const ampLabel = (state.lockVolume100 && state.ampVolumeControlEnabled)
+            ? `${state.ampBrandName || 'AMP'} TCP Vol ${state.ampMuted ? 'MUTE' : state.volume}`
+            : (anyPreDspNodeActive ? '64-bit DSP' : 'Zero DSP');
+          signalEngineMeta.textContent = isLossy
+            ? `CoreAudio HAL • Декодирование AAC → PCM 16-бит / 44.1 кГц${allPreDspSuffixes}`
+            : `${anyPreDspNodeActive ? 'CoreAudio 64-bit Lock' : 'Bit-Perfect 100% Lock'} • ${guardLabel} • ${ampLabel}${allPreDspSuffixes}`;
+        }
+      }
+    }
+    const signalVerifiedCard = document.querySelector('#quality-modal .signal-verified-card');
+    const signalVerifiedTitle = document.querySelector('#quality-modal .signal-verified-title');
+    const signalVerifiedDesc = document.querySelector('#quality-modal .signal-verified-desc');
+    const shouldHideDspBanner = isLocalDspActive && !isInsufficientDsd && !isSpectralFake && !isSpectralZeroPad;
+    const hasTopWarning = isLocalDspActive
+      ? (isInsufficientDsd || isSpectralFake || isSpectralZeroPad)
+      : (!isVerified || isSpectralFake || isSpectralZeroPad);
     if (signalVerifiedCard) {
+      signalVerifiedCard.classList.toggle('hidden', shouldHideDspBanner);
       signalVerifiedCard.classList.toggle('warning', hasTopWarning);
     }
-    if (signalVerifiedTitle && signalVerifiedDesc) {
+    if (!shouldHideDspBanner && signalVerifiedTitle && signalVerifiedDesc) {
       if (saVerdict === 'lossy_upscaled') {
         signalVerifiedTitle.textContent = 'Обнаружен апскейл Lossy (128 → 256 kbps)';
         signalVerifiedDesc.textContent = sa.verdict_description || sa.verdictDescription || 'Спектр жестко обрезан ниже 16.5 кГц — низкобитрейтный исходник (MP3/AAC 128 kbps) перекодирован в AAC 256 kbps.';
@@ -3995,6 +5353,28 @@ extension WebUIContent {
       } else if (saVerdict === 'zero_padded') {
         signalVerifiedTitle.textContent = 'Zero-Padded контейнер (16-бит в 24-бит)';
         signalVerifiedDesc.textContent = sa.verdict_description || sa.verdictDescription || 'Младшие 8 бит в 24-битном потоке пустые — реальный динамический диапазон составляет 16 бит.';
+      } else if (isLocalDspActive && isInsufficientDsd) {
+        const srcKhz = (srcRateVal / 1000).toFixed(1).replace(/\.0$/, '');
+        const recDsd = srcRateVal >= 176400 ? 'DSD256' : 'DSD128 / DSD256';
+        signalVerifiedTitle.textContent = `Недостаточная частота DSD${dsdMult} для источника (${srcBitsVal}/${srcKhz})`;
+        signalVerifiedDesc.textContent = `Поток источника (${srcBitsVal}-бит / ${srcKhz} кГц) превышает оптимальную полосу однобитного режима DSD${dsdMult}. Выберите ${recDsd} для раскрытия битрейта без потерь.`;
+      } else if (isClockSynced64BitDsp) {
+        const activeDspParts = [];
+        if (isDeClipActive) {
+          activeDspParts.push(`⚡️ ${deClipShort}`);
+        }
+        if (isDeEsserActive) {
+          activeDspParts.push(`💎 ${deEsserShort}`);
+        }
+        if (roomEqSuffix) {
+          const profName = state.roomProfileName || (state.roomAcoustic && state.roomAcoustic.active_profile && state.roomAcoustic.active_profile.name) || 'Auto-PEQ';
+          activeDspParts.push(`Room EQ «${profName}»`);
+        }
+        if (isDrcActive) {
+          activeDspParts.push(`🌙 ${drcModeShort}`);
+        }
+        signalVerifiedTitle.textContent = `64-bit DSP • Синхронная частота (${outBitDepth}/${rateKhz})`;
+        signalVerifiedDesc.textContent = `Частота ЦАП (${rateKhz} кГц) синхронизирована 1:1 с потоком без передискретизации. Активна 64-битная обработка (${activeDspParts.join(' + ')}).`;
       } else if (isVerified) {
         signalVerifiedTitle.textContent = 'Bit-Perfect Verified';
         if (isNetworkRenderer) {
@@ -4007,9 +5387,14 @@ extension WebUIContent {
         signalVerifiedDesc.textContent = 'Воспроизводится сжатый поток AAC 256 kbps (полоса до ~19.5 кГц). Для Bit-Perfect переключитесь на ALAC Lossless.';
       } else {
         const srcKhz = sourceRateHz ? (sourceRateHz / 1000).toFixed(1).replace(/\.0$/, '') : rateKhz;
-        const srcBits = sourceBitDepth || 24;
-        signalVerifiedTitle.textContent = `Передискретизация (${srcBits}/${srcKhz} → ${outBitDepth}/${rateKhz})`;
-        signalVerifiedDesc.textContent = `Частота или разрядность источника (${srcBits}-бит / ${srcKhz} кГц) отличается от текущего режима вывода (${outBitDepth}-бит / ${rateKhz} кГц).`;
+        const srcBits = sourceBitDepth || (srcRateVal >= 48000 ? 24 : 16);
+        if (srcBits === outBitDepth && srcKhz === rateKhz) {
+          signalVerifiedTitle.textContent = `Системный микшер macOS (${outBitDepth}/${rateKhz})`;
+          signalVerifiedDesc.textContent = `Частота и разрядность совпадают (${outBitDepth}-бит / ${rateKhz} кГц), но поток проходит через микшер macOS CoreAudio.`;
+        } else {
+          signalVerifiedTitle.textContent = `Передискретизация (${srcBits}/${srcKhz} → ${outBitDepth}/${rateKhz})`;
+          signalVerifiedDesc.textContent = `Частота или разрядность источника (${srcBits}-бит / ${srcKhz} кГц) отличается от текущего режима вывода (${outBitDepth}-бит / ${rateKhz} кГц).`;
+        }
       }
     }
     syncSignalPathAmpNode();
@@ -4017,67 +5402,97 @@ extension WebUIContent {
   }
 
   let spectralPollTimer = null;
+  let spectralPollIntervalMs = 0;
+  let spectralRpcInFlightAt = 0;
   let standbyRtaRafId = null;
   let lastStandbyRtaFrameMs = 0;
   let cachedStandbyRtaBackdrop = null;
   let cachedStandbyRtaBarsWrap = null;
   let standbyRtaBarEls = [];
   const standbyRtaBarCount = 64;
+  const standbyRtaUnsmoothed = new Float32Array(standbyRtaBarCount);
   const standbyRtaCurrent = new Float32Array(standbyRtaBarCount).fill(0.03);
   const standbyRtaTarget = new Float32Array(standbyRtaBarCount).fill(0.03);
   const standbyRtaVelocity = new Float32Array(standbyRtaBarCount).fill(0.0);
   const standbyRtaRendered = new Float32Array(standbyRtaBarCount).fill(-1);
   const standbyRtaClassState = new Uint8Array(standbyRtaBarCount).fill(255);
 
+  let cachedSpectralModalBarsWrap = null;
+  let spectralModalRtaBarEls = [];
+  const spectralModalRtaBarCount = 32;
+  const spectralModalRtaCurrent = new Float32Array(spectralModalRtaBarCount).fill(0.06);
+  const spectralModalRtaTarget = new Float32Array(spectralModalRtaBarCount).fill(0.06);
+  const spectralModalRtaRendered = new Float32Array(spectralModalRtaBarCount).fill(-1);
+  const spectralModalRtaClassState = new Uint8Array(spectralModalRtaBarCount).fill(255);
+
   function stepStandbyRtaAnimation(nowMs) {
     const sa = state.spectralAnalysis || {};
     const saEnabled = sa.is_enabled !== false && sa.isEnabled !== false && sa.verdict !== 'disabled';
-    if (standbyRtaBarEls.length !== standbyRtaBarCount || !saEnabled || !isStandbyOrLandscapeVisible()) {
+    const showStandby = saEnabled && isStandbyOrLandscapeVisible() && standbyRtaBarEls.length === standbyRtaBarCount;
+    const showModal = saEnabled && Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden')) && spectralModalRtaBarEls.length === spectralModalRtaBarCount;
+    if (!showStandby && !showModal) {
       standbyRtaRafId = null;
       return;
     }
 
     const ts = nowMs || performance.now();
-    // Cap RTA GPU transform updates to ~24fps (40ms) so iPad mini / ProMotion displays stay cool
-    if (ts - lastStandbyRtaFrameMs < 40) {
+    // Pace GPU scale3d transforms at locked ~60fps (15ms) for zero-judder motion on 60Hz TVs & 120Hz ProMotion
+    if (ts - lastStandbyRtaFrameMs < 15) {
       standbyRtaRafId = requestAnimationFrame(stepStandbyRtaAnimation);
       return;
     }
     lastStandbyRtaFrameMs = ts;
 
-    // If spectral updates stopped arriving (>1.2s stale) or player is not playing, decay targets to floor
-    // so spectrum bars never freeze in mid-air during track transitions or stalls.
+    // Decay targets to floor if playback paused or spectral stream stalled (>1.2s)
     const spectralStale = (ts - (state.lastSpectralUpdateAt || 0)) > 1200;
     const shouldDecayToFloor = (state.playerState !== 'playing') || spectralStale;
-
     let hasMotion = false;
 
-    for (let i = 0; i < standbyRtaBarCount; i++) {
-      if (shouldDecayToFloor && standbyRtaTarget[i] > 0.03) {
-        standbyRtaTarget[i] = Math.max(0.03, standbyRtaTarget[i] * 0.82);
-        if (standbyRtaTarget[i] > 0.032) {
+    if (showStandby) {
+      for (let i = 0; i < standbyRtaBarCount; i++) {
+        if (shouldDecayToFloor && standbyRtaTarget[i] > 0.03) {
+          standbyRtaTarget[i] = Math.max(0.03, standbyRtaTarget[i] * 0.86);
+          if (standbyRtaTarget[i] > 0.032) hasMotion = true;
+        }
+        const tgt = Math.max(0.025, Math.min(0.96, standbyRtaTarget[i]));
+        const cur = standbyRtaCurrent[i];
+        const diff = tgt - cur;
+        const factor = diff > 0 ? 0.36 : 0.19;
+        standbyRtaVelocity[i] = standbyRtaVelocity[i] * 0.42 + diff * factor;
+        const nextVal = Math.max(0.025, Math.min(0.96, cur + standbyRtaVelocity[i]));
+        standbyRtaCurrent[i] = nextVal;
+
+        if (Math.abs(diff) > 0.0025 || Math.abs(standbyRtaVelocity[i]) > 0.0018) {
           hasMotion = true;
         }
+        if (Math.abs(nextVal - standbyRtaRendered[i]) > 0.0025) {
+          standbyRtaRendered[i] = nextVal;
+          const bar = standbyRtaBarEls[i];
+          if (bar) bar.style.transform = `scale3d(1, ${nextVal.toFixed(3)}, 1)`;
+        }
       }
-      const tgt = Math.max(0.025, Math.min(0.96, standbyRtaTarget[i]));
-      const cur = standbyRtaCurrent[i];
-      const diff = tgt - cur;
+    }
 
-      // Smooth spring-damped interpolation (soft attack, silky exponential release)
-      const factor = diff > 0 ? 0.24 : 0.13;
-      standbyRtaVelocity[i] = standbyRtaVelocity[i] * 0.52 + diff * factor;
-      const nextVal = Math.max(0.025, Math.min(0.96, cur + standbyRtaVelocity[i]));
-      standbyRtaCurrent[i] = nextVal;
+    if (showModal) {
+      for (let i = 0; i < spectralModalRtaBarCount; i++) {
+        if (shouldDecayToFloor && spectralModalRtaTarget[i] > 0.06) {
+          spectralModalRtaTarget[i] = Math.max(0.06, spectralModalRtaTarget[i] * 0.86);
+          if (spectralModalRtaTarget[i] > 0.062) hasMotion = true;
+        }
+        const tgt = Math.max(0.06, Math.min(1.0, spectralModalRtaTarget[i]));
+        const cur = spectralModalRtaCurrent[i];
+        const diff = tgt - cur;
+        const step = diff * (diff > 0 ? 0.44 : 0.24);
+        const nextVal = Math.max(0.06, Math.min(1.0, cur + step));
+        spectralModalRtaCurrent[i] = nextVal;
 
-      if (Math.abs(diff) > 0.003 || Math.abs(standbyRtaVelocity[i]) > 0.002) {
-        hasMotion = true;
-      }
-
-      if (Math.abs(nextVal - standbyRtaRendered[i]) > 0.003) {
-        standbyRtaRendered[i] = nextVal;
-        const bar = standbyRtaBarEls[i];
-        if (bar) {
-          bar.style.transform = `scale3d(1, ${nextVal.toFixed(3)}, 1)`;
+        if (Math.abs(diff) > 0.003) {
+          hasMotion = true;
+        }
+        if (Math.abs(nextVal - spectralModalRtaRendered[i]) > 0.0025) {
+          spectralModalRtaRendered[i] = nextVal;
+          const bar = spectralModalRtaBarEls[i];
+          if (bar) bar.style.transform = `scale3d(1, ${nextVal.toFixed(3)}, 1)`;
         }
       }
     }
@@ -4089,8 +5504,16 @@ extension WebUIContent {
     }
   }
 
+// === MODULE: 10-rta-mastering-and-spectral.js ===
+  function setTextIfChanged(el, nextText) {
+    if (el && el.textContent !== nextText) {
+      el.textContent = nextText;
+    }
+  }
+
   function ensureStandbyRtaAnimLoop() {
-    if (!standbyRtaRafId && isStandbyOrLandscapeVisible()) {
+    const modalVisible = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
+    if (!standbyRtaRafId && (isStandbyOrLandscapeVisible() || modalVisible)) {
       standbyRtaRafId = requestAnimationFrame(stepStandbyRtaAnimation);
     }
   }
@@ -4128,8 +5551,8 @@ extension WebUIContent {
     const isHiResRate = sRate >= 88200;
     const splitBarIdx = isHiResRate ? 40 : 48;
 
-    // 1. Interpolate 32 FFT bands to 64 raw targets
-    const unsmoothed = new Float32Array(barCount);
+    // 1. Interpolate 32 FFT bands to 64 raw targets (zero per-frame heap allocation)
+    const unsmoothed = standbyRtaUnsmoothed;
     for (let i = 0; i < barCount; i++) {
       if (!isPlaying || !rawBands) {
         unsmoothed[i] = 0.03;
@@ -4139,14 +5562,13 @@ extension WebUIContent {
       const idx0 = Math.floor(pos);
       const idx1 = Math.min(31, idx0 + 1);
       const frac = pos - idx0;
-      // Smoothstep interpolation between bins
       const t = frac * frac * (3 - 2 * frac);
       const v0 = Number.isFinite(Number(rawBands[idx0])) ? Number(rawBands[idx0]) : 0.03;
       const v1 = Number.isFinite(Number(rawBands[idx1])) ? Number(rawBands[idx1]) : 0.03;
       unsmoothed[i] = v0 * (1 - t) + v1 * t;
     }
 
-    // 2. Apply 5-tap Gaussian spatial smoothing across neighboring bars for a liquid wave curve
+    // 2. Apply crisp 5-tap spatial curve across neighboring bars
     for (let i = 0; i < barCount; i++) {
       const bar = standbyRtaBarEls[i];
       if (!isPlaying || !rawBands) {
@@ -4164,9 +5586,9 @@ extension WebUIContent {
       const c0 = unsmoothed[i];
       const p1 = unsmoothed[Math.min(barCount - 1, i + 1)];
       const p2 = unsmoothed[Math.min(barCount - 1, i + 2)];
-      const val = m2 * 0.08 + m1 * 0.22 + c0 * 0.40 + p1 * 0.22 + p2 * 0.08;
+      const val = m2 * 0.05 + m1 * 0.20 + c0 * 0.50 + p1 * 0.20 + p2 * 0.05;
 
-      standbyRtaTarget[i] = Math.max(0.03, Math.min(0.95, val * 0.92));
+      standbyRtaTarget[i] = Math.max(0.03, Math.min(0.95, val * 0.94));
 
       const isAboveBoundary = i >= splitBarIdx;
       const isDepleted = isAboveBoundary && (isWarning || isLossy || val < 0.06);
@@ -4189,6 +5611,410 @@ extension WebUIContent {
     ensureStandbyRtaAnimLoop();
   }
 
+  function renderTopAndStandbyDrBadges(sa, saEnabled) {
+    const rawDr = sa.tt_dr_score !== undefined ? sa.tt_dr_score : sa.ttDrScore;
+    const hasDr = saEnabled && Boolean(state.track && state.track.name) && rawDr !== null && rawDr !== undefined && Number.isFinite(Number(rawDr));
+    const drScore = hasDr ? Math.max(0, Math.min(24, Math.round(Number(rawDr)))) : null;
+    const drStatus = drScore === null
+      ? 'analyzing'
+      : (drScore >= 12 ? 'dynamic' : (drScore >= 8 ? 'balanced' : 'compressed'));
+    const drLabel = drScore !== null ? `DR${drScore}` : 'DR--';
+    const rawLufs = sa.integrated_lufs !== undefined ? sa.integrated_lufs : sa.integratedLufs;
+    const lufsPart = (rawLufs !== null && rawLufs !== undefined && Number.isFinite(Number(rawLufs)))
+      ? ` • ${Number(rawLufs).toFixed(1)} LUFS`
+      : '';
+    const statusHint = drScore === null
+      ? ''
+      : (drStatus === 'dynamic'
+        ? (IS_EN ? 'Audiophile Dynamic Master' : 'Высокая динамика')
+        : (drStatus === 'balanced'
+          ? (IS_EN ? 'Balanced Master' : 'Сбалансированный мастер')
+          : (IS_EN ? 'Loudness War Compression' : 'Перекомпрессирован (Loudness War)')));
+    const tooltipText = drScore !== null
+      ? `TT DR${drScore}${lufsPart} — ${statusHint}`
+      : (IS_EN ? 'Mastering Dynamic Range (TT DR)' : 'Динамический диапазон мастеринга (TT DR)');
+
+    ['player-dr-badge', 'mobile-dr-badge'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('hidden', !hasDr);
+      if (hasDr) {
+        el.textContent = drLabel;
+        el.title = tooltipText;
+        el.classList.toggle('dynamic', drStatus === 'dynamic');
+        el.classList.toggle('balanced', drStatus === 'balanced');
+        el.classList.toggle('compressed', drStatus === 'compressed');
+      }
+    });
+
+    const sbDrEl = document.getElementById('standby-dr-badge');
+    if (sbDrEl) {
+      sbDrEl.classList.toggle('hidden', !hasDr);
+      if (hasDr) {
+        sbDrEl.textContent = drStatus === 'compressed' ? `⚠️ ${drLabel}` : drLabel;
+        sbDrEl.title = tooltipText;
+        sbDrEl.classList.toggle('authentic', drStatus === 'dynamic');
+        sbDrEl.classList.toggle('balanced', drStatus === 'balanced');
+        sbDrEl.classList.toggle('compressed', drStatus === 'compressed');
+        sbDrEl.classList.remove('neutral', 'warning');
+      }
+    }
+  }
+
+  function renderMasteringAndStereoCard(sa, saEnabled) {
+    const mCard = document.getElementById('signal-mastering-card');
+    if (!mCard) return;
+    mCard.classList.toggle('hidden', !saEnabled);
+    if (!saEnabled) return;
+
+    const rawDr = sa.tt_dr_score !== undefined ? sa.tt_dr_score : sa.ttDrScore;
+    const hasDr = rawDr !== null && rawDr !== undefined && Number.isFinite(Number(rawDr));
+    const drScore = hasDr ? Math.max(0, Math.min(24, Math.round(Number(rawDr)))) : null;
+    const drStatus = drScore === null
+      ? 'analyzing'
+      : (drScore >= 12 ? 'dynamic' : (drScore >= 8 ? 'balanced' : 'compressed'));
+
+    mCard.classList.toggle('authentic', drStatus === 'dynamic');
+    mCard.classList.toggle('balanced', drStatus === 'balanced');
+    mCard.classList.toggle('compressed', drStatus === 'compressed');
+
+    const drBadgeEl = document.getElementById('mastering-dr-badge');
+    if (drBadgeEl) {
+      drBadgeEl.classList.toggle('neutral', drStatus === 'analyzing');
+      drBadgeEl.classList.toggle('balanced', drStatus === 'balanced');
+      drBadgeEl.classList.toggle('compressed', drStatus === 'compressed');
+      drBadgeEl.classList.remove('warning');
+      if (drScore === null) {
+        drBadgeEl.textContent = IS_EN ? 'DR ANALYZING...' : 'DR АНАЛИЗ...';
+      } else if (drStatus === 'dynamic') {
+        drBadgeEl.textContent = `DR${drScore} • DYNAMIC`;
+      } else if (drStatus === 'balanced') {
+        drBadgeEl.textContent = `DR${drScore} • BALANCED`;
+      } else {
+        drBadgeEl.textContent = `DR${drScore} • LOUDNESS WAR`;
+      }
+    }
+
+    const intLufs = sa.integrated_lufs !== undefined ? sa.integrated_lufs : sa.integratedLufs;
+    const stLufs = sa.short_term_lufs !== undefined ? sa.short_term_lufs : sa.shortTermLufs;
+    const momLufs = sa.momentary_lufs !== undefined ? sa.momentary_lufs : sa.momentaryLufs;
+    const lraLu = sa.loudness_range_lu !== undefined ? sa.loudness_range_lu : sa.loudnessRangeLu;
+    const tpDbtp = sa.true_peak_dbtp !== undefined ? sa.true_peak_dbtp : sa.truePeakDbtp;
+    const ispClips = Number(sa.isp_clip_count !== undefined ? sa.isp_clip_count : (sa.ispClipCount || 0));
+
+    const lufsIntEl = document.getElementById('mastering-lufs-int');
+    if (lufsIntEl) {
+      lufsIntEl.textContent = (intLufs !== null && intLufs !== undefined && Number.isFinite(Number(intLufs)))
+        ? `${Number(intLufs).toFixed(1)} LUFS`
+        : '— LUFS';
+    }
+
+    const lufsStEl = document.getElementById('mastering-lufs-st');
+    if (lufsStEl) {
+      const stDisplay = (stLufs !== null && stLufs !== undefined && Number.isFinite(Number(stLufs)))
+        ? Number(stLufs)
+        : ((momLufs !== null && momLufs !== undefined && Number.isFinite(Number(momLufs))) ? Number(momLufs) : null);
+      lufsStEl.textContent = stDisplay !== null ? `${stDisplay.toFixed(1)} LUFS` : '— LUFS';
+    }
+
+    const tpEl = document.getElementById('mastering-true-peak');
+    if (tpEl) {
+      if (tpDbtp !== null && tpDbtp !== undefined && Number.isFinite(Number(tpDbtp))) {
+        const tpNum = Number(tpDbtp);
+        const sign = tpNum > 0 ? '+' : '';
+        tpEl.textContent = `${sign}${tpNum.toFixed(2)} dBTP`;
+        tpEl.classList.toggle('tp-warning', tpNum > 0.0 || ispClips > 0);
+      } else {
+        tpEl.textContent = '— dBTP';
+        tpEl.classList.remove('tp-warning');
+      }
+    }
+
+    const lraEl = document.getElementById('mastering-lra');
+    if (lraEl) {
+      lraEl.textContent = (lraLu !== null && lraLu !== undefined && Number.isFinite(Number(lraLu)))
+        ? `${Number(lraLu).toFixed(1)} LU`
+        : '— LU';
+    }
+
+    // Stereo Phase Correlation (-1 ... 0 ... +1), Width & Balance
+    const rawCorr = Number(sa.phase_correlation !== undefined ? sa.phase_correlation : (sa.phaseCorrelation !== undefined ? sa.phaseCorrelation : 1.0));
+    const corr = Number.isFinite(rawCorr) ? Math.max(-1.0, Math.min(1.0, rawCorr)) : 1.0;
+    const rawWidth = Number(sa.stereo_width_percent !== undefined ? sa.stereo_width_percent : (sa.stereoWidthPercent || 0));
+    const widthPct = Number.isFinite(rawWidth) ? Math.max(0, Math.min(100, Math.round(rawWidth))) : 0;
+    const rawBal = Number(sa.channel_balance_db !== undefined ? sa.channel_balance_db : (sa.channelBalanceDb || 0));
+    const balDb = Number.isFinite(rawBal) ? rawBal : 0.0;
+
+    const phaseValEl = document.getElementById('phase-meter-val');
+    if (phaseValEl) {
+      const sign = corr >= 0 ? '+' : '';
+      phaseValEl.textContent = `${sign}${corr.toFixed(2)}`;
+      phaseValEl.classList.toggle('negative', corr < 0);
+      phaseValEl.classList.toggle('wide', corr >= 0 && corr < 0.45);
+    }
+
+    const phaseFillEl = document.getElementById('phase-meter-fill');
+    const phaseDotEl = document.getElementById('phase-meter-dot');
+    const dotPct = ((corr + 1.0) * 0.5) * 100.0;
+    if (phaseDotEl) {
+      phaseDotEl.style.left = `${dotPct.toFixed(1)}%`;
+    }
+    if (phaseFillEl) {
+      if (corr >= 0) {
+        phaseFillEl.style.left = '50%';
+        phaseFillEl.style.width = `${(corr * 50.0).toFixed(1)}%`;
+        phaseFillEl.classList.add('positive');
+        phaseFillEl.classList.remove('negative');
+      } else {
+        const w = Math.abs(corr) * 50.0;
+        phaseFillEl.style.left = `${(50.0 - w).toFixed(1)}%`;
+        phaseFillEl.style.width = `${w.toFixed(1)}%`;
+        phaseFillEl.classList.add('negative');
+        phaseFillEl.classList.remove('positive');
+      }
+    }
+
+    const widthEl = document.getElementById('stereo-width-val');
+    if (widthEl) {
+      widthEl.textContent = `${widthPct}%`;
+    }
+
+    const balEl = document.getElementById('stereo-balance-val');
+    if (balEl) {
+      if (Math.abs(balDb) < 0.15) {
+        balEl.textContent = IS_EN ? 'Center (0.0 dB)' : 'Центр (0.0 дБ)';
+      } else {
+        const side = balDb > 0 ? 'R' : 'L';
+        balEl.textContent = `${side} +${Math.abs(balDb).toFixed(1)} ${IS_EN ? 'dB' : 'дБ'}`;
+      }
+    }
+
+    const ispBadge = document.getElementById('isp-clips-badge');
+    if (ispBadge) {
+      ispBadge.classList.toggle('hidden', ispClips <= 0);
+      if (ispClips > 0) {
+        ispBadge.textContent = IS_EN ? `ISP Overs: ${ispClips}` : `ISP >0 dBTP: ${ispClips}`;
+      }
+    }
+
+    const mTitleEl = document.getElementById('mastering-verdict-title');
+    const mDescEl = document.getElementById('mastering-verdict-desc');
+    if (mTitleEl && mDescEl) {
+      if (drScore === null) {
+        mTitleEl.textContent = state.playerState === 'playing'
+          ? (IS_EN ? 'Measuring TT Dynamic Range & EBU R128...' : 'Расчёт TT Dynamic Range и EBU R128...')
+          : (IS_EN ? 'Waiting for playback...' : 'Ожидание воспроизведения...');
+        mDescEl.textContent = IS_EN
+          ? 'Accumulating 3-second PCM windows for official TT DR score, ITU-R BS.1770-4 loudness, and 4x True Peak.'
+          : 'Накопление 3-секундных блоков PCM для расчёта официального индекса TT Dynamic Range, громкости ITU-R BS.1770-4 и 4x True Peak.';
+      } else if (drStatus === 'dynamic') {
+        mTitleEl.textContent = IS_EN
+          ? `Audiophile Dynamic Master (DR${drScore})`
+          : `Эталонная динамика мастеринга (DR${drScore})`;
+        mDescEl.textContent = IS_EN
+          ? 'Natural micro-dynamics and transient punch preserved without brickwall limiting.'
+          : 'Свободные транзиенты и живая микродинамика сохранены без агрессивного brickwall-лимитирования.';
+      } else if (drStatus === 'balanced') {
+        mTitleEl.textContent = IS_EN
+          ? `Balanced Studio Master (DR${drScore})`
+          : `Сбалансированный студийный мастер (DR${drScore})`;
+        mDescEl.textContent = IS_EN
+          ? 'Moderate studio bus compression with healthy crest factor for modern genres.'
+          : 'Умеренная студийная компрессия с комфортным запасом пик-фактора для современных жанров.';
+      } else {
+        mTitleEl.textContent = IS_EN
+          ? `Heavy Compression • Loudness War (DR${drScore})`
+          : `Перекомпрессия «Войны громкости» (DR${drScore})`;
+        mDescEl.textContent = ispClips > 0
+          ? (IS_EN
+            ? `Aggressive brickwall limiting detected with ${ispClips} inter-sample peaks (>0 dBTP). ISP Headroom Guard in DSP Engine prevents DAC clipping.`
+            : `Обнаружено жесткое лимитирование и ${ispClips} межсэмпловых перегрузок (>0 dBTP). Защита ISP Headroom Guard в DSP предотвращает клиппинг ЦАПа.`)
+          : (IS_EN
+            ? 'Dense brickwall limiting reduces transient contrast; after loudness normalization such tracks sound less punchy than high-DR masters.'
+            : 'Плотный brickwall-лимитер сжал транзиенты: при выравнивании громкости такой трек звучит субъективно тише и менее рельефно, чем динамичный мастер.');
+      }
+    }
+  }
+
+  function applyDeviceCapabilityPermissionsUI(options = {}) {
+    const canSelectDac = state.allowDacSelection !== false;
+    const canSelectDspPerm = state.allowDspPresetSelection !== false;
+    const canMeasureRoom = state.allowRoomMeasurement !== false;
+    const canControlRoomEq = canMeasureRoom || canSelectDspPerm;
+    const canControlLateNight = state.allowLateNightMode !== false;
+    const canModifyLib = state.allowLibraryModification !== false;
+    document.body.classList.toggle('library-mod-locked', !canModifyLib);
+    if (dom.btnSaveQueuePlaylist) {
+      dom.btnSaveQueuePlaylist.classList.toggle('hidden', !canModifyLib);
+      if (!canModifyLib) dom.btnSaveQueuePlaylist.disabled = true;
+    }
+    if (!canModifyLib) {
+      if (dom.btnAddPlaylistLibrary) dom.btnAddPlaylistLibrary.classList.add('hidden');
+      if (dom.btnRemoveDetailLibrary) dom.btnRemoveDetailLibrary.classList.add('hidden');
+      if (dom.btnRemoveArtistDetailLibrary) dom.btnRemoveArtistDetailLibrary.classList.add('hidden');
+      if (dom.btnAddTrackLibrary) dom.btnAddTrackLibrary.classList.add('hidden');
+      if (dom.btnRemoveTrackLibrary) dom.btnRemoveTrackLibrary.classList.add('hidden');
+      if (dom.btnRemoveArtistLibrary) dom.btnRemoveArtistLibrary.classList.add('hidden');
+    }
+    const activeDev = (state.audioDevices || []).find(d => d && (d.name === state.audioDeviceName || d.isDefault || d.is_default));
+    const isNetworkOut = Boolean(
+      state.isDlnaActive ||
+      (activeDev && (activeDev.type === 'dlna' || activeDev.isNetwork || activeDev.is_network || activeDev.protocol === 'dlna' || activeDev.protocol === 'bluos'))
+    );
+
+    if (dom.btnOpenDevices) {
+      dom.btnOpenDevices.classList.toggle('hidden', !canSelectDac);
+      dom.btnOpenDevices.disabled = !canSelectDac;
+    }
+    if (!canSelectDac && dom.devicesModal && !dom.devicesModal.classList.contains('hidden')) {
+      blurFocusedInContainer(dom.devicesModal);
+      dom.devicesModal.classList.add('hidden');
+      dom.devicesModal.setAttribute('aria-hidden', 'true');
+    }
+
+    const dspFieldEl = document.getElementById('dsp-preset-field');
+    const dspSelectEl = document.getElementById('dsp-preset-select');
+    const dspReadonlyEl = document.getElementById('dsp-preset-readonly-note');
+    if (dspFieldEl) {
+      dspFieldEl.classList.toggle('hidden', !canSelectDspPerm);
+    }
+    if (dspSelectEl) {
+      dspSelectEl.disabled = !canSelectDspPerm || isNetworkOut;
+      if (isNetworkOut && Array.from(dspSelectEl.options).some(o => o.value === 'builtin_passthrough')) {
+        dspSelectEl.value = 'builtin_passthrough';
+      }
+    }
+    if (dspReadonlyEl) {
+      if (!canSelectDspPerm) {
+        dspReadonlyEl.classList.remove('hidden');
+        const presetLabel = isNetworkOut
+          ? 'Bit-Perfect Passthrough'
+          : (state.dspActivePresetName
+            ? translateTextToEn(state.dspActivePresetName)
+            : (state.dspMode === 'sdm_dop' ? `DSD${state.dspRate || 256} DoP` : (state.dspMode === 'hq_nos_pcm' ? 'HQ PCM NOS' : 'Bit-Perfect Passthrough')));
+        dspReadonlyEl.textContent = IS_EN
+          ? `🔒 Preset: ${presetLabel} (selection locked on Mac)`
+          : `🔒 Пресет: ${presetLabel} (выбор закрыт в настройках Mac)`;
+      } else if (isNetworkOut) {
+        dspReadonlyEl.classList.remove('hidden');
+        dspReadonlyEl.textContent = IS_EN
+          ? '🌐 DSP presets disabled for external BluOS / DLNA network players'
+          : '🌐 Пресеты DSP отключены при выводе на сетевой плеер BluOS / DLNA';
+      } else {
+        dspReadonlyEl.classList.add('hidden');
+      }
+    }
+
+    const deClipFieldEl = document.getElementById('mastering-declip-field');
+    const deClipSelectEl = document.getElementById('mastering-declip-select');
+    const deClipReadonlyEl = document.getElementById('mastering-declip-readonly-note');
+    if (deClipFieldEl) {
+      deClipFieldEl.classList.toggle('hidden', !canSelectDspPerm);
+    }
+    if (deClipSelectEl) {
+      deClipSelectEl.disabled = !canSelectDspPerm;
+    }
+    if (deClipReadonlyEl) {
+      if (!canSelectDspPerm) {
+        deClipReadonlyEl.classList.remove('hidden');
+        const dcMode = state.masteringDeclipMode || 'off';
+        const dcLabel = dcMode === 'off'
+          ? (IS_EN ? 'Off (100% Bit-Perfect)' : 'Выкл (100% Bit-Perfect)')
+          : (dcMode === 'studio' ? 'Studio De-Clip' : (dcMode === 'gentle' ? 'Gentle De-Clip' : 'Auto De-Clip'));
+        deClipReadonlyEl.textContent = IS_EN
+          ? `🔒 De-Clipper: ${dcLabel} (locked on Mac)`
+          : `🔒 De-Clipper: ${dcLabel} (доступ закрыт в настройках Mac)`;
+      } else {
+        deClipReadonlyEl.classList.add('hidden');
+      }
+    }
+
+    const deEsserFieldEl = document.getElementById('mastering-deesser-field');
+    const deEsserSelectEl = document.getElementById('mastering-deesser-select');
+    const deEsserReadonlyEl = document.getElementById('mastering-deesser-readonly-note');
+    if (deEsserFieldEl) {
+      deEsserFieldEl.classList.toggle('hidden', !canSelectDspPerm);
+    }
+    if (deEsserSelectEl) {
+      deEsserSelectEl.disabled = !canSelectDspPerm;
+    }
+    if (deEsserReadonlyEl) {
+      if (!canSelectDspPerm) {
+        deEsserReadonlyEl.classList.remove('hidden');
+        const deMode = state.masteringDeesserMode || 'off';
+        const deLabel = deMode === 'off'
+          ? (IS_EN ? 'Off (100% Bit-Perfect)' : 'Выкл (100% Bit-Perfect)')
+          : (deMode === 'vocal' ? 'Weiss Studio' : 'Gentle');
+        deEsserReadonlyEl.textContent = IS_EN
+          ? `🔒 Weiss De-Esser: ${deLabel} (locked on Mac)`
+          : `🔒 Weiss De-Esser: ${deLabel} (доступ закрыт в настройках Mac)`;
+      } else {
+        deEsserReadonlyEl.classList.add('hidden');
+      }
+    }
+
+    const drcFieldEl = document.getElementById('late-night-drc-field');
+    const drcSelectEl = document.getElementById('late-night-drc-select');
+    const drcReadonlyEl = document.getElementById('late-night-drc-readonly-note');
+    if (drcFieldEl) {
+      drcFieldEl.classList.toggle('hidden', !canControlLateNight);
+    }
+    if (drcSelectEl) {
+      drcSelectEl.disabled = !canControlLateNight;
+    }
+    if (drcReadonlyEl) {
+      if (!canControlLateNight) {
+        drcReadonlyEl.classList.remove('hidden');
+        const activeMode = (state.lateNightDrcMode === 'gentle' || state.lateNightDrcMode === 'concert')
+          ? state.lateNightDrcMode
+          : 'off';
+        const statusTxt = activeMode === 'concert'
+          ? (IS_EN ? 'Night Concert' : 'Ночной концерт')
+          : (activeMode === 'gentle'
+            ? (IS_EN ? 'Gentle DRC' : 'Деликатный')
+            : (IS_EN ? 'Off (100% Bit-Perfect)' : 'Выкл (100% Bit-Perfect)'));
+        drcReadonlyEl.textContent = IS_EN
+          ? `🔒 Late-Night DRC: ${statusTxt} (access disabled on Mac)`
+          : `🔒 Ночной режим: ${statusTxt} (доступ закрыт в настройках Mac)`;
+      } else {
+        drcReadonlyEl.classList.add('hidden');
+      }
+    }
+
+    const roomActionsEl = document.getElementById('room-measure-actions');
+    const roomLockedEl = document.getElementById('room-measure-locked-note');
+    const btnStartRoom = document.getElementById('btn-start-room-measure');
+    const btnUploadRoom = document.getElementById('btn-upload-room-audio');
+    const roomToggleBtn = document.getElementById('btn-room-eq-toggle');
+    const roomProfileSelect = document.getElementById('room-profile-select');
+    const hasRoomProfiles = Boolean(
+      state.roomAcoustic &&
+      Array.isArray(state.roomAcoustic.profiles) &&
+      state.roomAcoustic.profiles.length > 0
+    );
+    if (roomActionsEl) {
+      roomActionsEl.classList.toggle('hidden', !canMeasureRoom);
+    }
+    if (btnStartRoom) {
+      btnStartRoom.disabled = !canMeasureRoom || state.isMeasuringRoom;
+    }
+    if (btnUploadRoom) {
+      btnUploadRoom.disabled = !canMeasureRoom || state.isMeasuringRoom;
+    }
+    if (roomToggleBtn) {
+      roomToggleBtn.disabled = !hasRoomProfiles || !canControlRoomEq;
+    }
+    if (roomProfileSelect) {
+      roomProfileSelect.disabled = !hasRoomProfiles || !canControlRoomEq;
+    }
+    if (roomLockedEl) {
+      roomLockedEl.classList.toggle('hidden', canMeasureRoom);
+    }
+    if (!options.fromRoomAcousticUI && state.roomAcoustic) {
+      updateRoomAcousticUI(state.roomAcoustic, { skipSignalRefresh: true, skipPermissionsSync: true });
+    }
+  }
+
   function renderSpectralAnalysisUI() {
     const quality = state.audioQuality || 'Lossless (ALAC 24-bit/48kHz)';
     const isLossy = quality.toUpperCase().includes('AAC') || quality.toUpperCase().includes('MP3');
@@ -4200,9 +6026,12 @@ extension WebUIContent {
     const isWarning = (verdict === 'upsampled' || verdict === 'lossy_transcode' || verdict === 'zero_padded' || verdict === 'lossy_upscaled');
 
     renderStandbyRtaBackdrop(sa, saEnabled, isLossy, sRate, isWarning);
+    renderTopAndStandbyDrBadges(sa, saEnabled);
 
     const isModalOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
     if (!isModalOpen) return;
+
+    renderMasteringAndStereoCard(sa, saEnabled);
 
     const card = document.getElementById('signal-spectral-card');
     if (!card) return;
@@ -4236,40 +6065,38 @@ extension WebUIContent {
         aac_lossy: 'AAC 256 KBPS',
         analyzing: 'FFT АНАЛИЗ...'
       };
-      badgeEl.textContent = badgeMap[verdict] || 'TRUE LOSSLESS';
+      setTextIfChanged(badgeEl, badgeMap[verdict] || 'TRUE LOSSLESS');
     }
 
     const titleEl = document.getElementById('spectral-verdict-title');
     if (titleEl) {
-      titleEl.textContent = sa.verdict_title || sa.verdictTitle || (isLossy ? 'Сжатый поток AAC 256 kbps' : 'Verified True Lossless');
+      setTextIfChanged(titleEl, sa.verdict_title || sa.verdictTitle || (isLossy ? 'Сжатый поток AAC 256 kbps' : 'Verified True Lossless'));
     }
 
     const descEl = document.getElementById('spectral-verdict-desc');
     if (descEl) {
-      descEl.textContent = sa.verdict_description || sa.verdictDescription || 'Спектральный анализ потока CoreAudio Process Tap через Accelerate vDSP FFT.';
+      setTextIfChanged(descEl, sa.verdict_description || sa.verdictDescription || 'Спектральный анализ потока CoreAudio Process Tap через Accelerate vDSP FFT.');
     }
 
     const cutoffEl = document.getElementById('spectral-metric-cutoff');
     if (cutoffEl) {
-      cutoffEl.textContent = `до ${(cutoffHz / 1000).toFixed(1)} кГц`;
+      setTextIfChanged(cutoffEl, `до ${(cutoffHz / 1000).toFixed(1)} кГц`);
     }
 
     const ultraEl = document.getElementById('spectral-metric-ultra');
     if (ultraEl) {
-      if (sRate >= 88200) {
-        ultraEl.textContent = ultraDb > -80 ? `${Math.round(ultraDb)} dBFS` : 'Нет (<-82 dB)';
-      } else {
-        ultraEl.textContent = 'Н/Д (≤ 48 кГц)';
-      }
+      const ultraText = sRate >= 88200
+        ? (ultraDb > -80 ? `${Math.round(ultraDb)} dBFS` : 'Нет (<-82 dB)')
+        : 'Н/Д (≤ 48 кГц)';
+      setTextIfChanged(ultraEl, ultraText);
     }
 
     const bitsEl = document.getElementById('spectral-metric-bits');
     if (bitsEl) {
-      if (isZeroPadded) {
-        bitsEl.textContent = `16-бит (в ${claimedBits}-бит)`;
-      } else {
-        bitsEl.textContent = `${effBits}-бит (${effBits >= 24 ? 'Честный LSB' : 'PCM'})`;
-      }
+      const bitsText = isZeroPadded
+        ? `16-бит (в ${claimedBits}-бит)`
+        : `${effBits}-бит (${effBits >= 24 ? 'Честный LSB' : 'PCM'})`;
+      setTextIfChanged(bitsEl, bitsText);
     }
 
     const markerEl = document.getElementById('spectral-cutoff-marker');
@@ -4279,60 +6106,120 @@ extension WebUIContent {
     const isHiResRate = sRate >= 88200;
 
     if (markerEl && markerLabelEl) {
-      markerEl.style.left = isHiResRate ? '62.5%' : '75%';
-      markerLabelEl.textContent = isHiResRate ? '22.05 кГц CD' : '18.0 кГц AAC';
+      const nextLeft = isHiResRate ? '62.5%' : '75%';
+      if (markerEl.style.left !== nextLeft) markerEl.style.left = nextLeft;
+      setTextIfChanged(markerLabelEl, isHiResRate ? '22.05 кГц CD' : '18.0 кГц AAC');
     }
     if (axisRefEl) {
-      axisRefEl.textContent = isHiResRate ? '22.05 кГц' : '18.0 кГц';
+      setTextIfChanged(axisRefEl, isHiResRate ? '22.05 кГц' : '18.0 кГц');
     }
     if (axisNyqEl) {
-      axisNyqEl.textContent = `${(nyquistHz / 1000).toFixed(1).replace(/\.0$/, '')} кГц`;
+      setTextIfChanged(axisNyqEl, `${(nyquistHz / 1000).toFixed(1).replace(/\.0$/, '')} кГц`);
     }
 
-    const barsContainer = document.getElementById('spectral-rta-bars');
+    if (!cachedSpectralModalBarsWrap) {
+      cachedSpectralModalBarsWrap = document.getElementById('spectral-rta-bars');
+    }
+    const barsContainer = cachedSpectralModalBarsWrap;
     if (barsContainer) {
-      if (barsContainer.children.length !== 32) {
+      if (barsContainer.children.length !== spectralModalRtaBarCount || spectralModalRtaBarEls.length !== spectralModalRtaBarCount) {
         barsContainer.innerHTML = '';
-        for (let i = 0; i < 32; i++) {
+        spectralModalRtaBarEls = [];
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < spectralModalRtaBarCount; i++) {
           const b = document.createElement('div');
           b.className = 'spectral-rta-bar';
-          barsContainer.appendChild(b);
+          frag.appendChild(b);
+          spectralModalRtaBarEls.push(b);
+          spectralModalRtaRendered[i] = -1;
+          spectralModalRtaClassState[i] = 255;
         }
+        barsContainer.appendChild(frag);
       }
-      const rawBands = Array.isArray(sa.rta_bands || sa.rtaBands) && (sa.rta_bands || sa.rtaBands).length === 32
+      const rawBands = Array.isArray(sa.rta_bands || sa.rtaBands) && (sa.rta_bands || sa.rtaBands).length === spectralModalRtaBarCount
         ? (sa.rta_bands || sa.rtaBands)
         : null;
+      const isPlaying = state.playerState === 'playing';
 
       const splitIdx = isHiResRate ? 20 : 24;
-      for (let i = 0; i < 32; i++) {
-        const bar = barsContainer.children[i];
-        let val = rawBands ? Number(rawBands[i]) : 0.08;
-        if (!Number.isFinite(val)) val = 0.05;
-        const pct = Math.max(6, Math.min(100, Math.round(val * 100)));
-        bar.style.height = `${pct}%`;
+      for (let i = 0; i < spectralModalRtaBarCount; i++) {
+        const bar = spectralModalRtaBarEls[i];
+        let val = (isPlaying && rawBands) ? Number(rawBands[i]) : 0.06;
+        if (!Number.isFinite(val)) val = 0.06;
+        const clamped = Math.max(0.06, Math.min(1.0, val));
+        spectralModalRtaTarget[i] = clamped;
 
         const isAboveBoundary = i >= splitIdx;
-        const isDepleted = isAboveBoundary && (isWarning || isLossy || val < 0.06);
-        bar.classList.toggle('ultrasonic', isAboveBoundary && !isDepleted && !isWarning);
-        bar.classList.toggle('warning-bar', isWarning && !isDepleted);
-        bar.classList.toggle('depleted', isDepleted);
+        const isDepleted = isAboveBoundary && (isWarning || isLossy || clamped < 0.065);
+        const isUltra = isAboveBoundary && !isDepleted && !isWarning;
+        const isWarn = isWarning && !isDepleted;
+        const classMask = (isUltra ? 1 : 0) | (isWarn ? 2 : 0) | (isDepleted ? 4 : 0);
+        if (spectralModalRtaClassState[i] !== classMask) {
+          spectralModalRtaClassState[i] = classMask;
+          bar.classList.toggle('ultrasonic', isUltra);
+          bar.classList.toggle('warning-bar', isWarn);
+          bar.classList.toggle('depleted', isDepleted);
+        }
+        if (!standbyRtaRafId) {
+          spectralModalRtaCurrent[i] = clamped;
+          spectralModalRtaRendered[i] = clamped;
+          bar.style.transform = `scale3d(1, ${clamped.toFixed(3)}, 1)`;
+        }
       }
+      ensureStandbyRtaAnimLoop();
     }
   }
+
+// === MODULE: 11-spectral-polling-devices-and-auth.js ===
+  let cachedStandbyOverlayEl = null;
+  let cachedCoarsePointerMql = null;
 
   function stopSpectralPolling() {
     if (spectralPollTimer) {
       clearInterval(spectralPollTimer);
       spectralPollTimer = null;
     }
+    spectralPollIntervalMs = 0;
+    spectralRpcInFlightAt = 0;
   }
 
   function isStandbyOrLandscapeVisible() {
-    const overlay = document.getElementById('standby-tv-overlay');
-    const isExplicitOpen = Boolean(overlay && !overlay.classList.contains('hidden'));
-    const isTouchPhone = Boolean(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
-    const isMobileLandscape = isTouchPhone && window.innerHeight <= 540 && window.innerWidth >= 568 && window.innerWidth > window.innerHeight && !document.body.classList.contains('keyboard-open');
-    return isExplicitOpen || isMobileLandscape;
+    if (!cachedStandbyOverlayEl) {
+      cachedStandbyOverlayEl = document.getElementById('standby-tv-overlay');
+    }
+    const isExplicitOpen = Boolean(cachedStandbyOverlayEl && !cachedStandbyOverlayEl.classList.contains('hidden'));
+    if (isExplicitOpen) return true;
+    if (!cachedCoarsePointerMql && window.matchMedia) {
+      cachedCoarsePointerMql = window.matchMedia('(hover: none) and (pointer: coarse)');
+    }
+    const isTouchPhone = Boolean(cachedCoarsePointerMql && cachedCoarsePointerMql.matches);
+    return isTouchPhone && window.innerHeight <= 540 && window.innerWidth >= 568 && window.innerWidth > window.innerHeight && !document.body.classList.contains('keyboard-open');
+  }
+
+  function handleSpectralAnalysisMessage(data) {
+    spectralRpcInFlightAt = 0;
+    if (!data || !data.verdict) return;
+    const prev = state.spectralAnalysis || {};
+    const prevVerdict = prev.verdict || '';
+    const prevRate = Number(prev.sample_rate || prev.sampleRate || 0);
+    const prevZeroPad = Boolean(prev.is_zero_padded || prev.isZeroPadded);
+    const prevEnabled = prev.is_enabled !== false && prev.isEnabled !== false && prevVerdict !== 'disabled';
+
+    const merged = (prevVerdict === data.verdict && data.verdict_title === undefined && data.verdictTitle === undefined)
+      ? Object.assign({}, prev, data)
+      : data;
+    state.spectralAnalysis = merged;
+    state.lastSpectralUpdateAt = performance.now();
+
+    const nextRate = Number(merged.sample_rate || merged.sampleRate || 0);
+    const nextZeroPad = Boolean(merged.is_zero_padded || merged.isZeroPadded);
+    const nextEnabled = merged.is_enabled !== false && merged.isEnabled !== false && merged.verdict !== 'disabled';
+
+    if (prevVerdict !== merged.verdict || prevRate !== nextRate || prevZeroPad !== nextZeroPad || prevEnabled !== nextEnabled) {
+      updateSignalPathDetails();
+    } else {
+      renderSpectralAnalysisUI();
+    }
   }
 
   let spectralPollTickCount = 0;
@@ -4346,13 +6233,20 @@ extension WebUIContent {
     const isModalOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
     const isTvActive = isStandbyOrLandscapeVisible();
     const isCachedPass = Boolean(sa.is_cached || sa.isCached);
-    const stillAnalyzing = !isCachedPass && (!sa.verdict || sa.verdict === 'analyzing');
+    const hasDrScore = (sa.tt_dr_score !== undefined && sa.tt_dr_score !== null) || (sa.ttDrScore !== undefined && sa.ttDrScore !== null);
+    const stillAnalyzing = (!isCachedPass && (!sa.verdict || sa.verdict === 'analyzing')) || (!hasDrScore && spectralPollTickCount < 24);
     const needsSoundCheck = Boolean(state.ampSoundCheckEnabled && (state.ampSoundCheckGainDb === null || state.ampSoundCheckGainDb === undefined));
     const isPlayingAndNeeded = state.playerState === 'playing' && saEnabled && (isTvActive || stillAnalyzing || needsSoundCheck);
 
     if (isModalOpen || isPlayingAndNeeded) {
+      const isVisualRtaActive = isModalOpen || (isTvActive && state.playerState === 'playing' && saEnabled);
+      const desiredIntervalMs = isVisualRtaActive ? 90 : 220;
+      if (spectralPollTimer && spectralPollIntervalMs !== desiredIntervalMs) {
+        clearInterval(spectralPollTimer);
+        spectralPollTimer = null;
+      }
       if (!spectralPollTimer) {
-        spectralPollTickCount = 0;
+        spectralPollIntervalMs = desiredIntervalMs;
         spectralPollTimer = setInterval(() => {
           if (document.hidden) {
             stopSpectralPolling();
@@ -4364,16 +6258,32 @@ extension WebUIContent {
           const modalStillOpen = Boolean(dom.qualityModal && !dom.qualityModal.classList.contains('hidden'));
           const tvStillActive = isStandbyOrLandscapeVisible() && state.playerState === 'playing' && curEnabled;
           const curCachedPass = Boolean(curSa.is_cached || curSa.isCached);
-          const curStillAnalyzing = state.playerState === 'playing' && curEnabled && !curCachedPass && (!curSa.verdict || curSa.verdict === 'analyzing');
+          const curHasDr = (curSa.tt_dr_score !== undefined && curSa.tt_dr_score !== null) || (curSa.ttDrScore !== undefined && curSa.ttDrScore !== null);
+          const curStillAnalyzing = state.playerState === 'playing' && curEnabled && (
+            (!curCachedPass && (!curSa.verdict || curSa.verdict === 'analyzing')) ||
+            (!curHasDr && spectralPollTickCount < 24)
+          );
           const curNeedsSoundCheck = state.playerState === 'playing' && Boolean(state.ampSoundCheckEnabled && (state.ampSoundCheckGainDb === null || state.ampSoundCheckGainDb === undefined));
           if (!modalStillOpen && !tvStillActive && !curStillAnalyzing && !curNeedsSoundCheck) {
             stopSpectralPolling();
             return;
           }
-          if (modalStillOpen || tvStillActive || curStillAnalyzing || curNeedsSoundCheck) {
-            send({ action: 'get_spectral_analysis' });
+          const wantFastNow = modalStillOpen || tvStillActive;
+          if ((wantFastNow ? 90 : 220) !== spectralPollIntervalMs) {
+            syncSpectralPolling();
+            return;
           }
-        }, 210);
+          const nowPerf = performance.now();
+          if (spectralRpcInFlightAt > 0 && (nowPerf - spectralRpcInFlightAt) < 420) {
+            return;
+          }
+          const hasFullVerdictStrings = Boolean(curSa.verdict && curSa.verdict !== 'analyzing' && (curSa.verdict_title || curSa.verdictTitle));
+          const useCompactRta = wantFastNow && hasFullVerdictStrings && (spectralPollTickCount % 12 !== 0);
+          spectralRpcInFlightAt = nowPerf;
+          if (!send({ action: useCompactRta ? 'get_spectral_rta' : 'get_spectral_analysis' })) {
+            spectralRpcInFlightAt = 0;
+          }
+        }, desiredIntervalMs);
       }
       ensureStandbyRtaAnimLoop();
     } else {
@@ -4384,11 +6294,14 @@ extension WebUIContent {
 
   const openQualityModal = () => {
     triggerHaptic('light');
-    updateSignalPathDetails();
     if (dom.qualityModal) {
       dom.qualityModal.classList.remove('hidden');
       dom.qualityModal.setAttribute('aria-hidden', 'false');
     }
+    applyDeviceCapabilityPermissionsUI();
+    updateSignalPathDetails();
+    ensureStandbyRtaAnimLoop();
+    send({ action: 'get_dsp_settings' });
     send({ action: 'get_spectral_analysis' });
     syncSpectralPolling();
   };
@@ -4396,24 +6309,39 @@ extension WebUIContent {
   if (dom.audioQualityBadge) dom.audioQualityBadge.addEventListener('click', openQualityModal);
   if (dom.desktopDacBadge) dom.desktopDacBadge.addEventListener('click', openQualityModal);
   if (dom.mobileDacBadge) dom.mobileDacBadge.addEventListener('click', openQualityModal);
+  const playerDrBadgeEl = document.getElementById('player-dr-badge');
+  const mobileDrBadgeEl = document.getElementById('mobile-dr-badge');
   const standbyDacBadgeEl = document.getElementById('standby-dac-badge');
   const standbySpectralBadgeEl = document.getElementById('standby-spectral-badge');
+  const standbyDrBadgeEl = document.getElementById('standby-dr-badge');
+  if (playerDrBadgeEl) playerDrBadgeEl.addEventListener('click', openQualityModal);
+  if (mobileDrBadgeEl) mobileDrBadgeEl.addEventListener('click', openQualityModal);
   if (standbyDacBadgeEl) standbyDacBadgeEl.addEventListener('click', openQualityModal);
   if (standbySpectralBadgeEl) standbySpectralBadgeEl.addEventListener('click', openQualityModal);
+  if (standbyDrBadgeEl) standbyDrBadgeEl.addEventListener('click', openQualityModal);
+
+  function closeQualityModal() {
+    if (state.isMeasuringRoom || state.roomIsPlayingTestSignal || (state.roomAcoustic && state.roomAcoustic.is_test_signal_playing)) {
+      stopRoomMeasurementSession(true);
+    }
+    if (dom.qualityModal) {
+      blurFocusedInContainer(dom.qualityModal);
+      dom.qualityModal.classList.add('hidden');
+      dom.qualityModal.setAttribute('aria-hidden', 'true');
+    }
+    syncSpectralPolling();
+  }
 
   if (dom.btnCloseModal) {
-    dom.btnCloseModal.addEventListener('click', () => {
-      if (dom.qualityModal) {
-        blurFocusedInContainer(dom.qualityModal);
-        dom.qualityModal.classList.add('hidden');
-        dom.qualityModal.setAttribute('aria-hidden', 'true');
-      }
-      syncSpectralPolling();
-    });
+    dom.btnCloseModal.addEventListener('click', closeQualityModal);
   }
 
   // --- Audio Output Devices Modal (DAC Selector) ---
   const openDevicesModal = () => {
+    if (state.allowDacSelection === false) {
+      showToast(IS_EN ? 'DAC selection is disabled for this device on Mac' : 'Выбор ЦАП отключён для этого устройства в настройках Mac');
+      return;
+    }
     triggerHaptic('light');
     if (dom.devicesModal) {
       dom.devicesModal.classList.remove('hidden');
@@ -4453,15 +6381,36 @@ extension WebUIContent {
     }
     state.audioDevices = list;
 
-    const defaultDev = list.find(d => d.isDefault);
+    const currentDevObj = (data && !Array.isArray(data) && data.current_device && typeof data.current_device === 'object')
+      ? data.current_device
+      : null;
+    const defaultDev = list.find(d => d && (d.isDefault || d.is_default)) || currentDevObj;
     if (defaultDev) {
-      state.audioDeviceName = defaultDev.name || state.audioDeviceName;
-      if (defaultDev.currentSampleRate) {
-        state.audioDeviceSampleRate = defaultDev.currentSampleRate;
+      state.audioDeviceName = defaultDev.name || defaultDev.friendlyName || state.audioDeviceName;
+      if (defaultDev.currentSampleRate || defaultDev.sampleRate) {
+        state.audioDeviceSampleRate = defaultDev.currentSampleRate || defaultDev.sampleRate;
       }
+      const isNet = Boolean(
+        defaultDev.type === 'dlna' ||
+        defaultDev.isNetwork ||
+        defaultDev.is_network ||
+        defaultDev.protocol === 'dlna' ||
+        defaultDev.protocol === 'bluos' ||
+        (typeof defaultDev.uid === 'string' && defaultDev.uid.startsWith('dlna:'))
+      );
+      state.isDlnaActive = isNet;
     }
     renderAudioDevicesList();
-    updateSignalPathDetails();
+    if (state.lastDspSettings && typeof state.lastDspSettings === 'object') {
+      state.lastDspSettings = Object.assign({}, state.lastDspSettings, { is_dlna_active: state.isDlnaActive });
+      updateDSPSettingsUI(state.lastDspSettings);
+    } else {
+      applyDeviceCapabilityPermissionsUI();
+      updateSignalPathDetails();
+    }
+    if (typeof renderVolumeUI === 'function') {
+      renderVolumeUI();
+    }
   }
 
   function renderAudioDevicesList() {
@@ -4520,6 +6469,10 @@ extension WebUIContent {
       `;
 
       item.addEventListener('click', () => {
+        if (state.allowDacSelection === false) {
+          showToast(IS_EN ? 'DAC selection is disabled for this device on Mac' : 'Выбор ЦАП отключён для этого устройства в настройках Mac');
+          return;
+        }
         triggerHaptic('medium');
         send({ action: 'set_audio_device', params: { id: dev.id, uid: dev.uid } });
         state.audioDevices.forEach(d => { d.isDefault = (d.id === dev.id); });
@@ -4537,16 +6490,19 @@ extension WebUIContent {
   let musicKitInstance = null;
   let musicKitLoadedListenerBound = false;
 
-  function setupMusicKitFromState() {
+  function setupMusicKitFromState(forceConfigure = false) {
     const devToken = state.developerToken;
     if (!devToken || !window.MusicKit) return;
+    if (!forceConfigure && (state.hasUserToken || state.isAccountSynced || !state.userTokenStatusChecked)) {
+      return;
+    }
     try {
       if (!musicKitInstance) {
         window.MusicKit.configure({
           developerToken: devToken,
           app: {
             name: 'Apple Music Remote',
-            build: '2.5.0'
+            build: '3.0.0'
           }
         });
         musicKitInstance = window.MusicKit.getInstance();
@@ -4555,6 +6511,10 @@ extension WebUIContent {
           if (uToken && !state.hasUserToken) {
             send({ action: 'set_user_token', params: { user_token: uToken } });
           }
+        }
+        if (state.lockScreenControls && state.deviceAuthorized) {
+          setupMediaSession(true);
+          updateMediaSession();
         }
       }
     } catch (e) {
@@ -4566,10 +6526,10 @@ extension WebUIContent {
     if (!devToken) return;
     state.developerToken = devToken;
     if (window.MusicKit) {
-      setupMusicKitFromState();
+      setupMusicKitFromState(false);
     } else if (!musicKitLoadedListenerBound) {
       musicKitLoadedListenerBound = true;
-      document.addEventListener('musickitloaded', setupMusicKitFromState, { once: true });
+      document.addEventListener('musickitloaded', () => setupMusicKitFromState(false), { once: true });
     }
   }
 
@@ -4583,8 +6543,12 @@ extension WebUIContent {
     }
     const hasToken = Boolean(data && (data.has_user_token !== undefined ? data.has_user_token : data.hasUserToken));
     state.hasUserToken = hasToken;
+    state.userTokenStatusChecked = true;
     if (data && data.storefront) {
-      state.userStorefront = data.storefront;
+      state.userStorefront = String(data.storefront).trim().toLowerCase();
+    }
+    if (data && data.locale) {
+      state.userLocale = String(data.locale).trim();
     }
 
     if (hasToken || state.isAccountSynced) {
@@ -4593,12 +6557,13 @@ extension WebUIContent {
         dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
       }
 
-      const activeCountry = state.userStorefront || state.trends.country || 'us';
-      if (state.trends.country !== activeCountry) {
+      const activeCountry = getActiveStorefront();
+      if (activeCountry && state.trends.country !== activeCountry) {
         state.trends.country = activeCountry;
         loadTrends(activeCountry);
       }
     } else {
+      setupMusicKitFromState(true);
       if (dom.modalAppleAuth && !state.isAccountSynced) {
         dom.modalAppleAuth.classList.remove('hidden');
         dom.modalAppleAuth.setAttribute('aria-hidden', 'false');
@@ -4606,13 +6571,31 @@ extension WebUIContent {
     }
   }
 
+  function getActiveStorefront() {
+    const fromHealth = state.accountHealth && (
+      state.accountHealth.web_storefront ||
+      state.accountHealth.storefront ||
+      state.accountHealth.mac_country_code
+    );
+    const raw = state.userStorefront || fromHealth || (state.trends && state.trends.country) || '';
+    return String(raw).trim().toLowerCase();
+  }
+
   function updateAccountHealth(data) {
     if (!data) return;
     state.accountHealth = data;
     const isSynced = data.status === 'synchronized' || data.is_accounts_matched === true;
     state.isAccountSynced = isSynced;
+    const detectedSf = String(data.web_storefront || data.storefront || data.mac_country_code || state.userStorefront || '').trim().toLowerCase();
+    if (detectedSf && state.userStorefront !== detectedSf) {
+      state.userStorefront = detectedSf;
+      if (state.trends.country !== detectedSf) {
+        state.trends.country = detectedSf;
+        loadTrends(detectedSf);
+      }
+    }
     const email = data.account_email || data.mac_apple_id || data.macos_account || 'Apple Music';
-    const storefront = (data.mac_country_code || data.storefront || data.web_storefront || state.userStorefront || 'us').toUpperCase();
+    const storefront = (detectedSf || '—').toUpperCase();
     const hasSub = data.is_subscription_active !== false && data.has_active_subscription !== false;
     const details = data.details || (isSynced ? `Apple Music: подписка активна • Регион ${storefront} • Медиатека синхронизирована` : (data.message || 'Требуется вход'));
 
@@ -4675,7 +6658,7 @@ extension WebUIContent {
     }
 
     if (!musicKitInstance && state.developerToken) {
-      initMusicKit(state.developerToken);
+      setupMusicKitFromState(true);
     }
 
     if (!musicKitInstance) {
@@ -4684,7 +6667,7 @@ extension WebUIContent {
       setTimeout(() => {
         if (dom.btnAuthModalLogin) dom.btnAuthModalLogin.disabled = false;
         if (state.developerToken && !musicKitInstance) {
-          initMusicKit(state.developerToken);
+          setupMusicKitFromState(true);
         }
       }, 1500);
       return;
@@ -4762,34 +6745,137 @@ extension WebUIContent {
     });
   }
 
-  // --- Go to Album Action & Station Creation Modal Listeners ---
-  function openCurrentTrackAlbum() {
-    const t = state.track;
-    const albumName = t && t.album ? t.album.trim() : '';
+  // --- In-App Confirmation Modal & Track Actions (•••) Modal ---
+  let pendingDeleteConfirmCallback = null;
+
+  function closeConfirmDeleteModal() {
+    pendingDeleteConfirmCallback = null;
+    if (dom.confirmDeleteModal) {
+      blurFocusedInContainer(dom.confirmDeleteModal);
+      dom.confirmDeleteModal.classList.add('hidden');
+      dom.confirmDeleteModal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function confirmLibraryDeleteModal({
+    title,
+    message,
+    confirmLabel = 'Удалить',
+    onConfirm
+  }) {
+    if (!dom.confirmDeleteModal) {
+      if (typeof onConfirm === 'function') onConfirm();
+      return;
+    }
+    triggerHaptic('light');
+    pendingDeleteConfirmCallback = typeof onConfirm === 'function' ? onConfirm : null;
+
+    if (dom.confirmDeleteTitle) {
+      dom.confirmDeleteTitle.textContent = translateTextToEn(title || 'Удалить из медиатеки?');
+    }
+    if (dom.confirmDeleteMessage) {
+      dom.confirmDeleteMessage.textContent = message || translateTextToEn('Элемент будет удалён из вашей медиатеки Apple Music.');
+    }
+    if (dom.btnConfirmDeleteOk) {
+      dom.btnConfirmDeleteOk.textContent = translateTextToEn(confirmLabel || 'Удалить');
+    }
+    dom.confirmDeleteModal.classList.remove('hidden');
+    dom.confirmDeleteModal.setAttribute('aria-hidden', 'false');
+  }
+
+  if (dom.btnConfirmDeleteCancel) {
+    dom.btnConfirmDeleteCancel.addEventListener('click', () => {
+      triggerHaptic('light');
+      closeConfirmDeleteModal();
+    });
+  }
+  if (dom.btnConfirmDeleteOk) {
+    dom.btnConfirmDeleteOk.addEventListener('click', () => {
+      triggerHaptic('medium');
+      const fn = pendingDeleteConfirmCallback;
+      closeConfirmDeleteModal();
+      if (fn) fn();
+    });
+  }
+  if (dom.confirmDeleteModal) {
+    dom.confirmDeleteModal.addEventListener('click', (e) => {
+      if (e.target === dom.confirmDeleteModal) {
+        closeConfirmDeleteModal();
+      }
+    });
+  }
+
+  function getActiveActionTrack() {
+    return state.actionTargetTrack || state.track || null;
+  }
+
+  function closeStationPickerModal() {
+    state.actionTargetTrack = null;
+    if (dom.stationPickerModal) {
+      blurFocusedInContainer(dom.stationPickerModal);
+      dom.stationPickerModal.classList.add('hidden');
+      dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function resolveCurrentBrowseOrigin() {
+    if (dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden')) {
+      return 'library-artist-detail';
+    }
+    if (dom.playlistDetailPane && !dom.playlistDetailPane.classList.contains('hidden')) {
+      return state.detailReturnOrigin || 'library';
+    }
+    if (isDesktopLayout()) {
+      const dt = state.desktopActiveTab || 'home';
+      if (dt === 'search') return 'search';
+      if (dt === 'playlists') return 'playlists';
+      if (dt === 'home' || dt === 'trends') {
+        return (dom.sectionGridView && dom.sectionGridView.classList.contains('active')) ? 'home-grid' : 'home';
+      }
+      if (dt === 'library') return `library-${state.libraryTab || 'recent'}`;
+      return 'library';
+    }
+    const mv = state.activeView || 'view-now-playing';
+    if (mv === 'view-now-playing') return 'player';
+    if (mv === 'view-search') return 'search';
+    if (mv === 'view-playlists') return 'playlists';
+    if (mv === 'view-home' || mv === 'view-trends') {
+      return (dom.sectionGridView && dom.sectionGridView.classList.contains('active')) ? 'home-grid' : 'home';
+    }
+    if (mv === 'view-library') return `library-${state.libraryTab || 'recent'}`;
+    return 'library';
+  }
+
+// === MODULE: 12-track-actions-volume-and-queue.js ===
+  function openTrackAlbumForTarget(targetTrack, explicitOrigin = '') {
+    const t = targetTrack || state.track;
+    const albumName = t && (t.album || t.collectionName) ? String(t.album || t.collectionName).trim() : '';
     if (!albumName) return;
     triggerHaptic('light');
     if (typeof bookletState !== 'undefined' && bookletState.isOpen) {
       closeBookletViewer();
     }
     const art = getArtworkSrc(t);
-    const origin = isDesktopLayout() ? 'library' : 'player';
+    const origin = explicitOrigin || resolveCurrentBrowseOrigin();
     openAlbumDetail({
-      id: '',
+      id: t.album_id || t.collectionId || '',
       name: albumName,
-      artist: (t && t.artist) ? t.artist : '',
+      artist: (t && (t.artist || t.artistName)) ? (t.artist || t.artistName) : '',
       artwork: art,
       url: ''
-    }, origin);
+    }, origin, { source: 'catalog' });
+  }
+
+  function openCurrentTrackAlbum() {
+    openTrackAlbumForTarget(state.track, isDesktopLayout() ? resolveCurrentBrowseOrigin() : 'player');
   }
 
   if (dom.btnGoToAlbum) {
     dom.btnGoToAlbum.addEventListener('click', () => {
-      if (dom.stationPickerModal) {
-        blurFocusedInContainer(dom.stationPickerModal);
-        dom.stationPickerModal.classList.add('hidden');
-        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
-      }
-      openCurrentTrackAlbum();
+      const target = getActiveActionTrack();
+      const origin = state.actionTargetTrack ? resolveCurrentBrowseOrigin() : (isDesktopLayout() ? resolveCurrentBrowseOrigin() : 'player');
+      closeStationPickerModal();
+      openTrackAlbumForTarget(target, origin);
     });
   }
 
@@ -4797,16 +6883,13 @@ extension WebUIContent {
     dom.playerAlbum.addEventListener('click', openCurrentTrackAlbum);
   }
 
-  function triggerAiMixFromCurrentTrack() {
+  function triggerAiMixFromTrack(targetTrack) {
     triggerHaptic('medium');
-    if (dom.stationPickerModal) {
-      blurFocusedInContainer(dom.stationPickerModal);
-      dom.stationPickerModal.classList.add('hidden');
-      dom.stationPickerModal.setAttribute('aria-hidden', 'true');
-    }
-    const trackName = (state.track && state.track.name) ? state.track.name.trim() : '';
-    const artistName = (state.track && state.track.artist) ? state.track.artist.trim() : '';
-    const albumName = (state.track && state.track.album) ? state.track.album.trim() : '';
+    const t = targetTrack || state.track;
+    closeStationPickerModal();
+    const trackName = (t && (t.name || t.trackName)) ? String(t.name || t.trackName).trim() : '';
+    const artistName = (t && (t.artist || t.artistName)) ? String(t.artist || t.artistName).trim() : '';
+    const albumName = (t && (t.album || t.collectionName)) ? String(t.album || t.collectionName).trim() : '';
     if (!trackName) {
       showToast(translateTextToEn('Сначала запустите трек для ИИ-подбора по вайбу'));
       return;
@@ -4830,71 +6913,229 @@ extension WebUIContent {
         name: trackName,
         artist: artistName,
         album: albumName,
-        country: state.userStorefront || state.trends.country || 'ru',
+        country: getActiveStorefront(),
         auto_play: true,
         request_id: reqId
       }
     });
   }
 
+  function triggerAiMixFromCurrentTrack() {
+    triggerAiMixFromTrack(state.track);
+  }
+
   if (dom.btnAiTrackVibe) {
-    dom.btnAiTrackVibe.addEventListener('click', triggerAiMixFromCurrentTrack);
+    dom.btnAiTrackVibe.addEventListener('click', () => triggerAiMixFromTrack(state.track));
   }
 
   if (dom.btnAiMixByTrack) {
-    dom.btnAiMixByTrack.addEventListener('click', triggerAiMixFromCurrentTrack);
+    dom.btnAiMixByTrack.addEventListener('click', () => triggerAiMixFromTrack(getActiveActionTrack()));
+  }
+
+  if (dom.btnSonicBridgeByTrack) {
+    dom.btnSonicBridgeByTrack.addEventListener('click', () => {
+      triggerHaptic('light');
+      const t = getActiveActionTrack();
+      const trackText = (t && (t.name || t.trackName)) ? String(t.name || t.trackName).trim() : '';
+      const artistText = (t && (t.artist || t.artistName)) ? String(t.artist || t.artistName).trim() : '';
+      if (!trackText) {
+        showToast(IS_EN ? 'Start a track first to launch Sonic Bridge' : 'Сначала запустите трек для старта Sonic Bridge');
+        return;
+      }
+      closeStationPickerModal();
+      state.sonicBridgeFrom = artistText ? `${artistText} — ${trackText}` : trackText;
+      openSonicBridgeTab(true);
+    });
+  }
+
+  function syncStationPickerModalUI() {
+    const t = getActiveActionTrack();
+    const trackText = (t && (t.name || t.trackName)) ? String(t.name || t.trackName).trim() : '';
+    const artistText = (t && (t.artist || t.artistName)) ? String(t.artist || t.artistName).trim() : '';
+    const albumText = (t && (t.album || t.collectionName)) ? String(t.album || t.collectionName).trim() : '';
+
+    if (dom.stationModalTrackBanner) {
+      dom.stationModalTrackBanner.classList.toggle('hidden', !trackText);
+      if (trackText) {
+        if (dom.stationModalTrackArt) {
+          delete dom.stationModalTrackArt.dataset.fallbackApplied;
+          dom.stationModalTrackArt.dataset.fallbackIcon = 'apple-touch-icon.svg';
+          dom.stationModalTrackArt.src = getArtworkSrc(t);
+        }
+        if (dom.stationModalTrackTitle) dom.stationModalTrackTitle.textContent = trackText;
+        if (dom.stationModalTrackSub) {
+          dom.stationModalTrackSub.textContent = [artistText, albumText].filter(Boolean).join(' • ') || 'Apple Music';
+        }
+      }
+    }
+
+    const canModifyLib = state.allowLibraryModification !== false;
+    const inLib = Boolean(t && trackText && isTrackInLibraryClient(t));
+    if (dom.btnAddTrackLibrary) {
+      dom.btnAddTrackLibrary.classList.toggle('hidden', !canModifyLib || !trackText || inLib);
+    }
+    if (dom.btnRemoveTrackLibrary) {
+      dom.btnRemoveTrackLibrary.classList.toggle('hidden', !canModifyLib || !trackText || !inLib);
+    }
+
+    const libArtist = artistText ? findMatchingLibraryArtist(artistText) : null;
+    const artistInLib = Boolean(libArtist || (inLib && artistText));
+    if (dom.btnGoToLibraryArtist) {
+      dom.btnGoToLibraryArtist.classList.toggle('hidden', !artistInLib);
+      if (dom.stationOptLibArtistName) {
+        dom.stationOptLibArtistName.textContent = artistText || '—';
+      }
+    }
+    if (dom.btnRemoveArtistLibrary) {
+      dom.btnRemoveArtistLibrary.classList.toggle('hidden', !canModifyLib || !artistInLib);
+      if (dom.stationOptRemoveArtistSub) {
+        const cnt = libArtist && libArtist.track_count ? Number(libArtist.track_count) : 0;
+        dom.stationOptRemoveArtistSub.textContent = cnt > 0
+          ? `${artistText} • ${formatTracksCount(cnt)}`
+          : (artistText || '—');
+      }
+    }
+
+    const btnOpenBookletModal = document.getElementById('btn-open-booklet');
+    if (btnOpenBookletModal && state.actionTargetTrack) {
+      const curAlb = (state.track && state.track.album) ? state.track.album.trim().toLowerCase() : '';
+      if (!albumText || albumText.toLowerCase() !== curAlb) {
+        btnOpenBookletModal.classList.add('hidden');
+      }
+    }
+
+    if (dom.stationOptAlbumName) {
+      dom.stationOptAlbumName.textContent = albumText || translateTextToEn('Не указан');
+    }
+    if (dom.btnGoToAlbum) {
+      dom.btnGoToAlbum.disabled = !albumText;
+    }
+    if (dom.btnAiMixByTrack) {
+      dom.btnAiMixByTrack.disabled = !trackText;
+      dom.btnAiMixByTrack.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
+    if (dom.stationOptAiVibeSub) {
+      dom.stationOptAiVibeSub.textContent = trackText
+        ? `${artistText ? artistText + ' — ' : ''}${trackText}`
+        : translateTextToEn('Бесконечная волна 20+ треков по атмосфере');
+    }
+    if (dom.btnSonicBridgeByTrack) {
+      dom.btnSonicBridgeByTrack.disabled = !trackText;
+      dom.btnSonicBridgeByTrack.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
+    if (dom.stationOptSonicBridgeSub) {
+      dom.stationOptSonicBridgeSub.textContent = trackText
+        ? `${artistText ? artistText + ' — ' : ''}${trackText} → ...`
+        : translateTextToEn('Плавный ИИ-маршрут к другому треку или артисту');
+    }
+    if (dom.stationOptTrackName) {
+      dom.stationOptTrackName.textContent = trackText || translateTextToEn('Не играет');
+    }
+    if (dom.stationOptArtistName) {
+      dom.stationOptArtistName.textContent = artistText || 'Apple Music';
+    }
+    if (dom.btnStationByTrack) {
+      dom.btnStationByTrack.disabled = !trackText;
+    }
+    if (dom.btnStationByArtist) {
+      dom.btnStationByArtist.disabled = !artistText;
+    }
+  }
+
+  function openTrackActionsModal(customTrack = null) {
+    triggerHaptic('light');
+    state.actionTargetTrack = customTrack || null;
+    if (!state.librarySongsLoaded && state.connected && state.deviceAuthorized) {
+      send({ action: 'get_library_songs' });
+    }
+    if (!state.libraryArtistsLoaded && state.connected && state.deviceAuthorized) {
+      send({ action: 'get_library_artists' });
+    }
+    syncStationPickerModalUI();
+    if (!customTrack) {
+      syncCurrentTrackBookletAvailability();
+    }
+    if (dom.stationPickerModal) {
+      dom.stationPickerModal.classList.remove('hidden');
+      dom.stationPickerModal.setAttribute('aria-hidden', 'false');
+    }
   }
 
   if (dom.btnCreateStation) {
     dom.btnCreateStation.addEventListener('click', () => {
-      triggerHaptic('light');
-      const albumText = (state.track && state.track.album) ? state.track.album.trim() : '';
-      const trackText = (state.track && state.track.name) ? state.track.name.trim() : '';
-      const artistText = (state.track && state.track.artist) ? state.track.artist.trim() : '';
-      if (dom.stationOptAlbumName) {
-        dom.stationOptAlbumName.textContent = albumText || 'Не указан';
-      }
-      if (dom.btnGoToAlbum) {
-        dom.btnGoToAlbum.disabled = !albumText;
-      }
-      if (dom.btnAiMixByTrack) {
-        dom.btnAiMixByTrack.disabled = !trackText;
-        dom.btnAiMixByTrack.classList.toggle('hidden', !state.aiCuratorEnabled);
-      }
-      if (dom.stationOptAiVibeSub) {
-        dom.stationOptAiVibeSub.textContent = trackText
-          ? `${artistText ? artistText + ' — ' : ''}${trackText}`
-          : translateTextToEn('Бесконечная волна 20+ треков по атмосфере');
-      }
-      if (dom.stationOptTrackName) {
-        dom.stationOptTrackName.textContent = trackText || 'Не играет';
-      }
-      if (dom.stationOptArtistName) {
-        dom.stationOptArtistName.textContent = artistText || 'Apple Music';
-      }
-      if (dom.stationPickerModal) {
-        dom.stationPickerModal.classList.remove('hidden');
-        dom.stationPickerModal.setAttribute('aria-hidden', 'false');
+      openTrackActionsModal(null);
+    });
+  }
+
+  if (dom.btnAddTrackLibrary) {
+    dom.btnAddTrackLibrary.addEventListener('click', () => {
+      const t = getActiveActionTrack();
+      if (!t || !(t.name || t.trackName)) return;
+      triggerHaptic('medium');
+      const tName = String(t.name || t.trackName || '').trim();
+      const tArtist = String(t.artist || t.artistName || '').trim();
+      const tAlbum = String(t.album || t.collectionName || '').trim();
+      const tCatId = String(t.catalog_id || t.catalogId || t.id || t.trackId || '').trim();
+      const tNumId = Number(t.numeric_id || t.numericId || 0);
+      state.lastLibraryAddTarget = 'track';
+      t.is_local = true;
+      closeStationPickerModal();
+      send({
+        action: 'add_to_library',
+        params: {
+          id: tCatId,
+          track_id: tNumId > 0 ? tNumId : undefined,
+          name: tName,
+          artist: tArtist,
+          album: tAlbum,
+          url: t.url || ''
+        }
+      });
+    });
+  }
+
+  if (dom.btnRemoveTrackLibrary) {
+    dom.btnRemoveTrackLibrary.addEventListener('click', () => {
+      const t = getActiveActionTrack();
+      closeStationPickerModal();
+      if (t) {
+        promptRemoveTrackFromLibrary(t);
       }
     });
   }
 
-  if (dom.btnCloseStationModal) {
-    dom.btnCloseStationModal.addEventListener('click', () => {
-      if (dom.stationPickerModal) {
-        blurFocusedInContainer(dom.stationPickerModal);
-        dom.stationPickerModal.classList.add('hidden');
-        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
-      }
+  if (dom.btnGoToLibraryArtist) {
+    dom.btnGoToLibraryArtist.addEventListener('click', () => {
+      const t = getActiveActionTrack();
+      const artistName = t ? String(t.artist || t.artistName || '').trim() : '';
+      closeStationPickerModal();
+      if (!artistName) return;
+      const libArt = findMatchingLibraryArtist(artistName) || { name: artistName };
+      navigateToView('view-library', 'library', true);
+      switchLibrarySubtab('artists', false);
+      openLibraryArtistDetail(libArt);
     });
+  }
+
+  if (dom.btnRemoveArtistLibrary) {
+    dom.btnRemoveArtistLibrary.addEventListener('click', () => {
+      const t = getActiveActionTrack();
+      const artistName = t ? String(t.artist || t.artistName || '').trim() : '';
+      closeStationPickerModal();
+      if (!artistName) return;
+      const libArt = findMatchingLibraryArtist(artistName) || { name: artistName };
+      promptRemoveArtistFromLibrary(libArt);
+    });
+  }
+
+  if (dom.btnCloseStationModal) {
+    dom.btnCloseStationModal.addEventListener('click', closeStationPickerModal);
   }
 
   if (dom.stationPickerModal) {
     dom.stationPickerModal.addEventListener('click', (e) => {
       if (e.target === dom.stationPickerModal) {
-        blurFocusedInContainer(dom.stationPickerModal);
-        dom.stationPickerModal.classList.add('hidden');
-        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+        closeStationPickerModal();
       }
     });
   }
@@ -4902,13 +7143,10 @@ extension WebUIContent {
   if (dom.btnStationByTrack) {
     dom.btnStationByTrack.addEventListener('click', () => {
       triggerHaptic('medium');
-      if (dom.stationPickerModal) {
-        blurFocusedInContainer(dom.stationPickerModal);
-        dom.stationPickerModal.classList.add('hidden');
-        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
-      }
-      const trackName = state.track ? state.track.name : '';
-      const artistName = state.track ? state.track.artist : '';
+      const t = getActiveActionTrack();
+      closeStationPickerModal();
+      const trackName = t ? String(t.name || t.trackName || '').trim() : '';
+      const artistName = t ? String(t.artist || t.artistName || '').trim() : '';
       if (!trackName) return;
       markWaitingForPlayback({ isStation: true, targetName: trackName });
       setUIBusy(true, `Запуск радио по треку «${trackName}»...`);
@@ -4927,12 +7165,9 @@ extension WebUIContent {
   if (dom.btnStationByArtist) {
     dom.btnStationByArtist.addEventListener('click', () => {
       triggerHaptic('medium');
-      if (dom.stationPickerModal) {
-        blurFocusedInContainer(dom.stationPickerModal);
-        dom.stationPickerModal.classList.add('hidden');
-        dom.stationPickerModal.setAttribute('aria-hidden', 'true');
-      }
-      const artistName = state.track ? state.track.artist : '';
+      const t = getActiveActionTrack();
+      closeStationPickerModal();
+      const artistName = t ? String(t.artist || t.artistName || '').trim() : '';
       if (!artistName) return;
       markWaitingForPlayback({ isStation: true, targetName: artistName });
       setUIBusy(true, `Запуск радио по артисту «${artistName}»...`);
@@ -4949,10 +7184,7 @@ extension WebUIContent {
 
   dom.qualityModal.addEventListener('click', (e) => {
     if (e.target === dom.qualityModal) {
-      blurFocusedInContainer(dom.qualityModal);
-      dom.qualityModal.classList.add('hidden');
-      dom.qualityModal.setAttribute('aria-hidden', 'true');
-      syncSpectralPolling();
+      closeQualityModal();
     }
   });
 
@@ -4962,6 +7194,9 @@ extension WebUIContent {
 
   function sendThrottledVolume(val) {
     const isExtAmpMode = Boolean(state.lockVolume100 && state.ampVolumeControlEnabled);
+    if (state.lockVolume100 && !isExtAmpMode) {
+      return;
+    }
     const maxVol = isExtAmpMode ? Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80)) : 100;
     const vol = Math.max(0, Math.min(maxVol, Math.round(Number(val) || 0)));
     state.volume = vol;
@@ -4987,7 +7222,8 @@ extension WebUIContent {
     triggerStandbyVolumePulse();
 
     const now = Date.now();
-    if (now - lastVolumeSendTime >= 75) {
+    const throttleMs = state.isDlnaActive ? 45 : 75;
+    if (now - lastVolumeSendTime >= throttleMs) {
       lastVolumeSendTime = now;
       send({ action: 'set_volume', params: { volume: vol } });
     } else {
@@ -4995,11 +7231,14 @@ extension WebUIContent {
       volumeSendTimeout = setTimeout(() => {
         lastVolumeSendTime = Date.now();
         send({ action: 'set_volume', params: { volume: vol } });
-      }, 75);
+      }, throttleMs);
     }
   }
 
   function handleMuteToggleClick() {
+    if (state.lockVolume100 && !state.ampVolumeControlEnabled) {
+      return;
+    }
     triggerHaptic('toggle');
     triggerStandbyVolumePulse();
     if (state.lockVolume100 && state.ampVolumeControlEnabled) {
@@ -5097,7 +7336,12 @@ extension WebUIContent {
     dom.standbyBtnVolumeMute.addEventListener('click', handleMuteToggleClick);
   }
 
-  // --- Queue View Handling ---
+// === MODULE: 12b-queue-view.js ===
+  // --- Queue View Handling (Previous, Now Playing, and Upcoming) ---
+  const QUEUE_HISTORY_PREVIEW_LIMIT = 3;
+  const lastQueueListKey = { upcoming: '', history: '' };
+  let lastCurrentQueueTrackKey = '';
+
   function updateQueue(data) {
     if (!data) return;
 
@@ -5112,20 +7356,93 @@ extension WebUIContent {
     state.queue.currentIndex = currentIdx;
     state.queue.totalTracks = total;
     state.queue.playlist = playlistName;
-
-    const isAMR = playlistName === 'Очередь AMR' || Boolean(state.isRadio);
-    if (isAMR) {
-      const displayCount = total > 0 ? total : (upcoming.length + (state.track && state.track.name ? 1 : 0));
-      dom.queueSubtitle.textContent = `Очередь AMR · ${displayCount} трек${displayCount === 1 ? '' : (displayCount >= 2 && displayCount <= 4 ? 'а' : 'ов')}`;
-    } else {
-      dom.queueSubtitle.textContent = `${upcoming.length} треков в очереди`;
+    if (history.length <= QUEUE_HISTORY_PREVIEW_LIMIT) {
+      state.queueHistoryExpanded = false;
     }
 
+    const isGenericPl = !playlistName || playlistName === 'Музыка' || playlistName === 'Music' || playlistName === 'Apple Music' || playlistName === 'Очередь';
+    const plPrefix = (!isGenericPl && playlistName !== 'Очередь AMR')
+      ? `${playlistName} · `
+      : (playlistName === 'Очередь AMR' ? (IS_EN ? 'AMR Queue · ' : 'Очередь AMR · ') : '');
+    if (IS_EN) {
+      dom.queueSubtitle.textContent = history.length > 0
+        ? `${plPrefix}${upcoming.length} up next · ${history.length} previous`
+        : `${plPrefix}${upcoming.length} tracks in queue`;
+    } else {
+      dom.queueSubtitle.textContent = history.length > 0
+        ? `${plPrefix}${upcoming.length} далее · ${history.length} ранее`
+        : `${plPrefix}${upcoming.length} треков в очереди`;
+    }
+
+    renderQueueHistorySection(history);
     renderCurrentQueueTrack(dom.queueCurrentTrack);
     renderQueueList(dom.queueUpcomingList, upcoming, 'upcoming');
   }
 
-  let lastCurrentQueueTrackKey = '';
+  function renderQueueHistorySection(history) {
+    if (!dom.queueHistoryGroup || !dom.queueHistoryList) return;
+    if (!Array.isArray(history) || history.length === 0) {
+      dom.queueHistoryGroup.style.display = 'none';
+      dom.queueHistoryList.innerHTML = '';
+      lastQueueListKey.history = '';
+      return;
+    }
+    dom.queueHistoryGroup.style.display = 'block';
+
+    const hasOverflow = history.length > QUEUE_HISTORY_PREVIEW_LIMIT;
+    const expanded = Boolean(state.queueHistoryExpanded) && hasOverflow;
+    if (dom.btnToggleQueueHistory) {
+      dom.btnToggleQueueHistory.classList.toggle('hidden', !hasOverflow);
+      if (hasOverflow) {
+        dom.btnToggleQueueHistory.textContent = expanded
+          ? (IS_EN ? 'Show Less' : 'Свернуть')
+          : (IS_EN ? `Show All (${history.length})` : `Показать все (${history.length})`);
+      }
+    }
+
+    // Backend `history[0]` is the most recently played track (`curIdx - 1`);
+    // display chronologically top-to-bottom so the last played track sits directly above NOW PLAYING.
+    const slice = expanded ? history : history.slice(0, QUEUE_HISTORY_PREVIEW_LIMIT);
+    const chronological = slice.map((t, idx) => ({ track: t, historyIdx: idx })).reverse();
+    const key = `${expanded ? '1' : '0'}|${chronological.map(({ track: t, historyIdx }) => `${historyIdx}:${t.id || t.numeric_id || t.numericId || ''}:${t.name}:${t.artist}:${t.artwork || t.artwork_url || ''}`).join('|')}`;
+    if (key === lastQueueListKey.history) {
+      return;
+    }
+    lastQueueListKey.history = key;
+
+    dom.queueHistoryList.innerHTML = '';
+    chronological.forEach(({ track: t, historyIdx }) => {
+      const row = document.createElement('div');
+      row.className = 'track-row history-track-row';
+      const artSrc = getArtworkSrc(t);
+      const dur = formatTime(t.duration || 0);
+      row.innerHTML = `
+        <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" data-fallback-icon="apple-touch-icon.svg">
+        <div class="track-details">
+          <span class="track-row-title">${escapeHtml(t.name || (IS_EN ? 'Untitled' : 'Без названия'))}</span>
+          <span class="track-row-artist">${escapeHtml(t.artist || (IS_EN ? 'Unknown Artist' : 'Неизвестный исполнитель'))}</span>
+        </div>
+        <span class="track-row-dur">${dur}</span>
+      `;
+      row.addEventListener('click', () => {
+        optimisticPlay();
+        markWaitingForPlayback({ targetName: t.name || '', expectedTrackName: t.name || '' });
+        setUIBusy(true, IS_EN ? 'Switching track...' : 'Переход к треку...');
+        send({ action: 'play_history_index', index: historyIdx, params: { index: historyIdx } });
+      });
+      dom.queueHistoryList.appendChild(row);
+    });
+  }
+
+  if (dom.btnToggleQueueHistory) {
+    dom.btnToggleQueueHistory.addEventListener('click', () => {
+      triggerHaptic('light');
+      state.queueHistoryExpanded = !state.queueHistoryExpanded;
+      lastQueueListKey.history = '';
+      renderQueueHistorySection(state.queue.history || []);
+    });
+  }
+
   function renderCurrentQueueTrack(container) {
     if (!container) return;
     const cur = state.track;
@@ -5150,21 +7467,20 @@ extension WebUIContent {
 
     container.innerHTML = `
       <div class="track-row now-playing-row">
-        <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
+        <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" data-fallback-icon="apple-touch-icon.svg">
         <div class="track-details">
-          <span class="track-row-title">${escapeHtml(cur.name || 'Без названия')}</span>
-          <span class="track-row-artist">${escapeHtml(cur.artist || 'Неизвестный исполнитель')}</span>
+          <span class="track-row-title">${escapeHtml(cur.name || (IS_EN ? 'Untitled' : 'Без названия'))}</span>
+          <span class="track-row-artist">${escapeHtml(cur.artist || (IS_EN ? 'Unknown Artist' : 'Неизвестный исполнитель'))}</span>
         </div>
         <span class="track-row-dur">${dur}</span>
       </div>
     `;
   }
 
-  const lastQueueListKey = { upcoming: '', history: '' };
   function renderQueueList(container, tracks, type) {
     if (!container) return;
     if (!tracks || tracks.length === 0) {
-      container.innerHTML = `<div class="empty-state">${type === 'upcoming' ? 'Нет предстоящих треков' : 'История пуста'}</div>`;
+      container.innerHTML = `<div class="empty-state">${type === 'upcoming' ? (IS_EN ? 'No upcoming tracks' : 'Нет предстоящих треков') : (IS_EN ? 'No previous tracks' : 'История пуста')}</div>`;
       lastQueueListKey[type] = '';
       return;
     }
@@ -5183,10 +7499,10 @@ extension WebUIContent {
       const dur = formatTime(t.duration || 0);
 
       row.innerHTML = `
-        <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
+        <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" data-fallback-icon="apple-touch-icon.svg">
         <div class="track-details">
-          <span class="track-row-title">${escapeHtml(t.name || 'Без названия')}</span>
-          <span class="track-row-artist">${escapeHtml(t.artist || 'Неизвестный исполнитель')}</span>
+          <span class="track-row-title">${escapeHtml(t.name || (IS_EN ? 'Untitled' : 'Без названия'))}</span>
+          <span class="track-row-artist">${escapeHtml(t.artist || (IS_EN ? 'Unknown Artist' : 'Неизвестный исполнитель'))}</span>
         </div>
         <span class="track-row-dur">${dur}</span>
       `;
@@ -5194,7 +7510,7 @@ extension WebUIContent {
       row.addEventListener('click', () => {
         optimisticPlay();
         markWaitingForPlayback({ targetName: t.name || '', expectedTrackName: t.name || '' });
-        setUIBusy(true, 'Переход к треку...');
+        setUIBusy(true, IS_EN ? 'Switching track...' : 'Переход к треку...');
         if (type === 'upcoming') {
           send({ action: 'queue_play_index', params: { index: idx } });
         } else {
@@ -5212,19 +7528,32 @@ extension WebUIContent {
 
   if (dom.btnSaveQueuePlaylist) {
     dom.btnSaveQueuePlaylist.addEventListener('click', () => {
+      const prevChrono = Array.isArray(state.queue.history) ? [...state.queue.history].reverse() : [];
       const cur = (state.track && state.track.name) ? [state.track] : [];
       const upcoming = Array.isArray(state.queue.upcoming) ? state.queue.upcoming : [];
-      const allQueueTracks = [...cur, ...upcoming];
+      const allQueueTracks = [...prevChrono, ...cur, ...upcoming];
       if (allQueueTracks.length === 0) {
         showToast(IS_EN ? 'Queue is empty' : 'Очередь пуста');
         return;
       }
       triggerHaptic('medium');
+      const GENERIC_QUEUE_NAMES = new Set([
+        'очередь amr',
+        'очередь',
+        'amr queue',
+        'результаты поиска',
+        'search results'
+      ]);
+      const rawQueueName = String((state.queue && state.queue.playlist) || '').trim();
+      const isGenericQueue = !rawQueueName || GENERIC_QUEUE_NAMES.has(rawQueueName.toLowerCase());
       let plName = '';
-      if (state.activeAiCuratedTitle && (!state.queue.playlist || state.queue.playlist === 'Очередь AMR')) {
+      if (!isGenericQueue) {
+        plName = rawQueueName;
+      } else if (state.activeAiCuratedTitle) {
         plName = state.activeAiCuratedTitle;
-      } else if (state.queue.playlist && state.queue.playlist !== 'Очередь AMR') {
-        plName = state.queue.playlist;
+      } else if (state.searchQuery && String(state.searchQuery).trim()) {
+        const cleanQ = String(state.searchQuery).trim();
+        plName = IS_EN ? `Search: ${cleanQ}` : `Поиск: ${cleanQ}`;
       }
       dom.btnSaveQueuePlaylist.disabled = true;
       if (dom.btnSaveQueueText) {
@@ -5240,16 +7569,684 @@ extension WebUIContent {
     });
   }
 
-  // --- Library / Playlists Handling ---
-  function updatePlaylists(data) {
-    const list = data.playlists || (Array.isArray(data) ? data : []);
-    state.playlists = list;
+// === MODULE: 13-library-helpers-and-removal.js ===
+  // --- Library / Playlists Helpers, Browse Views, Completeness & Deletion ---
+  function formatTracksCount(n) {
+    const num = Math.max(0, Number(n) || 0);
+    if (IS_EN) {
+      return num === 1 ? '1 track' : `${num} tracks`;
+    }
+    const mod10 = num % 10;
+    const mod100 = num % 100;
+    if (mod10 === 1 && mod100 !== 11) return `${num} трек`;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${num} трека`;
+    return `${num} треков`;
+  }
+
+  function formatAlbumsCount(n) {
+    const num = Math.max(0, Number(n) || 0);
+    if (IS_EN) {
+      return num === 1 ? '1 album' : `${num} albums`;
+    }
+    const mod10 = num % 10;
+    const mod100 = num % 100;
+    if (mod10 === 1 && mod100 !== 11) return `${num} альбом`;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${num} альбома`;
+    return `${num} альбомов`;
+  }
+
+  function normalizeAlbumMatchText(val) {
+    if (!val) return '';
+    let s = String(val).trim().toLowerCase();
+    if (typeof s.normalize === 'function') {
+      s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+    return s;
+  }
+
+  const normalizeTrackMatchText = normalizeAlbumMatchText;
+
+  function albumsMatchClient(lhsName, lhsArtist, rhsName, rhsArtist) {
+    const ln = normalizeAlbumMatchText(lhsName);
+    const rn = normalizeAlbumMatchText(rhsName);
+    if (!ln || ln !== rn) return false;
+    const la = normalizeAlbumMatchText(lhsArtist);
+    const ra = normalizeAlbumMatchText(rhsArtist);
+    if (!la || !ra) return true;
+    return la === ra || la.includes(ra) || ra.includes(la);
+  }
+
+  function tracksMatchClient(lhs, rhs) {
+    if (!lhs || !rhs) return false;
+    const lhsId = String(lhs.id || lhs.track_id || lhs.trackId || lhs.numeric_id || '').trim();
+    const rhsId = String(rhs.id || rhs.track_id || rhs.trackId || rhs.numeric_id || '').trim();
+    if (lhsId && rhsId && lhsId === rhsId) return true;
+    const ln = normalizeTrackMatchText(lhs.name || lhs.trackName || '');
+    const rn = normalizeTrackMatchText(rhs.name || rhs.trackName || '');
+    if (!ln || ln !== rn) return false;
+    const la = normalizeTrackMatchText(lhs.artist || lhs.artistName || '');
+    const ra = normalizeTrackMatchText(rhs.artist || rhs.artistName || '');
+    if (!la || !ra) return true;
+    return la === ra || la.includes(ra) || ra.includes(la);
+  }
+
+  function findMatchingLibrarySong(trackObj) {
+    if (!trackObj) return null;
+    const fromSongs = (state.librarySongs || []).find(item => tracksMatchClient(item, trackObj));
+    if (fromSongs) return fromSongs;
+    const fromRecent = (state.libraryRecent && Array.isArray(state.libraryRecent.songs))
+      ? state.libraryRecent.songs.find(item => tracksMatchClient(item, trackObj))
+      : null;
+    return fromRecent || null;
+  }
+
+  function isTrackInLibraryClient(trackObj) {
+    if (!trackObj) return false;
+    if (trackObj.is_local || trackObj.isLocal || trackObj.in_library) return true;
+    return Boolean(findMatchingLibrarySong(trackObj));
+  }
+
+  function findMatchingLibraryArtist(artistName) {
+    const target = normalizeTrackMatchText(artistName);
+    if (!target) return null;
+    return (state.libraryArtists || []).find(a => {
+      const an = normalizeTrackMatchText(a && (a.name || a.artist));
+      return an && an === target;
+    }) || null;
+  }
+
+  function getArtistInitials(name) {
+    const clean = String(name || '').replace(/[^\p{L}\p{N}\s]/gu, ' ').trim();
+    if (!clean) return '♪';
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return clean.slice(0, 2).toUpperCase();
+  }
+
+  function promptRemoveTrackFromLibrary(trackObj) {
+    if (!trackObj) return;
+    const tName = String(trackObj.name || trackObj.trackName || '').trim();
+    const tArtist = String(trackObj.artist || trackObj.artistName || '').trim();
+    const tAlbum = String(trackObj.album || trackObj.collectionName || '').trim();
+    const matchedSong = findMatchingLibrarySong(trackObj);
+    const rawId = String(
+      trackObj.id ||
+      trackObj.track_id ||
+      trackObj.trackId ||
+      trackObj.numeric_id ||
+      (matchedSong && (matchedSong.id || matchedSong.track_id || matchedSong.numeric_id)) ||
+      ''
+    ).trim();
+    if (!tName && !rawId) return;
+
+    const msg = IS_EN
+      ? `Track “${tName || 'Selected track'}”${tArtist ? ` — ${tArtist}` : ''} will be removed from your Apple Music library.`
+      : `Трек «${tName || 'Выбранный трек'}»${tArtist ? ` (${tArtist})` : ''} будет удалён из вашей медиатеки Apple Music.`;
+
+    confirmLibraryDeleteModal({
+      title: 'Удалить трек из медиатеки?',
+      message: msg,
+      confirmLabel: 'Удалить',
+      onConfirm: () => {
+        send({
+          action: 'remove_from_library',
+          params: {
+            type: 'track',
+            id: rawId,
+            track_id: rawId,
+            name: tName,
+            artist: tArtist,
+            album: tAlbum
+          }
+        });
+      }
+    });
+  }
+
+  function promptRemoveAlbumFromLibrary(albObj) {
+    if (!albObj) return;
+    const aName = String(albObj.name || albObj.title || '').trim();
+    const aArtist = String(albObj.artist || albObj.sub || albObj.subtitle || '').trim();
+    const matchedAlb = findMatchingLibraryAlbum(albObj);
+    const rawId = String(albObj.id || albObj.album_id || (matchedAlb && matchedAlb.id) || '').trim();
+    if (!aName && !rawId) return;
+
+    const msg = IS_EN
+      ? `Album “${aName}”${aArtist ? ` — ${aArtist}` : ''} will be removed from your Apple Music library.`
+      : `Альбом «${aName}»${aArtist ? ` — ${aArtist}` : ''} будет удалён из медиатеки Apple Music.`;
+
+    confirmLibraryDeleteModal({
+      title: 'Удалить альбом из медиатеки?',
+      message: msg,
+      confirmLabel: 'Удалить',
+      onConfirm: () => {
+        send({
+          action: 'remove_from_library',
+          params: {
+            type: 'album',
+            id: rawId,
+            album_id: rawId,
+            name: aName,
+            album: aName,
+            artist: aArtist
+          }
+        });
+      }
+    });
+  }
+
+  const PROTECTED_SYSTEM_PLAYLISTS = new Set([
+    'музыка', 'music', 'медиатека', 'библиотека', 'musik', 'musique', 'música', 'musica', 'ミュージック', '音乐',
+    'очередь amr', 'буфер amr', 'любимые песни', 'favorites', 'favourite songs', 'favorite songs', 'покупки', 'purchased', 'загружено', 'downloaded'
+  ]);
+
+  function isProtectedSystemPlaylistClient(name) {
+    const clean = String(name || '').trim().toLowerCase();
+    if (!clean) return false;
+    return PROTECTED_SYSTEM_PLAYLISTS.has(clean);
+  }
+
+  function promptRemovePlaylistFromLibrary(plObj) {
+    if (!plObj) return;
+    const pName = String(plObj.name || plObj.title || '').trim();
+    const matchedLocal = findMatchingLocalPlaylist(pName, plObj.id, 0, plObj.catalog_id || plObj.catalogId || '');
+    const effectiveName = (matchedLocal && matchedLocal.name) ? matchedLocal.name : (plObj.local_name || pName);
+    const rawId = String(plObj.id || plObj.playlist_id || (matchedLocal && (matchedLocal.id || matchedLocal.catalog_id)) || '').trim();
+    if (!effectiveName && !rawId) return;
+    if (isProtectedSystemPlaylistClient(effectiveName)) {
+      showToast(IS_EN ? 'System playlist cannot be deleted' : 'Системный плейлист нельзя удалить');
+      return;
+    }
+
+    const trkCount = Number(
+      plObj.track_count ||
+      plObj.trackCount ||
+      (matchedLocal && (matchedLocal.track_count || matchedLocal.trackCount)) ||
+      (Array.isArray(plObj.tracks) ? plObj.tracks.length : 0) ||
+      0
+    );
+
+    const cntPart = trkCount > 0 ? ` (${formatTracksCount(trkCount)})` : '';
+    const msg = IS_EN
+      ? `Playlist “${effectiveName}”${cntPart} will be removed from your Apple Music playlists.`
+      : `Плейлист «${effectiveName}»${cntPart} будет удалён из ваших плейлистов Apple Music.`;
+
+    confirmLibraryDeleteModal({
+      title: 'Удалить плейлист?',
+      message: msg,
+      confirmLabel: 'Удалить',
+      onConfirm: () => {
+        send({
+          action: 'remove_from_library',
+          params: {
+            type: 'playlist',
+            id: rawId,
+            playlist_id: rawId,
+            name: effectiveName,
+            playlist: effectiveName
+          }
+        });
+      }
+    });
+  }
+
+  function promptRemoveArtistFromLibrary(artistObjOrName) {
+    if (!artistObjOrName) return;
+    const isObj = typeof artistObjOrName === 'object';
+    const artName = String(isObj ? (artistObjOrName.name || artistObjOrName.artist || '') : artistObjOrName).trim();
+    if (!artName) return;
+    const matchedArt = findMatchingLibraryArtist(artName);
+    const artId = String((isObj && artistObjOrName.id) || (matchedArt && matchedArt.id) || '').trim();
+    const trkCount = Number((isObj && artistObjOrName.track_count) || (matchedArt && matchedArt.track_count) || 0);
+
+    const msg = trkCount > 0
+      ? (IS_EN
+        ? `All tracks by ${artName} (${trkCount}) will be removed from your Apple Music library.`
+        : `Все треки ${artName} (${trkCount}) будут удалены из вашей медиатеки Apple Music.`)
+      : (IS_EN
+        ? `All saved tracks by ${artName} will be removed from your Apple Music library.`
+        : `Все сохранённые треки ${artName} будут удалены из вашей медиатеки Apple Music.`);
+
+    confirmLibraryDeleteModal({
+      title: 'Удалить исполнителя из медиатеки?',
+      message: msg,
+      confirmLabel: 'Удалить',
+      onConfirm: () => {
+        send({
+          action: 'remove_from_library',
+          params: {
+            type: 'artist',
+            id: artId,
+            artist: artName,
+            name: artName
+          }
+        });
+      }
+    });
+  }
+
+  let lastLibraryRemovalToastSig = '';
+  let lastLibraryRemovalToastAt = 0;
+  let librarySyncRefetchTimer = null;
+
+  function handleLibraryRemovedOrChanged(data, eventType = 'library_changed', rawMsg = null) {
+    const payload = (data && typeof data === 'object') ? data : {};
+    const statusStr = payload.status || (rawMsg && rawMsg.status) || 'ok';
+    if (statusStr === 'error') {
+      const errMsg = translateTextToEn(payload.message || payload.error || (rawMsg && rawMsg.error) || 'Не удалось удалить из медиатеки');
+      showToast(errMsg);
+      return;
+    }
+
+    const remType = String(payload.type || '').toLowerCase();
+    const delCount = payload.deleted_count !== undefined ? Number(payload.deleted_count) : null;
+    const remId = String(payload.id || '').trim();
+    const remName = String(payload.name || '').trim();
+    const remArtist = String(payload.artist || '').trim();
+    const remAlbum = String(payload.album || (remType === 'album' ? remName : '')).trim();
+    const label = remName || remAlbum || remArtist;
+
+    const isExplicitRemove = (
+      eventType === 'remove_from_library' ||
+      eventType === 'delete_from_library' ||
+      eventType === 'remove_playlist_from_library' ||
+      eventType === 'delete_playlist_from_library' ||
+      Boolean(remType)
+    );
+    if (isExplicitRemove && (remType === 'playlist' || delCount === null || delCount > 0 || eventType !== 'library_changed')) {
+      const toastSig = `${remType}|${label.toLowerCase()}|${delCount || 0}`;
+      const now = Date.now();
+      if (toastSig !== lastLibraryRemovalToastSig || (now - lastLibraryRemovalToastAt) > 1800) {
+        lastLibraryRemovalToastSig = toastSig;
+        lastLibraryRemovalToastAt = now;
+        let toastText;
+        if (remType === 'playlist') {
+          toastText = IS_EN
+            ? `Playlist deleted: ${label || 'playlist'}`
+            : `Плейлист удалён: ${label || 'плейлист'}`;
+        } else {
+          const cntSuffix = (delCount && delCount > 0) ? ` (${delCount})` : '';
+          toastText = IS_EN
+            ? `Removed from Library: ${label || 'item'}${cntSuffix}`
+            : `Удалено из медиатеки: ${label || 'элемент'}${cntSuffix}`;
+        }
+        showToast(toastText);
+      }
+    }
+
+    if (remType !== 'playlist') {
+      if (state.libraryRecent) state.libraryRecent.loaded = false;
+      state.libraryArtistsLoaded = false;
+      state.librarySongsLoaded = false;
+    }
+
+    const artistMatchesClientTarget = (candArtist, targetNorm) => {
+      const ca = normalizeTrackMatchText(candArtist);
+      if (!ca || !targetNorm) return false;
+      if (ca === targetNorm) return true;
+      const parts = ca.split(/\s*(?:,|&|\bfeat\.?\b|\bft\.?\b|\bwith\b|\/|;)\s*/i);
+      return parts.some(p => p.trim() === targetNorm);
+    };
+
+    // Optimistic client state pruning
+    if (remType === 'track') {
+      const probe = { id: remId, name: remName, artist: remArtist, album: remAlbum };
+      if (Array.isArray(state.librarySongs)) {
+        state.librarySongs = state.librarySongs.filter(s => !tracksMatchClient(s, probe));
+      }
+      if (state.libraryRecent && Array.isArray(state.libraryRecent.songs)) {
+        state.libraryRecent.songs = state.libraryRecent.songs.filter(s => !tracksMatchClient(s, probe));
+      }
+      if (state.track && tracksMatchClient(state.track, probe)) {
+        state.track.is_local = false;
+      }
+      if (state.currentLibraryArtistDetail && Array.isArray(state.currentLibraryArtistDetail.songs)) {
+        const beforeLen = state.currentLibraryArtistDetail.songs.length;
+        state.currentLibraryArtistDetail.songs = state.currentLibraryArtistDetail.songs.filter(s => !tracksMatchClient(s, probe));
+        if (state.currentLibraryArtistDetail.songs.length !== beforeLen) {
+          state.currentLibraryArtistDetail.track_count = Math.max(0, (Number(state.currentLibraryArtistDetail.track_count) || beforeLen) - 1);
+          if (dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden')) {
+            updateLibraryArtistDetail(state.currentLibraryArtistDetail);
+          }
+        }
+      }
+      if (
+        state.currentAlbumDetail &&
+        state.currentPlaylistDetail &&
+        state.currentPlaylistDetail.isAlbum &&
+        dom.playlistDetailPane &&
+        !dom.playlistDetailPane.classList.contains('hidden')
+      ) {
+        const curAlb = state.currentAlbumDetail;
+        const tracksArr = Array.isArray(curAlb.tracks) ? curAlb.tracks : [];
+        const hasMatch = tracksArr.some(t => tracksMatchClient(t, probe));
+        if (hasMatch) {
+          if (curAlb.is_library_view) {
+            curAlb.tracks = tracksArr.filter(t => !tracksMatchClient(t, probe));
+          } else {
+            tracksArr.forEach(t => {
+              if (tracksMatchClient(t, probe)) {
+                t.is_local = false;
+                t.isLocal = false;
+              }
+            });
+          }
+          const prevLibCnt = Number(curAlb.library_track_count ?? tracksArr.length);
+          curAlb.library_track_count = Math.max(0, prevLibCnt - 1);
+          curAlb.in_library = curAlb.library_track_count > 0;
+          curAlb.is_local = curAlb.in_library;
+          curAlb.is_complete_in_library = false;
+          updateAlbumDetails(curAlb);
+        }
+      }
+    } else if (remType === 'album') {
+      const targetAlbName = remAlbum || remName;
+      if (Array.isArray(state.libraryAlbums)) {
+        state.libraryAlbums = state.libraryAlbums.filter(a => {
+          if (remId && String(a.id || '') === remId) return false;
+          return !albumsMatchClient(a.name, a.artist, targetAlbName, remArtist);
+        });
+      }
+      if (state.libraryRecent && Array.isArray(state.libraryRecent.albums)) {
+        state.libraryRecent.albums = state.libraryRecent.albums.filter(a => {
+          if (remId && String(a.id || '') === remId) return false;
+          return !albumsMatchClient(a.name, a.artist, targetAlbName, remArtist);
+        });
+      }
+      if (Array.isArray(state.librarySongs) && targetAlbName) {
+        state.librarySongs = state.librarySongs.filter(s => !albumsMatchClient(s.album, s.artist, targetAlbName, remArtist));
+      }
+      if (state.libraryRecent && Array.isArray(state.libraryRecent.songs) && targetAlbName) {
+        state.libraryRecent.songs = state.libraryRecent.songs.filter(s => !albumsMatchClient(s.album, s.artist, targetAlbName, remArtist));
+      }
+      if (state.track && targetAlbName && albumsMatchClient(state.track.album, state.track.artist, targetAlbName, remArtist)) {
+        state.track.is_local = false;
+      }
+      if (state.currentLibraryArtistDetail) {
+        const det = state.currentLibraryArtistDetail;
+        if (Array.isArray(det.albums)) {
+          det.albums = det.albums.filter(a => !albumsMatchClient(a.name, a.artist || det.artist, targetAlbName, remArtist));
+          det.album_count = det.albums.length;
+        }
+        if (Array.isArray(det.songs) && targetAlbName) {
+          det.songs = det.songs.filter(s => !albumsMatchClient(s.album, s.artist || det.artist, targetAlbName, remArtist));
+          det.track_count = det.songs.length;
+        }
+        if (dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden')) {
+          updateLibraryArtistDetail(det);
+        }
+      }
+      if (
+        state.currentAlbumDetail &&
+        state.currentPlaylistDetail &&
+        state.currentPlaylistDetail.isAlbum &&
+        dom.playlistDetailPane &&
+        !dom.playlistDetailPane.classList.contains('hidden')
+      ) {
+        const curAlb = state.currentAlbumDetail;
+        const idMatches = remId && String(curAlb.id || '') === remId;
+        if (idMatches || albumsMatchClient(curAlb.name, curAlb.artist, targetAlbName, remArtist)) {
+          curAlb.in_library = false;
+          curAlb.is_local = false;
+          curAlb.is_complete_in_library = false;
+          curAlb.is_library_view = false;
+          curAlb.library_track_count = 0;
+          if (Array.isArray(curAlb.tracks)) {
+            curAlb.tracks.forEach(t => {
+              t.is_local = false;
+              t.isLocal = false;
+            });
+          }
+          updateAlbumDetails(curAlb);
+        }
+      }
+    } else if (remType === 'artist') {
+      const normArt = normalizeTrackMatchText(remArtist || remName);
+      if (normArt) {
+        if (Array.isArray(state.libraryArtists)) {
+          state.libraryArtists = state.libraryArtists.filter(a => normalizeTrackMatchText(a.name || a.artist) !== normArt);
+        }
+        if (Array.isArray(state.libraryAlbums)) {
+          state.libraryAlbums = state.libraryAlbums.filter(a => !artistMatchesClientTarget(a.artist, normArt));
+        }
+        if (Array.isArray(state.librarySongs)) {
+          state.librarySongs = state.librarySongs.filter(s => !artistMatchesClientTarget(s.artist, normArt));
+        }
+        if (state.libraryRecent) {
+          if (Array.isArray(state.libraryRecent.albums)) {
+            state.libraryRecent.albums = state.libraryRecent.albums.filter(a => !artistMatchesClientTarget(a.artist, normArt));
+          }
+          if (Array.isArray(state.libraryRecent.songs)) {
+            state.libraryRecent.songs = state.libraryRecent.songs.filter(s => !artistMatchesClientTarget(s.artist, normArt));
+          }
+        }
+        if (state.track && artistMatchesClientTarget(state.track.artist, normArt)) {
+          state.track.is_local = false;
+        }
+        if (
+          state.currentLibraryArtistDetail &&
+          normalizeTrackMatchText(state.currentLibraryArtistDetail.artist) === normArt
+        ) {
+          state.currentLibraryArtistDetail = null;
+          if (dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden')) {
+            dom.libraryArtistDetailPane.classList.add('hidden');
+            showLibraryBrowsePane();
+            switchLibrarySubtab('artists', false);
+          }
+        }
+        if (
+          state.currentAlbumDetail &&
+          state.currentPlaylistDetail &&
+          state.currentPlaylistDetail.isAlbum &&
+          dom.playlistDetailPane &&
+          !dom.playlistDetailPane.classList.contains('hidden') &&
+          normalizeTrackMatchText(state.currentAlbumDetail.artist) === normArt
+        ) {
+          const curAlb = state.currentAlbumDetail;
+          curAlb.in_library = false;
+          curAlb.is_local = false;
+          curAlb.is_complete_in_library = false;
+          curAlb.is_library_view = false;
+          curAlb.library_track_count = 0;
+          if (Array.isArray(curAlb.tracks)) {
+            curAlb.tracks.forEach(t => {
+              t.is_local = false;
+              t.isLocal = false;
+            });
+          }
+          updateAlbumDetails(curAlb);
+        }
+      }
+    } else if (remType === 'playlist') {
+      const remCatalogId = String(payload.catalog_id || '').trim();
+      const remLocalName = String(payload.local_name || '').trim();
+      const targetProbe = {
+        id: remId,
+        catalog_id: remCatalogId || (remId.toLowerCase().startsWith('pl.') ? remId : ''),
+        name: remName,
+        local_name: remLocalName
+      };
+      if (Array.isArray(state.playlists) && (remName || remLocalName || remId || remCatalogId)) {
+        const filteredPls = state.playlists.filter(pl => {
+          if (!pl) return false;
+          return !playlistsMatchCrossLocaleClient(pl, targetProbe);
+        });
+        updatePlaylists({ playlists: filteredPls });
+      }
+      if (typeof syncSearchPlaylistCardsLibraryStatus === 'function') {
+        syncSearchPlaylistCardsLibraryStatus(targetProbe, false);
+      }
+      if (
+        state.currentPlaylistDetail &&
+        !state.currentPlaylistDetail.isAlbum &&
+        dom.playlistDetailPane &&
+        !dom.playlistDetailPane.classList.contains('hidden')
+      ) {
+        const matchesCurrentDetail = playlistsMatchCrossLocaleClient(state.currentPlaylistDetail, targetProbe);
+        if (matchesCurrentDetail) {
+          state.currentPlaylistDetail.is_local = false;
+          state.currentPlaylistDetail.in_library = false;
+          if (state.detailReturnOrigin === 'playlists') {
+            dom.playlistDetailPane.classList.add('hidden');
+            state.detailReturnOrigin = null;
+            navigateToView('view-playlists', 'playlists');
+          } else {
+            if (dom.btnRemoveDetailLibrary) {
+              dom.btnRemoveDetailLibrary.classList.add('hidden');
+            }
+            if (dom.btnAddPlaylistLibrary) {
+              dom.btnAddPlaylistLibrary.disabled = false;
+              dom.btnAddPlaylistLibrary.classList.remove('added');
+              dom.btnAddPlaylistLibrary.classList.remove('hidden');
+              dom.btnAddPlaylistLibrary.title = translateTextToEn('Добавить в плейлисты Apple Music');
+              if (dom.btnAddPlaylistLibraryText) {
+                dom.btnAddPlaylistLibraryText.textContent = translateTextToEn('В плейлисты');
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (remType !== 'playlist') {
+      renderLibraryRecent();
+      renderLibraryArtists();
+      renderLibraryAlbums();
+      renderLibrarySongs();
+    }
     if (typeof renderStandbyQuickTiles === 'function') {
       renderStandbyQuickTiles();
     }
+    if (dom.stationPickerModal && !dom.stationPickerModal.classList.contains('hidden')) {
+      syncStationPickerModalUI();
+    }
+
+    // Debounced background sync from server
+    if (librarySyncRefetchTimer) {
+      clearTimeout(librarySyncRefetchTimer);
+    }
+    librarySyncRefetchTimer = setTimeout(() => {
+      librarySyncRefetchTimer = null;
+      if (!state.connected || !state.deviceAuthorized) return;
+      if (remType === 'playlist') {
+        send({ action: 'get_playlists', params: { refresh: true } });
+        return;
+      }
+      send({ action: 'get_library_albums', params: { refresh: true } });
+      const activeLibTab = state.libraryTab || 'recent';
+      if (activeLibTab === 'recent') {
+        send({ action: 'get_library_recent', params: { refresh: true } });
+      } else if (activeLibTab === 'artists') {
+        send({ action: 'get_library_artists', params: { refresh: true } });
+      } else if (activeLibTab === 'songs') {
+        send({ action: 'get_library_songs', params: { refresh: true } });
+      }
+    }, 280);
+  }
+
+// === MODULE: 14-playlists-recent-and-artists.js ===
+  function createTrackRowActionButtons(trackObj, opts = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'track-row-actions';
+
+    if (opts.showDirectDelete && state.allowLibraryModification !== false) {
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'track-row-action-btn track-row-del-btn';
+      const delTitle = translateTextToEn('Удалить трек из медиатеки');
+      delBtn.title = delTitle;
+      delBtn.setAttribute('aria-label', delTitle);
+      delBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/>
+          <path d="M14 11v6"/>
+        </svg>
+      `;
+      delBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        promptRemoveTrackFromLibrary(trackObj);
+      });
+      wrap.appendChild(delBtn);
+    }
+
+    const moreBtn = document.createElement('button');
+    moreBtn.type = 'button';
+    moreBtn.className = 'track-row-action-btn track-row-more-btn';
+    const moreTitle = translateTextToEn('Действия с треком');
+    moreBtn.title = moreTitle;
+    moreBtn.setAttribute('aria-label', moreTitle);
+    moreBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <circle cx="5" cy="12" r="1.8"/>
+        <circle cx="12" cy="12" r="1.8"/>
+        <circle cx="19" cy="12" r="1.8"/>
+      </svg>
+    `;
+    moreBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openTrackActionsModal(trackObj);
+    });
+    wrap.appendChild(moreBtn);
+
+    return wrap;
+  }
+
+  function updatePlaylists(data) {
+    const list = data.playlists || (Array.isArray(data) ? data : []);
+    state.playlists = list;
+    if (dom.playlistsSectionSubtitle) {
+      dom.playlistsSectionSubtitle.textContent = list.length > 0
+        ? translateTextToEn(`Плейлисты Apple Music • ${list.length}`)
+        : translateTextToEn('Плейлисты Apple Music');
+    }
+    if (typeof renderStandbyQuickTiles === 'function') {
+      renderStandbyQuickTiles();
+    }
+    if (
+      state.currentPlaylistDetail &&
+      !state.currentPlaylistDetail.isAlbum &&
+      dom.playlistDetailPane &&
+      !dom.playlistDetailPane.classList.contains('hidden')
+    ) {
+      const curPlName = state.currentPlaylistDetail.name || state.currentPlaylistDetail.title || '';
+      const matchedLocal = findMatchingLocalPlaylist(
+        curPlName,
+        state.currentPlaylistDetail.id,
+        0,
+        state.currentPlaylistDetail.catalog_id || state.currentPlaylistDetail.catalogId || ''
+      );
+      if (matchedLocal) {
+        state.isAddingDetailToLibrary = false;
+        state.currentPlaylistDetail.is_local = true;
+        state.currentPlaylistDetail.in_library = true;
+        const syncedCnt = Number(matchedLocal.track_count || matchedLocal.trackCount || 0);
+        if (syncedCnt > 0 && dom.detailMeta) {
+          state.currentPlaylistDetail.track_count = syncedCnt;
+          dom.detailMeta.textContent = formatTracksCount(syncedCnt);
+        }
+        if (dom.btnAddPlaylistLibrary) {
+          dom.btnAddPlaylistLibrary.disabled = true;
+          dom.btnAddPlaylistLibrary.classList.add('added');
+          dom.btnAddPlaylistLibrary.classList.add('hidden');
+        }
+        if (dom.btnRemoveDetailLibrary && !isProtectedSystemPlaylistClient(curPlName)) {
+          if (dom.btnRemoveDetailLibraryText) {
+            dom.btnRemoveDetailLibraryText.textContent = translateTextToEn('Удалить плейлист');
+          }
+          dom.btnRemoveDetailLibrary.classList.remove('hidden');
+        }
+      }
+    }
+    if (!dom.playlistsGrid) return;
 
     if (list.length === 0) {
-      dom.playlistsGrid.innerHTML = '<div class="empty-state">Плейлисты не найдены</div>';
+      dom.playlistsGrid.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Плейлисты не найдены'))}</div>`;
       return;
     }
 
@@ -5257,28 +8254,974 @@ extension WebUIContent {
     list.forEach(pl => {
       const card = document.createElement('div');
       card.className = 'playlist-card';
-      const art = pl.artwork_url || pl.artworkUrl || 'apple-touch-icon.svg';
+      const art = appendDeviceIdToUrl(pl.artwork_url || pl.artworkUrl || 'apple-touch-icon.svg');
       const count = pl.track_count || pl.trackCount || 0;
+      const canDelete = !isProtectedSystemPlaylistClient(pl.name);
+      const delBtnTitle = translateTextToEn('Удалить плейлист из медиатеки');
 
       card.innerHTML = `
         <div class="playlist-card-art-wrap">
-          <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" decoding="async" data-fallback-mode="next-flex">
           <div class="playlist-card-art-fallback" style="display:none;">
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#6e6e73" stroke-width="1.8">
               <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
             </svg>
           </div>
+          ${canDelete ? `<button type="button" class="playlist-card-del-btn" title="${escapeHtml(delBtnTitle)}" aria-label="${escapeHtml(delBtnTitle)}">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+            </svg>
+          </button>` : ''}
         </div>
         <span class="playlist-card-title">${escapeHtml(pl.name)}</span>
-        <span class="playlist-card-count">${count} треков</span>
+        <span class="playlist-card-count">${escapeHtml(formatTracksCount(count))}</span>
       `;
 
+      const delCardBtn = card.querySelector('.playlist-card-del-btn');
+      if (delCardBtn) {
+        delCardBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          promptRemovePlaylistFromLibrary({ ...pl, is_local: true });
+        });
+      }
+
       card.addEventListener('click', () => {
-        openPlaylistDetail(pl);
+        openPlaylistDetail({ ...pl, is_local: true }, 'playlists');
       });
 
       dom.playlistsGrid.appendChild(card);
     });
+  }
+
+  if (dom.btnRefreshPlaylists) {
+    dom.btnRefreshPlaylists.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.playlistsGrid) {
+        dom.playlistsGrid.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка плейлистов...'))}</div>`;
+      }
+      send({ action: 'get_playlists', params: { refresh: true } });
+    });
+  }
+
+  function findMatchingLibraryAlbum(alb) {
+    if (!alb) return null;
+    const targetId = String(alb.id || '').trim();
+    const isCatalogTarget = Number(targetId) >= 10000000;
+    const targetName = alb.name || alb.title || '';
+    const targetArtist = alb.artist || alb.sub || alb.subtitle || '';
+    return (state.libraryAlbums || []).find(item => {
+      const itemId = String(item.id || '').trim();
+      if (isCatalogTarget && Number(itemId) >= 10000000 && itemId === targetId) {
+        return true;
+      }
+      return albumsMatchClient(item.name, item.artist, targetName, targetArtist);
+    }) || null;
+  }
+
+  function upsertOptimisticPlaylist(pl) {
+    if (!pl || !pl.name) return;
+    const rawPlId = String(pl.id || '').trim();
+    const rawCatId = String(pl.catalog_id || pl.catalogId || (rawPlId.toLowerCase().startsWith('pl.') ? rawPlId : '')).trim();
+    const probe = { id: rawPlId, catalog_id: rawCatId, name: pl.name };
+    const existing = Array.isArray(state.playlists) ? [...state.playlists] : [];
+    const idx = existing.findIndex(item => playlistsMatchCrossLocaleClient(item, probe));
+    const nextArt = pl.artwork_url || pl.artworkUrl || pl.artwork || '';
+    const nextCnt = Number(pl.track_count || pl.trackCount || 0);
+    if (idx >= 0) {
+      const prev = existing[idx];
+      const prevArt = prev.artwork_url || prev.artworkUrl || '';
+      existing[idx] = {
+        ...prev,
+        id: prev.id || rawPlId,
+        catalog_id: prev.catalog_id || prev.catalogId || rawCatId,
+        track_count: Math.max(Number(prev.track_count || prev.trackCount || 0), nextCnt),
+        artwork_url: (prevArt && !String(prevArt).startsWith('/api/artwork/playlist'))
+          ? prevArt
+          : (nextArt || prevArt)
+      };
+    } else {
+      existing.push({
+        id: rawPlId,
+        catalog_id: rawCatId,
+        name: pl.name,
+        track_count: nextCnt,
+        artwork_url: nextArt,
+        is_playlist: true,
+        is_local: true,
+        in_library: true
+      });
+      existing.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ru', { sensitivity: 'base' }));
+    }
+    if (typeof syncSearchPlaylistCardsLibraryStatus === 'function') {
+      syncSearchPlaylistCardsLibraryStatus(probe, true);
+    }
+    updatePlaylists({ playlists: existing });
+  }
+
+  function upsertOptimisticLibraryAlbum(alb) {
+    if (!alb || !alb.name) return;
+    const existing = Array.isArray(state.libraryAlbums) ? [...state.libraryAlbums] : [];
+    const filtered = existing.filter(item => {
+      if (alb.id && item.id && Number(alb.id) >= 10000000 && String(alb.id) === String(item.id)) {
+        return false;
+      }
+      return !albumsMatchClient(item.name, item.artist, alb.name, alb.artist);
+    });
+    filtered.unshift({ ...alb, in_library: true });
+    state.libraryAlbums = filtered;
+    renderLibraryAlbums();
+    if (typeof renderStandbyQuickTiles === 'function') {
+      renderStandbyQuickTiles();
+    }
+  }
+
+  function showLibraryBrowsePane() {
+    if (dom.playlistDetailPane) dom.playlistDetailPane.classList.add('hidden');
+    if (dom.libraryArtistDetailPane) dom.libraryArtistDetailPane.classList.add('hidden');
+    if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.remove('hidden');
+  }
+
+  function syncLibrarySubtitle() {
+    if (!dom.librarySectionSubtitle) return;
+    const tab = state.libraryTab || 'recent';
+    if (tab === 'albums') {
+      const cnt = (state.libraryAlbums || []).length;
+      dom.librarySectionSubtitle.textContent = cnt > 0
+        ? translateTextToEn(`Альбомы в медиатеке • ${cnt}`)
+        : translateTextToEn('Альбомы в медиатеке');
+    } else if (tab === 'artists') {
+      const cnt = (state.libraryArtists || []).length;
+      dom.librarySectionSubtitle.textContent = cnt > 0
+        ? translateTextToEn(`Исполнители в медиатеке • ${cnt}`)
+        : translateTextToEn('Исполнители в медиатеке');
+    } else if (tab === 'songs') {
+      const cnt = (state.librarySongs || []).length;
+      dom.librarySectionSubtitle.textContent = cnt > 0
+        ? translateTextToEn(`Треки в медиатеке • ${cnt}`)
+        : translateTextToEn('Треки в медиатеке');
+    } else {
+      dom.librarySectionSubtitle.textContent = translateTextToEn('Недавно добавленные в медиатеку');
+    }
+  }
+
+  function resolveBestLibraryAlbumArtwork(albumName, artistName, currentArt) {
+    const raw = String(currentArt || '').trim();
+    if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:')) {
+      return raw;
+    }
+    if (albumName) {
+      const pool = Array.isArray(state.libraryAlbums) ? state.libraryAlbums : [];
+      for (let i = 0; i < pool.length; i += 1) {
+        const cand = pool[i];
+        if (!cand) continue;
+        const candArt = String(cand.artwork || cand.artwork_url || cand.artworkUrl || '').trim();
+        if ((candArt.startsWith('http://') || candArt.startsWith('https://')) &&
+            albumsMatchClient(cand.name, cand.artist, albumName, artistName)) {
+          return candArt;
+        }
+      }
+    }
+    return raw;
+  }
+
+  function createLibraryAlbumCardElement(alb, originKey) {
+    const card = document.createElement('div');
+    card.className = 'playlist-card';
+    const candidateArt = resolveBestLibraryAlbumArtwork(
+      alb.name,
+      alb.artist,
+      alb.artwork || alb.artwork_url || alb.artworkUrl || ''
+    );
+    const rawArt = candidateArt || 'apple-touch-icon.svg';
+    const art = appendDeviceIdToUrl(rawArt);
+    const count = alb.track_count || alb.trackCount || 0;
+    const artistText = (alb.artist || '').trim();
+    const metaParts = [];
+    if (artistText) metaParts.push(artistText);
+    if (count > 0) metaParts.push(formatTracksCount(count));
+    const metaStr = metaParts.join(' • ');
+
+    card.innerHTML = `
+      <div class="playlist-card-art-wrap">
+        <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" decoding="async" data-fallback-mode="next-flex">
+        <div class="playlist-card-art-fallback" style="display:none;">
+          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#6e6e73" stroke-width="1.8">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </div>
+      </div>
+      <span class="playlist-card-title">${escapeHtml(alb.name || 'Альбом')}</span>
+      <span class="playlist-card-count">${escapeHtml(metaStr)}</span>
+    `;
+
+    card.addEventListener('click', () => {
+      openAlbumDetail({ ...alb, artwork: candidateArt || alb.artwork, in_library: true }, originKey, { source: 'library' });
+    });
+
+    return card;
+  }
+
+  function createLibrarySongRowElement(s, onPlayClick) {
+    const row = document.createElement('div');
+    row.className = 'track-row';
+    const artistStr = s.artist || s.artistName || '';
+    const albumStr = s.album || s.collectionName || '';
+    const upgradedArt = resolveBestLibraryAlbumArtwork(
+      albumStr,
+      artistStr,
+      s.artwork_url || s.artwork || getArtworkSrc(s) || ''
+    );
+    const artSrc = appendDeviceIdToUrl(upgradedArt || 'apple-touch-icon.svg');
+    const dur = s.duration ? formatTime(s.duration) : '';
+    const subParts = [artistStr, albumStr].filter(Boolean);
+
+    row.innerHTML = `
+      <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" decoding="async" data-fallback-icon="apple-touch-icon.svg">
+      <div class="track-details">
+        <span class="track-row-title">${escapeHtml(s.name || s.trackName || 'Без названия')}</span>
+        <span class="track-row-artist">${escapeHtml(subParts.join(' • '))}</span>
+      </div>
+      ${dur ? `<span class="track-row-dur">${dur}</span>` : ''}
+    `;
+
+    const normalizedTrack = {
+      ...s,
+      name: s.name || s.trackName || '',
+      artist: artistStr,
+      album: albumStr,
+      artwork: s.artwork || s.artwork_url || '',
+      is_local: true
+    };
+    row.appendChild(createTrackRowActionButtons(normalizedTrack, { showDirectDelete: true }));
+    row.addEventListener('click', onPlayClick);
+    return row;
+  }
+
+  function playLibrarySongsWindow(pool, startIdx, shuffle, queueTitle) {
+    if (!Array.isArray(pool) || pool.length === 0) return;
+    const maxBatch = 350;
+    let sliceSongs = pool;
+    let adjustedIdx = startIdx;
+    if (!shuffle && pool.length > maxBatch && Number.isInteger(startIdx) && startIdx >= 0) {
+      const winStart = Math.max(0, Math.min(startIdx - 25, pool.length - maxBatch));
+      sliceSongs = pool.slice(winStart, winStart + maxBatch);
+      adjustedIdx = startIdx - winStart;
+    } else if (pool.length > maxBatch) {
+      sliceSongs = pool.slice(0, maxBatch);
+      if (Number.isInteger(adjustedIdx) && adjustedIdx >= maxBatch) adjustedIdx = 0;
+    }
+    const localMarked = sliceSongs.map(x => ({ ...x, is_local: true }));
+    playSearchResultsList(localMarked, Boolean(shuffle), shuffle ? null : adjustedIdx, {
+      queueName: translateTextToEn(queueTitle || 'Треки медиатеки'),
+      query: ''
+    });
+  }
+
+  // Subtab 1: Недавние
+  function renderLibraryRecent() {
+    if (!dom.libraryRecentPane) return;
+    syncLibrarySubtitle();
+    if (!state.libraryRecent || !state.libraryRecent.loaded) return;
+
+    const albums = Array.isArray(state.libraryRecent.albums) ? state.libraryRecent.albums : [];
+    const songs = Array.isArray(state.libraryRecent.songs) ? state.libraryRecent.songs : [];
+
+    if (albums.length === 0 && songs.length === 0) {
+      dom.libraryRecentPane.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Недавно добавленные элементы не найдены'))}</div>`;
+      return;
+    }
+
+    dom.libraryRecentPane.innerHTML = '';
+
+    if (albums.length > 0) {
+      const albBlock = document.createElement('div');
+      albBlock.className = 'library-group-block';
+      const heading = document.createElement('h3');
+      heading.className = 'library-group-heading';
+      heading.textContent = translateTextToEn('НЕДАВНО ДОБАВЛЕННЫЕ АЛЬБОМЫ');
+      albBlock.appendChild(heading);
+
+      const grid = document.createElement('div');
+      grid.className = 'playlists-grid';
+      albums.forEach(alb => {
+        grid.appendChild(createLibraryAlbumCardElement(alb, 'library-recent'));
+      });
+      albBlock.appendChild(grid);
+      dom.libraryRecentPane.appendChild(albBlock);
+    }
+
+    if (songs.length > 0) {
+      const sngBlock = document.createElement('div');
+      sngBlock.className = 'library-group-block';
+      const heading = document.createElement('h3');
+      heading.className = 'library-group-heading';
+      heading.textContent = translateTextToEn('НЕДАВНО ДОБАВЛЕННЫЕ ТРЕКИ');
+      sngBlock.appendChild(heading);
+
+      const listEl = document.createElement('div');
+      listEl.className = 'track-list';
+      songs.forEach((s, idx) => {
+        listEl.appendChild(createLibrarySongRowElement(s, () => {
+          playLibrarySongsWindow(songs, idx, false, 'Недавние в медиатеке');
+        }));
+      });
+      sngBlock.appendChild(listEl);
+      dom.libraryRecentPane.appendChild(sngBlock);
+    }
+  }
+
+  function updateLibraryRecent(data) {
+    const albums = (data && Array.isArray(data.albums)) ? data.albums : [];
+    const songs = (data && Array.isArray(data.songs)) ? data.songs : [];
+    state.libraryRecent = {
+      albums,
+      songs,
+      loaded: true
+    };
+    renderLibraryRecent();
+  }
+
+  // Subtab 2: Артисты + Artist Library Detail
+  function renderLibraryArtists() {
+    if (!dom.libraryArtistsList) return;
+    syncLibrarySubtitle();
+    if (!state.libraryArtistsLoaded) return;
+
+    const allArtists = Array.isArray(state.libraryArtists) ? state.libraryArtists : [];
+    const rawFilter = String(state.libraryArtistFilter || '').trim();
+    const q = normalizeTrackMatchText(rawFilter);
+
+    if (dom.libraryArtistsToolbar) {
+      dom.libraryArtistsToolbar.classList.toggle('hidden', allArtists.length <= 8 && !rawFilter);
+    }
+    if (dom.btnClearArtistsFilter) {
+      dom.btnClearArtistsFilter.classList.toggle('hidden', !rawFilter);
+    }
+
+    if (allArtists.length === 0) {
+      dom.libraryArtistsList.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Исполнители в медиатеке не найдены'))}</div>`;
+      return;
+    }
+
+    const filtered = q
+      ? allArtists.filter(a => normalizeTrackMatchText(a && (a.name || a.artist)).includes(q))
+      : allArtists;
+
+    if (filtered.length === 0) {
+      dom.libraryArtistsList.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Ничего не найдено'))}</div>`;
+      return;
+    }
+
+    dom.libraryArtistsList.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    filtered.forEach(art => {
+      const artName = String(art.name || art.artist || '').trim();
+      if (!artName) return;
+      const row = document.createElement('div');
+      row.className = 'library-artist-row';
+
+      const albCount = Number(art.album_count || art.albumCount || 0);
+      const trkCount = Number(art.track_count || art.trackCount || 0);
+      const metaParts = [];
+      if (albCount > 0) metaParts.push(formatAlbumsCount(albCount));
+      if (trkCount > 0) metaParts.push(formatTracksCount(trkCount));
+      const metaStr = metaParts.join(' • ');
+      const rawAvatar = art.artwork || art.artwork_url || '';
+      const avatarUrl = rawAvatar ? appendDeviceIdToUrl(rawAvatar) : '';
+      const initials = getArtistInitials(artName);
+
+      row.innerHTML = `
+        <div class="artist-avatar-circle">
+          ${avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" data-fallback-mode="next-flex">` : ''}
+          <span class="artist-avatar-initials" style="${avatarUrl ? 'display:none;' : ''}">${escapeHtml(initials)}</span>
+        </div>
+        <div class="artist-row-info">
+          <span class="artist-row-name">${escapeHtml(artName)}</span>
+          ${metaStr ? `<span class="artist-row-meta">${escapeHtml(metaStr)}</span>` : ''}
+        </div>
+      `;
+
+      const actionsWrap = document.createElement('div');
+      actionsWrap.className = 'track-row-actions';
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'track-row-action-btn track-row-del-btn';
+      const delTitle = translateTextToEn('Удалить исполнителя из медиатеки');
+      delBtn.title = delTitle;
+      delBtn.setAttribute('aria-label', delTitle);
+      delBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/>
+          <path d="M14 11v6"/>
+        </svg>
+      `;
+      delBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        promptRemoveArtistFromLibrary(art);
+      });
+      actionsWrap.appendChild(delBtn);
+      row.appendChild(actionsWrap);
+
+      const chev = document.createElement('span');
+      chev.className = 'artist-row-chevron';
+      chev.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+      row.appendChild(chev);
+
+      row.addEventListener('click', () => {
+        openLibraryArtistDetail(art);
+      });
+
+      frag.appendChild(row);
+    });
+    dom.libraryArtistsList.appendChild(frag);
+  }
+
+  function updateLibraryArtists(data) {
+    const list = (data && Array.isArray(data.artists)) ? data.artists : (Array.isArray(data) ? data : []);
+    state.libraryArtists = list;
+    state.libraryArtistsLoaded = true;
+    renderLibraryArtists();
+    if (dom.stationPickerModal && !dom.stationPickerModal.classList.contains('hidden')) {
+      syncStationPickerModalUI();
+    }
+  }
+
+  if (dom.libraryArtistsFilter) {
+    dom.libraryArtistsFilter.addEventListener('input', (e) => {
+      state.libraryArtistFilter = e.target.value || '';
+      renderLibraryArtists();
+    });
+  }
+  if (dom.btnClearArtistsFilter) {
+    dom.btnClearArtistsFilter.addEventListener('click', () => {
+      state.libraryArtistFilter = '';
+      if (dom.libraryArtistsFilter) dom.libraryArtistsFilter.value = '';
+      renderLibraryArtists();
+    });
+  }
+
+  function syncArtistDetailAvatar(artUrl, artistName) {
+    const initials = getArtistInitials(artistName);
+    if (dom.artistDetailInitials) {
+      dom.artistDetailInitials.textContent = initials;
+    }
+    if (dom.artistDetailArtwork) {
+      if (artUrl) {
+        dom.artistDetailArtwork.src = appendDeviceIdToUrl(artUrl);
+        dom.artistDetailArtwork.classList.remove('hidden');
+        if (dom.artistDetailInitials) dom.artistDetailInitials.classList.add('hidden');
+        dom.artistDetailArtwork.onerror = () => {
+          dom.artistDetailArtwork.classList.add('hidden');
+          if (dom.artistDetailInitials) dom.artistDetailInitials.classList.remove('hidden');
+        };
+      } else {
+        dom.artistDetailArtwork.classList.add('hidden');
+        if (dom.artistDetailInitials) dom.artistDetailInitials.classList.remove('hidden');
+      }
+    }
+  }
+
+  function openLibraryArtistDetail(art) {
+    const artistName = String((art && (art.name || art.artist)) || '').trim();
+    if (!artistName) return;
+    triggerHaptic('light');
+
+    const albCount = Number((art && (art.album_count || art.albumCount)) || 0);
+    const trkCount = Number((art && (art.track_count || art.trackCount)) || 0);
+    const rawAvatar = (art && (art.artwork || art.artwork_url)) || '';
+
+    state.currentLibraryArtistDetail = {
+      artist: artistName,
+      id: (art && art.id) || '',
+      album_count: albCount,
+      track_count: trkCount,
+      artwork: rawAvatar,
+      albums: [],
+      songs: []
+    };
+
+    if (dom.artistDetailTitle) dom.artistDetailTitle.textContent = artistName;
+    if (dom.artistDetailMeta) {
+      const mParts = [];
+      if (albCount > 0) mParts.push(formatAlbumsCount(albCount));
+      if (trkCount > 0) mParts.push(formatTracksCount(trkCount));
+      dom.artistDetailMeta.textContent = mParts.join(' • ') || translateTextToEn('Медиатека Apple Music');
+    }
+    syncArtistDetailAvatar(rawAvatar, artistName);
+
+    if (dom.artistDetailContent) {
+      dom.artistDetailContent.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка медиатеки артиста...'))}</div>`;
+    }
+
+    navigateToView('view-library', 'library', true);
+    syncNavHighlightForDetailOrigin('library-artists');
+    if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.add('hidden');
+    if (dom.playlistDetailPane) dom.playlistDetailPane.classList.add('hidden');
+    if (dom.libraryArtistDetailPane) dom.libraryArtistDetailPane.classList.remove('hidden');
+
+    send({
+      action: 'get_library_artist_detail',
+      params: {
+        artist: artistName
+      }
+    });
+  }
+
+// === MODULE: 15-artist-detail-albums-and-songs.js ===
+  function updateLibraryArtistDetail(data) {
+    if (!data || typeof data !== 'object') return;
+    const artistName = String(data.artist || data.name || (state.currentLibraryArtistDetail && state.currentLibraryArtistDetail.artist) || '').trim();
+    const albums = Array.isArray(data.albums) ? data.albums : [];
+    const songs = Array.isArray(data.songs) ? data.songs : [];
+    const albCount = Number(data.album_count !== undefined ? data.album_count : albums.length);
+    const trkCount = Number(data.track_count !== undefined ? data.track_count : songs.length);
+    const fallbackArt = (albums[0] && (albums[0].artwork || albums[0].artwork_url)) || (songs[0] && (songs[0].artwork || songs[0].artwork_url)) || '';
+    const avatarUrl = data.artwork || data.artwork_url || (state.currentLibraryArtistDetail && state.currentLibraryArtistDetail.artwork) || fallbackArt;
+
+    state.currentLibraryArtistDetail = {
+      artist: artistName,
+      id: data.id || (state.currentLibraryArtistDetail && state.currentLibraryArtistDetail.id) || '',
+      album_count: albCount,
+      track_count: trkCount,
+      artwork: avatarUrl,
+      albums,
+      songs
+    };
+
+    if (dom.artistDetailTitle && artistName) {
+      dom.artistDetailTitle.textContent = artistName;
+    }
+    if (dom.artistDetailMeta) {
+      const mParts = [];
+      if (albCount > 0) mParts.push(formatAlbumsCount(albCount));
+      if (trkCount > 0) mParts.push(formatTracksCount(trkCount));
+      dom.artistDetailMeta.textContent = mParts.join(' • ') || translateTextToEn('Медиатека Apple Music');
+    }
+    syncArtistDetailAvatar(avatarUrl, artistName);
+
+    if (!dom.artistDetailContent) return;
+    if (albums.length === 0 && songs.length === 0) {
+      dom.artistDetailContent.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Нет сохранённых треков этого исполнителя'))}</div>`;
+      return;
+    }
+
+    dom.artistDetailContent.innerHTML = '';
+
+    if (albums.length > 0) {
+      const albBlock = document.createElement('div');
+      albBlock.className = 'library-group-block';
+      const heading = document.createElement('h3');
+      heading.className = 'library-group-heading';
+      heading.textContent = translateTextToEn('АЛЬБОМЫ В МЕДИАТЕКЕ');
+      albBlock.appendChild(heading);
+
+      const grid = document.createElement('div');
+      grid.className = 'playlists-grid';
+      albums.forEach(alb => {
+        grid.appendChild(createLibraryAlbumCardElement({
+          ...alb,
+          artist: alb.artist || artistName
+        }, 'library-artist-detail'));
+      });
+      albBlock.appendChild(grid);
+      dom.artistDetailContent.appendChild(albBlock);
+    }
+
+    if (songs.length > 0) {
+      const sngBlock = document.createElement('div');
+      sngBlock.className = 'library-group-block';
+      const heading = document.createElement('h3');
+      heading.className = 'library-group-heading';
+      heading.textContent = translateTextToEn('ТРЕКИ В МЕДИАТЕКЕ');
+      sngBlock.appendChild(heading);
+
+      const listEl = document.createElement('div');
+      listEl.className = 'track-list';
+      songs.forEach((s, idx) => {
+        const enrichedSong = { ...s, artist: s.artist || artistName };
+        listEl.appendChild(createLibrarySongRowElement(enrichedSong, () => {
+          const pool = songs.map(item => ({ ...item, artist: item.artist || artistName, is_local: true }));
+          playLibrarySongsWindow(pool, idx, false, artistName);
+        }));
+      });
+      sngBlock.appendChild(listEl);
+      dom.artistDetailContent.appendChild(sngBlock);
+    }
+  }
+
+  if (dom.btnBackToArtists) {
+    dom.btnBackToArtists.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (dom.libraryArtistDetailPane) dom.libraryArtistDetailPane.classList.add('hidden');
+      showLibraryBrowsePane();
+      switchLibrarySubtab('artists', false);
+      syncNavHighlightForDetailOrigin('library-artists');
+    });
+  }
+
+  if (dom.btnPlayArtistLibrary) {
+    dom.btnPlayArtistLibrary.addEventListener('click', () => {
+      const det = state.currentLibraryArtistDetail;
+      if (!det || !Array.isArray(det.songs) || det.songs.length === 0) return;
+      const pool = det.songs.map(s => ({ ...s, artist: s.artist || det.artist, is_local: true }));
+      playLibrarySongsWindow(pool, 0, false, det.artist || 'Медиатека');
+    });
+  }
+
+  if (dom.btnShuffleArtistLibrary) {
+    dom.btnShuffleArtistLibrary.addEventListener('click', () => {
+      const det = state.currentLibraryArtistDetail;
+      if (!det || !Array.isArray(det.songs) || det.songs.length === 0) return;
+      const pool = det.songs.map(s => ({ ...s, artist: s.artist || det.artist, is_local: true }));
+      playLibrarySongsWindow(pool, null, true, det.artist || 'Медиатека');
+    });
+  }
+
+  if (dom.btnRemoveArtistDetailLibrary) {
+    dom.btnRemoveArtistDetailLibrary.addEventListener('click', () => {
+      if (state.currentLibraryArtistDetail) {
+        promptRemoveArtistFromLibrary(state.currentLibraryArtistDetail);
+      }
+    });
+  }
+
+  // Subtab 3: Альбомы
+  function renderLibraryAlbums() {
+    if (!dom.libraryAlbumsGrid) return;
+    const list = state.libraryAlbums || [];
+    syncLibrarySubtitle();
+
+    if (list.length === 0) {
+      dom.libraryAlbumsGrid.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Альбомы в медиатеке не найдены'))}</div>`;
+      return;
+    }
+
+    dom.libraryAlbumsGrid.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    list.forEach(alb => {
+      frag.appendChild(createLibraryAlbumCardElement(alb, 'library-albums'));
+    });
+    dom.libraryAlbumsGrid.appendChild(frag);
+  }
+
+  function updateLibraryAlbums(data) {
+    const list = (data && data.albums) ? data.albums : (Array.isArray(data) ? data : []);
+    state.libraryAlbums = list;
+    renderLibraryAlbums();
+    if (state.libraryRecent && state.libraryRecent.loaded) {
+      let upgradedAny = false;
+      if (Array.isArray(state.libraryRecent.albums)) {
+        state.libraryRecent.albums = state.libraryRecent.albums.map(alb => {
+          const cur = String(alb.artwork || alb.artwork_url || '').trim();
+          const best = resolveBestLibraryAlbumArtwork(alb.name, alb.artist, cur);
+          if (best && best !== cur) {
+            upgradedAny = true;
+            return { ...alb, artwork: best };
+          }
+          return alb;
+        });
+      }
+      if (Array.isArray(state.libraryRecent.songs)) {
+        state.libraryRecent.songs = state.libraryRecent.songs.map(s => {
+          const cur = String(s.artwork_url || s.artwork || '').trim();
+          const best = resolveBestLibraryAlbumArtwork(s.album || s.collectionName, s.artist || s.artistName, cur);
+          if (best && best !== cur) {
+            upgradedAny = true;
+            return { ...s, artwork_url: best, artwork: best };
+          }
+          return s;
+        });
+      }
+      if (upgradedAny && state.libraryTab === 'recent') {
+        renderLibraryRecent();
+      }
+    }
+    if (typeof renderStandbyQuickTiles === 'function') {
+      renderStandbyQuickTiles();
+    }
+    if (
+      state.currentPlaylistDetail &&
+      state.currentPlaylistDetail.isAlbum &&
+      state.currentAlbumDetail &&
+      state.currentAlbumDetail.is_complete_in_library === true &&
+      dom.btnAddPlaylistLibrary &&
+      (!dom.playlistDetailPane || !dom.playlistDetailPane.classList.contains('hidden')) &&
+      findMatchingLibraryAlbum(state.currentPlaylistDetail)
+    ) {
+      state.isAddingDetailToLibrary = false;
+      dom.btnAddPlaylistLibrary.disabled = true;
+      dom.btnAddPlaylistLibrary.classList.add('added');
+      dom.btnAddPlaylistLibrary.classList.add('hidden');
+      if (dom.btnRemoveDetailLibrary) {
+        dom.btnRemoveDetailLibrary.classList.remove('hidden');
+      }
+    }
+  }
+
+  // Subtab 4: Треки
+  function getFilteredLibrarySongs() {
+    const allSongs = Array.isArray(state.librarySongs) ? state.librarySongs : [];
+    const rawFilter = String(state.librarySongsFilter || '').trim();
+    const q = normalizeTrackMatchText(rawFilter);
+    if (!q) return allSongs;
+    return allSongs.filter(s => {
+      const hay = `${normalizeTrackMatchText(s.name || s.trackName)} ${normalizeTrackMatchText(s.artist || s.artistName)} ${normalizeTrackMatchText(s.album || s.collectionName)}`;
+      return hay.includes(q);
+    });
+  }
+
+  function renderLibrarySongs() {
+    if (!dom.librarySongsList) return;
+    syncLibrarySubtitle();
+    if (!state.librarySongsLoaded) return;
+
+    const allSongs = Array.isArray(state.librarySongs) ? state.librarySongs : [];
+    const rawFilter = String(state.librarySongsFilter || '').trim();
+
+    if (dom.librarySongsToolbar) {
+      dom.librarySongsToolbar.classList.toggle('hidden', allSongs.length === 0 && !rawFilter);
+    }
+    if (dom.btnClearSongsFilter) {
+      dom.btnClearSongsFilter.classList.toggle('hidden', !rawFilter);
+    }
+
+    if (allSongs.length === 0) {
+      dom.librarySongsList.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Треки в медиатеке не найдены'))}</div>`;
+      return;
+    }
+
+    const filtered = getFilteredLibrarySongs();
+    if (filtered.length === 0) {
+      dom.librarySongsList.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Ничего не найдено'))}</div>`;
+      return;
+    }
+
+    dom.librarySongsList.innerHTML = '';
+    const limit = state.librarySongsRenderLimit || 250;
+    const visible = filtered.slice(0, limit);
+    const frag = document.createDocumentFragment();
+    visible.forEach((s, idx) => {
+      frag.appendChild(createLibrarySongRowElement(s, () => {
+        playLibrarySongsWindow(filtered, idx, false, 'Треки медиатеки');
+      }));
+    });
+
+    if (filtered.length > limit) {
+      const moreWrap = document.createElement('div');
+      moreWrap.style.cssText = 'display:flex;justify-content:center;padding:14px 0 6px;';
+      const moreBtn = document.createElement('button');
+      moreBtn.type = 'button';
+      moreBtn.className = 'btn-pill-outline';
+      moreBtn.textContent = IS_EN
+        ? `Show more (${filtered.length - limit} remaining)`
+        : `Показать ещё (${filtered.length - limit})`;
+      moreBtn.addEventListener('click', () => {
+        state.librarySongsRenderLimit = limit + 300;
+        renderLibrarySongs();
+      });
+      moreWrap.appendChild(moreBtn);
+      frag.appendChild(moreWrap);
+    }
+
+    dom.librarySongsList.appendChild(frag);
+  }
+
+  function updateLibrarySongs(data) {
+    const list = (data && Array.isArray(data.songs)) ? data.songs : (Array.isArray(data) ? data : []);
+    state.librarySongs = list;
+    state.librarySongsLoaded = true;
+    renderLibrarySongs();
+    if (dom.stationPickerModal && !dom.stationPickerModal.classList.contains('hidden')) {
+      syncStationPickerModalUI();
+    }
+  }
+
+  if (dom.librarySongsFilter) {
+    dom.librarySongsFilter.addEventListener('input', (e) => {
+      state.librarySongsFilter = e.target.value || '';
+      state.librarySongsRenderLimit = 250;
+      renderLibrarySongs();
+    });
+  }
+  if (dom.btnClearSongsFilter) {
+    dom.btnClearSongsFilter.addEventListener('click', () => {
+      state.librarySongsFilter = '';
+      state.librarySongsRenderLimit = 250;
+      if (dom.librarySongsFilter) dom.librarySongsFilter.value = '';
+      renderLibrarySongs();
+    });
+  }
+  if (dom.btnPlayLibrarySongs) {
+    dom.btnPlayLibrarySongs.addEventListener('click', () => {
+      const pool = getFilteredLibrarySongs();
+      if (pool.length === 0) return;
+      playLibrarySongsWindow(pool, 0, false, 'Треки медиатеки');
+    });
+  }
+  if (dom.btnShuffleLibrarySongs) {
+    dom.btnShuffleLibrarySongs.addEventListener('click', () => {
+      const pool = getFilteredLibrarySongs();
+      if (pool.length === 0) return;
+      playLibrarySongsWindow(pool, null, true, 'Треки медиатеки');
+    });
+  }
+
+  function switchLibrarySubtab(subtab, forceFetch = false) {
+    const allowed = ['recent', 'artists', 'albums', 'songs'];
+    const nextTab = allowed.includes(subtab) ? subtab : 'recent';
+    state.libraryTab = nextTab;
+
+    const segMap = [
+      { key: 'recent', btn: dom.librarySegRecent, pane: dom.libraryRecentPane },
+      { key: 'artists', btn: dom.librarySegArtists, pane: dom.libraryArtistsPane },
+      { key: 'albums', btn: dom.librarySegAlbums, pane: dom.libraryAlbumsGrid },
+      { key: 'songs', btn: dom.librarySegSongs, pane: dom.librarySongsPane }
+    ];
+    segMap.forEach(({ key, btn, pane }) => {
+      const isAct = key === nextTab;
+      if (btn) {
+        btn.classList.toggle('active', isAct);
+        btn.setAttribute('aria-selected', isAct ? 'true' : 'false');
+      }
+      if (pane) {
+        pane.classList.toggle('hidden', !isAct);
+      }
+    });
+
+    syncLibrarySubtitle();
+
+    if (nextTab === 'recent') {
+      if (forceFetch || !state.libraryRecent || !state.libraryRecent.loaded) {
+        if (dom.libraryRecentPane && (!state.libraryRecent || !state.libraryRecent.loaded)) {
+          dom.libraryRecentPane.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка недавних...'))}</div>`;
+        }
+        send({ action: 'get_library_recent', params: forceFetch ? { refresh: true } : {} });
+      } else {
+        renderLibraryRecent();
+      }
+    } else if (nextTab === 'artists') {
+      if (forceFetch || !state.libraryArtistsLoaded) {
+        if (dom.libraryArtistsList && !state.libraryArtistsLoaded) {
+          dom.libraryArtistsList.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка исполнителей...'))}</div>`;
+        }
+        send({ action: 'get_library_artists', params: forceFetch ? { refresh: true } : {} });
+      } else {
+        renderLibraryArtists();
+      }
+    } else if (nextTab === 'albums') {
+      if (forceFetch || !state.libraryAlbums || state.libraryAlbums.length === 0) {
+        if (dom.libraryAlbumsGrid && (!state.libraryAlbums || state.libraryAlbums.length === 0)) {
+          dom.libraryAlbumsGrid.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка альбомов...'))}</div>`;
+        }
+        send({ action: 'get_library_albums', params: forceFetch ? { refresh: true } : {} });
+      } else {
+        renderLibraryAlbums();
+      }
+    } else if (nextTab === 'songs') {
+      if (forceFetch || !state.librarySongsLoaded) {
+        if (dom.librarySongsList && !state.librarySongsLoaded) {
+          dom.librarySongsList.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка треков медиатеки...'))}</div>`;
+        }
+        send({ action: 'get_library_songs', params: forceFetch ? { refresh: true } : {} });
+      } else {
+        renderLibrarySongs();
+      }
+    }
+  }
+
+  [
+    [dom.librarySegRecent, 'recent'],
+    [dom.librarySegArtists, 'artists'],
+    [dom.librarySegAlbums, 'albums'],
+    [dom.librarySegSongs, 'songs']
+  ].forEach(([btnEl, tabKey]) => {
+    if (!btnEl) return;
+    btnEl.addEventListener('click', () => {
+      triggerHaptic('light');
+      showLibraryBrowsePane();
+      switchLibrarySubtab(tabKey, false);
+    });
+  });
+
+  function refreshActiveLibrarySection() {
+    triggerHaptic('light');
+    if (dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden') && state.currentLibraryArtistDetail) {
+      if (dom.artistDetailContent) {
+        dom.artistDetailContent.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка медиатеки артиста...'))}</div>`;
+      }
+      send({ action: 'get_library_artist_detail', params: { artist: state.currentLibraryArtistDetail.artist } });
+      return;
+    }
+    const activeSub = state.libraryTab || 'recent';
+    if (activeSub === 'recent' && dom.libraryRecentPane) {
+      dom.libraryRecentPane.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка недавних...'))}</div>`;
+    } else if (activeSub === 'artists' && dom.libraryArtistsList) {
+      dom.libraryArtistsList.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка исполнителей...'))}</div>`;
+    } else if (activeSub === 'albums' && dom.libraryAlbumsGrid) {
+      dom.libraryAlbumsGrid.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка альбомов...'))}</div>`;
+    } else if (activeSub === 'songs' && dom.librarySongsList) {
+      dom.librarySongsList.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка треков медиатеки...'))}</div>`;
+    }
+    switchLibrarySubtab(activeSub, true);
+  }
+
+  if (dom.btnRefreshLibrary) {
+    dom.btnRefreshLibrary.addEventListener('click', refreshActiveLibrarySection);
+  }
+  if (dom.btnRefreshLibraryDesktop) {
+    dom.btnRefreshLibraryDesktop.addEventListener('click', refreshActiveLibrarySection);
+  }
+
+  function syncNavHighlightForDetailOrigin(origin) {
+    let deskTarget = 'library';
+    let mobTarget = 'view-library';
+    if (origin === 'playlists') {
+      deskTarget = 'playlists';
+      mobTarget = 'view-playlists';
+    } else if (origin === 'search') {
+      deskTarget = 'search';
+      mobTarget = 'view-search';
+    } else if (origin === 'home' || origin === 'home-grid') {
+      deskTarget = 'home';
+      mobTarget = 'view-home';
+    } else if (origin === 'player') {
+      deskTarget = state.desktopActiveTab || 'library';
+      mobTarget = 'view-library';
+    }
+    dom.desktopNavButtons.forEach(b => {
+      b.classList.toggle('active', b.dataset.target === deskTarget);
+    });
+    dom.tabItems.forEach(item => {
+      item.classList.toggle('active', item.dataset.view === mobTarget);
+    });
+  }
+
+  function syncDetailBackLabel(origin) {
+    const backEl = dom.detailBackLabel || (dom.btnBackToPlaylists && dom.btnBackToPlaylists.querySelector('span'));
+    if (!backEl) return;
+    let label = 'Медиатека';
+    if (origin === 'playlists') label = 'Плейлисты';
+    else if (origin === 'library-recent') label = 'Недавние';
+    else if (origin === 'library-artists') label = 'Артисты';
+    else if (origin === 'library-artist-detail') {
+      label = (state.currentLibraryArtistDetail && state.currentLibraryArtistDetail.artist) || 'Артисты';
+      backEl.textContent = label;
+      return;
+    } else if (origin === 'library-albums') label = 'Альбомы';
+    else if (origin === 'library-songs') label = 'Треки';
+    else if (origin === 'library') {
+      const subMap = { recent: 'Недавние', artists: 'Артисты', albums: 'Альбомы', songs: 'Треки' };
+      label = subMap[state.libraryTab] || 'Медиатека';
+    } else if (origin === 'search') label = 'Поиск';
+    else if (origin === 'home' || origin === 'home-grid') label = 'Главная';
+    else if (origin === 'player') label = 'Плеер';
+    backEl.textContent = translateTextToEn(label);
   }
 
   function isDesktopLayout() {
@@ -5297,28 +9240,77 @@ extension WebUIContent {
     }
   }
 
-  function findMatchingLocalPlaylist(plName, plId = '') {
-    if (!plName && !plId) return null;
-    const lower = (plName || '').trim().toLowerCase();
-    const isEssentials = lower === 'your essentials' || lower === 'мои любимые треки';
-    const isChillMix = lower === 'chill mix' || lower === 'чилл-микс';
-    const isNewMusicMix = lower === 'new music mix' || lower === 'микс новинок';
-    const isFavoritesMix = lower === 'favorites mix' || lower === 'в моём вкусе: микс' || lower === 'в моем вкусе: микс';
-    const isGetUpMix = lower === 'get up! mix' || lower === 'энергетический микс';
+  const PERSONAL_MIX_ALIAS_GROUPS = [
+    ['get up! mix', 'get up!', 'get up mix', 'на старт!', 'на старт', 'на старт!: микс', 'энергетический микс', 'драйв-микс'],
+    ['chill mix', 'чилл-микс', 'чилл микс', 'для отдыха', 'для отдыха: микс'],
+    ['new music mix', 'микс новинок', 'новинки для вас', 'новая музыка', 'новая музыка: микс'],
+    ['favorites mix', 'favourites mix', 'фавориты', 'фавориты: микс', 'в моём вкусе', 'в моем вкусе', 'в моём вкусе: микс', 'в моем вкусе: микс', 'избранное: микс'],
+    ['friends mix', 'микс друзей', 'микс для друзей'],
+    ['heavy rotation mix', 'на повторе', 'сейчас на повторе'],
+    ['your essentials', 'мои любимые треки']
+  ];
 
-    return (state.playlists || []).find(p => {
-      const pn = (p.name || '').trim().toLowerCase();
-      if (pn === lower) return true;
-      if (isEssentials && (pn === 'мои любимые треки' || pn === 'your essentials')) return true;
-      if (isChillMix && (pn === 'chill mix' || pn === 'чилл-микс')) return true;
-      if (isNewMusicMix && (pn === 'new music mix' || pn === 'микс новинок')) return true;
-      if (isFavoritesMix && (pn === 'favorites mix' || pn === 'в моём вкусе: микс' || pn === 'в моем вкусе: микс')) return true;
-      if (isGetUpMix && (pn === 'get up! mix' || pn === 'энергетический микс')) return true;
-      return false;
-    }) || null;
+  function normalizePlaylistKeyClient(str) {
+    return String(str || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[’‘ʼ`]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/ё/g, 'е')
+      .replace(/[–—]/g, '-');
   }
 
-  function resolveDetailOrigin(originParam) {
+  function playlistsSharePersonalMixAliasClient(a, b) {
+    const na = normalizePlaylistKeyClient(a);
+    const nb = normalizePlaylistKeyClient(b);
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    return PERSONAL_MIX_ALIAS_GROUPS.some(grp => grp.includes(na) && grp.includes(nb));
+  }
+
+  function collectPlaylistCandidateNamesClient(pl) {
+    if (!pl) return [];
+    const out = [];
+    const push = (v) => {
+      const s = String(v || '').trim();
+      if (s && !out.includes(s)) out.push(s);
+    };
+    push(pl.name);
+    push(pl.title);
+    push(pl.local_name);
+    push(pl.localName);
+    const alts = pl.alternate_names || pl.alternateNames;
+    if (Array.isArray(alts)) alts.forEach(push);
+    return out;
+  }
+
+  function playlistsMatchCrossLocaleClient(plA, plB) {
+    if (!plA || !plB) return false;
+    const idsA = [plA.id, plA.library_id, plA.playlist_id, plA.catalog_id, plA.catalogId]
+      .map(v => String(v || '').trim().toLowerCase())
+      .filter(Boolean);
+    const idsB = [plB.id, plB.library_id, plB.playlist_id, plB.catalog_id, plB.catalogId]
+      .map(v => String(v || '').trim().toLowerCase())
+      .filter(Boolean);
+    if (idsA.length > 0 && idsB.length > 0 && idsA.some(id => idsB.includes(id))) {
+      return true;
+    }
+    const namesA = collectPlaylistCandidateNamesClient(plA);
+    const namesB = collectPlaylistCandidateNamesClient(plB);
+    return namesA.some(na => namesB.some(nb => playlistsSharePersonalMixAliasClient(na, nb)));
+  }
+
+  function findMatchingLocalPlaylist(plName, plId = '', expectedTrackCount = 0, catalogId = '') {
+    if (!plName && !plId && !catalogId) return null;
+    const probe = {
+      id: plId,
+      catalog_id: catalogId || (String(plId || '').trim().toLowerCase().startsWith('pl.') ? plId : ''),
+      name: plName
+    };
+    return (state.playlists || []).find(p => playlistsMatchCrossLocaleClient(p, probe)) || null;
+  }
+
+  function resolveDetailOrigin(originParam, defaultOrigin = 'library') {
     if (typeof originParam === 'string' && originParam) return originParam;
     if (originParam === true) {
       if (dom.sectionGridView && dom.sectionGridView.classList.contains('active')) {
@@ -5326,15 +9318,16 @@ extension WebUIContent {
       }
       return 'home';
     }
-    return 'library';
+    return defaultOrigin;
   }
 
-  function openPlaylistDetail(pl, fromOrigin = false) {
-    const origin = resolveDetailOrigin(fromOrigin);
+  function openPlaylistDetail(pl, fromOrigin = 'playlists') {
+    const origin = resolveDetailOrigin(fromOrigin, 'playlists');
     state.detailReturnOrigin = origin;
     state.albumOpenedFromHome = (origin === 'home' || origin === 'home-grid');
     state.detailOpenedFromHome = (origin === 'home' || origin === 'home-grid');
     state.currentPlaylistDetail = pl;
+    state.currentAlbumDetail = null;
     const plName = pl.name || pl.title || '';
     const nextPlId = String(pl.id || '').trim().toLowerCase();
     const nextPlName = String(plName).trim().toLowerCase();
@@ -5350,33 +9343,49 @@ extension WebUIContent {
     state.currentDetailPlaylistId = String(pl.id || '');
     state.currentDetailAlbumId = '';
     state.currentDetailTitle = String(plName);
-    if (dom.detailBadge) dom.detailBadge.textContent = 'ПЛЕЙЛИСТ';
+    if (dom.detailBadge) dom.detailBadge.textContent = translateTextToEn('ПЛЕЙЛИСТ');
     dom.detailTitle.textContent = plName;
     const count = pl.track_count || pl.trackCount || 0;
-    dom.detailMeta.textContent = count > 0 ? `${count} треков` : (pl.curator_name || pl.curatorName || 'Apple Music');
-    dom.detailArtwork.src = pl.artwork_url || pl.artworkUrl || pl.artwork || 'apple-touch-icon.svg';
-    dom.playlistTracksList.innerHTML = '<div class="loading-state">Загрузка треков...</div>';
+    const matchedLocal = findMatchingLocalPlaylist(plName, pl.id, count, pl.catalog_id || pl.catalogId || '');
+    const resolvedCount = count > 0 ? count : Number((matchedLocal && (matchedLocal.track_count || matchedLocal.trackCount)) || 0);
+    dom.detailMeta.textContent = resolvedCount > 0 ? formatTracksCount(resolvedCount) : (pl.curator_name || pl.curatorName || 'Apple Music');
+    delete dom.detailArtwork.dataset.fallbackApplied;
+    dom.detailArtwork.src = appendDeviceIdToUrl(pl.artwork_url || pl.artworkUrl || pl.artwork || 'apple-touch-icon.svg');
+    dom.playlistTracksList.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка треков...'))}</div>`;
+    if (dom.albumCompletenessBannerSlot) dom.albumCompletenessBannerSlot.innerHTML = '';
+    const isAlreadyInLib = Boolean(matchedLocal) || Boolean(pl.is_local || pl.in_library);
+    const canModifyLib = state.allowLibraryModification !== false;
+    const canDeletePlaylist = canModifyLib && isAlreadyInLib && !isProtectedSystemPlaylistClient(plName);
 
-    const matchedLocal = findMatchingLocalPlaylist(plName, pl.id);
-    const isAlreadyInLib = Boolean(pl.is_local) || Boolean(matchedLocal);
+    if (dom.btnRemoveDetailLibrary) {
+      if (dom.btnRemoveDetailLibraryText) {
+        dom.btnRemoveDetailLibraryText.textContent = translateTextToEn('Удалить плейлист');
+      }
+      dom.btnRemoveDetailLibrary.classList.toggle('hidden', !canDeletePlaylist);
+    }
 
     if (dom.btnAddPlaylistLibrary) {
       dom.btnAddPlaylistLibrary.style.display = '';
-      if (isAlreadyInLib) {
+      dom.btnAddPlaylistLibrary.title = translateTextToEn('Добавить в плейлисты Apple Music');
+      if (isAlreadyInLib || !canModifyLib) {
         dom.btnAddPlaylistLibrary.disabled = true;
-        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
         dom.btnAddPlaylistLibrary.classList.add('added');
+        dom.btnAddPlaylistLibrary.classList.add('hidden');
       } else {
         dom.btnAddPlaylistLibrary.disabled = false;
-        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = translateTextToEn('В плейлисты');
         dom.btnAddPlaylistLibrary.classList.remove('added');
+        dom.btnAddPlaylistLibrary.classList.remove('hidden');
       }
     }
     const btnDetailBookletPl = document.getElementById('btn-detail-booklet');
     if (btnDetailBookletPl) btnDetailBookletPl.classList.add('hidden');
 
     navigateToView('view-library', 'library', true);
+    syncDetailBackLabel(origin);
+    syncNavHighlightForDetailOrigin(origin);
     if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.add('hidden');
+    if (dom.libraryArtistDetailPane) dom.libraryArtistDetailPane.classList.add('hidden');
     if (dom.playlistDetailPane) dom.playlistDetailPane.classList.remove('hidden');
 
     send({
@@ -5389,12 +9398,18 @@ extension WebUIContent {
     });
   }
 
-  function openAlbumDetail(alb, fromOrigin = true) {
-    const origin = resolveDetailOrigin(fromOrigin);
+// === MODULE: 16-album-detail-and-tracks.js ===
+  function openAlbumDetail(alb, fromOrigin = true, opts = {}) {
+    const origin = resolveDetailOrigin(fromOrigin, 'library-albums');
+    const albumSource = (opts && opts.source)
+      ? opts.source
+      : ((origin === 'library-albums' || origin === 'library-recent' || origin === 'library-artist-detail') ? 'library' : 'catalog');
+    state.currentAlbumSource = albumSource;
     state.detailReturnOrigin = origin;
     state.albumOpenedFromHome = (origin === 'home' || origin === 'home-grid');
     state.detailOpenedFromHome = (origin === 'home' || origin === 'home-grid');
     state.currentPlaylistDetail = { ...alb, isAlbum: true };
+    state.currentAlbumDetail = null;
     const nextAlbId = String(alb.id || '').trim().toLowerCase();
     const nextAlbName = String(alb.name || alb.title || '').trim().toLowerCase();
     if (
@@ -5409,22 +9424,41 @@ extension WebUIContent {
     state.currentDetailPlaylistId = '';
     state.currentDetailAlbumId = String(alb.id || '');
     state.currentDetailTitle = String(alb.name || alb.title || '');
-    if (dom.detailTitle) dom.detailTitle.textContent = alb.name || alb.title || 'Альбом';
+    if (dom.detailTitle) dom.detailTitle.textContent = alb.name || alb.title || translateTextToEn('Альбом');
     if (dom.detailMeta) dom.detailMeta.textContent = alb.artist || alb.sub || alb.subtitle || '';
-    if (dom.detailArtwork) dom.detailArtwork.src = alb.artwork || alb.artwork_url || 'apple-touch-icon.svg';
-    if (dom.detailBadge) dom.detailBadge.textContent = 'АЛЬБОМ';
-    if (dom.playlistTracksList) dom.playlistTracksList.innerHTML = '<div class="loading-state">Загрузка треков альбома...</div>';
+    if (dom.detailArtwork) {
+      delete dom.detailArtwork.dataset.fallbackApplied;
+      dom.detailArtwork.src = appendDeviceIdToUrl(alb.artwork || alb.artwork_url || 'apple-touch-icon.svg');
+    }
+    if (dom.detailBadge) dom.detailBadge.textContent = translateTextToEn('АЛЬБОМ');
+    if (dom.playlistTracksList) dom.playlistTracksList.innerHTML = `<div class="loading-state">${escapeHtml(translateTextToEn('Загрузка треков альбома...'))}</div>`;
+    if (dom.albumCompletenessBannerSlot) dom.albumCompletenessBannerSlot.innerHTML = '';
+
+    const matchedLibAlb = findMatchingLibraryAlbum(alb);
+    const alreadyInLib = Boolean(alb.is_local || alb.in_library || matchedLibAlb);
+    const canModifyLib = state.allowLibraryModification !== false;
+
+    if (dom.btnRemoveDetailLibrary) {
+      if (dom.btnRemoveDetailLibraryText) {
+        dom.btnRemoveDetailLibraryText.textContent = translateTextToEn('Удалить из медиатеки');
+      }
+      dom.btnRemoveDetailLibrary.classList.toggle('hidden', !canModifyLib || !alreadyInLib);
+    }
 
     if (dom.btnAddPlaylistLibrary) {
       dom.btnAddPlaylistLibrary.style.display = '';
-      if (alb.is_local || alb.in_library) {
+      dom.btnAddPlaylistLibrary.title = translateTextToEn('Добавить в медиатеку Apple Music');
+      if (!canModifyLib || alb.is_complete_in_library === true || (alreadyInLib && alb.is_complete_in_library !== false)) {
         dom.btnAddPlaylistLibrary.disabled = true;
-        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
         dom.btnAddPlaylistLibrary.classList.add('added');
+        dom.btnAddPlaylistLibrary.classList.add('hidden');
       } else {
         dom.btnAddPlaylistLibrary.disabled = false;
-        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+        if (dom.btnAddPlaylistLibraryText) {
+          dom.btnAddPlaylistLibraryText.textContent = translateTextToEn(alreadyInLib ? 'Добавить весь альбом' : 'В медиатеку');
+        }
         dom.btnAddPlaylistLibrary.classList.remove('added');
+        dom.btnAddPlaylistLibrary.classList.remove('hidden');
       }
     }
     const btnDetailBookletAlb = document.getElementById('btn-detail-booklet');
@@ -5432,7 +9466,10 @@ extension WebUIContent {
     syncDetailAlbumBookletAvailability(alb);
 
     navigateToView('view-library', 'library', true);
+    syncDetailBackLabel(origin);
+    syncNavHighlightForDetailOrigin(origin);
     if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.add('hidden');
+    if (dom.libraryArtistDetailPane) dom.libraryArtistDetailPane.classList.add('hidden');
     if (dom.playlistDetailPane) dom.playlistDetailPane.classList.remove('hidden');
 
     send({
@@ -5441,25 +9478,30 @@ extension WebUIContent {
         id: alb.id || '',
         name: alb.name || alb.title || '',
         artist: alb.artist || alb.sub || alb.subtitle || '',
-        country: state.userStorefront || state.trends.country || 'us'
+        country: getActiveStorefront(),
+        source: albumSource
       }
     });
   }
 
   dom.btnBackToPlaylists.addEventListener('click', () => {
     dom.playlistDetailPane.classList.add('hidden');
+    if (dom.albumCompletenessBannerSlot) dom.albumCompletenessBannerSlot.innerHTML = '';
     const origin = state.detailReturnOrigin || (state.albumOpenedFromHome || state.detailOpenedFromHome ? 'home' : 'library');
     state.detailReturnOrigin = null;
     state.albumOpenedFromHome = false;
     state.detailOpenedFromHome = false;
 
-    if (origin === 'search') {
+    if (origin === 'playlists') {
+      navigateToView('view-playlists', 'playlists');
+    } else if (origin === 'search') {
       navigateToView('view-search', 'search');
     } else if (origin === 'player') {
       if (!isDesktopLayout()) {
         switchMobileView('view-now-playing', true);
       } else {
-        dom.playlistsBrowsePane.classList.remove('hidden');
+        showLibraryBrowsePane();
+        syncNavHighlightForDetailOrigin('library');
       }
     } else if (origin === 'home-grid') {
       navigateToView('view-home', 'home');
@@ -5470,31 +9512,55 @@ extension WebUIContent {
       }
     } else if (origin === 'home') {
       navigateToView('view-home', 'home');
+    } else if (origin === 'library-artist-detail') {
+      if (state.currentLibraryArtistDetail && dom.libraryArtistDetailPane) {
+        if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.add('hidden');
+        dom.libraryArtistDetailPane.classList.remove('hidden');
+        syncNavHighlightForDetailOrigin('library-artists');
+      } else {
+        showLibraryBrowsePane();
+        switchLibrarySubtab('artists', false);
+        syncNavHighlightForDetailOrigin('library-artists');
+      }
+    } else if (origin === 'library-recent') {
+      showLibraryBrowsePane();
+      switchLibrarySubtab('recent', false);
+      syncNavHighlightForDetailOrigin('library-recent');
+    } else if (origin === 'library-artists') {
+      showLibraryBrowsePane();
+      switchLibrarySubtab('artists', false);
+      syncNavHighlightForDetailOrigin('library-artists');
+    } else if (origin === 'library-albums') {
+      showLibraryBrowsePane();
+      switchLibrarySubtab('albums', false);
+      syncNavHighlightForDetailOrigin('library-albums');
+    } else if (origin === 'library-songs') {
+      showLibraryBrowsePane();
+      switchLibrarySubtab('songs', false);
+      syncNavHighlightForDetailOrigin('library-songs');
     } else {
-      dom.playlistsBrowsePane.classList.remove('hidden');
+      showLibraryBrowsePane();
+      switchLibrarySubtab(state.libraryTab || 'recent', false);
+      syncNavHighlightForDetailOrigin('library');
     }
-  });
-
-  dom.btnRefreshLibrary.addEventListener('click', () => {
-    dom.playlistsGrid.innerHTML = '<div class="loading-state">Загрузка плейлистов...</div>';
-    send({ action: 'get_playlists' });
   });
 
   dom.btnPlayPlaylist.addEventListener('click', () => {
     if (!state.currentPlaylistDetail) return;
     const isAlbum = Boolean(state.currentPlaylistDetail.isAlbum);
     const plName = state.currentPlaylistDetail.name || state.currentPlaylistDetail.title || '';
-    const matchedLocal = findMatchingLocalPlaylist(plName, state.currentPlaylistDetail.id);
-    const isLocalPlaylist = !isAlbum && (Boolean(state.currentPlaylistDetail.is_local) || Boolean(matchedLocal));
+    const loadedTracks = Array.isArray(state.currentPlaylistTracks) ? state.currentPlaylistTracks : [];
+    const matchedLocal = findMatchingLocalPlaylist(plName, state.currentPlaylistDetail.id, loadedTracks.length);
+    const isExplicitLocalPlaylist = !isAlbum && Boolean(state.currentPlaylistDetail.is_local);
 
     optimisticPlay();
     markWaitingForPlayback({ targetName: plName });
     if (isAlbum) {
       setUIBusy(true, 'Запуск альбома...', dom.btnPlayPlaylist);
-    } else if (isLocalPlaylist) {
+    } else if (isExplicitLocalPlaylist || matchedLocal) {
       setUIBusy(true, 'Запуск плейлиста...', dom.btnPlayPlaylist);
     } else {
-      setUIBusy(true, 'Синхронизация очереди в Apple Music (~10 сек)...', dom.btnPlayPlaylist);
+      setUIBusy(true, 'Запуск плейлиста...', dom.btnPlayPlaylist);
     }
 
     if (isAlbum) {
@@ -5508,7 +9574,7 @@ extension WebUIContent {
           shuffle: false
         }
       });
-    } else if (isLocalPlaylist) {
+    } else if (isExplicitLocalPlaylist) {
       send({
         action: 'play_playlist',
         params: {
@@ -5524,7 +9590,7 @@ extension WebUIContent {
           playlist: plName,
           id: state.currentPlaylistDetail.id || '',
           url: state.currentPlaylistDetail.url || '',
-          tracks: state.currentPlaylistTracks || [],
+          tracks: loadedTracks,
           shuffle: false
         }
       });
@@ -5535,17 +9601,16 @@ extension WebUIContent {
     if (!state.currentPlaylistDetail) return;
     const isAlbum = Boolean(state.currentPlaylistDetail.isAlbum);
     const plName = state.currentPlaylistDetail.name || state.currentPlaylistDetail.title || '';
-    const matchedLocal = findMatchingLocalPlaylist(plName, state.currentPlaylistDetail.id);
-    const isLocalPlaylist = !isAlbum && (Boolean(state.currentPlaylistDetail.is_local) || Boolean(matchedLocal));
+    const loadedTracks = Array.isArray(state.currentPlaylistTracks) ? state.currentPlaylistTracks : [];
+    const matchedLocal = findMatchingLocalPlaylist(plName, state.currentPlaylistDetail.id, loadedTracks.length);
+    const isExplicitLocalPlaylist = !isAlbum && Boolean(state.currentPlaylistDetail.is_local);
 
     optimisticPlay();
     markWaitingForPlayback({ targetName: plName });
     if (isAlbum) {
       setUIBusy(true, 'Перемешивание альбома...', dom.btnShufflePlaylist);
-    } else if (isLocalPlaylist) {
-      setUIBusy(true, 'Перемешивание...', dom.btnShufflePlaylist);
     } else {
-      setUIBusy(true, 'Синхронизация очереди в Apple Music (~10 сек)...', dom.btnShufflePlaylist);
+      setUIBusy(true, 'Перемешивание...', dom.btnShufflePlaylist);
     }
 
     if (isAlbum) {
@@ -5559,7 +9624,7 @@ extension WebUIContent {
           shuffle: true
         }
       });
-    } else if (isLocalPlaylist) {
+    } else if (isExplicitLocalPlaylist) {
       send({
         action: 'play_playlist',
         params: {
@@ -5575,7 +9640,7 @@ extension WebUIContent {
           playlist: plName,
           id: state.currentPlaylistDetail.id || '',
           url: state.currentPlaylistDetail.url || '',
-          tracks: state.currentPlaylistTracks || [],
+          tracks: loadedTracks,
           shuffle: true
         }
       });
@@ -5586,30 +9651,50 @@ extension WebUIContent {
     dom.btnAddPlaylistLibrary.addEventListener('click', () => {
       if (!state.currentPlaylistDetail) return;
       const isAlbum = Boolean(state.currentPlaylistDetail.isAlbum);
-      const itemId = state.currentPlaylistDetail.id || (state.currentAlbumDetail && state.currentAlbumDetail.id) || '';
+      const curAlb = state.currentAlbumDetail;
+      const catalogAlbId = (isAlbum && curAlb && curAlb.catalog_album_id) ? String(curAlb.catalog_album_id) : '';
+      const rawItemId = state.currentPlaylistDetail.id || (curAlb && curAlb.id) || '';
+      const itemId = catalogAlbId || rawItemId;
       const itemName = state.currentPlaylistDetail.name || state.currentPlaylistDetail.title || '';
-      const itemArtist = state.currentPlaylistDetail.artist || state.currentPlaylistDetail.sub || state.currentPlaylistDetail.subtitle || (state.currentAlbumDetail && state.currentAlbumDetail.artist) || '';
+      const itemArtist = state.currentPlaylistDetail.artist || state.currentPlaylistDetail.sub || state.currentPlaylistDetail.subtitle || (curAlb && curAlb.artist) || '';
+      const isPartialLibrarySubset = Boolean(isAlbum && curAlb && curAlb.is_library_view && !curAlb.is_complete_in_library);
       const tracks = isAlbum
-        ? ((state.currentAlbumDetail && state.currentAlbumDetail.tracks) || [])
+        ? (isPartialLibrarySubset ? [] : ((curAlb && curAlb.tracks) || []))
         : (state.currentPlaylistTracks || []);
 
       state.lastLibraryAddTarget = 'detail';
       state.isAddingDetailToLibrary = true;
       state.lastDetailLibraryAddKey = String(state.currentDetailPlaylistId || state.currentDetailAlbumId || state.currentDetailTitle || itemId || itemName || '');
-      state.lastDetailLibraryAddId = String(itemId || '').trim().toLowerCase();
+      state.lastDetailLibraryAddId = String(rawItemId || itemId || '').trim().toLowerCase();
       state.lastDetailLibraryAddName = String(itemName || '').trim().toLowerCase();
+      const itemArtwork = state.currentPlaylistDetail.artwork_url || state.currentPlaylistDetail.artworkUrl || state.currentPlaylistDetail.artwork || (curAlb && (curAlb.artwork || curAlb.artwork_url)) || '';
+      const itemTrackCount = Number(state.currentPlaylistDetail.track_count || state.currentPlaylistDetail.trackCount || (tracks && tracks.length) || 0);
       dom.btnAddPlaylistLibrary.disabled = true;
-      if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'Добавление...';
+      if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = translateTextToEn('Добавление...');
       send({
         action: 'add_playlist_to_library',
         params: {
           id: itemId,
           name: itemName,
           artist: itemArtist,
+          artwork: itemArtwork,
+          track_count: itemTrackCount,
           is_album: isAlbum,
           tracks: tracks
         }
       });
+    });
+  }
+
+  if (dom.btnRemoveDetailLibrary) {
+    dom.btnRemoveDetailLibrary.addEventListener('click', () => {
+      const target = state.currentAlbumDetail || state.currentPlaylistDetail;
+      if (!target) return;
+      if (state.currentPlaylistDetail && state.currentPlaylistDetail.isAlbum) {
+        promptRemoveAlbumFromLibrary(target);
+      } else if (state.currentPlaylistDetail) {
+        promptRemovePlaylistFromLibrary(state.currentPlaylistDetail);
+      }
     });
   }
 
@@ -5632,10 +9717,31 @@ extension WebUIContent {
     state.currentDetailPlaylistId = '';
     state.currentDetailAlbumId = String(alb.id || state.currentDetailAlbumId || '');
     state.currentDetailTitle = String(alb.name || alb.title || state.currentDetailTitle || '');
+
+    const tracks = Array.isArray(alb.tracks) ? alb.tracks : [];
+    const allLocal = tracks.length > 0 && tracks.every(t => Boolean(t.is_local || t.isLocal));
+    const localInTracksCount = tracks.filter(t => Boolean(t.is_local || t.isLocal)).length;
+    const libCount = alb.library_track_count !== undefined
+      ? Number(alb.library_track_count || 0)
+      : localInTracksCount;
+    const catCount = alb.catalog_track_count !== undefined
+      ? Number(alb.catalog_track_count || 0)
+      : Number(alb.track_count || tracks.length || 0);
+    const inLibrary = alb.in_library !== undefined
+      ? Boolean(alb.in_library)
+      : Boolean(libCount > 0 || alb.is_local || allLocal);
+    const isComplete = alb.is_complete_in_library !== undefined
+      ? Boolean(alb.is_complete_in_library)
+      : Boolean(inLibrary && (allLocal || (catCount > 0 && libCount >= catCount)));
+    const isLibraryView = Boolean(alb.is_library_view);
+    const catAlbumId = String(alb.catalog_album_id || (Number(alb.id) >= 10000000 ? alb.id : '') || '').trim();
+
+    if (dom.btnRemoveDetailLibrary) {
+      dom.btnRemoveDetailLibrary.classList.toggle('hidden', !(inLibrary || libCount > 0));
+    }
+
     if (dom.btnAddPlaylistLibrary) {
       dom.btnAddPlaylistLibrary.style.display = '';
-      const tracksArr = alb.tracks || [];
-      const allLocal = tracksArr.length > 0 && tracksArr.every(t => Boolean(t.is_local || t.isLocal));
       const curIdLower = String(state.currentDetailAlbumId || '').trim().toLowerCase();
       const curNameLower = String(state.currentDetailTitle || '').trim().toLowerCase();
       const isSamePendingDetail = Boolean(
@@ -5646,49 +9752,125 @@ extension WebUIContent {
             : Boolean(state.lastDetailLibraryAddName && curNameLower && state.lastDetailLibraryAddName === curNameLower)
         )
       );
-      if (alb.is_local || alb.in_library || allLocal) {
+      if (isComplete) {
         state.isAddingDetailToLibrary = false;
         dom.btnAddPlaylistLibrary.disabled = true;
-        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеке ✓';
         dom.btnAddPlaylistLibrary.classList.add('added');
-      } else if (!dom.btnAddPlaylistLibrary.classList.contains('added') && !isSamePendingDetail) {
-        dom.btnAddPlaylistLibrary.disabled = false;
-        if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = 'В медиатеку';
+        dom.btnAddPlaylistLibrary.classList.add('hidden');
+      } else {
+        dom.btnAddPlaylistLibrary.classList.remove('hidden');
+        if (!isSamePendingDetail) {
+          dom.btnAddPlaylistLibrary.disabled = false;
+          dom.btnAddPlaylistLibrary.classList.remove('added');
+          if (dom.btnAddPlaylistLibraryText) {
+            dom.btnAddPlaylistLibraryText.textContent = translateTextToEn(
+              (inLibrary || libCount > 0) ? 'Добавить весь альбом' : 'В медиатеку'
+            );
+          }
+        }
       }
     }
-    if (dom.detailTitle) dom.detailTitle.textContent = alb.name || 'Альбом';
+
+    if (dom.detailTitle) dom.detailTitle.textContent = alb.name || translateTextToEn('Альбом');
     if (dom.detailMeta) {
       const parts = [];
       if (alb.artist) parts.push(alb.artist);
-      if (alb.release_date) parts.push(alb.release_date.slice(0, 4));
-      if (alb.track_count) parts.push(`${alb.track_count} треков`);
+      if (alb.release_date) parts.push(String(alb.release_date).slice(0, 4));
+      if (isComplete) {
+        const totCnt = catCount || tracks.length || Number(alb.track_count || 0);
+        if (totCnt > 0) parts.push(formatTracksCount(totCnt));
+        parts.push(translateTextToEn('В медиатеке целиком'));
+      } else if (!isComplete && isLibraryView && catCount > tracks.length) {
+        const shownLib = libCount > 0 ? libCount : tracks.length;
+        parts.push(translateTextToEn(`${shownLib} из ${catCount} треков в медиатеке`));
+      } else if (!isComplete && !isLibraryView && libCount > 0 && catCount > libCount) {
+        const totCnt = catCount || tracks.length || Number(alb.track_count || 0);
+        if (totCnt > 0) parts.push(formatTracksCount(totCnt));
+        parts.push(translateTextToEn(`${libCount} из ${catCount} треков в медиатеке`));
+      } else {
+        const totCnt = Number(alb.track_count || tracks.length || 0);
+        if (totCnt > 0) parts.push(formatTracksCount(totCnt));
+      }
       dom.detailMeta.textContent = parts.join(' • ');
     }
     if (dom.detailArtwork && (alb.artwork || alb.artwork_url)) {
-      dom.detailArtwork.src = alb.artwork || alb.artwork_url;
+      dom.detailArtwork.src = appendDeviceIdToUrl(alb.artwork || alb.artwork_url);
     }
-    if (dom.detailBadge) dom.detailBadge.textContent = 'АЛЬБОМ';
+    if (dom.detailBadge) dom.detailBadge.textContent = translateTextToEn('АЛЬБОМ');
 
-    const tracks = alb.tracks || [];
+    // Completeness Banner Slot: ONLY shown when !isComplete && isLibraryView && catCount > tracks.length
+    if (dom.albumCompletenessBannerSlot) {
+      dom.albumCompletenessBannerSlot.innerHTML = '';
+      if (!isComplete && isLibraryView && catCount > tracks.length) {
+        const banner = document.createElement('div');
+        banner.className = 'album-completeness-banner';
+        const savedCnt = tracks.length;
+        const bannerTitle = translateTextToEn(`В медиатеке сохранено ${savedCnt} из ${catCount} треков этого альбома`);
+        const btnLabel = translateTextToEn(`Показать полный альбом (${catCount}) →`);
+
+        banner.innerHTML = `
+          <div class="album-completeness-info">
+            <span class="album-completeness-title">${escapeHtml(bannerTitle)}</span>
+          </div>
+          <button type="button" class="btn-show-complete-album">${escapeHtml(btnLabel)}</button>
+        `;
+        const showFullBtn = banner.querySelector('.btn-show-complete-album');
+        if (showFullBtn) {
+          showFullBtn.addEventListener('click', () => {
+            triggerHaptic('light');
+            openAlbumDetail({
+              id: catAlbumId || alb.id || '',
+              name: alb.name || '',
+              artist: alb.artist || '',
+              artwork: alb.artwork || alb.artwork_url || ''
+            }, state.detailReturnOrigin || 'library-albums', { source: 'catalog' });
+          });
+        }
+        dom.albumCompletenessBannerSlot.appendChild(banner);
+      }
+    }
+
     if (tracks.length === 0) {
-      dom.playlistTracksList.innerHTML = '<div class="empty-state">Нет треков</div>';
+      dom.playlistTracksList.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Нет треков'))}</div>`;
       return;
     }
+
+    const showSavedTrackBadge = Boolean(!isComplete && !isLibraryView && libCount > 0 && (catCount === 0 || libCount < catCount));
 
     dom.playlistTracksList.innerHTML = '';
     tracks.forEach((t, idx) => {
       const row = document.createElement('div');
       row.className = 'track-row';
       const dur = formatTime(t.duration || 0);
+      const trackIsLocal = Boolean(t.is_local || t.isLocal);
+      const savedBadgeHtml = (showSavedTrackBadge && trackIsLocal)
+        ? `<span class="badge-in-lib-check">${escapeHtml(translateTextToEn('✓ В медиатеке'))}</span>`
+        : '';
 
       row.innerHTML = `
-        <span class="track-index-num">${idx + 1}</span>
+        <span class="track-index-num">${escapeHtml(String(t.track_number || (idx + 1)))}</span>
         <div class="track-details">
-          <span class="track-row-title">${escapeHtml(t.name || 'Без названия')}</span>
+          <div class="track-row-title-wrap">
+            <span class="track-row-title">${escapeHtml(t.name || 'Без названия')}</span>
+            ${savedBadgeHtml}
+          </div>
           <span class="track-row-artist">${escapeHtml(t.artist || alb.artist || '')}</span>
         </div>
         <span class="track-row-dur">${dur}</span>
       `;
+
+      const actionTrackObj = {
+        ...t,
+        name: t.name || '',
+        artist: t.artist || alb.artist || '',
+        album: t.album || alb.name || '',
+        album_id: catAlbumId || alb.id || '',
+        artwork: t.artwork || t.artwork_url || alb.artwork || alb.artwork_url || '',
+        is_local: trackIsLocal || isLibraryView || isComplete
+      };
+      row.appendChild(createTrackRowActionButtons(actionTrackObj, {
+        showDirectDelete: Boolean(trackIsLocal || isLibraryView || isComplete)
+      }));
 
       row.addEventListener('click', () => {
         optimisticPlay();
@@ -5714,8 +9896,33 @@ extension WebUIContent {
   function updatePlaylistTracks(data) {
     const tracks = data.tracks || [];
     state.currentPlaylistTracks = tracks;
+    if (state.currentPlaylistDetail && !state.currentPlaylistDetail.isAlbum) {
+      const pl = state.currentPlaylistDetail;
+      const plName = pl.name || pl.title || '';
+      if (dom.detailMeta && tracks.length > 0) {
+        dom.detailMeta.textContent = formatTracksCount(tracks.length);
+      }
+      const matchedLocal = findMatchingLocalPlaylist(plName, pl.id, tracks.length);
+      const isAlreadyInLib = Boolean(pl.is_local || pl.in_library) || Boolean(matchedLocal);
+      const canDeletePlaylist = isAlreadyInLib && !isProtectedSystemPlaylistClient(plName);
+      if (dom.btnRemoveDetailLibrary) {
+        dom.btnRemoveDetailLibrary.classList.toggle('hidden', !canDeletePlaylist);
+      }
+      if (dom.btnAddPlaylistLibrary && !state.isAddingDetailToLibrary) {
+        if (isAlreadyInLib) {
+          dom.btnAddPlaylistLibrary.disabled = true;
+          dom.btnAddPlaylistLibrary.classList.add('added');
+          dom.btnAddPlaylistLibrary.classList.add('hidden');
+        } else {
+          dom.btnAddPlaylistLibrary.disabled = false;
+          if (dom.btnAddPlaylistLibraryText) dom.btnAddPlaylistLibraryText.textContent = translateTextToEn('В плейлисты');
+          dom.btnAddPlaylistLibrary.classList.remove('added');
+          dom.btnAddPlaylistLibrary.classList.remove('hidden');
+        }
+      }
+    }
     if (!tracks || tracks.length === 0) {
-      dom.playlistTracksList.innerHTML = '<div class="empty-state">Плейлист пуст</div>';
+      dom.playlistTracksList.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Плейлист пуст'))}</div>`;
       return;
     }
 
@@ -5724,29 +9931,31 @@ extension WebUIContent {
       const row = document.createElement('div');
       row.className = 'track-row';
       const dur = formatTime(t.duration || 0);
+      const trackIsLocal = Boolean(t.is_local || t.isLocal);
 
       row.innerHTML = `
         <span class="track-index-num">${idx + 1}</span>
         <div class="track-details">
           <span class="track-row-title">${escapeHtml(t.name || 'Без названия')}</span>
-          <span class="track-row-artist">${escapeHtml(t.artist || '')} &bull; ${escapeHtml(t.album || '')}</span>
+          <span class="track-row-artist">${escapeHtml(t.artist || '')}${t.album ? ' &bull; ' + escapeHtml(t.album) : ''}</span>
         </div>
         <span class="track-row-dur">${dur}</span>
       `;
 
+      row.appendChild(createTrackRowActionButtons({
+        ...t,
+        is_local: trackIsLocal
+      }, { showDirectDelete: trackIsLocal }));
+
       row.addEventListener('click', () => {
         if (!state.currentPlaylistDetail) return;
         const plName = state.currentPlaylistDetail.name || state.currentPlaylistDetail.title || '';
-        const matchedLocal = findMatchingLocalPlaylist(plName, state.currentPlaylistDetail.id);
-        const isLocalPlaylist = !state.currentPlaylistDetail.isAlbum && (Boolean(state.currentPlaylistDetail.is_local) || Boolean(matchedLocal));
+        const matchedLocal = findMatchingLocalPlaylist(plName, state.currentPlaylistDetail.id, tracks.length);
+        const isExplicitLocalPlaylist = !state.currentPlaylistDetail.isAlbum && Boolean(state.currentPlaylistDetail.is_local);
         optimisticPlay();
         markWaitingForPlayback({ targetName: t.name || '', expectedTrackName: t.name || '' });
-        if (isLocalPlaylist) {
-          setUIBusy(true, 'Запуск трека...');
-        } else {
-          setUIBusy(true, 'Синхронизация очереди в Apple Music (~10 сек)...');
-        }
-        if (isLocalPlaylist) {
+        setUIBusy(true, 'Запуск трека...');
+        if (isExplicitLocalPlaylist) {
           send({
             action: 'play_playlist',
             params: {
@@ -5766,7 +9975,8 @@ extension WebUIContent {
               url: state.currentPlaylistDetail.url || '',
               track_index: idx + 1,
               track_id: t.numeric_id || t.id,
-              tracks: state.currentPlaylistTracks || []
+              tracks: state.currentPlaylistTracks || [],
+              shuffle: false
             }
           });
         }
@@ -5791,6 +10001,9 @@ extension WebUIContent {
     dom.btnClearSearch.classList.toggle('hidden', q.length === 0);
 
     clearTimeout(searchDebounceTimer);
+    if (state.searchScope === 'bridge') {
+      return;
+    }
     if (!q) {
       renderSearchPlaceholder();
       return;
@@ -5810,10 +10023,22 @@ extension WebUIContent {
       const q = e.target.value.trim();
       if (!q) return;
       clearTimeout(searchDebounceTimer);
+      if (state.searchScope === 'bridge') {
+        const arrowParts = q.split(/\s*(?:->|→|—>)\s*/);
+        if (arrowParts.length >= 2 && arrowParts[0].trim() && arrowParts[1].trim()) {
+          state.sonicBridgeFrom = arrowParts[0].trim();
+          state.sonicBridgeTo = arrowParts.slice(1).join(' ').trim();
+          triggerSonicBridgeSearch(false);
+          return;
+        }
+        state.searchScope = 'all';
+        dom.filterChips.forEach(c => c.classList.toggle('active', c.dataset.scope === 'all'));
+      }
       executeSearch(q, state.searchScope);
     }
   });
 
+// === MODULE: 17-ai-prompts-and-sonic-bridge.js ===
   const AI_PROMPT_SUGGESTIONS_POOL = [
     {
       labelRu: '🎷 Ночной нуар-джаз с саксофоном',
@@ -6200,6 +10425,10 @@ extension WebUIContent {
     if (aiFilterChip) {
       aiFilterChip.classList.toggle('hidden', !state.aiCuratorEnabled);
     }
+    const bridgeFilterChip = document.querySelector('.filter-chip-bridge');
+    if (bridgeFilterChip) {
+      bridgeFilterChip.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
     const standbyAiBtn = document.getElementById('standby-btn-ai-curator');
     if (standbyAiBtn) {
       standbyAiBtn.classList.toggle('hidden', !state.aiCuratorEnabled);
@@ -6214,6 +10443,9 @@ extension WebUIContent {
     if (dom.btnAiMixByTrack) {
       dom.btnAiMixByTrack.classList.toggle('hidden', !state.aiCuratorEnabled);
     }
+    if (dom.btnSonicBridgeByTrack) {
+      dom.btnSonicBridgeByTrack.classList.toggle('hidden', !state.aiCuratorEnabled);
+    }
     if (!state.aiCuratorEnabled) {
       const standbyAiModal = document.getElementById('standby-ai-modal');
       if (standbyAiModal && !standbyAiModal.classList.contains('hidden')) {
@@ -6221,7 +10453,7 @@ extension WebUIContent {
         standbyAiModal.setAttribute('aria-hidden', 'true');
       }
     }
-    if (!state.aiCuratorEnabled && state.searchScope === 'ai') {
+    if (!state.aiCuratorEnabled && (state.searchScope === 'ai' || state.searchScope === 'bridge')) {
       state.searchScope = 'all';
       dom.filterChips.forEach(c => c.classList.toggle('active', c.dataset.scope === 'all'));
       if (dom.searchInput) {
@@ -6257,6 +10489,282 @@ extension WebUIContent {
     }
   }
 
+  const SONIC_BRIDGE_EXAMPLES = [
+    {
+      labelRu: '🎷 Miles Davis → 🤖 Daft Punk',
+      labelEn: '🎷 Miles Davis → 🤖 Daft Punk',
+      from: 'Miles Davis — Blue in Green',
+      to: 'Daft Punk — Veridis Quo'
+    },
+    {
+      labelRu: '🎸 Pink Floyd → 🎹 Nils Frahm',
+      labelEn: '🎸 Pink Floyd → 🎹 Nils Frahm',
+      from: 'Pink Floyd — Shine On You Crazy Diamond',
+      to: 'Nils Frahm — Says'
+    },
+    {
+      labelRu: '🎻 Hans Zimmer → 🌌 Massive Attack',
+      labelEn: '🎻 Hans Zimmer → 🌌 Massive Attack',
+      from: 'Hans Zimmer — Time',
+      to: 'Massive Attack — Teardrop'
+    },
+    {
+      labelRu: '🌙 Sade → 🎛 Radiohead',
+      labelEn: '🌙 Sade → 🎛 Radiohead',
+      from: 'Sade — No Ordinary Love',
+      to: 'Radiohead — Everything In Its Right Place'
+    }
+  ];
+
+  function buildSonicBridgeCardElement(compact = false) {
+    const card = document.createElement('div');
+    card.className = `sonic-bridge-builder-card${compact ? ' compact' : ''}`;
+    const hasCurrentTrack = Boolean(state.track && state.track.name);
+    const steps = Number(state.sonicBridgeSteps) || 12;
+    const examplesHtml = compact ? '' : `
+      <div class="sonic-bridge-examples">
+        ${SONIC_BRIDGE_EXAMPLES.map((ex, i) => `
+          <button type="button" class="sonic-bridge-example-chip" data-bridge-idx="${i}">
+            ${escapeHtml(IS_EN ? ex.labelEn : ex.labelRu)}
+          </button>
+        `).join('')}
+      </div>
+    `;
+
+    card.innerHTML = `
+      <div class="sonic-bridge-top">
+        <span class="sonic-bridge-pill">🌉 SONIC BRIDGE • 512-D SLERP GEODESIC</span>
+      </div>
+      ${compact ? '' : `
+        <h3 class="sonic-bridge-title">${IS_EN ? 'Sonic Bridge: Smooth Musical Trajectory' : 'Sonic Bridge: плавный ИИ-маршрут между треками'}</h3>
+        <p class="sonic-bridge-desc">${IS_EN
+          ? 'Specify Point A and Point B (track, artist, or mood). Apple Neural Engine computes a smooth 512-D geodesic SLERP path across tempo, timbre, and atmosphere.'
+          : 'Укажите Точку А и Точку Б (трек, артиста или настроение) — Apple Neural Engine построит бесшовную 512-мерную геодезическую траекторию по тембру, темпу и атмосфере.'}</p>
+      `}
+      <div class="sonic-bridge-endpoints-row">
+        <div class="sonic-bridge-endpoint-box">
+          <div class="sonic-bridge-endpoint-head">
+            <span class="sonic-bridge-endpoint-label">${translateTextToEn('Точка А (откуда)')}</span>
+            <button type="button" class="sonic-bridge-use-current-btn" id="btn-bridge-use-current" ${hasCurrentTrack ? '' : 'disabled'}>
+              ${translateTextToEn('🎵 Текущий трек')}
+            </button>
+          </div>
+          <input type="text" id="sonic-bridge-from-input" class="sonic-bridge-input"
+            value="${escapeHtml(state.sonicBridgeFrom || '')}"
+            placeholder="${IS_EN ? 'e.g. Miles Davis — Blue in Green' : 'Напр.: Miles Davis — Blue in Green'}"
+            autocomplete="off" autocorrect="off" spellcheck="false">
+        </div>
+
+        <button type="button" id="btn-sonic-bridge-swap" class="sonic-bridge-swap-btn" title="${IS_EN ? 'Swap Point A and Point B' : 'Поменять местами А и Б'}">⇄</button>
+
+        <div class="sonic-bridge-endpoint-box">
+          <div class="sonic-bridge-endpoint-head">
+            <span class="sonic-bridge-endpoint-label">${translateTextToEn('Точка Б (куда)')}</span>
+          </div>
+          <input type="text" id="sonic-bridge-to-input" class="sonic-bridge-input"
+            value="${escapeHtml(state.sonicBridgeTo || '')}"
+            placeholder="${IS_EN ? 'e.g. Daft Punk — Veridis Quo' : 'Напр.: Daft Punk — Veridis Quo'}"
+            autocomplete="off" autocorrect="off" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="sonic-bridge-controls-bar">
+        <div class="sonic-bridge-steps-wrap">
+          <span class="sonic-bridge-steps-label">${translateTextToEn('Длина маршрута:')}</span>
+          ${[10, 12, 16].map((n) => `
+            <button type="button" class="sonic-bridge-step-pill ${steps === n ? 'active' : ''}" data-step-count="${n}">${n}</button>
+          `).join('')}
+        </div>
+        <div class="sonic-bridge-submit-actions">
+          <button type="button" id="btn-sonic-bridge-build" class="btn-sonic-bridge-build">
+            <span>🌉 ${translateTextToEn('Построить маршрут')}</span>
+          </button>
+          <button type="button" id="btn-sonic-bridge-autoplay" class="btn-sonic-bridge-autoplay">
+            <span>▶ ${translateTextToEn('Сразу включить')}</span>
+          </button>
+        </div>
+      </div>
+      ${examplesHtml}
+    `;
+
+    const fromInput = card.querySelector('#sonic-bridge-from-input');
+    const toInput = card.querySelector('#sonic-bridge-to-input');
+    const useCurrBtn = card.querySelector('#btn-bridge-use-current');
+    const swapBtn = card.querySelector('#btn-sonic-bridge-swap');
+    const buildBtn = card.querySelector('#btn-sonic-bridge-build');
+    const autoPlayBtn = card.querySelector('#btn-sonic-bridge-autoplay');
+
+    if (fromInput) {
+      fromInput.addEventListener('input', () => { state.sonicBridgeFrom = fromInput.value; });
+      fromInput.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          if (toInput && !toInput.value.trim()) {
+            toInput.focus();
+          } else {
+            triggerSonicBridgeSearch(false);
+          }
+        }
+      });
+    }
+    if (toInput) {
+      toInput.addEventListener('input', () => { state.sonicBridgeTo = toInput.value; });
+      toInput.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          triggerSonicBridgeSearch(false);
+        }
+      });
+    }
+    if (useCurrBtn) {
+      useCurrBtn.addEventListener('click', () => {
+        if (!state.track || !state.track.name) return;
+        triggerHaptic('light');
+        const cur = state.track.artist ? `${state.track.artist} — ${state.track.name}` : state.track.name;
+        state.sonicBridgeFrom = cur;
+        if (fromInput) fromInput.value = cur;
+        if (toInput && !toInput.value.trim()) toInput.focus();
+      });
+    }
+    if (swapBtn) {
+      swapBtn.addEventListener('click', () => {
+        triggerHaptic('light');
+        const a = fromInput ? fromInput.value : state.sonicBridgeFrom;
+        const b = toInput ? toInput.value : state.sonicBridgeTo;
+        state.sonicBridgeFrom = b;
+        state.sonicBridgeTo = a;
+        if (fromInput) fromInput.value = b;
+        if (toInput) toInput.value = a;
+      });
+    }
+    card.querySelectorAll('.sonic-bridge-step-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        triggerHaptic('light');
+        const n = Number(pill.getAttribute('data-step-count')) || 12;
+        state.sonicBridgeSteps = n;
+        card.querySelectorAll('.sonic-bridge-step-pill').forEach(p => p.classList.toggle('active', Number(p.getAttribute('data-step-count')) === n));
+      });
+    });
+    card.querySelectorAll('.sonic-bridge-example-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const idx = Number(chip.getAttribute('data-bridge-idx'));
+        const ex = SONIC_BRIDGE_EXAMPLES[idx];
+        if (!ex) return;
+        triggerHaptic('light');
+        state.sonicBridgeFrom = ex.from;
+        state.sonicBridgeTo = ex.to;
+        if (fromInput) fromInput.value = ex.from;
+        if (toInput) toInput.value = ex.to;
+        triggerSonicBridgeSearch(false);
+      });
+    });
+    if (buildBtn) {
+      buildBtn.addEventListener('click', () => triggerSonicBridgeSearch(false));
+    }
+    if (autoPlayBtn) {
+      autoPlayBtn.addEventListener('click', () => triggerSonicBridgeSearch(true));
+    }
+    return card;
+  }
+
+// === MODULE: 18-sonic-bridge-and-search-exec.js ===
+  function renderSonicBridgeBuilder() {
+    if (!dom.searchResults) return;
+    dom.searchResults.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'search-placeholder';
+    wrap.appendChild(buildSonicBridgeCardElement(false));
+    dom.searchResults.appendChild(wrap);
+  }
+
+  function openSonicBridgeTab(focusDestination = false) {
+    if (!state.aiCuratorEnabled) return;
+    if (!isDesktopLayout()) {
+      switchMobileView('view-search', true);
+    } else {
+      switchDesktopTab('search', true, { fromResize: true });
+    }
+    state.searchScope = 'bridge';
+    dom.filterChips.forEach(c => c.classList.toggle('active', c.dataset.scope === 'bridge'));
+    if (dom.searchInput) {
+      dom.searchInput.placeholder = IS_EN
+        ? 'Point A -> Point B (or fill route below)...'
+        : 'Точка А -> Точка Б (или заполните маршрут ниже)...';
+    }
+    renderSonicBridgeBuilder();
+    setTimeout(() => {
+      const targetId = (focusDestination || state.sonicBridgeFrom) ? 'sonic-bridge-to-input' : 'sonic-bridge-from-input';
+      const el = document.getElementById(targetId);
+      if (el) el.focus();
+    }, 60);
+  }
+
+  function triggerSonicBridgeSearch(autoPlay = false) {
+    const fromEl = document.getElementById('sonic-bridge-from-input');
+    const toEl = document.getElementById('sonic-bridge-to-input');
+    const fromQ = String((fromEl ? fromEl.value : state.sonicBridgeFrom) || '').trim();
+    const toQ = String((toEl ? toEl.value : state.sonicBridgeTo) || '').trim();
+    state.sonicBridgeFrom = fromQ;
+    state.sonicBridgeTo = toQ;
+
+    if (!fromQ || !toQ) {
+      showToast(IS_EN
+        ? 'Specify both Point A and Point B for Sonic Bridge'
+        : 'Укажите обе точки маршрута (Точку А и Точку Б)');
+      if (!fromQ && fromEl) fromEl.focus();
+      else if (!toQ && toEl) toEl.focus();
+      return;
+    }
+
+    triggerHaptic('medium');
+    currentSearchSongs = [];
+    currentSearchOffset = 0;
+    currentSearchHasMore = false;
+    state.isAiCurating = true;
+    state.sonicBridgeAutoPlay = Boolean(autoPlay);
+    state.aiCurateReqSeq = (state.aiCurateReqSeq || 0) + 1;
+    state.lastAiCurateSentAt = Date.now();
+    const reqId = state.aiCurateReqSeq;
+
+    if (dom.searchResults) {
+      dom.searchResults.innerHTML = '';
+      dom.searchResults.appendChild(buildSonicBridgeCardElement(true));
+      const loadingEl = document.createElement('div');
+      loadingEl.className = 'loading-state';
+      loadingEl.textContent = IS_EN
+        ? `🌉 Computing 512-D Sonic Bridge: ${fromQ} → ${toQ}...`
+        : `🌉 Расчёт 512-D маршрута Sonic Bridge: ${fromQ} → ${toQ}...`;
+      dom.searchResults.appendChild(loadingEl);
+    }
+
+    const sent = send({
+      action: 'build_sonic_bridge',
+      request_id: reqId,
+      params: {
+        from: fromQ,
+        to: toQ,
+        steps: Number(state.sonicBridgeSteps) || 12,
+        country: getActiveStorefront(),
+        auto_play: Boolean(autoPlay),
+        request_id: reqId
+      }
+    });
+    if (!sent) {
+      state.isAiCurating = false;
+      state.sonicBridgeAutoPlay = false;
+      setUIBusy(false);
+      if (dom.searchResults) {
+        const loadingEl = dom.searchResults.querySelector('.loading-state');
+        if (loadingEl) loadingEl.remove();
+        const emptyEl = document.createElement('div');
+        emptyEl.className = 'empty-state';
+        emptyEl.textContent = IS_EN ? 'No connection to Mac server' : 'Нет соединения с сервером Mac';
+        dom.searchResults.appendChild(emptyEl);
+      }
+      showToast(IS_EN ? 'No connection to Mac server' : 'Нет соединения с сервером Mac');
+    }
+  }
+
   function renderSearchPlaceholder() {
     if (!dom.searchResults) return;
     if (!state.aiCuratorEnabled) {
@@ -6264,6 +10772,11 @@ extension WebUIContent {
         <div class="search-placeholder">
           <div class="search-placeholder-minimal">${translateTextToEn('Введите название песни, альбома, плейлиста или артиста')}</div>
         </div>`;
+      return;
+    }
+
+    if (state.searchScope === 'bridge') {
+      renderSonicBridgeBuilder();
       return;
     }
 
@@ -6289,9 +10802,25 @@ extension WebUIContent {
           <div id="ai-main-prompts-grid" class="ai-curator-prompts-grid">
             ${chipsHtml}
           </div>
+          <button type="button" id="btn-open-sonic-bridge-cta" class="ai-landing-bridge-cta">
+            <div class="ai-landing-bridge-cta-texts">
+              <span class="ai-landing-bridge-cta-title">🌉 ${IS_EN ? 'Sonic Bridge: Musical Route A → B' : 'Sonic Bridge: плавный ИИ-маршрут А → Б'}</span>
+              <span class="ai-landing-bridge-cta-sub">${IS_EN
+                ? 'Build a seamless geodesic transition between any two tracks or artists'
+                : 'Бесшовный переход от одного трека или артиста к другому в 512-D пространстве'}</span>
+            </div>
+            <span class="ai-landing-bridge-cta-arrow">→</span>
+          </button>
         </div>
       </div>`;
     bindAiPromptChips();
+    const bridgeCta = document.getElementById('btn-open-sonic-bridge-cta');
+    if (bridgeCta) {
+      bridgeCta.addEventListener('click', () => {
+        triggerHaptic('light');
+        openSonicBridgeTab(false);
+      });
+    }
   }
 
   function bindAiPromptChips() {
@@ -6351,11 +10880,21 @@ extension WebUIContent {
       chip.classList.add('active');
       state.searchScope = chip.dataset.scope;
       if (dom.searchInput) {
-        dom.searchInput.placeholder = translateTextToEn(
-          state.searchScope === 'ai'
-            ? 'Опишите настроение, сцену или инструменты...'
-            : 'Поиск в Apple Music...'
-        );
+        if (state.searchScope === 'bridge') {
+          dom.searchInput.placeholder = IS_EN
+            ? 'Point A -> Point B (or fill route below)...'
+            : 'Точка А -> Точка Б (или заполните маршрут ниже)...';
+        } else {
+          dom.searchInput.placeholder = translateTextToEn(
+            state.searchScope === 'ai'
+              ? 'Опишите настроение, сцену или инструменты...'
+              : 'Поиск в Apple Music...'
+          );
+        }
+      }
+      if (state.searchScope === 'bridge') {
+        renderSonicBridgeBuilder();
+        return;
       }
       if (state.searchQuery) {
         executeSearch(state.searchQuery, state.searchScope);
@@ -6371,6 +10910,17 @@ extension WebUIContent {
   let isSearchLoadingMore = false;
 
   function executeSearch(query, scope, offset = 0) {
+    if (scope === 'bridge') {
+      const arrowParts = String(query || '').split(/\s*(?:->|→|—>)\s*/);
+      if (arrowParts.length >= 2 && arrowParts[0].trim() && arrowParts[1].trim()) {
+        state.sonicBridgeFrom = arrowParts[0].trim();
+        state.sonicBridgeTo = arrowParts.slice(1).join(' ').trim();
+        triggerSonicBridgeSearch(false);
+      } else {
+        renderSonicBridgeBuilder();
+      }
+      return;
+    }
     if (scope === 'ai') {
       currentSearchSongs = [];
       currentSearchOffset = 0;
@@ -6380,15 +10930,23 @@ extension WebUIContent {
       state.lastAiCurateSentAt = Date.now();
       const reqId = state.aiCurateReqSeq;
       dom.searchResults.innerHTML = `<div class="loading-state">${translateTextToEn('Подбор нативным ИИ (Apple Neural Engine)...')}</div>`;
-      send({
+      const sent = send({
         action: 'ai_curate',
         request_id: reqId,
         params: {
           prompt: query,
-          country: state.userStorefront || state.trends.country || 'ru',
+          country: getActiveStorefront(),
           request_id: reqId
         }
       });
+      if (!sent) {
+        state.isAiCurating = false;
+        setUIBusy(false);
+        if (dom.searchResults) {
+          dom.searchResults.innerHTML = `<div class="empty-state">${escapeHtml(IS_EN ? 'No connection to Mac server' : 'Нет соединения с сервером Mac')}</div>`;
+        }
+        showToast(IS_EN ? 'No connection to Mac server' : 'Нет соединения с сервером Mac');
+      }
       return;
     }
 
@@ -6418,7 +10976,8 @@ extension WebUIContent {
       request_id: searchReqId,
       params: {
         query: query,
-        country: state.userStorefront || state.trends.country || 'us',
+        country: getActiveStorefront(),
+        locale: state.userLocale || undefined,
         scope: scope,
         limit: 25,
         offset: offset,
@@ -6430,12 +10989,12 @@ extension WebUIContent {
   function createTrackRow(s) {
     const row = document.createElement('div');
     row.className = 'track-row';
-    const artSrc = s.artwork_url || s.artwork || 'apple-touch-icon.svg';
+    const artSrc = appendDeviceIdToUrl(s.artwork_url || s.artwork || getArtworkSrc(s) || 'apple-touch-icon.svg');
     const isLocal = Boolean(s.is_local || s.isLocal);
     const localBadge = isLocal ? '<span class="badge-library">МЕДИАТЕКА</span>' : '';
 
     row.innerHTML = `
-      <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" onerror="this.onerror=null;this.src='apple-touch-icon.svg';">
+      <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" data-fallback-icon="apple-touch-icon.svg">
       <div class="track-details">
         <div class="track-row-title-wrap">
           <span class="track-row-title">${escapeHtml(s.name || s.trackName || '')}</span>
@@ -6444,6 +11003,15 @@ extension WebUIContent {
         <span class="track-row-artist">${escapeHtml(s.artist || s.artistName || '')}</span>
       </div>
     `;
+
+    row.appendChild(createTrackRowActionButtons({
+      ...s,
+      name: s.name || s.trackName || '',
+      artist: s.artist || s.artistName || '',
+      album: s.album || s.collectionName || '',
+      artwork: s.artwork_url || s.artwork || '',
+      is_local: isLocal
+    }, { showDirectDelete: isLocal }));
 
     row.addEventListener('click', () => {
       setUIBusy(true, 'Запуск трека...');
@@ -6470,6 +11038,208 @@ extension WebUIContent {
     return row;
   }
 
+  function createSonicBridgeTrackRow(s, stepIdx, totalSteps) {
+    const row = document.createElement('div');
+    row.className = 'track-row sonic-bridge-track-row';
+    const artSrc = appendDeviceIdToUrl(s.artwork_url || s.artwork || getArtworkSrc(s) || 'apple-touch-icon.svg');
+    const isLocal = Boolean(s.is_local || s.isLocal);
+    const localBadge = isLocal ? '<span class="badge-library">МЕДИАТЕКА</span>' : '';
+    const pct = s.bridge_progress !== undefined
+      ? Number(s.bridge_progress)
+      : (totalSteps > 1 ? Math.round((stepIdx / (totalSteps - 1)) * 100) : 0);
+    let stageLabel = `${pct}%`;
+    if (stepIdx === 0) {
+      stageLabel = IS_EN ? '0% • Origin A' : '0% • Точка А';
+    } else if (stepIdx === totalSteps - 1) {
+      stageLabel = IS_EN ? '100% • Dest B' : '100% • Точка Б';
+    } else if (Math.abs(pct - 50) <= 7) {
+      stageLabel = IS_EN ? `${pct}% • Midpoint` : `${pct}% • Экватор`;
+    }
+
+    row.innerHTML = `
+      <span class="sonic-bridge-step-num">${stepIdx + 1}</span>
+      <img class="track-thumb" src="${escapeHtml(artSrc)}" alt="" loading="lazy" data-fallback-icon="apple-touch-icon.svg">
+      <div class="track-details">
+        <div class="track-row-title-wrap">
+          <span class="track-row-title">${escapeHtml(s.name || s.trackName || '')}</span>
+          ${localBadge}
+        </div>
+        <span class="track-row-artist">${escapeHtml(s.artist || s.artistName || '')}</span>
+      </div>
+      <span class="bridge-progress-pill">${escapeHtml(stageLabel)}</span>
+    `;
+
+    row.addEventListener('click', () => {
+      setUIBusy(true, IS_EN ? 'Starting Sonic Bridge...' : 'Запуск маршрута Sonic Bridge...');
+      if (currentSearchSongs && currentSearchSongs.length > 0) {
+        playSearchResultsList(currentSearchSongs, false, stepIdx, {
+          queueName: state.activeAiCuratedTitle || '🌉 Sonic Bridge'
+        });
+        return;
+      }
+      send({
+        action: 'play_cloud',
+        params: {
+          numeric_id: s.numeric_id || s.numericId || undefined,
+          id: `${s.id || s.trackId || ''}`,
+          name: s.name || s.trackName || '',
+          artist: s.artist || s.artistName || '',
+          url: s.url || s.trackViewUrl || '',
+          artwork: s.artwork_url || s.artwork || ''
+        }
+      });
+    });
+    return row;
+  }
+
+  function updateSonicBridgeResults(data) {
+    const respReqId = data && data.request_id;
+    if (respReqId !== undefined && respReqId !== null && state.aiCurateReqSeq && Number(respReqId) !== Number(state.aiCurateReqSeq)) {
+      return;
+    }
+    if (state.aiCurateTimeoutId) {
+      clearTimeout(state.aiCurateTimeoutId);
+      state.aiCurateTimeoutId = null;
+    }
+    state.isAiCurating = false;
+    setUIBusy(false);
+
+    if (!data || typeof data !== 'object' || data.status === 'disabled' || data.status === 'error' || data.error) {
+      state.sonicBridgeAutoPlay = false;
+      const infoMsg = translateTextToEn(String(
+        (data && (data.message || data.error)) ||
+        (data && data.status === 'disabled'
+          ? 'Нативные функции ИИ отключены в настройках Mac'
+          : 'Не удалось построить маршрут Sonic Bridge')
+      ));
+      showToast(infoMsg);
+      if (dom.searchResults) {
+        dom.searchResults.innerHTML = '';
+        if (state.searchScope === 'bridge') {
+          dom.searchResults.appendChild(buildSonicBridgeCardElement(true));
+        }
+        const emptyEl = document.createElement('div');
+        emptyEl.className = 'empty-state';
+        emptyEl.textContent = infoMsg;
+        dom.searchResults.appendChild(emptyEl);
+      }
+      return;
+    }
+
+    const songs = Array.isArray(data.songs) ? data.songs : [];
+    const title = data.title || `${state.sonicBridgeFrom} → ${state.sonicBridgeTo}`;
+    const subtitle = data.subtitle || '';
+    const engine = data.engine || 'Sonic Bridge • 512-D Geodesic SLERP';
+    const tags = Array.isArray(data.tags) ? data.tags : [];
+    const shouldAutoPlay = Boolean(data.auto_play || state.sonicBridgeAutoPlay);
+    state.sonicBridgeAutoPlay = false;
+
+    if (data.from) state.sonicBridgeFrom = String(data.from);
+    if (data.to) state.sonicBridgeTo = String(data.to);
+    state.activeAiCuratedTitle = title.startsWith('🌉') ? title : `🌉 ${title}`;
+
+    if (shouldAutoPlay && songs.length > 0) {
+      showToast(state.activeAiCuratedTitle);
+      playSearchResultsList([...songs], false, 0, {
+        queueName: state.activeAiCuratedTitle,
+        query: ''
+      });
+    } else if (songs.length === 0) {
+      showToast(IS_EN ? 'No bridge tracks found in catalog' : 'Не удалось найти треки для маршрута в каталоге');
+    }
+
+    currentSearchSongs = [...songs];
+    currentSearchOffset = songs.length;
+    currentSearchHasMore = false;
+
+    if (!dom.searchResults) return;
+    dom.searchResults.innerHTML = '';
+
+    // 1. Compact editable Sonic Bridge Route Builder
+    dom.searchResults.appendChild(buildSonicBridgeCardElement(true));
+
+    if (songs.length === 0) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'empty-state';
+      emptyEl.textContent = IS_EN ? 'No tracks found for this route' : 'Треки для маршрута не найдены';
+      dom.searchResults.appendChild(emptyEl);
+      return;
+    }
+
+    // 2. Hero Summary Card
+    const heroCard = document.createElement('div');
+    heroCard.className = 'ai-curated-session-card';
+    const tagsHtml = tags.map(t => `<span class="ai-curated-tag">${escapeHtml(String(t))}</span>`).join('');
+    heroCard.innerHTML = `
+      <div class="ai-curated-header-top">
+        <span class="ai-curator-engine-pill">🌉 ${escapeHtml(engine)}</span>
+      </div>
+      <h3 class="ai-curated-title">${escapeHtml(title)}</h3>
+      ${subtitle ? `<p class="ai-curated-subtitle">${escapeHtml(subtitle)}</p>` : ''}
+      ${tagsHtml ? `<div class="ai-curated-tags">${tagsHtml}</div>` : ''}
+      <div class="ai-curated-actions">
+        <button type="button" class="btn-search-action btn-search-play-all" id="btn-sonic-bridge-play-all">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <polygon points="6 3 20 12 6 21 6 3"/>
+          </svg>
+          <span>${translateTextToEn('Запустить маршрут')}</span>
+        </button>
+        <button type="button" class="btn-search-action" id="btn-ai-curated-save">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span id="btn-ai-curated-save-text">${translateTextToEn('В плейлисты')}</span>
+        </button>
+      </div>
+    `;
+    dom.searchResults.appendChild(heroCard);
+
+    const btnPlayAll = heroCard.querySelector('#btn-sonic-bridge-play-all');
+    const btnSave = heroCard.querySelector('#btn-ai-curated-save');
+    const btnSaveText = heroCard.querySelector('#btn-ai-curated-save-text');
+    dom.btnAiCuratedSave = btnSave;
+    dom.btnAiCuratedSaveText = btnSaveText;
+
+    if (btnPlayAll) {
+      btnPlayAll.addEventListener('click', () => {
+        playSearchResultsList([...songs], false, 0, {
+          queueName: state.activeAiCuratedTitle,
+          query: ''
+        });
+      });
+    }
+    if (btnSave) {
+      btnSave.addEventListener('click', () => {
+        state.lastLibraryAddTarget = 'ai';
+        btnSave.disabled = true;
+        if (btnSaveText) btnSaveText.textContent = translateTextToEn('Добавление...');
+        send({
+          action: 'add_playlist_to_library',
+          params: {
+            name: state.activeAiCuratedTitle,
+            tracks: songs
+          }
+        });
+      });
+    }
+
+    // 3. Geodesic Trajectory Track List
+    const heading = document.createElement('h3');
+    heading.className = 'search-section-title';
+    heading.textContent = translateTextToEn('МАРШРУТ ПЕРЕХОДА');
+    dom.searchResults.appendChild(heading);
+
+    const list = document.createElement('div');
+    list.id = 'search-songs-list';
+    list.className = 'track-list';
+    songs.forEach((s, idx) => {
+      list.appendChild(createSonicBridgeTrackRow(s, idx, songs.length));
+    });
+    dom.searchResults.appendChild(list);
+  }
+
+// === MODULE: 19-ai-curated-and-search-results.js ===
   function updateAiCuratedResults(data, type = '') {
     const respReqId = data && data.request_id;
     if (respReqId !== undefined && respReqId !== null && state.aiCurateReqSeq && Number(respReqId) !== Number(state.aiCurateReqSeq)) {
@@ -6577,7 +11347,7 @@ extension WebUIContent {
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          <span id="btn-ai-curated-save-text">${translateTextToEn('В медиатеку')}</span>
+          <span id="btn-ai-curated-save-text">${translateTextToEn('В плейлисты')}</span>
         </button>
       </div>
     `;
@@ -6602,7 +11372,7 @@ extension WebUIContent {
     }
     if (btnShuffle && songs.length > 0) {
       btnShuffle.addEventListener('click', () => {
-        playSearchResultsList([...songs], true, 0, {
+        playSearchResultsList([...songs], true, null, {
           queueName: `✨ ${title}`,
           query: '',
           curatorPrompt: curatorPrompt
@@ -6711,9 +11481,10 @@ extension WebUIContent {
           songList.appendChild(createTrackRow(s));
         });
         // Append to active AMR queue if currently playing search results
+        const curQPl = String((state.queue && state.queue.playlist) || '');
         const isPlayingSearch = Boolean(
           state.queue &&
-          (state.queue.playlist === 'Результаты поиска' || state.queue.playlist === 'Очередь AMR')
+          (curQPl === 'Результаты поиска' || curQPl === 'Search Results' || curQPl === 'Очередь AMR' || curQPl.startsWith('Поиск: ') || curQPl.startsWith('Search: '))
         );
         if (isPlayingSearch) {
           const formatted = songs.map(s => ({
@@ -6890,27 +11661,41 @@ extension WebUIContent {
       playlists.forEach(pl => {
         const card = document.createElement('div');
         card.className = 'playlist-card';
-        const art = pl.artwork_url || pl.artwork || 'apple-touch-icon.svg';
+        const art = appendDeviceIdToUrl(pl.artwork_url || pl.artwork || 'apple-touch-icon.svg');
         const plName = pl.name || 'Плейлист';
-        const plSub = pl.curator_name || pl.curator || pl.subtitle || 'Apple Music';
+        const baseSub = pl.curator_name || pl.curator || pl.subtitle || 'Apple Music';
+        const matchedLocal = findMatchingLocalPlaylist(plName, pl.id || '', 0, pl.catalog_id || '');
+        const isInLib = Boolean(pl.in_library || pl.is_local || matchedLocal);
+        const displaySub = isInLib
+          ? `✓ ${IS_EN ? 'In Library' : 'В медиатеке'} • ${baseSub}`
+          : baseSub;
+        card._searchPlaylistItem = pl;
+        card._searchPlaylistBaseSub = baseSub;
 
         card.innerHTML = `
           <div class="media-card-art-wrap">
-            <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" onerror="this.src='apple-touch-icon.svg'">
+            <img class="playlist-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" data-fallback-icon="apple-touch-icon.svg">
           </div>
           <span class="playlist-card-title">${escapeHtml(plName)}</span>
-          <span class="playlist-card-count">${escapeHtml(plSub)}</span>
+          <span class="playlist-card-count">${escapeHtml(displaySub)}</span>
         `;
 
         card.addEventListener('click', () => {
+          const liveLocal = findMatchingLocalPlaylist(plName, pl.id || '', 0, pl.catalog_id || '');
+          const liveInLib = Boolean(liveLocal) || Boolean(pl.in_library || pl.is_local);
           openPlaylistDetail({
             id: pl.id || '',
+            catalog_id: pl.catalog_id || (String(pl.id || '').toLowerCase().startsWith('pl.') ? pl.id : ''),
+            library_id: pl.library_id || (liveLocal && liveLocal.id) || '',
+            local_name: pl.local_name || (liveLocal && liveLocal.name) || '',
+            alternate_names: pl.alternate_names || (liveLocal && liveLocal.alternate_names) || [],
             name: plName,
             url: pl.url || '',
             artwork_url: art,
-            track_count: pl.track_count || 25,
-            curator_name: plSub,
-            is_local: Boolean(pl.is_local)
+            track_count: Number(pl.track_count || pl.trackCount || (liveLocal && (liveLocal.track_count || liveLocal.trackCount)) || 0),
+            curator_name: baseSub,
+            is_local: liveInLib,
+            in_library: liveInLib
           }, 'search');
         });
 
@@ -6968,15 +11753,38 @@ extension WebUIContent {
     }
   }
 
-  function playSearchResultsList(songs, shuffle, startIndex = 0, options = {}) {
+  function syncSearchPlaylistCardsLibraryStatus(targetProbe, inLibrary) {
+    if (!dom.searchResults || !targetProbe) return;
+    dom.searchResults.querySelectorAll('.playlist-card').forEach(card => {
+      const pl = card._searchPlaylistItem;
+      if (!pl || !playlistsMatchCrossLocaleClient(pl, targetProbe)) return;
+      pl.in_library = Boolean(inLibrary);
+      pl.is_local = Boolean(inLibrary);
+      const subEl = card.querySelector('.playlist-card-count');
+      if (subEl) {
+        const baseSub = card._searchPlaylistBaseSub || pl.curator_name || pl.curator || pl.subtitle || 'Apple Music';
+        subEl.textContent = inLibrary
+          ? `✓ ${IS_EN ? 'In Library' : 'В медиатеке'} • ${baseSub}`
+          : baseSub;
+      }
+    });
+  }
+
+  function playSearchResultsList(songs, shuffle, startIndex = null, options = {}) {
     if (!songs || songs.length === 0) return;
     const isAiCurated = Boolean(options.queueName || state.activeAiCuratedTitle);
-    const resolvedQueueName = options.queueName || state.activeAiCuratedTitle || 'Результаты поиска';
-    const resolvedQuery = options.query !== undefined ? options.query : (isAiCurated ? '' : (state.searchQuery || ''));
+    const resolvedQuery = String(options.query !== undefined ? options.query : (isAiCurated ? '' : (state.searchQuery || ''))).trim();
+    const resolvedQueueName = options.queueName
+      || state.activeAiCuratedTitle
+      || (resolvedQuery
+        ? (IS_EN ? `Search: ${resolvedQuery}` : `Поиск: ${resolvedQuery}`)
+        : (IS_EN ? 'Search Results' : 'Результаты поиска'));
     const resolvedCuratorPrompt = options.curatorPrompt !== undefined
       ? options.curatorPrompt
       : (isAiCurated ? (state.activeAiCuratedPrompt || '') : '');
-    const firstSong = songs[startIndex] || songs[0];
+    const hasExplicitStart = Number.isInteger(startIndex) && startIndex >= 0 && startIndex < songs.length;
+    const effectiveStartIndex = shuffle ? (hasExplicitStart ? startIndex : -1) : (hasExplicitStart ? startIndex : 0);
+    const firstSong = effectiveStartIndex >= 0 ? (songs[effectiveStartIndex] || songs[0]) : songs[0];
     const expectedFirstTitle = firstSong ? (firstSong.name || firstSong.trackName || '') : '';
     optimisticPlay();
     markWaitingForPlayback({
@@ -7003,7 +11811,8 @@ extension WebUIContent {
       action: 'play_search_results',
       params: {
         tracks: formatted,
-        startIndex: startIndex,
+        startIndex: effectiveStartIndex,
+        pin_start_track: Boolean(!shuffle || hasExplicitStart),
         shuffle: Boolean(shuffle),
         queue_name: resolvedQueueName,
         query: resolvedQuery,
@@ -7017,6 +11826,7 @@ extension WebUIContent {
     }
   }
 
+// === MODULE: 20-trends-and-animated-plaques.js ===
   // --- Trends & Recommendations Handling ---
 
   // --- Главная (Home) & Trends Handling ---
@@ -7131,25 +11941,28 @@ extension WebUIContent {
 
   function loadTrends(country, force = false) {
     if (country) {
-      state.trends.country = country;
+      state.trends.country = String(country).trim().toLowerCase();
     }
-    const c = state.userStorefront || state.trends.country || 'us';
-    state.trends.country = c;
+    const c = getActiveStorefront();
+    if (c) {
+      state.trends.country = c;
+    }
 
+    const dedupKey = c || '__account_default__';
     const now = Date.now();
-    if (!force && trendsInFlightCountry === c && now - trendsInFlightSince < 12000) {
+    if (!force && trendsInFlightCountry === dedupKey && now - trendsInFlightSince < 12000) {
       return;
     }
-    if (!force && lastTrendsCountry === c && now - lastTrendsLoadedTime < 30000 && state.trends.stations && state.trends.stations.length > 0) {
+    if (!force && lastTrendsCountry === dedupKey && now - lastTrendsLoadedTime < 30000 && state.trends.stations && state.trends.stations.length > 0) {
       return;
     }
-    trendsInFlightCountry = c;
+    trendsInFlightCountry = dedupKey;
     trendsInFlightSince = now;
-    lastTrendsCountry = c;
+    lastTrendsCountry = dedupKey;
 
     send({
       action: 'get_explore',
-      params: { country: c }
+      params: c ? { country: c } : {}
     });
   }
 
@@ -7216,7 +12029,87 @@ extension WebUIContent {
     renderHomeGenres(state.trends.genres || DEFAULT_GENRES);
   }
 
+  const ALLOWED_STATION_SVG_TAGS = new Set([
+    'svg', 'g', 'path', 'circle', 'rect', 'ellipse', 'line', 'polyline',
+    'polygon', 'defs', 'lineargradient', 'radialgradient', 'stop'
+  ]);
+
+  const ALLOWED_STATION_SVG_ATTRS = new Set([
+    'viewbox', 'width', 'height', 'fill', 'stroke', 'stroke-width',
+    'stroke-linecap', 'stroke-linejoin', 'opacity', 'fill-opacity',
+    'stroke-opacity', 'd', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y',
+    'x1', 'y1', 'x2', 'y2', 'points', 'transform', 'id', 'offset',
+    'stop-color', 'stop-opacity', 'gradientunits', 'gradienttransform', 'xmlns'
+  ]);
+
+  function sanitizeCssColorValue(rawColor, fallbackColor = 'linear-gradient(135deg, #1c1c1e, #2c2c2e)') {
+    const trimmed = String(rawColor || '').trim();
+    if (!trimmed || trimmed.length > 240) return fallbackColor;
+    if (/url\s*\(|expression\s*\(|@import|[;\\'"<>{}\r\n`]|javascript\s*:|data\s*:/i.test(trimmed)) {
+      return fallbackColor;
+    }
+    if (!/^[#(),.%\-\s0-9a-zA-Z]+$/.test(trimmed)) {
+      return fallbackColor;
+    }
+    return escapeHtml(trimmed);
+  }
+
+  function sanitizeStationSvg(rawIcon, fallbackSvg) {
+    if (typeof rawIcon !== 'string') return fallbackSvg;
+    const trimmed = rawIcon.trim();
+    if (!trimmed || !/^<svg[\s>]/i.test(trimmed)) return fallbackSvg;
+    try {
+      const doc = new DOMParser().parseFromString(trimmed, 'image/svg+xml');
+      if (!doc || doc.querySelector('parsererror') || doc.getElementsByTagName('parsererror').length > 0) {
+        return fallbackSvg;
+      }
+      const rootEl = doc.documentElement;
+      if (!rootEl || String(rootEl.localName || rootEl.tagName || '').toLowerCase() !== 'svg') {
+        return fallbackSvg;
+      }
+      const allEls = [rootEl, ...Array.from(rootEl.querySelectorAll('*'))];
+      for (let i = 0; i < allEls.length; i++) {
+        const el = allEls[i];
+        const tagLower = String(el.localName || el.tagName || '').toLowerCase();
+        if (!ALLOWED_STATION_SVG_TAGS.has(tagLower)) {
+          el.remove();
+          continue;
+        }
+        const attrs = Array.from(el.attributes || []);
+        for (let j = 0; j < attrs.length; j++) {
+          const attr = attrs[j];
+          const nameLower = String(attr.localName || attr.name || '').toLowerCase();
+          const rawVal = String(attr.value || '');
+          const compactLower = rawVal.replace(/[\u0000-\u0020]+/g, '').toLowerCase();
+          const hasUnsafeVal = (
+            compactLower.includes('javascript:') ||
+            compactLower.includes('data:') ||
+            compactLower.includes('url(http') ||
+            compactLower.includes("url('http") ||
+            compactLower.includes('url("http') ||
+            compactLower.includes('url(//') ||
+            rawVal.includes('<') ||
+            /\bon[a-z]+\s*=/i.test(rawVal)
+          );
+          if (nameLower.startsWith('on') || !ALLOWED_STATION_SVG_ATTRS.has(nameLower) || hasUnsafeVal) {
+            el.removeAttribute(attr.name);
+          }
+        }
+        const childNodes = Array.from(el.childNodes || []);
+        for (let k = 0; k < childNodes.length; k++) {
+          if (childNodes[k].nodeType !== Node.ELEMENT_NODE) {
+            el.removeChild(childNodes[k]);
+          }
+        }
+      }
+      return new XMLSerializer().serializeToString(rootEl);
+    } catch (_) {
+      return fallbackSvg;
+    }
+  }
+
   // Animated Plaque Generator for Personal Stations, Weekly Mixes & Radio Stations
+  let plaqueUidCounter = 0;
   function getAnimatedPlaqueHtml(item) {
     if (!item) return null;
     const rawTitle = String(item.title || item.name || '').trim();
@@ -7243,12 +12136,13 @@ extension WebUIContent {
 
     if (isDiscovery) {
       const dispTitle = lowerTitle.includes('в моем вкусе') ? 'СТАНЦИЯ ОТКРЫТИЙ' : (rawTitle.toUpperCase() || 'СТАНЦИЯ ОТКРЫТИЙ');
+      const discGradId = `discStarG-${++plaqueUidCounter}`;
       return `
         <div class="animated-plaque-wrap" style="background: linear-gradient(135deg, #10042c 0%, #3a0ca3 38%, #7209b7 72%, #f72585 100%);">
           <div class="animated-plaque-orb" style="background: radial-gradient(circle, rgba(0,229,255,0.45) 0%, rgba(247,37,133,0) 70%);"></div>
           <svg class="animated-plaque-svg" viewBox="0 0 500 500">
             <defs>
-              <linearGradient id="discStarG" x1="0%" y1="50%" x2="100%" y2="50%">
+              <linearGradient id="${discGradId}" x1="0%" y1="50%" x2="100%" y2="50%">
                 <stop offset="0%" stop-color="#80ffdb" />
                 <stop offset="50%" stop-color="#ffffff" />
                 <stop offset="100%" stop-color="#ff85a1" />
@@ -7269,7 +12163,7 @@ extension WebUIContent {
               <polygon points="250,155 264,221 330,235 264,249 250,315 236,249 170,235 236,221" fill="#ffffff" fill-opacity="0.55" transform="rotate(45 250 235)" />
             </g>
             <g class="plaque-breathe">
-              <polygon points="250,110 268,217 375,235 268,253 250,360 232,253 125,235 232,217" fill="url(#discStarG)" />
+              <polygon points="250,110 268,217 375,235 268,253 250,360 232,253 125,235 232,217" fill="url(#${discGradId})" />
             </g>
             <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${escapeHtml(dispTitle)}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="600" letter-spacing="2.4" fill="#4cc9f0" text-anchor="middle">DISCOVERY STATION</text>
@@ -7552,6 +12446,7 @@ extension WebUIContent {
     return null;
   }
 
+// === MODULE: 21-hero-mixes-and-stations.js ===
   // Render Hero Carousel (Подборка лучших)
   function renderHeroCarousel(data) {
     if (!dom.homeHeroCarousel) return;
@@ -7665,11 +12560,12 @@ extension WebUIContent {
       el.setAttribute('data-index', c.index);
 
       const rawCardColor = c.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
-      const cardColor = escapeHtml(String(rawCardColor).replace(/[;"<>]/g, ''));
+      const cardColor = sanitizeCssColorValue(rawCardColor);
       const animatedPlaque = getAnimatedPlaqueHtml(c);
-      const hasArt = c.artwork && c.artwork.trim().length > 0;
+      const heroArtSrc = c.artwork ? appendDeviceIdToUrl(c.artwork) : '';
+      const hasArt = heroArtSrc && heroArtSrc.trim().length > 0;
       const mediaHtml = animatedPlaque ? animatedPlaque : (hasArt ? `
-        <img class="hero-art-img" src="${escapeHtml(c.artwork)}" alt="${escapeHtml(c.title)}" loading="eager" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <img class="hero-art-img" src="${escapeHtml(heroArtSrc)}" alt="${escapeHtml(c.title)}" loading="eager" data-fallback-mode="next-flex">
         <div class="hero-art-fallback" style="display:none; background: ${cardColor};">
           <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
@@ -7711,7 +12607,7 @@ extension WebUIContent {
             name: c.name || c.title,
             url: c.url,
             artwork_url: c.artwork,
-            track_count: c.track_count || 25
+            track_count: Number(c.track_count || c.trackCount || 0)
           }, true);
           return;
         }
@@ -7801,12 +12697,12 @@ extension WebUIContent {
       const card = document.createElement('div');
       card.className = 'media-card';
       const mName = mix.name || 'Микс';
-      const art = mix.artwork || mix.artwork_url || 'apple-touch-icon.svg';
+      const art = appendDeviceIdToUrl(mix.artwork || mix.artwork_url || 'apple-touch-icon.svg');
       const curator = mix.curator_name || 'Apple Music';
       const animatedPlaque = getAnimatedPlaqueHtml({ ...mix, title: mName, subtitle: curator });
       const artContent = animatedPlaque
         ? animatedPlaque
-        : `<img class="media-card-art" src="${escapeHtml(art)}" loading="lazy" alt="Cover" onerror="this.src='apple-touch-icon.svg'">`;
+        : `<img class="media-card-art" src="${escapeHtml(art)}" loading="lazy" alt="Cover" data-fallback-icon="apple-touch-icon.svg">`;
       card.innerHTML = `
         <div class="media-card-art-wrap">
           ${artContent}
@@ -7825,7 +12721,7 @@ extension WebUIContent {
           name: mName,
           url: mix.url || '',
           artwork_url: art,
-          track_count: mix.track_count || mix.trackCount || 25,
+          track_count: Number(mix.track_count || mix.trackCount || 0),
           curator_name: curator
         }, 'home');
       });
@@ -7860,11 +12756,11 @@ extension WebUIContent {
         card.className = 'media-card';
         const iName = item.name || '';
         const iSub = item.subtitle || '';
-        const art = item.artwork || item.artwork_url || 'apple-touch-icon.svg';
+        const art = appendDeviceIdToUrl(item.artwork || item.artwork_url || 'apple-touch-icon.svg');
         const animatedPlaque = getAnimatedPlaqueHtml({ ...item, title: iName, subtitle: iSub });
         const artContent = animatedPlaque
           ? animatedPlaque
-          : `<img class="media-card-art" src="${escapeHtml(art)}" loading="lazy" alt="Cover" onerror="this.src='apple-touch-icon.svg'">`;
+          : `<img class="media-card-art" src="${escapeHtml(art)}" loading="lazy" alt="Cover" data-fallback-icon="apple-touch-icon.svg">`;
 
         card.innerHTML = `
           <div class="media-card-art-wrap">
@@ -7895,7 +12791,7 @@ extension WebUIContent {
               name: iName,
               url: item.url || '',
               artwork_url: art,
-              track_count: item.track_count || 25,
+              track_count: Number(item.track_count || item.trackCount || 0),
               curator_name: iSub
             }, 'home');
           } else {
@@ -8014,7 +12910,7 @@ extension WebUIContent {
 
       card.innerHTML = `
         <div class="media-card-art-wrap">
-          <img class="media-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" onerror="this.style.display='none'; this.parentElement.classList.add('has-fallback');">
+          <img class="media-card-art" src="${escapeHtml(art)}" alt="" loading="lazy" data-fallback-mode="parent-fallback">
           <div class="media-card-art-fallback" style="background: linear-gradient(135deg, #1c1c1e, #2c2c2e);">
             <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#6e6e73" stroke-width="1.8">
               <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
@@ -8065,17 +12961,17 @@ extension WebUIContent {
       card.className = 'media-card station-card';
       const isLive = Boolean(st.isLive || st.is_live);
       const rawGradient = st.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
-      const gradient = escapeHtml(String(rawGradient).replace(/[;"<>]/g, ''));
+      const gradient = sanitizeCssColorValue(rawGradient);
       const defaultIconSvg = '<svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><circle cx="12" cy="12" r="3.2"/><path d="M12 6c-2.76 0-5 2.24-5 5 0 1.63.79 3.08 2 3.99V22l3-2 3 2v-7.01c1.21-.91 2-2.36 2-3.99 0-2.76-2.24-5-5-5z"/></svg>';
       const rawIcon = typeof st.icon === 'string' ? st.icon.trim() : '';
-      const iconSvg = (rawIcon.startsWith('<svg') && !/on\w+\s*=|<script|javascript:/i.test(rawIcon)) ? rawIcon : defaultIconSvg;
+      const iconSvg = sanitizeStationSvg(rawIcon, defaultIconSvg);
       const animatedPlaque = getAnimatedPlaqueHtml({ ...st, type: 'station' });
       const hasImage = Boolean(st.artwork && st.artwork.trim().length > 0 && !st.artwork.includes('apple-touch-icon'));
 
       const artHtml = animatedPlaque
         ? animatedPlaque
         : (hasImage
-          ? `<img class="media-card-art" src="${escapeHtml(st.artwork)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          ? `<img class="media-card-art" src="${escapeHtml(st.artwork)}" alt="" loading="lazy" data-fallback-mode="next-flex">
              <div class="media-card-art-fallback" style="display:none; background: ${gradient};">
                ${iconSvg}
                <span class="station-art-fallback-title">${escapeHtml(st.name || 'Радио')}</span>
@@ -8118,6 +13014,7 @@ extension WebUIContent {
     });
   }
 
+// === MODULE: 22-section-tiles-and-navigation.js ===
   // --- Section Tiles Grid Drill-down (Recent, Mixes, Albums, Stations) ---
   if (dom.homeRecentLink) {
     dom.homeRecentLink.addEventListener('click', () => {
@@ -8207,8 +13104,8 @@ extension WebUIContent {
 
       const isLive = Boolean(item.isLive || item.is_live);
       const rawGradient = item.color || 'linear-gradient(135deg, #1c1c1e, #2c2c2e)';
-      const gradient = escapeHtml(String(rawGradient).replace(/[;"<>]/g, ''));
-      const artUrl = item.artwork || item.artworkUrl || item.artwork_url || '';
+      const gradient = sanitizeCssColorValue(rawGradient);
+      const artUrl = appendDeviceIdToUrl(item.artwork || item.artworkUrl || item.artwork_url || '');
       const hasImage = Boolean(artUrl && artUrl.trim().length > 0 && !artUrl.includes('apple-touch-icon'));
       const itemName = item.name || item.title || 'Apple Music';
       const itemSub = item.subtitle || item.sub || item.artist || item.curatorName || (key === 'stations' ? 'Радиостанция' : '');
@@ -8217,7 +13114,7 @@ extension WebUIContent {
       const artHtml = animatedPlaque
         ? animatedPlaque
         : (hasImage
-          ? `<img class="collection-tile-art" src="${escapeHtml(artUrl)}" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          ? `<img class="collection-tile-art" src="${escapeHtml(artUrl)}" alt="" loading="lazy" data-fallback-mode="next-flex">
              <div class="collection-tile-fallback station-animated-bg" style="display:none; background: ${gradient};">
                <svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><circle cx="12" cy="12" r="3.2"/><path d="M12 6c-2.76 0-5 2.24-5 5 0 1.63.79 3.08 2 3.99V22l3-2 3 2v-7.01c1.21-.91 2-2.36 2-3.99 0-2.76-2.24-5-5-5z"/></svg>
                <span class="collection-tile-fallback-title">${escapeHtml(itemName)}</span>
@@ -8260,7 +13157,7 @@ extension WebUIContent {
             name: itemName,
             url: item.url || '',
             artwork_url: artUrl,
-            track_count: item.track_count || item.trackCount || 25,
+            track_count: Number(item.track_count || item.trackCount || 0),
             curator_name: itemSub
           }, 'home-grid');
           return;
@@ -8372,7 +13269,7 @@ extension WebUIContent {
 
       row.innerHTML = `
         <span class="track-index-num">${idx + 1}</span>
-        <img class="track-thumb" src="${escapeHtml(art)}" alt="" loading="lazy" onerror="this.src='apple-touch-icon.svg'">
+        <img class="track-thumb" src="${escapeHtml(art)}" alt="" loading="lazy" data-fallback-icon="apple-touch-icon.svg">
         <div class="track-details">
           <span class="track-row-title">${escapeHtml(t.name || 'Без названия')}</span>
           <span class="track-row-artist">${escapeHtml(t.artist || '')}${t.album ? ' &bull; ' + escapeHtml(t.album) : ''}</span>
@@ -8510,7 +13407,7 @@ extension WebUIContent {
     });
   });
 
-  function switchMobileView(viewId, skipFetch = false) {
+  function switchMobileView(viewId, skipFetch = false, preserveHomeDrilldown = false) {
     if (viewId !== 'view-search' && dom.searchInput && document.activeElement === dom.searchInput) {
       dom.searchInput.blur();
     }
@@ -8523,26 +13420,40 @@ extension WebUIContent {
       item.classList.toggle('active', item.dataset.view === viewId);
     });
 
+    const keepRecentOpen = Boolean(preserveHomeDrilldown && viewId === 'view-home' && dom.recentDetailPane && !dom.recentDetailPane.classList.contains('hidden'));
+    const keepGridOpen = Boolean(preserveHomeDrilldown && viewId === 'view-home' && dom.sectionGridView && !dom.sectionGridView.classList.contains('hidden'));
+
     // Hide all views first
     dom.viewNowPlaying.classList.remove('active');
     dom.viewQueue.classList.remove('active');
+    if (dom.viewPlaylists) dom.viewPlaylists.classList.remove('active');
     dom.viewLibrary.classList.remove('active');
     if (dom.viewHome) dom.viewHome.classList.remove('active');
     if (dom.viewTrends) dom.viewTrends.classList.remove('active');
-    if (dom.recentDetailPane) {
+    if (dom.recentDetailPane && !keepRecentOpen) {
       dom.recentDetailPane.classList.remove('active');
       dom.recentDetailPane.classList.add('hidden');
     }
-    if (dom.sectionGridView) {
+    if (dom.sectionGridView && !keepGridOpen) {
       dom.sectionGridView.classList.remove('active');
       dom.sectionGridView.classList.add('hidden');
     }
     dom.viewSearch.classList.remove('active');
 
-    // Activate selected view
-    const target = document.getElementById(viewId);
-    if (target) {
-      target.classList.add('active');
+    if (!skipFetch && viewId !== 'view-library' && viewId !== 'view-now-playing') {
+      showLibraryBrowsePane();
+    }
+
+    // Activate selected view (or keep Home drilldown sub-view active)
+    if (keepRecentOpen && dom.recentDetailPane) {
+      dom.recentDetailPane.classList.add('active');
+    } else if (keepGridOpen && dom.sectionGridView) {
+      dom.sectionGridView.classList.add('active');
+    } else {
+      const target = document.getElementById(viewId);
+      if (target) {
+        target.classList.add('active');
+      }
     }
     syncKeyboardFocusClass();
 
@@ -8553,11 +13464,17 @@ extension WebUIContent {
       dom.miniPlayer.classList.remove('hidden');
     }
 
-    if (viewId === 'view-library') {
+    if (viewId === 'view-playlists') {
       if (!skipFetch) {
-        if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.remove('hidden');
-        if (dom.playlistDetailPane) dom.playlistDetailPane.classList.add('hidden');
         send({ action: 'get_playlists' });
+      }
+    } else if (viewId === 'view-library') {
+      if (!skipFetch) {
+        showLibraryBrowsePane();
+        switchLibrarySubtab(state.libraryTab || 'recent', false);
+        if (!state.libraryAlbums || state.libraryAlbums.length === 0) {
+          send({ action: 'get_library_albums' });
+        }
       }
     } else if (viewId === 'view-queue') {
       if (!skipFetch) send({ action: 'get_queue' });
@@ -8569,7 +13486,14 @@ extension WebUIContent {
 
   function minimizeNowPlaying() {
     triggerHaptic('light');
-    switchMobileView(state.lastNonPlayerView || 'view-home');
+    const targetView = state.lastNonPlayerView || 'view-home';
+    const isPlDetailOpen = Boolean(dom.playlistDetailPane && !dom.playlistDetailPane.classList.contains('hidden'));
+    const isArtDetailOpen = Boolean(dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden'));
+    const hasOpenDetail = targetView === 'view-library' && (isPlDetailOpen || isArtDetailOpen);
+    switchMobileView(targetView, hasOpenDetail);
+    if (hasOpenDetail) {
+      syncNavHighlightForDetailOrigin(isArtDetailOpen ? 'library-artists' : (state.detailReturnOrigin || 'library'));
+    }
   }
 
   function expandNowPlaying() {
@@ -8697,6 +13621,7 @@ extension WebUIContent {
     container.addEventListener('touchcancel', handleTouchEnd);
   }
 
+// === MODULE: 23-gestures-resize-and-motion-video.js ===
   function setupMiniPlayerGestures() {
     const mini = dom.miniPlayer;
     if (!mini) return;
@@ -8774,6 +13699,8 @@ extension WebUIContent {
   });
 
   function switchDesktopTab(tabName, keepDetailOpen = false, opts = {}) {
+    const skipFetch = Boolean(keepDetailOpen || (opts && opts.skipFetch));
+    const preserveHomeDrilldown = Boolean(opts && opts.preserveHomeDrilldown);
     if (tabName !== 'search' && dom.searchInput && document.activeElement === dom.searchInput) {
       dom.searchInput.blur();
     }
@@ -8783,33 +13710,53 @@ extension WebUIContent {
       b.classList.toggle('active', b.dataset.target === tabName);
     });
 
+    const keepRecentOpen = Boolean(preserveHomeDrilldown && (tabName === 'home' || tabName === 'trends') && dom.recentDetailPane && !dom.recentDetailPane.classList.contains('hidden'));
+    const keepGridOpen = Boolean(preserveHomeDrilldown && (tabName === 'home' || tabName === 'trends') && dom.sectionGridView && !dom.sectionGridView.classList.contains('hidden'));
+
     dom.viewQueue.classList.remove('active');
+    if (dom.viewPlaylists) dom.viewPlaylists.classList.remove('active');
     dom.viewLibrary.classList.remove('active');
     if (dom.viewHome) dom.viewHome.classList.remove('active');
     if (dom.viewTrends) dom.viewTrends.classList.remove('active');
-    if (dom.recentDetailPane) {
+    if (dom.recentDetailPane && !keepRecentOpen) {
       dom.recentDetailPane.classList.remove('active');
       dom.recentDetailPane.classList.add('hidden');
     }
-    if (dom.sectionGridView) {
+    if (dom.sectionGridView && !keepGridOpen) {
       dom.sectionGridView.classList.remove('active');
       dom.sectionGridView.classList.add('hidden');
     }
     dom.viewSearch.classList.remove('active');
 
+    if (!keepDetailOpen && tabName !== 'library') {
+      showLibraryBrowsePane();
+    }
+
     if (tabName === 'home' || tabName === 'trends') {
-      if (dom.viewHome) dom.viewHome.classList.add('active');
-      else if (dom.viewTrends) dom.viewTrends.classList.add('active');
-      if (!keepDetailOpen) loadTrends();
+      if (keepRecentOpen && dom.recentDetailPane) {
+        dom.recentDetailPane.classList.add('active');
+      } else if (keepGridOpen && dom.sectionGridView) {
+        dom.sectionGridView.classList.add('active');
+      } else if (dom.viewHome) {
+        dom.viewHome.classList.add('active');
+      } else if (dom.viewTrends) {
+        dom.viewTrends.classList.add('active');
+      }
+      if (!skipFetch) loadTrends();
+    } else if (tabName === 'playlists') {
+      if (dom.viewPlaylists) dom.viewPlaylists.classList.add('active');
+      if (!skipFetch) send({ action: 'get_playlists' });
     } else if (tabName === 'queue') {
       dom.viewQueue.classList.add('active');
-      if (!keepDetailOpen) send({ action: 'get_queue' });
+      if (!skipFetch) send({ action: 'get_queue' });
     } else if (tabName === 'library') {
       dom.viewLibrary.classList.add('active');
       if (!keepDetailOpen) {
-        if (dom.playlistsBrowsePane) dom.playlistsBrowsePane.classList.remove('hidden');
-        if (dom.playlistDetailPane) dom.playlistDetailPane.classList.add('hidden');
-        send({ action: 'get_playlists' });
+        showLibraryBrowsePane();
+        switchLibrarySubtab(state.libraryTab || 'recent', false);
+        if (!skipFetch && (!state.libraryAlbums || state.libraryAlbums.length === 0)) {
+          send({ action: 'get_library_albums' });
+        }
       }
     } else if (tabName === 'search') {
       dom.viewSearch.classList.add('active');
@@ -8831,21 +13778,70 @@ extension WebUIContent {
       .replace(/'/g, '&#039;');
   }
 
-  // Handle responsive layout changes on resize
-  function handleResize() {
+  // Handle responsive layout changes on resize (debounced; ignores iOS Safari vertical scroll bar shifts)
+  let lastViewportWidth = window.innerWidth;
+  let wasMobileLayout = window.innerWidth < 768;
+  let resizeDebounceTimer = null;
+
+  function handleResize(opts = {}) {
+    const forceInitial = Boolean(opts && opts.force);
+    const curWidth = window.innerWidth;
+    if (typeof syncStandbyLandscapeBodyClass === 'function') {
+      syncStandbyLandscapeBodyClass();
+    }
+    if (!forceInitial && Math.abs(curWidth - lastViewportWidth) < 2) {
+      return;
+    }
+    lastViewportWidth = curWidth;
+
     syncStandbyAndMotionCoverUI();
     syncActiveMotionVideoTarget();
-    const detailOpen = Boolean(dom.playlistDetailPane && !dom.playlistDetailPane.classList.contains('hidden'));
-    if (isDesktopLayout()) {
-      // On desktop, ensure right column displays active desktop tab
-      switchDesktopTab(state.desktopActiveTab, detailOpen, { fromResize: true });
-    } else {
-      // On mobile, ensure active mobile view is respected
-      switchMobileView(state.activeView, detailOpen);
+
+    const isMobileLayout = !isDesktopLayout();
+    const isPlDetailOpen = Boolean(dom.playlistDetailPane && !dom.playlistDetailPane.classList.contains('hidden'));
+    const isArtDetailOpen = Boolean(dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden'));
+    const isSectionGridOpen = Boolean(dom.sectionGridView && !dom.sectionGridView.classList.contains('hidden'));
+    const isRecentDetailOpen = Boolean(dom.recentDetailPane && !dom.recentDetailPane.classList.contains('hidden'));
+    const detailOpen = isPlDetailOpen || isArtDetailOpen || isSectionGridOpen || isRecentDetailOpen;
+    const libDetailOpen = isPlDetailOpen || isArtDetailOpen;
+    const homeDrilldownOpen = isSectionGridOpen || isRecentDetailOpen;
+
+    if (forceInitial || isMobileLayout !== wasMobileLayout) {
+      wasMobileLayout = isMobileLayout;
+      if (!isMobileLayout) {
+        const targetDesktopTab = libDetailOpen ? 'library' : (homeDrilldownOpen ? 'home' : state.desktopActiveTab);
+        switchDesktopTab(targetDesktopTab, libDetailOpen, {
+          fromResize: true,
+          skipFetch: true,
+          preserveHomeDrilldown: homeDrilldownOpen
+        });
+      } else {
+        switchMobileView(state.activeView, true, homeDrilldownOpen);
+      }
+      if (detailOpen && (!isMobileLayout || state.activeView === 'view-library')) {
+        if (libDetailOpen) {
+          syncNavHighlightForDetailOrigin(isArtDetailOpen ? 'library-artists' : (state.detailReturnOrigin || 'library'));
+        }
+      }
     }
   }
-  window.addEventListener('resize', handleResize);
-  window.addEventListener('orientationchange', handleResize);
+
+  function scheduleDebouncedResize() {
+    if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+    resizeDebounceTimer = setTimeout(() => {
+      resizeDebounceTimer = null;
+      handleResize();
+    }, 150);
+  }
+  window.addEventListener('resize', scheduleDebouncedResize, { passive: true });
+  window.addEventListener('orientationchange', () => {
+    if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+    resizeDebounceTimer = setTimeout(() => {
+      resizeDebounceTimer = null;
+      lastViewportWidth = -1;
+      handleResize();
+    }, 150);
+  }, { passive: true });
 
   // ==========================================================================
   // StandBy / TV Mode (Motion Covers) & WLED DDP Ambilight Controller
@@ -8974,6 +13970,7 @@ extension WebUIContent {
       hideMotionVideos();
       return;
     }
+    url = appendDeviceIdToUrl(url);
     if (currentMotionVideoUrl === url) {
       syncActiveMotionVideoTarget();
       return;
@@ -9033,7 +14030,37 @@ extension WebUIContent {
     const sbPlay = document.getElementById('standby-icon-play');
     const sbPause = document.getElementById('standby-icon-pause');
     const sbFav = document.getElementById('standby-btn-favorite');
+    const sbShuffleBtn = document.getElementById('standby-btn-shuffle');
+    const sbRepeatBtn = document.getElementById('standby-btn-repeat');
+    const sbRepeatBadge = document.getElementById('standby-repeat-badge');
     const sbAiVibe = document.getElementById('standby-btn-ai-track-vibe');
+
+    const isRadioMode = Boolean(state.isRadio);
+    if (sbShuffleBtn) {
+      sbShuffleBtn.disabled = isRadioMode;
+      sbShuffleBtn.classList.toggle('disabled-control', isRadioMode);
+      sbShuffleBtn.classList.toggle('active', !isRadioMode && Boolean(state.shuffle));
+      sbShuffleBtn.title = isRadioMode
+        ? (IS_EN ? 'Shuffle unavailable on Radio' : 'Перемешивание недоступно для радио')
+        : (state.shuffle
+          ? (IS_EN ? 'Shuffle: On' : 'Перемешать: Вкл')
+          : (IS_EN ? 'Shuffle: Off' : 'Перемешать'));
+    }
+    const sbEffectiveRepeat = (isRadioMode && state.repeatMode === 'all') ? 'off' : state.repeatMode;
+    if (sbRepeatBtn) {
+      const isRepActive = sbEffectiveRepeat === 'one' || sbEffectiveRepeat === 'all';
+      sbRepeatBtn.classList.toggle('active', isRepActive);
+      sbRepeatBtn.title = sbEffectiveRepeat === 'one'
+        ? (IS_EN ? 'Repeat: One Track (1)' : 'Повтор: Зациклен 1 трек')
+        : (sbEffectiveRepeat === 'all'
+          ? (IS_EN ? 'Repeat: Queue' : 'Повтор: Вся очередь')
+          : (isRadioMode
+            ? (IS_EN ? 'Repeat: Off (tap to repeat track)' : 'Повтор трека: Выкл')
+            : (IS_EN ? 'Repeat: Off' : 'Режим повтора: Выкл')));
+    }
+    if (sbRepeatBadge) {
+      sbRepeatBadge.classList.toggle('hidden', sbEffectiveRepeat !== 'one');
+    }
 
     if (t && t.name) {
       const sbTitleText = t.name || 'Без названия';
@@ -9049,6 +14076,8 @@ extension WebUIContent {
       }
       const art = getArtworkSrc(t);
       if (sbArt && sbArt.dataset.targetSrc !== art) {
+        delete sbArt.dataset.fallbackApplied;
+        sbArt.dataset.fallbackIcon = 'apple-touch-icon.svg';
         sbArt.dataset.targetSrc = art;
         sbArt.src = art;
       }
@@ -9076,7 +14105,8 @@ extension WebUIContent {
         }
       }
     } else {
-      if (sbTitle && sbTitle.textContent !== 'Не играет') sbTitle.textContent = 'Не играет';
+      const sbNotPlaying = translateTextToEn('Не играет');
+      if (sbTitle && sbTitle.textContent !== sbNotPlaying) sbTitle.textContent = sbNotPlaying;
       if (sbArtist && sbArtist.textContent !== 'Apple Music') sbArtist.textContent = 'Apple Music';
       if (sbAlbum && sbAlbum.textContent !== '') sbAlbum.textContent = '';
       if (sbFav) sbFav.classList.remove('active');
@@ -9095,12 +14125,13 @@ extension WebUIContent {
     }
 
     const sbDacText = document.getElementById('standby-dac-text');
+    const drcTvPart = (state.lateNightDrcEnabled || (state.lateNightDrcMode && state.lateNightDrcMode !== 'off')) ? ' · 🌙' : '';
     if (sbDacText) {
       const devPart = state.audioDeviceName ? ` · ${state.audioDeviceName}` : '';
-      sbDacText.textContent = `${formatDacPill(state.audioQuality)}${devPart}`;
+      sbDacText.textContent = `${formatDacPill(state.audioQuality)}${devPart}${drcTvPart}`;
     } else if (sbDac) {
       const devPart = state.audioDeviceName ? ` · ${state.audioDeviceName}` : '';
-      sbDac.textContent = `${formatDacPill(state.audioQuality)}${devPart}`;
+      sbDac.textContent = `${formatDacPill(state.audioQuality)}${devPart}${drcTvPart}`;
     }
 
     if (sbPlay && sbPause) {
@@ -9114,6 +14145,7 @@ extension WebUIContent {
     }
 
     updateStandbyActiveTile();
+    syncTrackLoadingIndicatorUI();
     syncMotionVideoPlaybackState();
     ScreenWakeLockManager.syncByPlaybackAndConnection();
     syncSpectralPolling();
@@ -9122,13 +14154,31 @@ extension WebUIContent {
 
   let lastStandbyTilesSignature = '';
 
+  function handleTvLibraryConfig(data) {
+    const rawCfg = (data && data.config && typeof data.config === 'object') ? data.config : data;
+    if (!rawCfg || typeof rawCfg !== 'object') return;
+    state.tvLibraryConfig = {
+      ...state.tvLibraryConfig,
+      ...rawCfg
+    };
+    state.tvLibraryConfigLoaded = true;
+    lastStandbyTilesSignature = '';
+    renderStandbyQuickTiles();
+  }
+
   function openStandbyLibraryModal() {
     const modal = document.getElementById('standby-library-modal');
     if (!modal) return;
     closeStandbyAiModal();
+    if (!state.tvLibraryConfigLoaded) {
+      send({ action: 'get_tv_library_config' });
+    }
     renderStandbyQuickTiles();
     if (!state.playlists || state.playlists.length === 0) {
       send({ action: 'get_playlists' });
+    }
+    if (!state.libraryAlbums || state.libraryAlbums.length === 0) {
+      send({ action: 'get_library_albums' });
     }
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
@@ -9188,7 +14238,7 @@ extension WebUIContent {
       request_id: reqId,
       params: {
         prompt: prompt,
-        country: state.userStorefront || state.trends.country || 'ru',
+        country: getActiveStorefront(),
         auto_play: true,
         request_id: reqId
       }
@@ -9221,6 +14271,7 @@ extension WebUIContent {
     return `<span class="ai-tag-line-top">${iconSpan}<span class="ai-tag-main">${escapeHtml(rest)}</span></span>`;
   }
 
+// === MODULE: 24-standby-ai-cloud-and-tiles.js ===
   function createStandbyAiTagPillElement(item, forcePinned = false) {
     const isPinned = forcePinned || isPromptPinnedClient(item.prompt);
     const btn = document.createElement('button');
@@ -9242,27 +14293,41 @@ extension WebUIContent {
     return btn;
   }
 
+  const MAX_STANDBY_AI_CHIPS = 120;
+
   function appendStandbyAiTagBatch(count = 24) {
     const cloud = document.getElementById('standby-ai-tag-cloud');
+    const sentinel = document.getElementById('standby-ai-sentinel');
     if (!cloud) return;
+    const availableSlots = Math.max(0, MAX_STANDBY_AI_CHIPS - cloud.children.length);
+    const batchCount = Math.min(count, availableSlots);
+    if (batchCount <= 0) {
+      if (sentinel) sentinel.classList.add('hidden');
+      return;
+    }
     const frag = document.createDocumentFragment();
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < batchCount; i++) {
       const item = buildNextStandbyAiTagItem();
       frag.appendChild(createStandbyAiTagPillElement(item, false));
     }
     cloud.appendChild(frag);
+    if (sentinel && cloud.children.length >= MAX_STANDBY_AI_CHIPS) {
+      sentinel.classList.add('hidden');
+    }
   }
 
   function resetAndGenerateStandbyAiTagCloud() {
     const cloud = document.getElementById('standby-ai-tag-cloud');
     const scrollEl = document.getElementById('standby-ai-scroll');
+    const sentinel = document.getElementById('standby-ai-sentinel');
     if (!cloud) return;
     cloud.innerHTML = '';
+    if (sentinel) sentinel.classList.remove('hidden');
     if (scrollEl) scrollEl.scrollTop = 0;
     standbyAiGeneratedCount = 0;
     if (Array.isArray(state.pinnedAiPrompts) && state.pinnedAiPrompts.length > 0) {
       const pinFrag = document.createDocumentFragment();
-      state.pinnedAiPrompts.forEach((p, idx) => {
+      state.pinnedAiPrompts.slice(0, MAX_STANDBY_AI_CHIPS).forEach((p, idx) => {
         const prompt = IS_EN ? (p.promptEn || p.prompt_en || p.prompt || '') : (p.promptRu || p.prompt_ru || p.prompt || '');
         const label = IS_EN ? (p.labelEn || p.label_en || p.label || prompt) : (p.labelRu || p.label_ru || p.label || prompt);
         if (!prompt) return;
@@ -9285,18 +14350,6 @@ extension WebUIContent {
     const loadMoreBtn = document.getElementById('btn-standby-ai-load-more');
     if (!scrollEl) return;
     standbyAiScrollBound = true;
-
-    let throttleTick = false;
-    scrollEl.addEventListener('scroll', () => {
-      if (throttleTick) return;
-      throttleTick = true;
-      requestAnimationFrame(() => {
-        throttleTick = false;
-        if (scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 320) {
-          appendStandbyAiTagBatch(18);
-        }
-      });
-    }, { passive: true });
 
     if (loadMoreBtn) {
       loadMoreBtn.addEventListener('click', () => {
@@ -9358,9 +14411,17 @@ extension WebUIContent {
     });
   }
 
+  function buildAlbumConfigMatchKey(name, artist) {
+    return `${normalizeAlbumMatchText(name)}|${normalizeAlbumMatchText(artist)}`;
+  }
+
   function renderStandbyQuickTiles() {
     const grid = document.getElementById('standby-library-grid');
     if (!grid) return;
+
+    const cfg = state.tvLibraryConfig || {};
+    const playlistsMode = cfg.playlists_mode || 'all';
+    const albumsMode = cfg.albums_mode || 'recent';
 
     const rawPlaylists = (state.playlists || []).filter(pl => {
       const n = (pl.name || '').trim();
@@ -9369,7 +14430,11 @@ extension WebUIContent {
       return true;
     });
 
-    const sig = rawPlaylists.map(p => `${p.name}:${p.artwork_url || p.artworkUrl || ''}:${p.track_count || p.trackCount || 0}`).join('|') +
+    const allLibAlbums = Array.isArray(state.libraryAlbums) ? state.libraryAlbums : [];
+
+    const sig = JSON.stringify(cfg) +
+      '|pl:' + rawPlaylists.map(p => `${p.name}:${p.artwork_url || p.artworkUrl || ''}:${p.track_count || p.trackCount || 0}`).join('|') +
+      '|albums:' + allLibAlbums.map(a => `${a.id || ''}:${a.name || ''}:${a.artist || ''}:${a.artwork || ''}`).join('|') +
       '|mixes:' + ((state.personalMixes || []).map(m => `${m.name}:${m.id || ''}`).join(','));
     if (sig === lastStandbyTilesSignature && grid.children.length > 0) {
       updateStandbyActiveTile();
@@ -9390,6 +14455,7 @@ extension WebUIContent {
     const coreTiles = [
       {
         key: 'my-station',
+        visible: cfg.show_my_station !== false,
         title: 'Моя станция',
         type: 'station',
         onClick: () => {
@@ -9414,6 +14480,7 @@ extension WebUIContent {
       },
       {
         key: 'discovery-station',
+        visible: cfg.show_discovery_station !== false,
         title: 'Станция открытий',
         type: 'station',
         onClick: () => {
@@ -9438,6 +14505,7 @@ extension WebUIContent {
       },
       {
         key: 'favorites-mix',
+        visible: cfg.show_favorites_mix !== false,
         title: 'В моём вкусе',
         type: 'playlist',
         onClick: () => {
@@ -9465,6 +14533,7 @@ extension WebUIContent {
       },
       {
         key: 'heavy-rotation',
+        visible: cfg.show_heavy_rotation !== false,
         title: 'Сейчас на повторе',
         type: 'playlist',
         onClick: () => {
@@ -9490,7 +14559,143 @@ extension WebUIContent {
           });
         }
       }
-    ];
+    ].filter(item => item.visible);
+
+    // 2. Filter Playlists according to cfg.playlists_mode ('all' | 'selected' | 'none')
+    let filteredPlaylists = [];
+    if (playlistsMode === 'none') {
+      filteredPlaylists = [];
+    } else if (playlistsMode === 'selected') {
+      const selectedNames = Array.isArray(cfg.selected_playlist_names) ? cfg.selected_playlist_names : [];
+      const seenPl = new Set();
+      selectedNames.forEach(rawSel => {
+        const cleanSel = String(rawSel || '').trim();
+        const lowerSel = cleanSel.toLowerCase();
+        if (!lowerSel || seenPl.has(lowerSel)) return;
+        const found = rawPlaylists.find(pl => String(pl.name || '').trim().toLowerCase() === lowerSel);
+        if (found) {
+          seenPl.add(lowerSel);
+          filteredPlaylists.push(found);
+        } else if (rawPlaylists.length === 0 && cleanSel) {
+          seenPl.add(lowerSel);
+          filteredPlaylists.push({ name: cleanSel });
+        }
+      });
+    } else {
+      filteredPlaylists = rawPlaylists.filter(pl => {
+        const lower = (pl.name || '').trim().toLowerCase();
+        return lower !== 'в моём вкусе' && lower !== 'в моем вкусе' && lower !== 'сейчас на повторе';
+      });
+    }
+
+    // 3. Filter Albums according to cfg.albums_mode ('recent' | 'selected' | 'none')
+    let filteredAlbums = [];
+    if (albumsMode === 'none') {
+      filteredAlbums = [];
+    } else if (albumsMode === 'selected') {
+      const selAlbumObjs = Array.isArray(cfg.selected_albums) ? cfg.selected_albums : [];
+      const selAlbumKeys = Array.isArray(cfg.selected_album_keys) ? cfg.selected_album_keys : [];
+      const usedLibIndices = new Set();
+      const seenOutKeys = new Set();
+
+      const matchLibAlbum = (selItem) => {
+        const selId = String((selItem && selItem.id) || '').trim();
+        const selKeyRaw = String((selItem && selItem.key) || '').trim().toLowerCase();
+        const selKeyNorm = selKeyRaw
+          ? selKeyRaw.split('|').map(part => normalizeAlbumMatchText(part)).join('|')
+          : '';
+        const selName = (selItem && selItem.name) || '';
+        const selArtist = (selItem && selItem.artist) || '';
+
+        for (let i = 0; i < allLibAlbums.length; i++) {
+          if (usedLibIndices.has(i)) continue;
+          const cand = allLibAlbums[i];
+          if (!cand) continue;
+          const candId = String(cand.id || '').trim();
+          const candKeyRaw = String(cand.key || '').trim().toLowerCase();
+          const candNormKey = buildAlbumConfigMatchKey(cand.name, cand.artist);
+          const candRawPair = `${String(cand.name || '').trim().toLowerCase()}|${String(cand.artist || '').trim().toLowerCase()}`;
+
+          if (
+            (selId && candId && selId === candId) ||
+            (selKeyRaw && ((candKeyRaw && selKeyRaw === candKeyRaw) || selKeyRaw === candRawPair || selKeyNorm === candNormKey)) ||
+            (selName && albumsMatchClient(cand.name, cand.artist, selName, selArtist))
+          ) {
+            usedLibIndices.add(i);
+            return cand;
+          }
+        }
+        return null;
+      };
+
+      selAlbumObjs.forEach(selObj => {
+        if (!selObj || typeof selObj !== 'object') return;
+        const matched = matchLibAlbum(selObj);
+        if (matched) {
+          const outK = buildAlbumConfigMatchKey(matched.name, matched.artist) || String(matched.id || '');
+          if (!seenOutKeys.has(outK)) {
+            seenOutKeys.add(outK);
+            filteredAlbums.push(matched);
+          }
+        } else if (allLibAlbums.length === 0 && selObj.name) {
+          const outK = buildAlbumConfigMatchKey(selObj.name, selObj.artist) || String(selObj.key || selObj.id || selObj.name);
+          if (!seenOutKeys.has(outK)) {
+            seenOutKeys.add(outK);
+            filteredAlbums.push({
+              id: selObj.id || '',
+              name: selObj.name || '',
+              artist: selObj.artist || '',
+              artwork: selObj.artwork || selObj.artwork_url || '',
+              track_count: selObj.track_count || 0
+            });
+          }
+        }
+      });
+
+      selAlbumKeys.forEach(rawKey => {
+        const keyStr = String(rawKey || '').trim();
+        if (!keyStr) return;
+        let parsedName = '';
+        let parsedArtist = '';
+        if (keyStr.includes('|')) {
+          const parts = keyStr.split('|');
+          parsedName = parts[0] || '';
+          parsedArtist = parts.slice(1).join('|') || '';
+        } else if (keyStr.includes('::')) {
+          const parts = keyStr.split('::');
+          parsedName = parts[0] || '';
+          parsedArtist = parts.slice(1).join('::') || '';
+        }
+        const probe = { key: keyStr, id: (!parsedName ? keyStr : ''), name: parsedName, artist: parsedArtist };
+        const matched = matchLibAlbum(probe);
+        if (matched) {
+          const outK = buildAlbumConfigMatchKey(matched.name, matched.artist) || String(matched.id || keyStr);
+          if (!seenOutKeys.has(outK)) {
+            seenOutKeys.add(outK);
+            filteredAlbums.push(matched);
+          }
+        } else if (allLibAlbums.length === 0 && parsedName) {
+          const outK = buildAlbumConfigMatchKey(parsedName, parsedArtist) || keyStr.toLowerCase();
+          if (!seenOutKeys.has(outK)) {
+            seenOutKeys.add(outK);
+            filteredAlbums.push({
+              id: '',
+              name: parsedName,
+              artist: parsedArtist,
+              artwork: '',
+              track_count: 0
+            });
+          }
+        }
+      });
+    } else {
+      filteredAlbums = allLibAlbums.slice(0, 24);
+    }
+
+    if (coreTiles.length === 0 && filteredPlaylists.length === 0 && filteredAlbums.length === 0) {
+      grid.innerHTML = `<div class="empty-state">${escapeHtml(translateTextToEn('Все плашки скрыты в настройках Mac (Основные → ТВ-режим)'))}</div>`;
+      return;
+    }
 
     coreTiles.forEach(item => {
       const btn = document.createElement('button');
@@ -9506,10 +14711,9 @@ extension WebUIContent {
     });
 
     // 2. Local Library Playlists (Large Square Tiles)
-    rawPlaylists.forEach(pl => {
+    filteredPlaylists.forEach(pl => {
       const plName = (pl.name || '').trim();
-      const lower = plName.toLowerCase();
-      if (lower === 'в моём вкусе' || lower === 'в моем вкусе' || lower === 'сейчас на повторе') return;
+      if (!plName) return;
 
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -9521,9 +14725,9 @@ extension WebUIContent {
 
       const count = pl.track_count || pl.trackCount || 0;
       const countText = count > 0 ? `<span class="standby-tile-meta">${count} треков</span>` : '';
-      const artUrl = pl.artwork_url || pl.artworkUrl || `/api/artwork/playlist?name=${encodeURIComponent(plName)}`;
+      const artUrl = appendDeviceIdToUrl(pl.artwork_url || pl.artworkUrl || `/api/artwork/playlist?name=${encodeURIComponent(plName)}`);
       btn.innerHTML = `
-        <img class="standby-tile-cover" src="${escapeHtml(artUrl)}" alt="${escapeHtml(plName)}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <img class="standby-tile-cover" src="${escapeHtml(artUrl)}" alt="${escapeHtml(plName)}" loading="lazy" data-fallback-mode="next-flex">
         <div class="standby-tile-fallback" style="display:none;">
           <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.6">
             <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
@@ -9556,7 +14760,67 @@ extension WebUIContent {
       grid.appendChild(btn);
     });
 
+    // 3. User Library Albums (Filtered by tv_library_config)
+    filteredAlbums.forEach(alb => {
+      const albName = (alb.name || '').trim();
+      if (!albName) return;
+      const albArtist = (alb.artist || '').trim();
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'standby-square-tile';
+      const tileKey = `alb:${alb.id || albName}`;
+      btn.setAttribute('data-tile-key', tileKey);
+      btn.setAttribute('data-tile-name', albName);
+      btn.setAttribute('title', albArtist ? `${albName} — ${albArtist}` : albName);
+
+      const count = alb.track_count || alb.trackCount || 0;
+      const metaParts = [];
+      if (albArtist) metaParts.push(albArtist);
+      if (count > 0) metaParts.push(formatTracksCount(count));
+      const metaText = metaParts.length > 0
+        ? `<span class="standby-tile-meta">${escapeHtml(metaParts.join(' • '))}</span>`
+        : '';
+      const fallbackArt = `/api/artwork/search?name=${encodeURIComponent(albName)}&artist=${encodeURIComponent(albArtist)}&album=${encodeURIComponent(albName)}`;
+      const rawArt = alb.artwork || alb.artwork_url || alb.artworkUrl || fallbackArt;
+      const artUrl = appendDeviceIdToUrl(rawArt);
+
+      btn.innerHTML = `
+        <img class="standby-tile-cover" src="${escapeHtml(artUrl)}" alt="${escapeHtml(albName)}" loading="lazy" data-fallback-mode="next-flex">
+        <div class="standby-tile-fallback" style="display:none;">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </div>
+        <div class="standby-tile-scrim">
+          <span class="standby-tile-title">${escapeHtml(albName)}</span>
+          ${metaText}
+        </div>
+        ${playBadgeHtml}
+      `;
+
+      btn.addEventListener('click', () => {
+        state.activeStandbyTileKey = tileKey;
+        updateStandbyActiveTile();
+        closeStandbyLibraryModal();
+        optimisticPlay();
+        markWaitingForPlayback({ targetName: albName });
+        setUIBusy(true, `Запуск альбома «${albName}»...`);
+        send({
+          action: 'play_album',
+          params: {
+            id: alb.id || '',
+            name: albName,
+            artist: albArtist,
+            shuffle: false
+          }
+        });
+      });
+
+      grid.appendChild(btn);
+    });
+
     updateStandbyActiveTile();
+    syncTrackLoadingIndicatorUI();
     syncMotionVideoPlaybackState();
     ScreenWakeLockManager.syncByPlaybackAndConnection();
     syncSpectralPolling();
@@ -9599,6 +14863,7 @@ extension WebUIContent {
     }
   }
 
+// === MODULE: 25-wled-dsp-and-mastering-ui.js ===
   function pushWledSettingsToServer() {
     const modeSel = document.getElementById('wled-mode-select');
     const mode = modeSel ? modeSel.value : 'ambilight';
@@ -9611,6 +14876,1183 @@ extension WebUIContent {
     });
   }
 
+  function updateDSPSettingsUI(data) {
+    if (!data || typeof data !== 'object') return;
+    state.lastDspSettings = Object.assign({}, data);
+    if (data.is_dlna_active !== undefined) {
+      state.isDlnaActive = Boolean(data.is_dlna_active);
+    }
+    if (data.room_acoustic && typeof data.room_acoustic === 'object') {
+      updateRoomAcousticUI(data.room_acoustic, { skipSignalRefresh: true });
+    }
+    if (data.late_night_drc && typeof data.late_night_drc === 'object') {
+      updateLateNightDRCUI(data.late_night_drc, { skipSignalRefresh: true });
+    }
+    if (data.mastering_restoration && typeof data.mastering_restoration === 'object') {
+      updateMasteringRestorationUI(data.mastering_restoration, { skipSignalRefresh: true });
+    }
+    if (data.mode !== undefined) state.dspMode = String(data.mode || 'passthrough');
+    if (data.dsd_rate !== undefined) state.dspRate = Number(data.dsd_rate) || 256;
+    if (data.profile !== undefined) {
+      const p = String(data.profile || 'balanced');
+      state.dspProfileKey = p;
+      state.dspProfile = (p === 'transient') ? '7EC-Transient' : ((p === 'superWide') ? '7EC-Super' : '7EC-Balanced');
+    }
+    if (data.clock_policy !== undefined) state.dspClockPolicy = String(data.clock_policy || 'strictSACD44k1');
+    if (data.oversampler_backend !== undefined) state.dspOversamplerBackend = String(data.oversampler_backend || 'accelerateAMX');
+    if (data.phase_mode !== undefined) state.dspPhaseMode = String(data.phase_mode || 'linearPhase');
+    if (data.trellis_order !== undefined) state.dspTrellisOrder = Number(data.trellis_order) || 8;
+    if (data.output_sample_rate !== undefined) state.dspOutputSampleRate = Number(data.output_sample_rate) || 0;
+    if (data.dop_carrier_rate !== undefined) state.dspDoPCarrierRate = Number(data.dop_carrier_rate) || 0;
+    if (data.is_hog_mode !== undefined) state.dspIsHogMode = Boolean(data.is_hog_mode);
+    if (data.is_integer_mode !== undefined) state.dspIsIntegerMode = Boolean(data.is_integer_mode);
+    if (data.cpu_load_percent !== undefined) state.dspCpuLoadPercent = Number(data.cpu_load_percent) || 0;
+    if (data.ring_buffer_fill_percent !== undefined) state.dspRingBufferFillPercent = Number(data.ring_buffer_fill_percent) || 0;
+
+    if (data.usb_dac_available !== undefined) state.usbDacAvailable = Boolean(data.usb_dac_available);
+    if (data.supports_nos_pcm !== undefined) state.dspSupportsNos = Boolean(data.supports_nos_pcm);
+    if (data.supports_dsd_dop !== undefined) state.dspSupportsDsd = Boolean(data.supports_dsd_dop);
+    if (data.max_dsd_rate !== undefined) state.dspMaxDsdRate = Number(data.max_dsd_rate) || 0;
+    if (data.active_output_transport !== undefined) state.dspActiveOutputTransport = String(data.active_output_transport || '');
+
+    if (data.active_preset_id !== undefined) {
+      state.dspActivePresetId = String(data.active_preset_id || 'builtin_passthrough');
+    }
+    if (data.active_preset_name !== undefined) {
+      state.dspActivePresetName = String(data.active_preset_name || '');
+    }
+    if (data.active_preset_subtitle !== undefined) {
+      state.dspActivePresetSubtitle = String(data.active_preset_subtitle || '');
+    }
+    if (Array.isArray(data.presets)) {
+      state.dspPresets = data.presets;
+    }
+
+    const activeDev = Array.isArray(state.audioDevices)
+      ? state.audioDevices.find((d) => d && (d.isDefault || d.is_default))
+      : null;
+    const isNetDev = Boolean(
+      state.isDlnaActive ||
+      (activeDev && (activeDev.isNetwork || activeDev.is_network || activeDev.protocol === 'dlna' || activeDev.protocol === 'bluos'))
+    );
+    const devSupportsNos = state.dspSupportsNos !== undefined
+      ? Boolean(state.dspSupportsNos)
+      : Boolean(activeDev && (activeDev.supportsNOS || activeDev.supports_nos));
+    const devSupportsDsd = state.dspSupportsDsd !== undefined
+      ? Boolean(state.dspSupportsDsd)
+      : Boolean(activeDev && (activeDev.supportsDSDDoP || activeDev.supports_dsd_dop));
+    const hasEligibleUsbDac = state.usbDacAvailable !== undefined
+      ? Boolean(state.usbDacAvailable)
+      : (devSupportsNos || devSupportsDsd);
+
+    if (!isNetDev && devSupportsDsd && state.dspMode === 'sdm_dop') {
+      state.dspBadge = `DSD${state.dspRate || 256} DoP · ${state.dspProfile || '7EC-Balanced'}`;
+    } else if (!isNetDev && devSupportsNos && state.dspMode === 'hq_nos_pcm') {
+      const khz = ((state.dspDoPCarrierRate || 705600) / 1000).toFixed(1).replace(/\.0$/, '');
+      state.dspBadge = `HQ NOS PCM · ${khz} kHz`;
+    } else {
+      state.dspBadge = '';
+    }
+
+    const isPresetSupportedByHardware = (p) => {
+      if (!p) return false;
+      const pid = String(p.id || '');
+      if (pid === 'builtin_passthrough') return true;
+      const pMode = String(p.mode || (p.configuration && p.configuration.mode) || '');
+      if (pMode === 'passthrough' || pMode === 'bitPerfectPassthrough') return true;
+      if (pMode === 'hq_nos_pcm') return devSupportsNos;
+      if (pMode === 'sdm_dop') return devSupportsDsd;
+      return hasEligibleUsbDac;
+    };
+
+    const presetSel = document.getElementById('dsp-preset-select');
+    if (presetSel) {
+      if (Array.isArray(state.dspPresets) && state.dspPresets.length > 0) {
+        presetSel.innerHTML = '';
+        state.dspPresets.forEach((p) => {
+          if (!p || !p.id) return;
+          const opt = document.createElement('option');
+          opt.value = String(p.id);
+          const isBuiltIn = Boolean(p.is_builtin !== undefined ? p.is_builtin : p.isBuiltIn);
+          const rawName = String(p.name || p.id);
+          opt.textContent = isBuiltIn ? translateTextToEn(rawName) : `★ ${rawName}`;
+          opt.disabled = isNetDev || !isPresetSupportedByHardware(p);
+          presetSel.appendChild(opt);
+        });
+        if (!isNetDev && hasEligibleUsbDac && state.dspActivePresetId === 'unsaved_custom') {
+          const customOpt = document.createElement('option');
+          customOpt.value = 'unsaved_custom';
+          customOpt.disabled = true;
+          customOpt.textContent = `✏️ ${translateTextToEn(state.dspActivePresetName || 'Пользовательский режим')}`;
+          presetSel.appendChild(customOpt);
+        }
+      }
+      if (isNetDev || !hasEligibleUsbDac) {
+        presetSel.value = 'builtin_passthrough';
+        presetSel.disabled = true;
+      } else if (state.dspActivePresetId) {
+        presetSel.value = state.dspActivePresetId;
+        presetSel.disabled = (state.allowDspPresetSelection === false);
+      }
+    }
+
+    const subEl = document.getElementById('dsp-preset-subtitle');
+    if (subEl) {
+      if (isNetDev) {
+        subEl.textContent = IS_EN
+          ? 'External network streamer active: Bit-Perfect PCM (DSD/NOS presets unavailable)'
+          : 'Активен внешний сетевой плеер BluOS / DLNA: передаётся Bit-Perfect PCM (DSD/NOS не поддерживаются)';
+      } else if (!hasEligibleUsbDac) {
+        subEl.textContent = IS_EN
+          ? 'No external USB DAC connected: DSD and HQ NOS modes require a USB DAC (≥ 24-bit / 176.4 kHz)'
+          : 'Внешний USB ЦАП не подключён: режимы DSD и HQ NOS доступны только для USB ЦАП (≥ 24-бит / 176.4 кГц)';
+      } else if (state.dspActivePresetSubtitle) {
+        subEl.textContent = translateTextToEn(state.dspActivePresetSubtitle);
+      }
+    }
+
+    applyDeviceCapabilityPermissionsUI();
+    renderNowPlaying();
+    updateSignalPathDetails();
+  }
+
+  function pushDSPSettingsToServer() {
+    if (state.isDlnaActive) {
+      const presetSel = document.getElementById('dsp-preset-select');
+      if (presetSel) presetSel.value = 'builtin_passthrough';
+      showToast(IS_EN
+        ? 'DSP presets are disabled when outputting to BluOS / DLNA network players'
+        : 'Выбор пресета DSP отключён при выводе на сетевой плеер BluOS / DLNA');
+      return;
+    }
+    const presetSel = document.getElementById('dsp-preset-select');
+    if (!presetSel || !presetSel.value || presetSel.value === 'unsaved_custom') return;
+    if (presetSel.value !== 'builtin_passthrough' && state.usbDacAvailable === false) {
+      presetSel.value = 'builtin_passthrough';
+      showToast(IS_EN
+        ? 'DSD & HQ NOS modes are available only for external USB DACs'
+        : 'Режимы DSD и HQ NOS доступны только для внешних USB ЦАП');
+      return;
+    }
+    if (state.allowDspPresetSelection === false) {
+      if (state.dspActivePresetId) {
+        presetSel.value = state.dspActivePresetId;
+      }
+      showToast(IS_EN ? 'DSP preset selection is disabled for this device on Mac' : 'Выбор пресета DSP отключён для этого устройства в настройках Mac');
+      return;
+    }
+    triggerHaptic('light');
+    send({
+      action: 'select_dsp_preset',
+      params: {
+        preset_id: presetSel.value
+      }
+    });
+  }
+
+  function defaultLateNightSubtitle(mode) {
+    if (mode === 'gentle') {
+      return translateTextToEn('Мягкий подъём тихих деталей (до +6 дБ) с гейтом шума -63 dBFS для джаза, вокала и акустики.');
+    }
+    if (mode === 'concert') {
+      return translateTextToEn('Глубокий контроль оркестровых пианиссимо и тутти (до +9.5 дБ, -1.0 dBTP) для классики и саундтреков.');
+    }
+    return translateTextToEn('Прямой 100% Bit-Perfect тракт без динамической обработки сигнала.');
+  }
+
+  function syncLateNightBadgeOnly() {
+    const badgeEl = document.getElementById('late-night-gain-badge');
+    const selectEl = document.getElementById('late-night-drc-select');
+    const subEl = document.getElementById('late-night-drc-subtitle');
+
+    const mode = (state.lateNightDrcMode === 'gentle' || state.lateNightDrcMode === 'concert')
+      ? state.lateNightDrcMode
+      : 'off';
+    const isEnabled = mode !== 'off';
+    state.lateNightDrcEnabled = isEnabled;
+    state.lateNightDrcMode = mode;
+    if (isEnabled) {
+      state.lateNightDrcProfile = mode;
+    }
+
+    if (selectEl && selectEl.value !== mode && Array.from(selectEl.options).some(o => o.value === mode)) {
+      selectEl.value = mode;
+    }
+    if (subEl) {
+      subEl.textContent = (isEnabled && state.lateNightDrcSubtitle)
+        ? translateTextToEn(state.lateNightDrcSubtitle)
+        : defaultLateNightSubtitle(mode);
+    }
+    if (!badgeEl) return;
+    if (!isEnabled) {
+      badgeEl.classList.remove('active');
+      badgeEl.textContent = '100% Bit-Perfect';
+    } else {
+      badgeEl.classList.add('active');
+      const g = Number(state.lateNightDrcGainDb) || 0;
+      if (Math.abs(g) >= 0.15 && state.playerState === 'playing') {
+        const sign = g >= 0 ? '+' : '';
+        badgeEl.textContent = `64-bit • ${sign}${g.toFixed(1)} dB`;
+      } else {
+        badgeEl.textContent = mode === 'concert'
+          ? (IS_EN ? 'ACTIVE • CONCERT' : 'АКТИВЕН • КОНЦЕРТ')
+          : (IS_EN ? 'ACTIVE • GENTLE' : 'АКТИВЕН • ДЕЛИКАТНЫЙ');
+      }
+    }
+  }
+
+  function updateLateNightDRCUI(data, opts = {}) {
+    if (!data || typeof data !== 'object') return;
+    if (data.profile !== undefined) {
+      const nextProf = String(data.profile || 'gentle');
+      if (nextProf === 'gentle' || nextProf === 'concert') {
+        state.lateNightDrcProfile = nextProf;
+      }
+    }
+    if (data.enabled !== undefined) {
+      state.lateNightDrcEnabled = Boolean(data.enabled);
+    }
+    if (data.mode !== undefined) {
+      const nextMode = String(data.mode || 'off');
+      if (nextMode === 'gentle' || nextMode === 'concert') {
+        state.lateNightDrcProfile = nextMode;
+        state.lateNightDrcEnabled = true;
+        state.lateNightDrcMode = nextMode;
+      } else {
+        state.lateNightDrcEnabled = false;
+        state.lateNightDrcMode = 'off';
+      }
+    } else {
+      state.lateNightDrcMode = state.lateNightDrcEnabled ? (state.lateNightDrcProfile || 'gentle') : 'off';
+    }
+    if (data.subtitle !== undefined) {
+      state.lateNightDrcSubtitle = String(data.subtitle || '');
+    } else if (data.profile_subtitle !== undefined && state.lateNightDrcEnabled) {
+      state.lateNightDrcSubtitle = String(data.profile_subtitle || '');
+    }
+    if (data.current_gain_db !== undefined) {
+      state.lateNightDrcGainDb = Number(data.current_gain_db) || 0;
+    }
+    syncLateNightBadgeOnly();
+    applyDeviceCapabilityPermissionsUI();
+    if (!opts.skipSignalRefresh) {
+      renderNowPlaying();
+      updateSignalPathDetails();
+    }
+  }
+
+  function pushLateNightDRCToServer() {
+    const drcSel = document.getElementById('late-night-drc-select');
+    if (!drcSel) return;
+    if (state.allowLateNightMode === false) {
+      drcSel.value = state.lateNightDrcMode || 'off';
+      showToast(IS_EN ? 'Late-Night DRC access is disabled for this device on Mac' : 'Доступ к ночному режиму отключён для этого устройства в настройках Mac');
+      return;
+    }
+    const nextMode = (drcSel.value === 'gentle' || drcSel.value === 'concert') ? drcSel.value : 'off';
+    state.lateNightDrcMode = nextMode;
+    state.lateNightDrcEnabled = nextMode !== 'off';
+    if (nextMode !== 'off') {
+      state.lateNightDrcProfile = nextMode;
+    }
+    state.lateNightDrcSubtitle = '';
+    triggerHaptic('light');
+    syncLateNightBadgeOnly();
+    send({
+      action: 'set_late_night_drc',
+      params: {
+        mode: nextMode
+      }
+    });
+    if (nextMode === 'off') {
+      showToast(IS_EN ? '🌙 Late-Night DRC Off (100% Bit-Perfect)' : '🌙 Ночной режим выключен (100% Bit-Perfect)');
+    } else if (nextMode === 'concert') {
+      showToast(IS_EN ? '🌙 Night Concert Mode enabled' : '🌙 Включён режим «Ночной концерт»');
+    } else {
+      showToast(IS_EN ? '🌙 Gentle Late-Night DRC enabled' : '🌙 Включён деликатный ночной режим');
+    }
+  }
+
+  function defaultDeClipSubtitle(mode) {
+    if (mode === 'auto') {
+      return IS_EN
+        ? 'Automatically reconstructs shaved 0 dBFS brickwall plateaus on compressed masters while leaving DR11+ audiophile recordings untouched.'
+        : 'Автоматически достраивает срезанные «полки» кирпичного лимитера на зажатых ремастерах, не вмешиваясь в чистые записи DR11+.';
+    }
+    if (mode === 'gentle') {
+      return IS_EN
+        ? 'Smooth 64-bit cubic Hermite transient peak restoration up to +2.8 dB with C1 slope continuity.'
+        : 'Деликатная 64-битная кубическая Эрмитова реконструкция транзиентов до +2.8 дБ с гладкой сшивкой склонов.';
+    }
+    if (mode === 'studio') {
+      return IS_EN
+        ? 'Deep mastering crest reconstruction up to +4.2 dB for heavily clipped Loudness War (DR4–DR7) rock, metal & pop remasters.'
+        : 'Глубокое восстановление динамических пиков до +4.2 дБ для жёстко зажатых ремастеров «Войны громкости» (DR4–DR7).';
+    }
+    return IS_EN
+      ? '100% Bit-Perfect passthrough without waveform peak reconstruction.'
+      : 'Прямой 100% Bit-Perfect тракт без реконструкции срезанных верхушек волны.';
+  }
+
+  function defaultDeEsserSubtitle(mode) {
+    if (mode === 'gentle') {
+      return IS_EN
+        ? 'Level-independent relative detector (7.0 kHz) taming piercing glare up to -3.5 dB on planar headphones and bright tweeters while preserving cymbal air.'
+        : 'Относительный детектор в духе Weiss DAC501 (7.0 кГц): смягчает колкие сибилянты до -3.5 дБ на планарах и ярких АС, сохраняя воздух тарелок.';
+    }
+    if (mode === 'vocal') {
+      return IS_EN
+        ? 'Mastering-grade relative sibilance control (6.5 kHz, up to -6.0 dB, 0.8 ms attack) eliminating harsh vocal spikes at any volume.'
+        : 'Студийное подавление резких вокальных «с/ц/ш» (6.5 кГц, до -6.0 дБ, атака 0.8 мс) с одинаковой точностью на шёпоте и в тутти.';
+    }
+    return IS_EN
+      ? '100% Bit-Perfect passthrough without high-frequency dynamic sibilance control.'
+      : 'Прямой 100% Bit-Perfect тракт без динамического подавления сибилянтов.';
+  }
+
+  function syncMasteringRestorationBadgesOnly() {
+    const dcBadge = document.getElementById('declip-gain-badge');
+    const dcSelect = document.getElementById('mastering-declip-select');
+    const dcSub = document.getElementById('mastering-declip-subtitle');
+    const dcLabel = document.getElementById('signal-declip-label');
+
+    const dcMode = (state.masteringDeclipMode === 'auto' || state.masteringDeclipMode === 'gentle' || state.masteringDeclipMode === 'studio')
+      ? state.masteringDeclipMode
+      : 'off';
+    state.masteringDeclipMode = dcMode;
+
+    if (dcLabel && IS_EN) {
+      dcLabel.textContent = '⚡️ Mastering De-Clipper';
+    }
+    if (dcSelect) {
+      if (IS_EN) {
+        const enMap = {
+          off: 'Off (100% Bit-Perfect)',
+          auto: 'Auto — Smart Guard (DR ≤ 10)',
+          gentle: 'Gentle (up to +2.8 dB peaks)',
+          studio: 'Studio Restoration (up to +4.2 dB)'
+        };
+        Array.from(dcSelect.options).forEach(opt => {
+          if (enMap[opt.value]) opt.textContent = enMap[opt.value];
+        });
+      }
+      if (dcSelect.value !== dcMode && Array.from(dcSelect.options).some(o => o.value === dcMode)) {
+        dcSelect.value = dcMode;
+      }
+    }
+    if (dcSub) {
+      dcSub.textContent = (dcMode !== 'off' && state.masteringDeclipSubtitle)
+        ? translateTextToEn(state.masteringDeclipSubtitle)
+        : defaultDeClipSubtitle(dcMode);
+    }
+    if (dcBadge) {
+      if (dcMode === 'off') {
+        dcBadge.classList.remove('active');
+        dcBadge.textContent = '100% Bit-Perfect';
+      } else {
+        dcBadge.classList.add('active');
+        const restored = Number(state.masteringDeclipRestoredDb) || 0;
+        if (dcMode === 'auto' && state.masteringDeclipAutoBypassed) {
+          dcBadge.textContent = IS_EN ? 'DR11+ • BYPASS' : 'DR11+ • ЧИСТЫЙ';
+        } else if (restored >= 0.1 && state.playerState === 'playing') {
+          dcBadge.textContent = `64-bit • +${restored.toFixed(1)} dB`;
+        } else {
+          dcBadge.textContent = dcMode === 'studio'
+            ? (IS_EN ? 'ACTIVE • STUDIO' : 'АКТИВЕН • СТУДИЯ')
+            : (dcMode === 'gentle'
+              ? (IS_EN ? 'ACTIVE • GENTLE' : 'АКТИВЕН • ДЕЛИКАТНЫЙ')
+              : (IS_EN ? 'SMART GUARD' : 'УМНАЯ ЗАЩИТА'));
+        }
+      }
+    }
+
+    const deBadge = document.getElementById('deesser-gain-badge');
+    const deSelect = document.getElementById('mastering-deesser-select');
+    const deSub = document.getElementById('mastering-deesser-subtitle');
+    const deLabel = document.getElementById('signal-deesser-label');
+
+    const deMode = (state.masteringDeesserMode === 'gentle' || state.masteringDeesserMode === 'vocal')
+      ? state.masteringDeesserMode
+      : 'off';
+    state.masteringDeesserMode = deMode;
+
+    if (deLabel && IS_EN) {
+      deLabel.textContent = '💎 Weiss Dynamic De-Esser';
+    }
+    if (deSelect) {
+      if (IS_EN) {
+        const enDeMap = {
+          off: 'Off (100% Bit-Perfect)',
+          gentle: 'Gentle — Planars / Bright HF (up to -3.5 dB)',
+          vocal: 'Weiss Studio — Harsh Sibilance (up to -6.0 dB)'
+        };
+        Array.from(deSelect.options).forEach(opt => {
+          if (enDeMap[opt.value]) opt.textContent = enDeMap[opt.value];
+        });
+      }
+      if (deSelect.value !== deMode && Array.from(deSelect.options).some(o => o.value === deMode)) {
+        deSelect.value = deMode;
+      }
+    }
+    if (deSub) {
+      deSub.textContent = (deMode !== 'off' && state.masteringDeesserSubtitle)
+        ? translateTextToEn(state.masteringDeesserSubtitle)
+        : defaultDeEsserSubtitle(deMode);
+    }
+    if (deBadge) {
+      if (deMode === 'off') {
+        deBadge.classList.remove('active');
+        deBadge.textContent = '100% Bit-Perfect';
+      } else {
+        deBadge.classList.add('active');
+        const gr = Number(state.masteringDeesserGainDb) || 0;
+        if (Math.abs(gr) >= 0.15 && state.playerState === 'playing') {
+          deBadge.textContent = `64-bit • ${gr <= 0 ? '' : '-'}${gr.toFixed(1)} dB`;
+        } else {
+          deBadge.textContent = deMode === 'vocal'
+            ? (IS_EN ? 'ACTIVE • WEISS' : 'АКТИВЕН • WEISS')
+            : (IS_EN ? 'ACTIVE • GENTLE' : 'АКТИВЕН • ДЕЛИКАТНЫЙ');
+        }
+      }
+    }
+  }
+
+  function updateMasteringRestorationUI(data, opts = {}) {
+    if (!data || typeof data !== 'object') return;
+    if (data.declip_mode !== undefined) {
+      const m = String(data.declip_mode || 'off');
+      state.masteringDeclipMode = (m === 'auto' || m === 'gentle' || m === 'studio') ? m : 'off';
+    }
+    if (data.declip_subtitle !== undefined) {
+      state.masteringDeclipSubtitle = String(data.declip_subtitle || '');
+    }
+    if (data.restored_peak_db !== undefined) {
+      state.masteringDeclipRestoredDb = Number(data.restored_peak_db) || 0;
+    }
+    if (data.reconstructed_clips_count !== undefined) {
+      state.masteringDeclipClipsCount = Number(data.reconstructed_clips_count) || 0;
+    }
+    if (data.auto_bypassed_clean_master !== undefined) {
+      state.masteringDeclipAutoBypassed = Boolean(data.auto_bypassed_clean_master);
+    }
+    if (data.deesser_mode !== undefined) {
+      const m = String(data.deesser_mode || 'off');
+      state.masteringDeesserMode = (m === 'gentle' || m === 'vocal') ? m : 'off';
+    }
+    if (data.deesser_subtitle !== undefined) {
+      state.masteringDeesserSubtitle = String(data.deesser_subtitle || '');
+    }
+    if (data.deesser_gain_db !== undefined) {
+      state.masteringDeesserGainDb = Number(data.deesser_gain_db) || 0;
+    }
+    syncMasteringRestorationBadgesOnly();
+    applyDeviceCapabilityPermissionsUI();
+    if (!opts.skipSignalRefresh) {
+      renderNowPlaying();
+      updateSignalPathDetails();
+    }
+  }
+
+  function pushMasteringDeClipToServer() {
+    const sel = document.getElementById('mastering-declip-select');
+    if (!sel) return;
+    if (state.allowDspPresetSelection === false) {
+      sel.value = state.masteringDeclipMode || 'off';
+      showToast(IS_EN ? 'DSP parameters access is locked for this device on Mac' : 'Управление параметрами DSP отключено для этого устройства в настройках Mac');
+      return;
+    }
+    const nextMode = (sel.value === 'auto' || sel.value === 'gentle' || sel.value === 'studio') ? sel.value : 'off';
+    state.masteringDeclipMode = nextMode;
+    state.masteringDeclipSubtitle = '';
+    triggerHaptic('light');
+    syncMasteringRestorationBadgesOnly();
+    send({
+      action: 'set_mastering_restoration',
+      params: {
+        declip_mode: nextMode
+      }
+    });
+    if (nextMode === 'off') {
+      showToast(IS_EN ? '⚡️ De-Clipper Off (100% Bit-Perfect)' : '⚡️ Реставратор клиппинга выключен');
+    } else if (nextMode === 'studio') {
+      showToast(IS_EN ? '⚡️ Studio Mastering De-Clipper enabled' : '⚡️ Включена студийная реставрация пиков');
+    } else if (nextMode === 'gentle') {
+      showToast(IS_EN ? '⚡️ Gentle De-Clipper enabled' : '⚡️ Включён деликатный реставратор пиков');
+    } else {
+      showToast(IS_EN ? '⚡️ Auto Smart Guard De-Clipper enabled' : '⚡️ Включён умный реставратор клиппинга');
+    }
+  }
+
+  function pushMasteringDeEsserToServer() {
+    const sel = document.getElementById('mastering-deesser-select');
+    if (!sel) return;
+    if (state.allowDspPresetSelection === false) {
+      sel.value = state.masteringDeesserMode || 'off';
+      showToast(IS_EN ? 'DSP parameters access is locked for this device on Mac' : 'Управление параметрами DSP отключено для этого устройства в настройках Mac');
+      return;
+    }
+    const nextMode = (sel.value === 'gentle' || sel.value === 'vocal') ? sel.value : 'off';
+    state.masteringDeesserMode = nextMode;
+    state.masteringDeesserSubtitle = '';
+    triggerHaptic('light');
+    syncMasteringRestorationBadgesOnly();
+    send({
+      action: 'set_mastering_restoration',
+      params: {
+        deesser_mode: nextMode
+      }
+    });
+    if (nextMode === 'off') {
+      showToast(IS_EN ? '💎 Weiss De-Esser Off (100% Bit-Perfect)' : '💎 Де-эссер выключен (100% Bit-Perfect)');
+    } else if (nextMode === 'vocal') {
+      showToast(IS_EN ? '💎 Weiss Studio De-Esser enabled' : '💎 Включён студийный Weiss De-Esser');
+    } else {
+      showToast(IS_EN ? '💎 Gentle Planar De-Esser enabled' : '💎 Включён деликатный De-Esser для планаров/ВЧ');
+    }
+  }
+
+  function setupDSPControls() {
+    const presetSel = document.getElementById('dsp-preset-select');
+    if (presetSel) {
+      presetSel.addEventListener('change', pushDSPSettingsToServer);
+    }
+    const deClipSel = document.getElementById('mastering-declip-select');
+    if (deClipSel) {
+      deClipSel.addEventListener('change', pushMasteringDeClipToServer);
+    }
+    const deEsserSel = document.getElementById('mastering-deesser-select');
+    if (deEsserSel) {
+      deEsserSel.addEventListener('change', pushMasteringDeEsserToServer);
+    }
+    const drcSel = document.getElementById('late-night-drc-select');
+    if (drcSel) {
+      drcSel.addEventListener('change', pushLateNightDRCToServer);
+    }
+  }
+
+// === MODULE: 26-room-acoustic-measurement.js ===
+  // ==========================================================================
+  // Quick Room Frequency Response Measurement (iPhone / iPad Mic + Auto-PEQ 64-bit)
+  // ==========================================================================
+  const ROOM_ISO_BANDS_HZ = [
+    20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,
+    200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600,
+    2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000
+  ];
+
+  let activeRoomMeasureCtx = null;
+  let activeRoomMeasureStream = null;
+  let activeRoomMeasureTimer = null;
+
+  function roomDbToSvgPoints(valuesDb) {
+    if (!Array.isArray(valuesDb) || valuesDb.length === 0) return '';
+    const count = valuesDb.length;
+    const width = 360;
+    const midY = 56; // 0 dB
+    const scalePerDb = 3.1; // +-16 dB fits 6..106 inside 112px viewBox
+    const pts = [];
+    for (let i = 0; i < count; i++) {
+      const x = count > 1 ? ((i / (count - 1)) * width) : 0;
+      const clampedDb = Math.max(-16, Math.min(16, Number(valuesDb[i]) || 0));
+      const y = midY - clampedDb * scalePerDb;
+      pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+    }
+    return pts.join(' ');
+  }
+
+  function defaultHarmanTargetCurveDb() {
+    return ROOM_ISO_BANDS_HZ.map((f) => {
+      if (f <= 55) return 3.2;
+      if (f < 180) {
+        const t = Math.log10(f / 55) / Math.log10(180 / 55);
+        return 3.2 * (1 - t);
+      }
+      if (f <= 1200) return 0;
+      const oct = Math.log2(f / 1200);
+      return Math.max(-3.0, -0.65 * oct);
+    });
+  }
+
+  function renderRoomEqChart(profile, liveMeasuredOverrideDb = null) {
+    const lineTarget = document.getElementById('room-eq-line-target');
+    const lineMeasured = document.getElementById('room-eq-line-measured');
+    const lineCorrected = document.getElementById('room-eq-line-corrected');
+    const bandsListEl = document.getElementById('room-eq-bands-list');
+
+    const rawTarget = profile && (profile.target_curve_db || profile.target_db);
+    const rawMeasured = profile && (profile.measured_response_db || profile.measured_db);
+    const rawCorrected = profile && (profile.corrected_response_db || profile.corrected_db);
+
+    const targetArr = (Array.isArray(rawTarget) && rawTarget.length > 0)
+      ? rawTarget
+      : defaultHarmanTargetCurveDb();
+    const measuredArr = Array.isArray(liveMeasuredOverrideDb)
+      ? liveMeasuredOverrideDb
+      : (Array.isArray(rawMeasured) ? rawMeasured : []);
+    const correctedArr = (!liveMeasuredOverrideDb && Array.isArray(rawCorrected))
+      ? rawCorrected
+      : [];
+
+    if (lineTarget) lineTarget.setAttribute('points', roomDbToSvgPoints(targetArr));
+    if (lineMeasured) lineMeasured.setAttribute('points', roomDbToSvgPoints(measuredArr));
+    if (lineCorrected) lineCorrected.setAttribute('points', roomDbToSvgPoints(correctedArr));
+
+    if (bandsListEl) {
+      const eqBands = (profile && Array.isArray(profile.eq_bands)) ? profile.eq_bands : [];
+      if (!liveMeasuredOverrideDb && eqBands.length > 0) {
+        bandsListEl.innerHTML = '';
+        eqBands.forEach((b) => {
+          if (!b || b.enabled === false) return;
+          const f = Number(b.frequency_hz || b.frequencyHz || 0);
+          const g = Number(b.gain_db || b.gainDB || 0);
+          const q = Number(b.q || 1);
+          const freqStr = f >= 1000 ? `${(f / 1000).toFixed(f % 1000 === 0 ? 0 : 1)}к` : `${Math.round(f)}`;
+          const pill = document.createElement('span');
+          pill.className = 'room-eq-band-pill';
+          pill.textContent = `${freqStr}Гц ${g >= 0 ? '+' : ''}${g.toFixed(1)}дБ Q${q.toFixed(1)}`;
+          bandsListEl.appendChild(pill);
+        });
+        bandsListEl.classList.remove('hidden');
+      } else {
+        bandsListEl.classList.add('hidden');
+        bandsListEl.innerHTML = '';
+      }
+    }
+  }
+
+  function updateRoomAcousticUI(raw, options = {}) {
+    if (!raw || typeof raw !== 'object') return;
+    const payload = (raw.room_acoustic && typeof raw.room_acoustic === 'object') ? raw.room_acoustic : raw;
+    if (payload.status === 'error' && payload.message) {
+      showToast(String(payload.message));
+      return;
+    }
+
+    if (payload.enabled !== undefined) {
+      state.roomAcoustic.enabled = Boolean(payload.enabled);
+    }
+    if (payload.is_test_signal_playing !== undefined) {
+      state.roomAcoustic.is_test_signal_playing = Boolean(payload.is_test_signal_playing);
+    }
+    if (payload.active_profile_id !== undefined) {
+      state.roomAcoustic.active_profile_id = String(payload.active_profile_id || '');
+    }
+    if (Array.isArray(payload.profiles)) {
+      state.roomAcoustic.profiles = payload.profiles;
+    }
+    if (payload.active_profile !== undefined) {
+      state.roomAcoustic.active_profile = payload.active_profile || null;
+    } else if (Array.isArray(state.roomAcoustic.profiles)) {
+      state.roomAcoustic.active_profile = state.roomAcoustic.profiles.find(
+        (p) => p && String(p.id) === state.roomAcoustic.active_profile_id
+      ) || null;
+    }
+
+    const activeProf = state.roomAcoustic.active_profile;
+    state.roomIsPlayingTestSignal = Boolean(state.roomAcoustic.is_test_signal_playing);
+    state.roomActiveProfileId = String(state.roomAcoustic.active_profile_id || '');
+    state.roomCorrectionActive = Boolean(state.roomAcoustic.enabled && activeProf);
+    state.roomProfileName = activeProf && activeProf.name ? String(activeProf.name) : '';
+
+    if (
+      !state.roomIsPlayingTestSignal &&
+      state.isMeasuringRoom &&
+      !activeRoomMeasureCtx &&
+      (!state.nativePickerOpenedAt || (Date.now() - state.nativePickerOpenedAt > 2500))
+    ) {
+      state.isMeasuringRoom = false;
+      state.awaitingNativeRoomFilePicker = false;
+      const progWrap = document.getElementById('room-measure-progress-wrap');
+      const stopBtn = document.getElementById('btn-stop-room-measure');
+      if (progWrap) progWrap.classList.add('hidden');
+      if (stopBtn) stopBtn.classList.add('hidden');
+    }
+
+    const badgeEl = document.getElementById('room-eq-status-badge');
+    const toggleBtn = document.getElementById('btn-room-eq-toggle');
+    const selectEl = document.getElementById('room-profile-select');
+    const delBtn = document.getElementById('btn-delete-room-profile');
+    const descEl = document.getElementById('room-eq-desc');
+    const startLabelEl = document.getElementById('btn-start-room-measure-label');
+    const uploadBtnEl = document.getElementById('btn-upload-room-audio');
+
+    const hasProfiles = Array.isArray(state.roomAcoustic.profiles) && state.roomAcoustic.profiles.length > 0;
+    const isActive = Boolean(state.roomAcoustic.enabled && activeProf);
+    const canControlRoomEq = (state.allowRoomMeasurement !== false) || (state.allowDspPresetSelection !== false);
+
+    if (badgeEl) {
+      badgeEl.classList.remove('authentic', 'neutral', 'warning');
+      if (state.isMeasuringRoom || state.roomAcoustic.is_test_signal_playing) {
+        badgeEl.classList.add('warning');
+        badgeEl.textContent = IS_EN ? 'MEASURING...' : 'ЗАМЕР АЧХ...';
+      } else if (isActive) {
+        badgeEl.classList.add('authentic');
+        badgeEl.textContent = IS_EN ? 'ACTIVE • CLOUD' : 'АКТИВНА • CLOUD';
+      } else {
+        badgeEl.classList.add('neutral');
+        badgeEl.textContent = hasProfiles ? (IS_EN ? 'BYPASS' : 'ВЫКЛ') : (IS_EN ? 'NO PROFILE' : 'НЕТ ЗАМЕРА');
+      }
+    }
+
+    if (toggleBtn) {
+      toggleBtn.disabled = !hasProfiles || !canControlRoomEq;
+      toggleBtn.classList.toggle('active', isActive);
+      toggleBtn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      toggleBtn.textContent = isActive ? (IS_EN ? 'On' : 'Вкл') : (IS_EN ? 'Off' : 'Выкл');
+    }
+
+    if (selectEl) {
+      selectEl.innerHTML = '';
+      if (!hasProfiles) {
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = IS_EN ? 'No room profiles yet' : 'Нет профилей замера';
+        selectEl.appendChild(emptyOpt);
+        selectEl.disabled = true;
+      } else {
+        selectEl.disabled = !canControlRoomEq;
+        state.roomAcoustic.profiles.forEach((p) => {
+          if (!p || !p.id) return;
+          const opt = document.createElement('option');
+          opt.value = String(p.id);
+          const bandsCnt = Array.isArray(p.eq_bands) ? p.eq_bands.length : 0;
+          opt.textContent = `${p.name || 'Комната'} (${bandsCnt} PEQ)`;
+          selectEl.appendChild(opt);
+        });
+        selectEl.value = state.roomActiveProfileId || '';
+      }
+    }
+
+    if (delBtn) {
+      delBtn.classList.toggle('hidden', !activeProf || state.allowRoomMeasurement === false);
+    }
+
+    const canLiveGetUserMedia = Boolean(
+      typeof navigator !== 'undefined' &&
+      navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getUserMedia === 'function'
+    );
+    if (startLabelEl) {
+      startLabelEl.textContent = canLiveGetUserMedia
+        ? (IS_EN ? 'Measure Room Mic' : 'Быстрый замер микрофоном')
+        : (IS_EN ? 'Measure via iPhone / iPad Mic' : 'Замер микрофоном iPhone / iPad');
+    }
+    if (uploadBtnEl) {
+      uploadBtnEl.classList.toggle('hidden', !canLiveGetUserMedia);
+    }
+
+    if (descEl && !state.isMeasuringRoom) {
+      if (activeProf) {
+        const preGain = Number(activeProf.preamp_gain_db !== undefined ? activeProf.preamp_gain_db : (activeProf.preampGainDB || 0));
+        const micLabel = activeProf.measured_on_device || activeProf.mic_device_name || activeProf.micDeviceName || 'iOS Mic';
+        descEl.textContent = isActive
+          ? `Активен профиль «${activeProf.name}» (${micLabel} • Headroom ${preGain.toFixed(1)} дБ • синхронизирован с iCloud Drive).`
+          : `Профиль «${activeProf.name}» сохранён в облаке (${micLabel}). Нажмите «Вкл» для активации 64-bit Auto-PEQ.`;
+      } else {
+        descEl.textContent = 'Сядьте в точку прослушивания с iPhone / iPad: Mac подаст эталонный розовый шум на АС и построит 64-bit Auto-PEQ фильтр с синхронизацией в iCloud.';
+      }
+    }
+
+    if (!state.isMeasuringRoom) {
+      renderRoomEqChart(activeProf);
+    }
+    if (!options.skipPermissionsSync) {
+      applyDeviceCapabilityPermissionsUI({ fromRoomAcousticUI: true });
+    }
+
+    if (!options.skipSignalRefresh) {
+      updateSignalPathDetails();
+    }
+  }
+
+  function stopRoomMeasurementSession(sendStopToServer = true) {
+    state.isMeasuringRoom = false;
+    state.awaitingNativeRoomFilePicker = false;
+    state.nativePickerOpenedAt = 0;
+    if (activeRoomMeasureTimer) {
+      clearInterval(activeRoomMeasureTimer);
+      activeRoomMeasureTimer = null;
+    }
+    if (activeRoomMeasureStream) {
+      try {
+        activeRoomMeasureStream.getTracks().forEach((tr) => tr.stop());
+      } catch (e) {}
+      activeRoomMeasureStream = null;
+    }
+    if (activeRoomMeasureCtx) {
+      try { activeRoomMeasureCtx.close(); } catch (e) {}
+      activeRoomMeasureCtx = null;
+    }
+    if (sendStopToServer && state.connected) {
+      send({ action: 'stop_room_test_signal' });
+    }
+    const progWrap = document.getElementById('room-measure-progress-wrap');
+    const stopBtn = document.getElementById('btn-stop-room-measure');
+    if (progWrap) progWrap.classList.add('hidden');
+    if (stopBtn) stopBtn.classList.add('hidden');
+    updateRoomAcousticUI(state.roomAcoustic, { skipSignalRefresh: true });
+  }
+
+  function triggerNativeIosMicCapture() {
+    if (state.allowRoomMeasurement === false) {
+      showToast('Быстрое измерение АЧХ отключено для этого устройства в настройках Mac');
+      return;
+    }
+    const fileInput = document.getElementById('room-mic-file-input');
+    if (!fileInput) return;
+
+    state.isMeasuringRoom = true;
+    send({ action: 'start_room_test_signal' });
+
+    const progWrap = document.getElementById('room-measure-progress-wrap');
+    const progFill = document.getElementById('room-measure-progress-fill');
+    const statusTxt = document.getElementById('room-measure-status-text');
+    const stopBtn = document.getElementById('btn-stop-room-measure');
+    if (progWrap) progWrap.classList.remove('hidden');
+    if (progFill) progFill.style.width = '35%';
+    if (statusTxt) {
+      statusTxt.textContent = 'Розовый шум подан на АС — запишите 5–7 сек на микрофон iPhone/iPad и нажмите «Готово»';
+    }
+    if (stopBtn) stopBtn.classList.remove('hidden');
+    applyDeviceCapabilityPermissionsUI();
+
+    state.awaitingNativeRoomFilePicker = true;
+    state.nativePickerOpenedAt = Date.now();
+    fileInput.value = '';
+    fileInput.click();
+  }
+
+  async function startLiveWebAudioRoomMeasurement() {
+    if (state.allowRoomMeasurement === false) {
+      showToast('Быстрое измерение АЧХ отключено для этого устройства в настройках Mac');
+      return;
+    }
+    const canLive = Boolean(
+      typeof navigator !== 'undefined' &&
+      navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getUserMedia === 'function'
+    );
+    if (!canLive) {
+      triggerNativeIosMicCapture();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
+      activeRoomMeasureStream = stream;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      activeRoomMeasureCtx = ctx;
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 8192;
+      analyser.smoothingTimeConstant = 0.22;
+      source.connect(analyser);
+
+      state.isMeasuringRoom = true;
+      send({ action: 'start_room_test_signal' });
+
+      const progWrap = document.getElementById('room-measure-progress-wrap');
+      const progFill = document.getElementById('room-measure-progress-fill');
+      const statusTxt = document.getElementById('room-measure-status-text');
+      const stopBtn = document.getElementById('btn-stop-room-measure');
+      if (progWrap) progWrap.classList.remove('hidden');
+      if (progFill) progFill.style.width = '5%';
+      if (stopBtn) stopBtn.classList.remove('hidden');
+      applyDeviceCapabilityPermissionsUI();
+
+      const warmupMs = state.isDlnaActive ? 1900 : 650;
+      const captureMs = 5400;
+      const totalMs = warmupMs + captureMs;
+      const startedAt = performance.now();
+      const freqBins = new Float32Array(analyser.frequencyBinCount);
+      const nyquist = ctx.sampleRate / 2;
+      const binHz = nyquist / analyser.frequencyBinCount;
+      const bandLinearSums = new Float64Array(ROOM_ISO_BANDS_HZ.length);
+      let accumulatedFrames = 0;
+
+      if (statusTxt) {
+        statusTxt.textContent = 'Прогрев акустики калибровочным розовым шумом...';
+      }
+
+      activeRoomMeasureTimer = setInterval(() => {
+        if (!state.isMeasuringRoom) return;
+        const elapsed = performance.now() - startedAt;
+        const pct = Math.min(100, Math.round((elapsed / totalMs) * 100));
+        if (progFill) progFill.style.width = `${pct}%`;
+
+        if (elapsed >= warmupMs) {
+          analyser.getFloatFrequencyData(freqBins);
+          const instantDb = new Array(ROOM_ISO_BANDS_HZ.length).fill(0);
+
+          for (let b = 0; b < ROOM_ISO_BANDS_HZ.length; b++) {
+            const fc = ROOM_ISO_BANDS_HZ[b];
+            const fLow = fc / 1.122462;
+            const fHigh = fc * 1.122462;
+            const kStart = Math.max(1, Math.floor(fLow / binHz));
+            const kEnd = Math.min(freqBins.length - 1, Math.ceil(fHigh / binHz));
+            let powerSum = 0;
+            let count = 0;
+            for (let k = kStart; k <= kEnd; k++) {
+              const db = freqBins[k];
+              if (Number.isFinite(db) && db > -150) {
+                powerSum += Math.pow(10, db / 10);
+                count++;
+              }
+            }
+            const avgPower = count > 0 ? (powerSum / count) : 1e-12;
+            // Pink noise has 1/f power density -> multiply by fc for flat 1/3-octave acoustic response
+            const pinkWeighted = avgPower * fc;
+            bandLinearSums[b] += pinkWeighted;
+            instantDb[b] = 10 * Math.log10(Math.max(pinkWeighted, 1e-15));
+          }
+          accumulatedFrames++;
+
+          // Normalize live curve around 250 Hz..2 kHz midrange for live visual feedback
+          let midSum = 0;
+          let midCnt = 0;
+          for (let i = 11; i <= 20; i++) {
+            midSum += instantDb[i];
+            midCnt++;
+          }
+          const midRef = midCnt > 0 ? (midSum / midCnt) : 0;
+          const relLive = instantDb.map((v, idx) => {
+            const f = ROOM_ISO_BANDS_HZ[idx];
+            const memsComp = f < 55 ? Math.min(5.5, 1.8 * Math.log2(55 / Math.max(f, 20))) : 0;
+            return (v - midRef) + memsComp;
+          });
+          renderRoomEqChart(null, relLive);
+
+          const remSec = Math.max(0, (totalMs - elapsed) / 1000).toFixed(1);
+          if (statusTxt) {
+            statusTxt.textContent = `Усреднение спектра в точке прослушивания (${remSec} с)...`;
+          }
+        }
+
+        if (elapsed >= totalMs) {
+          const framesCount = Math.max(1, accumulatedFrames);
+          const rawBandsDb = [];
+          for (let b = 0; b < ROOM_ISO_BANDS_HZ.length; b++) {
+            const f = ROOM_ISO_BANDS_HZ[b];
+            const meanPwr = bandLinearSums[b] / framesCount;
+            const memsComp = f < 55 ? Math.min(5.5, 1.8 * Math.log2(55 / Math.max(f, 20))) : 0;
+            rawBandsDb.push(10 * Math.log10(Math.max(meanPwr, 1e-15)) + memsComp);
+          }
+
+          stopRoomMeasurementSession(true);
+
+          const dateLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const outLabel = state.audioDeviceName || 'Комната';
+          const profName = `${outLabel} (${dateLabel})`;
+          const sent = send({
+            action: 'submit_room_measurement',
+            params: {
+              name: profName,
+              device_name: state.deviceName || 'iPhone / iPad Mic',
+              bands_db: rawBandsDb
+            }
+          });
+          if (sent === true) {
+            showToast('Замер АЧХ завершён — профиль Auto-PEQ сохранён и синхронизирован с iCloud');
+          } else {
+            showToast(IS_EN
+              ? 'Connection lost — room measurement could not be sent to Mac'
+              : 'Соединение потеряно — замер АЧХ не удалось отправить на Mac');
+          }
+        }
+      }, 85);
+    } catch (err) {
+      stopRoomMeasurementSession(false);
+      if (err && (
+        err.name === 'NotAllowedError' ||
+        err.name === 'PermissionDeniedError' ||
+        err.name === 'NotFoundError' ||
+        err.name === 'AbortError' ||
+        err.name === 'NotReadableError'
+      )) {
+        showToast(IS_EN
+          ? 'Microphone access denied or unavailable'
+          : 'Доступ к микрофону запрещён или микрофон недоступен');
+        return;
+      }
+      triggerNativeIosMicCapture();
+    }
+  }
+
+  async function handleUploadedRoomAudioFile(file) {
+    if (!file) {
+      stopRoomMeasurementSession(true);
+      return;
+    }
+    send({ action: 'stop_room_test_signal' });
+    const progWrap = document.getElementById('room-measure-progress-wrap');
+    const progFill = document.getElementById('room-measure-progress-fill');
+    const statusTxt = document.getElementById('room-measure-status-text');
+    if (progWrap) progWrap.classList.remove('hidden');
+    if (progFill) progFill.style.width = '80%';
+    if (statusTxt) {
+      statusTxt.textContent = 'Расчёт 4096-pt vDSP FFT и синтез 64-bit Auto-PEQ на Mac...';
+    }
+
+    try {
+      const rawName = String(file.name || 'capture.m4a');
+      const dotIdx = rawName.lastIndexOf('.');
+      const ext = dotIdx >= 0 ? rawName.slice(dotIdx + 1).toLowerCase() : 'm4a';
+      const dateLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const outLabel = state.audioDeviceName || 'Комната';
+      const profName = `${outLabel} (${dateLabel})`;
+
+      const qs = new URLSearchParams({
+        ext,
+        name: profName,
+        device_name: state.deviceName || 'iPhone / iPad Mic',
+        device_id: state.deviceId
+      });
+      const resp = await fetch(`/api/room-measurement/analyze?${qs.toString()}`, {
+        method: 'POST',
+        headers: buildDeviceAuthHeaders({
+          'Content-Type': file.type || 'application/octet-stream'
+        }),
+        body: file
+      });
+      const json = await resp.json();
+      stopRoomMeasurementSession(false);
+      if (!resp.ok || json.status === 'error') {
+        showToast(json.error || json.message || 'Не удалось распознать аудиозапись микрофона');
+        return;
+      }
+      updateRoomAcousticUI(json.room_acoustic || json);
+      showToast('Профиль АЧХ комнаты создан и синхронизирован с iCloud');
+    } catch (err) {
+      stopRoomMeasurementSession(false);
+      showToast('Ошибка отправки записи микрофона на Mac');
+    }
+  }
+
+  function setupRoomAcousticControls() {
+    const toggleBtn = document.getElementById('btn-room-eq-toggle');
+    const selectEl = document.getElementById('room-profile-select');
+    const delBtn = document.getElementById('btn-delete-room-profile');
+    const startBtn = document.getElementById('btn-start-room-measure');
+    const uploadBtn = document.getElementById('btn-upload-room-audio');
+    const stopBtn = document.getElementById('btn-stop-room-measure');
+    const fileInput = document.getElementById('room-mic-file-input');
+
+    renderRoomEqChart(null);
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        if (state.allowRoomMeasurement === false && state.allowDspPresetSelection === false) {
+          showToast(IS_EN
+            ? 'Room EQ control is disabled for this device on Mac'
+            : 'Управление коррекцией комнаты отключено для этого устройства в настройках Mac');
+          updateRoomAcousticUI(state.roomAcoustic);
+          return;
+        }
+        triggerHaptic('toggle');
+        const nextEnabled = !(state.roomAcoustic && state.roomAcoustic.enabled);
+        send({
+          action: 'set_room_correction_enabled',
+          params: { enabled: nextEnabled }
+        });
+      });
+    }
+
+    if (selectEl) {
+      selectEl.addEventListener('change', () => {
+        if (state.allowRoomMeasurement === false && state.allowDspPresetSelection === false) {
+          showToast(IS_EN
+            ? 'Room EQ profile selection is disabled for this device on Mac'
+            : 'Выбор профиля АЧХ отключён для этого устройства в настройках Mac');
+          updateRoomAcousticUI(state.roomAcoustic);
+          return;
+        }
+        if (!selectEl.value) return;
+        triggerHaptic('light');
+        send({
+          action: 'select_room_profile',
+          params: { profile_id: selectEl.value }
+        });
+      });
+    }
+
+    if (delBtn) {
+      delBtn.addEventListener('click', () => {
+        const prof = state.roomAcoustic && state.roomAcoustic.active_profile;
+        if (!prof || !prof.id) return;
+        triggerHaptic('light');
+        send({
+          action: 'delete_room_profile',
+          params: { profile_id: prof.id }
+        });
+        showToast(`Профиль «${prof.name || 'АЧХ'}» удалён`);
+      });
+    }
+
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        triggerHaptic('light');
+        startLiveWebAudioRoomMeasurement();
+      });
+    }
+
+    if (uploadBtn) {
+      uploadBtn.addEventListener('click', () => {
+        triggerHaptic('light');
+        triggerNativeIosMicCapture();
+      });
+    }
+
+    if (stopBtn) {
+      stopBtn.addEventListener('click', () => {
+        triggerHaptic('light');
+        stopRoomMeasurementSession(true);
+      });
+    }
+
+    if (fileInput) {
+      fileInput.addEventListener('change', (e) => {
+        state.awaitingNativeRoomFilePicker = false;
+        const f = e.target.files && e.target.files[0];
+        if (f) {
+          handleUploadedRoomAudioFile(f);
+        } else {
+          stopRoomMeasurementSession(true);
+        }
+      });
+
+      fileInput.addEventListener('cancel', () => {
+        state.awaitingNativeRoomFilePicker = false;
+        if (state.isMeasuringRoom || state.roomIsPlayingTestSignal || (state.roomAcoustic && state.roomAcoustic.is_test_signal_playing)) {
+          stopRoomMeasurementSession(true);
+        }
+      });
+
+      window.addEventListener('focus', () => {
+        if (!state.awaitingNativeRoomFilePicker) return;
+        setTimeout(() => {
+          if (state.awaitingNativeRoomFilePicker && (!fileInput.files || fileInput.files.length === 0)) {
+            state.awaitingNativeRoomFilePicker = false;
+            if (state.isMeasuringRoom || state.roomIsPlayingTestSignal || (state.roomAcoustic && state.roomAcoustic.is_test_signal_playing)) {
+              stopRoomMeasurementSession(true);
+            }
+          }
+        }, 700);
+      });
+    }
+  }
+
+// === MODULE: 27-wakelock-and-standby-controls.js ===
   // ==========================================================================
   // Multi-Layer Screen Wake Lock Engine for iPadOS / iOS PWA & Desktop TV Mode
   // Layer 1: W3C Screen Wake Lock API (navigator.wakeLock.request('screen'))
@@ -9706,15 +16148,30 @@ extension WebUIContent {
       }
     },
 
-    stopVideoKeepAlive() {
+    stopVideoKeepAlive(releaseStream = false) {
       if (this.keepAliveTimer) {
         clearInterval(this.keepAliveTimer);
         this.keepAliveTimer = null;
       }
-      if (this.keepAliveVideo && !this.keepAliveVideo.paused) {
-        try {
-          this.keepAliveVideo.pause();
-        } catch (_) {}
+      if (this.keepAliveVideo) {
+        if (!this.keepAliveVideo.paused) {
+          try {
+            this.keepAliveVideo.pause();
+          } catch (_) {}
+        }
+        if (releaseStream && this.keepAliveVideo.srcObject) {
+          try {
+            const tracks = typeof this.keepAliveVideo.srcObject.getTracks === 'function'
+              ? this.keepAliveVideo.srcObject.getTracks()
+              : [];
+            tracks.forEach((tr) => {
+              try { tr.stop(); } catch (_) {}
+            });
+          } catch (_) {}
+          try {
+            this.keepAliveVideo.srcObject = null;
+          } catch (_) {}
+        }
       }
     },
 
@@ -9769,11 +16226,13 @@ extension WebUIContent {
           const overlay = document.getElementById('standby-tv-overlay') || document.body;
           overlay.appendChild(vid);
           this.keepAliveVideo = vid;
+        }
 
+        if (this.keepAliveVideo && !this.keepAliveVideo.srcObject) {
           const captureFn = this.keepAliveCanvas.captureStream || this.keepAliveCanvas.webkitCaptureStream;
           if (typeof captureFn === 'function') {
             const stream = captureFn.call(this.keepAliveCanvas, 1);
-            vid.srcObject = stream;
+            this.keepAliveVideo.srcObject = stream;
           }
         }
 
@@ -9785,7 +16244,7 @@ extension WebUIContent {
 
     release() {
       this.isActive = false;
-      this.stopVideoKeepAlive();
+      this.stopVideoKeepAlive(true);
       if (this.sentinel) {
         try {
           this.sentinel.release();
@@ -9831,15 +16290,25 @@ extension WebUIContent {
       localStorage.setItem('amr_tv_mode_active', '1');
       localStorage.removeItem('amr_default_tv_mode');
     } catch (_) {}
+    if (!state.tvLibraryConfigLoaded) {
+      send({ action: 'get_tv_library_config' });
+    }
     if (!state.playlists || state.playlists.length === 0) {
       send({ action: 'get_playlists' });
+    }
+    if (!state.libraryAlbums || state.libraryAlbums.length === 0) {
+      send({ action: 'get_library_albums' });
     }
     syncStandbyAndMotionCoverUI();
     syncActiveMotionVideoTarget();
     syncBookletViewerLayoutMode();
     updateScrubberUI(state.lastSyncPos, state.duration);
+    ensureScrubberLoopRunning();
     updateStandbyClock();
     refreshAllTitleMarquees(true);
+    if (!state.lastDspSettings) {
+      send({ action: 'get_dsp_settings' });
+    }
     send({ action: 'get_spectral_analysis' });
     syncSpectralPolling();
     const p = document.getElementById('top-settings-popover');
@@ -9867,6 +16336,7 @@ extension WebUIContent {
     syncBookletViewerLayoutMode();
     syncSpectralPolling();
     updateScrubberUI(state.lastSyncPos, state.duration);
+    ensureScrubberLoopRunning();
     refreshAllTitleMarquees(true);
     try {
       localStorage.setItem('amr_tv_mode_active', '0');
@@ -9905,7 +16375,8 @@ extension WebUIContent {
     setInterval(updateStandbyClock, 15000);
 
     try {
-      if (localStorage.getItem('amr_tv_mode_active') === '1') {
+      const qsStandby = new URLSearchParams(window.location.search || '').get('standby');
+      if (qsStandby === '1' || localStorage.getItem('amr_tv_mode_active') === '1') {
         openStandbyMode();
       }
     } catch (_) {}
@@ -9994,12 +16465,16 @@ extension WebUIContent {
     const sbPrev = document.getElementById('standby-btn-prev');
     const sbNext = document.getElementById('standby-btn-next');
     const sbFavBtn = document.getElementById('standby-btn-favorite');
+    const sbShuffleBtn = document.getElementById('standby-btn-shuffle');
+    const sbRepeatBtn = document.getElementById('standby-btn-repeat');
     const sbAiVibeBtn = document.getElementById('standby-btn-ai-track-vibe');
     const sbTrack = document.getElementById('standby-progress-track');
 
     if (sbPlayPause) sbPlayPause.addEventListener('click', togglePlayPause);
     if (sbPrev) sbPrev.addEventListener('click', () => sendThrottledTransport('previous'));
     if (sbNext) sbNext.addEventListener('click', () => sendThrottledTransport('next'));
+    if (sbShuffleBtn) sbShuffleBtn.addEventListener('click', toggleShuffleOptimistic);
+    if (sbRepeatBtn) sbRepeatBtn.addEventListener('click', cycleRepeatMode);
     if (sbFavBtn) {
       sbFavBtn.addEventListener('click', handleToggleFavorite);
     }
@@ -10042,6 +16517,11 @@ extension WebUIContent {
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        if (dom.confirmDeleteModal && !dom.confirmDeleteModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
+          closeConfirmDeleteModal();
+          return;
+        }
         const amrInfoModal = document.getElementById('amr-info-popover');
         if (amrInfoModal && !amrInfoModal.classList.contains('hidden')) {
           e.stopImmediatePropagation();
@@ -10060,17 +16540,12 @@ extension WebUIContent {
         }
         if (dom.qualityModal && !dom.qualityModal.classList.contains('hidden')) {
           e.stopImmediatePropagation();
-          blurFocusedInContainer(dom.qualityModal);
-          dom.qualityModal.classList.add('hidden');
-          dom.qualityModal.setAttribute('aria-hidden', 'true');
-          syncSpectralPolling();
+          closeQualityModal();
           return;
         }
         if (dom.stationPickerModal && !dom.stationPickerModal.classList.contains('hidden')) {
           e.stopImmediatePropagation();
-          blurFocusedInContainer(dom.stationPickerModal);
-          dom.stationPickerModal.classList.add('hidden');
-          dom.stationPickerModal.setAttribute('aria-hidden', 'true');
+          closeStationPickerModal();
           return;
         }
         if (dom.modalAccountDiag && !dom.modalAccountDiag.classList.contains('hidden')) {
@@ -10114,6 +16589,7 @@ extension WebUIContent {
     });
   }
 
+// === MODULE: 28-booklet-viewer.js ===
   // =========================================================================
   // APPLE DIGITAL BOOKLET VIEWER (OFFICIAL APPLE PDF READER)
   // - Desktop / Tablet Landscape: Replaces right column (.inline-right-pane)
@@ -10131,6 +16607,13 @@ extension WebUIContent {
   };
 
   const bookletAvailabilityCache = new Map();
+
+  function openRawBookletPdf(rawPdfUrl) {
+    if (!rawPdfUrl || typeof rawPdfUrl !== 'string') return;
+    const trimmed = rawPdfUrl.trim();
+    if (!trimmed.startsWith('/api/') && !trimmed.startsWith('https://')) return;
+    window.open(trimmed, '_blank', 'noopener,noreferrer');
+  }
 
   function makeBookletCacheKey(album, artist) {
     return `${(artist || '').trim().toLowerCase()}|${(album || '').trim().toLowerCase()}`;
@@ -10187,9 +16670,7 @@ extension WebUIContent {
     });
     const resp = await fetch(`/api/booklet/info?${qs.toString()}`, {
       cache: 'no-store',
-      headers: {
-        'X-AMR-Device-ID': state.deviceId || ''
-      }
+      headers: buildDeviceAuthHeaders()
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const info = await resp.json();
@@ -10199,7 +16680,7 @@ extension WebUIContent {
 
   async function syncCurrentTrackBookletAvailability() {
     const btnOpenNowPlaying = document.getElementById('btn-open-booklet');
-    const btnOpenStandby = document.getElementById('standby-booklet-btn');
+    const btnOpenStandby = document.getElementById('standby-btn-booklet');
     const moreDot = dom.moreBookletDot || document.getElementById('more-booklet-dot');
     const bookletSub = document.getElementById('station-opt-booklet-sub');
     const t = state.track;
@@ -10328,6 +16809,13 @@ extension WebUIContent {
     bookletState.targetArtist = artist;
     bookletState.targetAlbumId = albumId;
 
+    const btnOpenNowPlaying = document.getElementById('btn-open-booklet');
+    const btnOpenStandby = document.getElementById('standby-btn-booklet');
+    if (!customTarget) {
+      if (btnOpenNowPlaying) btnOpenNowPlaying.classList.add('active');
+      if (btnOpenStandby) btnOpenStandby.classList.add('active');
+    }
+
     syncBookletViewerLayoutMode();
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
@@ -10353,6 +16841,10 @@ extension WebUIContent {
     const btnOpenNowPlaying = document.getElementById('btn-open-booklet');
     if (btnOpenNowPlaying) {
       btnOpenNowPlaying.classList.remove('active');
+    }
+    const btnOpenStandby = document.getElementById('standby-btn-booklet');
+    if (btnOpenStandby) {
+      btnOpenStandby.classList.remove('active');
     }
   }
 
@@ -10610,19 +17102,16 @@ extension WebUIContent {
     }
   }
 
+// === MODULE: 29-device-auth-qr-and-init.js ===
   function setupBookletViewerControls() {
     const btnOpenNowPlaying = document.getElementById('btn-open-booklet');
-    const btnOpenStandby = document.getElementById('standby-booklet-btn');
+    const btnOpenStandby = document.getElementById('standby-btn-booklet');
     const btnOpenDetail = document.getElementById('btn-detail-booklet');
     const btnClose = document.getElementById('btn-close-booklet');
 
     if (btnOpenNowPlaying) {
       btnOpenNowPlaying.addEventListener('click', () => {
-        if (dom.stationPickerModal) {
-          blurFocusedInContainer(dom.stationPickerModal);
-          dom.stationPickerModal.classList.add('hidden');
-          dom.stationPickerModal.setAttribute('aria-hidden', 'true');
-        }
+        closeStationPickerModal();
         openBookletViewer();
       });
     }
@@ -10728,7 +17217,16 @@ extension WebUIContent {
       summaryEl.textContent = `ID: ${shortId}`;
     }
     if (deviceUidMetaEl) {
-      deviceUidMetaEl.textContent = translateTextToEn(`UID: ${state.deviceId} • Авторизовано на Mac`);
+      const dacStatus = state.allowDacSelection !== false
+        ? (IS_EN ? 'DAC: On' : 'ЦАП: Вкл')
+        : (IS_EN ? 'DAC: Off' : 'ЦАП: Закрыт');
+      const dspStatus = state.allowDspPresetSelection !== false
+        ? (IS_EN ? 'DSP: On' : 'DSP: Вкл')
+        : (IS_EN ? 'DSP: Off' : 'DSP: Закрыт');
+      const libStatus = state.allowLibraryModification !== false
+        ? ''
+        : (IS_EN ? ' • Lib: Read-Only' : ' • Медиатека: Чтение');
+      deviceUidMetaEl.textContent = `UID: ${state.deviceId} • ${dacStatus} • ${dspStatus}${libStatus}`;
     }
     if (nameInput && document.activeElement !== nameInput) {
       nameInput.value = state.deviceName;
@@ -10796,6 +17294,10 @@ extension WebUIContent {
     }
     state.deviceShortId = data.short_id || computeShortDeviceId(state.deviceId);
 
+    if (data.device_secret || data.deviceSecret) {
+      persistDeviceSecret(data.device_secret || data.deviceSecret);
+    }
+
     if (data.device_name && String(data.device_name).trim()) {
       state.deviceName = String(data.device_name).trim();
       try { localStorage.setItem('amr_device_name', state.deviceName); } catch (e) {}
@@ -10803,6 +17305,33 @@ extension WebUIContent {
 
     if (typeof data.authorized === 'boolean') {
       state.deviceAuthorized = data.authorized;
+    } else if (typeof data.is_authorized === 'boolean') {
+      state.deviceAuthorized = data.is_authorized;
+    }
+
+    if (state.deviceAuthorized) {
+      clearInviteTokenFromClient();
+    }
+
+    if (typeof data.allow_dac_selection === 'boolean') {
+      state.allowDacSelection = data.allow_dac_selection;
+    }
+    if (typeof data.allow_dsp_preset_selection === 'boolean') {
+      state.allowDspPresetSelection = data.allow_dsp_preset_selection;
+    }
+    if (typeof data.allow_room_measurement === 'boolean') {
+      state.allowRoomMeasurement = data.allow_room_measurement;
+      if (!state.allowRoomMeasurement && state.isMeasuringRoom) {
+        stopRoomMeasurementSession(true);
+      }
+    }
+    if (typeof data.allow_late_night_mode === 'boolean') {
+      state.allowLateNightMode = data.allow_late_night_mode;
+    }
+    if (typeof data.allow_library_modification === 'boolean') {
+      state.allowLibraryModification = data.allow_library_modification;
+    } else if (typeof data.allowLibraryModification === 'boolean') {
+      state.allowLibraryModification = data.allowLibraryModification;
     }
 
     if (typeof data.lock_screen_controls === 'boolean') {
@@ -10815,20 +17344,23 @@ extension WebUIContent {
       state.initialAuthFetched = false;
     }
 
+    applyDeviceCapabilityPermissionsUI();
     syncDeviceInfoUI();
 
     // Load library and Apple ID / MusicKit status ONLY after device is authorized.
-    // Note: register_device / device approval already pushes player_state_changed, ai_curator_settings, and queue;
-    // avoid duplicate get_status + get_queue storms and let get_user_token_status resolve storefront before loadTrends().
+    // Note: register_device / device approval already pushes player_state_changed, ai_curator_settings,
+    // dsp_settings, tv_library_config, and queue; avoid duplicate startup RPC bursts!
     if (state.deviceAuthorized && !state.initialAuthFetched && state.connected) {
       state.initialAuthFetched = true;
       const authTime = Date.now();
+      flushPendingPreOpenQueue();
       send({ action: 'get_user_token_status' });
       send({ action: 'get_developer_token' });
       send({ action: 'get_audio_devices' });
       send({ action: 'get_wled_settings' });
       send({ action: 'get_info' });
       send({ action: 'get_playlists' });
+      send({ action: 'get_library_albums' });
       send({ action: 'get_account_status' });
 
       setTimeout(() => {
@@ -10848,6 +17380,12 @@ extension WebUIContent {
         if (!state.lastAiSettingsReceivedAt || state.lastAiSettingsReceivedAt < authTime - 2000) {
           send({ action: 'get_ai_curator_settings' });
         }
+        if (!state.lastDspSettings) {
+          send({ action: 'get_dsp_settings' });
+        }
+        if (!state.tvLibraryConfigLoaded) {
+          send({ action: 'get_tv_library_config' });
+        }
       }, 900);
     }
   }
@@ -10855,7 +17393,7 @@ extension WebUIContent {
   function handleShareAccessQR(data) {
     if (!data || typeof data !== 'object') return;
     const shareUrl = String(data.share_url || data.base_url || window.location.origin);
-    const qrDataUrl = String(data.qr_data_url || '');
+    const qrDataUrl = data.qr_data_url;
     state.shareAccessUrl = shareUrl;
 
     const qrPanel = document.getElementById('amr-share-qr-panel');
@@ -10863,7 +17401,7 @@ extension WebUIContent {
     const urlText = document.getElementById('amr-share-url-text');
     const btnNativeShare = document.getElementById('btn-native-share-link');
 
-    if (qrImg && qrDataUrl) {
+    if (qrImg && typeof qrDataUrl === 'string' && qrDataUrl.startsWith('data:image/png;base64,')) {
       qrImg.src = qrDataUrl;
     }
     if (urlText) {
@@ -11067,18 +17605,97 @@ extension WebUIContent {
     }
   }
 
+  // iOS Standalone WebClip Cold-Launch Viewport Repair (WKWebViewIOS.mm _setViewportFitEdges:)
+  // On cold Home Screen launch, WKWebView processes <meta name="viewport" viewport-fit=cover> while
+  // _shouldDeferGeometryUpdates is YES during SpringBoard's zoom animation, leaving fixed bottom: 0
+  // inset by 34pt until rotated. Re-committing viewport-fit=contain -> cover after launch settles
+  // invokes _dispatchSetViewLayoutSize & _scheduleVisibleContentRectUpdate without rotating.
+  const VIEWPORT_META_COVER = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+  const VIEWPORT_META_CONTAIN = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=contain';
+  let viewportRepairInFlight = false;
+
+  function isStandalonePwaMode() {
+    return Boolean(
+      window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+    );
+  }
+
+  function hasStandaloneColdPortraitGap() {
+    if (!isStandalonePwaMode()) return false;
+    if (document.body && document.body.classList.contains('keyboard-open')) return false;
+    const iw = window.innerWidth || 0;
+    const ih = window.innerHeight || 0;
+    if (ih <= iw) return false;
+    const sh = (window.screen && window.screen.height) ? window.screen.height : 0;
+    const sw = (window.screen && window.screen.width) ? window.screen.width : 0;
+    const portraitScreenH = Math.max(sh, sw);
+    if (!portraitScreenH) return false;
+    const gap = portraitScreenH - ih;
+    return gap >= 16 && gap <= 120;
+  }
+
+  function repairStandaloneColdLaunchViewport(forceToggle = false) {
+    if (!isStandalonePwaMode() || viewportRepairInFlight) return;
+    if (document.body && document.body.classList.contains('keyboard-open')) return;
+    const isPortrait = (window.innerHeight || 0) > (window.innerWidth || 0);
+    if (!isPortrait) return;
+    if (!forceToggle && !hasStandaloneColdPortraitGap()) return;
+
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) return;
+
+    viewportRepairInFlight = true;
+    meta.setAttribute('content', VIEWPORT_META_CONTAIN);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          meta.setAttribute('content', VIEWPORT_META_COVER);
+          try { window.scrollTo(0, 0); } catch (_) {}
+          viewportRepairInFlight = false;
+          lastViewportWidth = -1;
+          handleResize({ force: true });
+        }, 28);
+      });
+    });
+  }
+
+  function scheduleStandaloneColdLaunchRepairs() {
+    if (!isStandalonePwaMode()) return;
+    repairStandaloneColdLaunchViewport(false);
+    setTimeout(() => repairStandaloneColdLaunchViewport(true), 120);
+    setTimeout(() => repairStandaloneColdLaunchViewport(true), 380);
+    setTimeout(() => repairStandaloneColdLaunchViewport(false), 800);
+  }
+
+  window.addEventListener('load', () => {
+    if (isStandalonePwaMode()) {
+      setTimeout(() => repairStandaloneColdLaunchViewport(true), 60);
+      setTimeout(() => repairStandaloneColdLaunchViewport(false), 420);
+    }
+  }, { passive: true });
+
+  window.addEventListener('pageshow', (e) => {
+    if (isStandalonePwaMode()) {
+      setTimeout(() => repairStandaloneColdLaunchViewport(Boolean(e && e.persisted)), 80);
+    }
+  }, { passive: true });
+
   // Initialize
   setupAmrInfoAndDeviceAuthControls();
   setupMediaSession();
   setupArtworkSwipeGestures();
   setupMiniPlayerGestures();
   setupStandbyAndWledControls();
+  setupDSPControls();
+  setupRoomAcousticControls();
   setupBookletViewerControls();
   renderHeroCarousel({});
   renderHomeStations(DEFAULT_STATIONS);
   renderHomeGenres(DEFAULT_GENRES);
   bindGenreCards();
-  handleResize();
+  handleResize({ force: true });
+  scheduleStandaloneColdLaunchRepairs();
   recoverOrPersistDeviceUidBeforeConnect().finally(() => {
     connectWebSocket();
   });

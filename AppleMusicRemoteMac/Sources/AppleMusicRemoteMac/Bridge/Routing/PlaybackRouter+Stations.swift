@@ -26,7 +26,17 @@ extension PlaybackRouter {
         if targetUrl.contains("повторе") || lowName.contains("повторе") {
             if !targetUrl.isEmpty && (targetUrl.contains("playlist") || targetUrl.contains("pl.")) {
                 if openMusicUrl(targetUrl) {
+                    QueueManager.shared.stopQueueMonitoring()
+                    PlaybackStateStore.shared.resetPlaybackState(
+                        isRadio: false,
+                        stationName: nil,
+                        isCustomQueue: false,
+                        playlistName: name.isEmpty ? "Сейчас на повторе" : name
+                    )
                     _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                    PlaybackStateStore.shared.invalidateQueueCache()
+                    PlaybackStateStore.shared.invalidateStatusCache()
+                    WebSocketServer.shared.broadcastStatus(includeQueue: true)
                     return true
                 }
             }
@@ -95,31 +105,44 @@ extension PlaybackRouter {
             playUrl = "music://" + playUrl.dropFirst(8)
         }
 
-        // Fallback Tier 3: If track-based station still has no URL, try playing catalog track directly
-        // This natively triggers Apple Music Autoplay (∞) for the track's genre/style.
+        // Fallback Tier 3: If track-based station still has no URL, play matching search queue across all ~25+ tracks
         if playUrl.isEmpty && (type == "track" || !trackTitle.isEmpty) {
             let t = trackTitle.isEmpty ? name : trackTitle
             let query = artistName.isEmpty ? t : "\(t) \(artistName)"
-            if await searchAndPlay(query: query) {
-                QueueManager.shared.stopQueueMonitoring()
-                PlaybackStateStore.shared.resetPlaybackState(isRadio: true, stationName: "Станция «\(t)»")
-                PlaybackStateStore.shared.withLock {
-                    PlaybackStateStore.shared.isUserPaused = false
-                    PlaybackStateStore.shared.lastPlayerStatusCache = nil
+            let searchRes = await searchAndPlayDetailed(query: query)
+            guard searchRes.success else {
+                return false
+            }
+            let resolvedStationLabel = !stationDisplayName.isEmpty ? stationDisplayName : "Станция «\(t)»"
+            let stillValid = PlaybackStateStore.shared.withLock { () -> Bool in
+                guard PlaybackStateStore.shared.playbackGeneration == searchRes.expectedGeneration else {
+                    return false
                 }
-                PlaybackStateStore.shared.invalidateQueueCache()
-                PlaybackStateStore.shared.invalidateStatusCache()
-                WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                PlaybackStateStore.shared.activeStationName = resolvedStationLabel
+                let curQName = PlaybackStateStore.shared.activeCustomQueueName ?? ""
+                if curQName.isEmpty || PlaybackRouter.isGenericQueueLabel(curQName) || curQName.hasPrefix("Поиск: ") || curQName.hasPrefix("Search: ") {
+                    PlaybackStateStore.shared.activeCustomQueueName = resolvedStationLabel
+                }
+                PlaybackStateStore.shared.isCustomQueuePlayback = true
+                PlaybackStateStore.shared.isUserPaused = false
+                PlaybackStateStore.shared.lastPlayerStatusCache = nil
                 return true
             }
-            return false
+            guard stillValid else {
+                return false
+            }
+            QueueManager.shared.startQueueMonitoring()
+            PlaybackStateStore.shared.invalidateQueueCache()
+            PlaybackStateStore.shared.invalidateStatusCache()
+            WebSocketServer.shared.broadcastStatus(includeQueue: true)
+            return true
         }
 
         guard !playUrl.isEmpty || (!name.isEmpty && !name.hasPrefix("Станция «") && !name.hasPrefix("Радио ")) else {
             return false
         }
 
-        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop")
+        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop", maxWait: 1.5, reportTimeout: false)
         QueueManager.shared.stopQueueMonitoring()
         let resolvedStationName = !stationDisplayName.isEmpty ? stationDisplayName : (!name.isEmpty ? name : "Apple Music Radio")
         PlaybackStateStore.shared.resetPlaybackState(isRadio: true, stationName: resolvedStationName)
@@ -128,8 +151,11 @@ extension PlaybackRouter {
             PlaybackStateStore.shared.lastPlayerStatusCache = nil
             PlaybackStateStore.shared.latestUpcomingTracks.removeAll()
             PlaybackStateStore.shared.latestHistoryTracks.removeAll()
+            PlaybackStateStore.shared.radioHistoryTracks.removeAll()
+            PlaybackStateStore.shared.lastRadioTrackSnapshot = nil
             PlaybackStateStore.shared.isShuffleQueueActive = false
             PlaybackStateStore.shared.activeShuffledQueue.removeAll()
+            PlaybackStateStore.shared.activeShuffledIndex = 0
             PlaybackStateStore.shared.activeShuffledPlaylistName = nil
             PlaybackStateStore.shared.playbackQueueCache = nil
             return PlaybackStateStore.shared.playbackGeneration
@@ -147,7 +173,24 @@ extension PlaybackRouter {
         }
 
         if ok {
-            QueueManager.shared.stopQueueMonitoring()
+            let keepMonitoring = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.repeatMode == "one" }
+            if !isTestingEnvironment {
+                _ = AppleScriptExecutor.shared.execute("""
+                tell application "Music"
+                    try
+                        with timeout of 1.2 seconds
+                            set shuffle enabled to false
+                            set song repeat to off
+                        end timeout
+                    end try
+                end tell
+                """, maxWait: 1.5, reportTimeout: false)
+            }
+            if keepMonitoring {
+                QueueManager.shared.startQueueMonitoring()
+            } else {
+                QueueManager.shared.stopQueueMonitoring()
+            }
             // Fast polling loop to broadcast status the instant radio playback begins (eliminates lag)
             Task.detached(priority: .userInitiated) {
                 for i in 0..<40 {
@@ -175,7 +218,7 @@ extension PlaybackRouter {
                             !PlaybackStateStore.shared.isUserPaused
                         }
                         if stillValid {
-                            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play")
+                            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to play", maxWait: 1.5, reportTimeout: false)
                         } else {
                             break
                         }

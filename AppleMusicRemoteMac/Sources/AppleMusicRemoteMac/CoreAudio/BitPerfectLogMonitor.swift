@@ -7,18 +7,29 @@
 //
 
 import Foundation
+import Darwin
+import os
 
 public final class BitPerfectLogMonitor: @unchecked Sendable {
     public static let shared = BitPerfectLogMonitor()
 
+    // Lock-free / nanosecond spin-locked scalar cache for Real-Time CoreAudio IOProcs.
+    // NEVER hold fastSpinLock across UserDefaults, NSLog, NSLock, I/O, or callbacks.
+    internal var fastSpinLock = os_unfair_lock_s()
+    private var _fastIsEnabled: Bool
+    private var _currentDetectedSampleRate: Double?
+
     public var isEnabled: Bool {
         get {
-            if UserDefaults.standard.object(forKey: "BitPerfectAutoSwitchEnabled") == nil {
-                return true
-            }
-            return UserDefaults.standard.bool(forKey: "BitPerfectAutoSwitchEnabled")
+            os_unfair_lock_lock(&fastSpinLock)
+            let enabled = _fastIsEnabled
+            os_unfair_lock_unlock(&fastSpinLock)
+            return enabled
         }
         set {
+            os_unfair_lock_lock(&fastSpinLock)
+            _fastIsEnabled = newValue
+            os_unfair_lock_unlock(&fastSpinLock)
             UserDefaults.standard.set(newValue, forKey: "BitPerfectAutoSwitchEnabled")
             NSLog("[BitPerfectLogMonitor] Bit-Perfect auto-switch is now: \(newValue ? "ON" : "OFF")")
             if newValue, let rate = currentDetectedSampleRate {
@@ -28,7 +39,6 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     }
 
     private let stateLock = NSLock()
-    private var _currentDetectedSampleRate: Double?
     private var _currentDetectedBitDepth: Int?
     private var _currentDetectedBitRate: Int?
     private var _currentIsLossless: Bool = true
@@ -38,45 +48,54 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     private var _currentLockedTrackKey: String?
     private var _pendingNextTrackFormat: (sampleRate: Double, bitDepth: Int, timestamp: Date)?
     private var _formatSwitchCountForCurrentTrack: Int = 0
-    private var lockTimestamp: Date = .distantPast
+    internal var lockTimestamp: Date = .distantPast
 
-    public private(set) var currentDetectedSampleRate: Double? {
-        get { stateLock.withLock { _currentDetectedSampleRate } }
-        set { stateLock.withLock { _currentDetectedSampleRate = newValue } }
+    public internal(set) var currentDetectedSampleRate: Double? {
+        get {
+            os_unfair_lock_lock(&fastSpinLock)
+            let val = _currentDetectedSampleRate
+            os_unfair_lock_unlock(&fastSpinLock)
+            return val
+        }
+        set {
+            os_unfair_lock_lock(&fastSpinLock)
+            _currentDetectedSampleRate = newValue
+            os_unfair_lock_unlock(&fastSpinLock)
+        }
     }
-    public private(set) var currentDetectedBitDepth: Int? {
+    public internal(set) var currentDetectedBitDepth: Int? {
         get { stateLock.withLock { _currentDetectedBitDepth } }
         set { stateLock.withLock { _currentDetectedBitDepth = newValue } }
     }
-    public private(set) var currentDetectedBitRate: Int? {
+    public internal(set) var currentDetectedBitRate: Int? {
         get { stateLock.withLock { _currentDetectedBitRate } }
         set { stateLock.withLock { _currentDetectedBitRate = newValue } }
     }
-    public private(set) var currentIsLossless: Bool {
+    public internal(set) var currentIsLossless: Bool {
         get { stateLock.withLock { _currentIsLossless } }
         set { stateLock.withLock { _currentIsLossless = newValue } }
     }
-    public private(set) var currentQualityDescription: String {
+    public internal(set) var currentQualityDescription: String {
         get { stateLock.withLock { _currentQualityDescription } }
         set { stateLock.withLock { _currentQualityDescription = newValue } }
     }
-    public private(set) var isFormatLockedForCurrentTrack: Bool {
+    public internal(set) var isFormatLockedForCurrentTrack: Bool {
         get { stateLock.withLock { _isFormatLockedForCurrentTrack } }
         set { stateLock.withLock { _isFormatLockedForCurrentTrack = newValue } }
     }
-    public private(set) var isAuthoritativelyLocked: Bool {
+    public internal(set) var isAuthoritativelyLocked: Bool {
         get { stateLock.withLock { _isAuthoritativelyLocked } }
         set { stateLock.withLock { _isAuthoritativelyLocked = newValue } }
     }
-    public private(set) var currentLockedTrackKey: String? {
+    public internal(set) var currentLockedTrackKey: String? {
         get { stateLock.withLock { _currentLockedTrackKey } }
         set { stateLock.withLock { _currentLockedTrackKey = newValue } }
     }
-    public private(set) var pendingNextTrackFormat: (sampleRate: Double, bitDepth: Int, timestamp: Date)? {
+    public internal(set) var pendingNextTrackFormat: (sampleRate: Double, bitDepth: Int, timestamp: Date)? {
         get { stateLock.withLock { _pendingNextTrackFormat } }
         set { stateLock.withLock { _pendingNextTrackFormat = newValue } }
     }
-    public private(set) var formatSwitchCountForCurrentTrack: Int {
+    public internal(set) var formatSwitchCountForCurrentTrack: Int {
         get { stateLock.withLock { _formatSwitchCountForCurrentTrack } }
         set { stateLock.withLock { _formatSwitchCountForCurrentTrack = newValue } }
     }
@@ -84,6 +103,18 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     private let handlersLock = NSLock()
     private var _onFormatChanged: ((Double, Int?, String) -> Void)?
     private var formatChangedObservers: [String: (Double, Int?, String) -> Void] = [:]
+    private var _onSmartTransitionScheduleDetected: ((Double) -> Void)?
+    private var _onSmartTransitionBegan: (() -> Void)?
+
+    public var onSmartTransitionScheduleDetected: ((Double) -> Void)? {
+        get { handlersLock.withLock { _onSmartTransitionScheduleDetected } }
+        set { handlersLock.withLock { _onSmartTransitionScheduleDetected = newValue } }
+    }
+
+    public var onSmartTransitionBegan: (() -> Void)? {
+        get { handlersLock.withLock { _onSmartTransitionBegan } }
+        set { handlersLock.withLock { _onSmartTransitionBegan = newValue } }
+    }
 
     public func addFormatChangedObserver(id: String, handler: @escaping (Double, Int?, String) -> Void) {
         handlersLock.lock()
@@ -112,14 +143,18 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
     }
 
-    private var process: Process?
+    internal var process: Process?
     private var outputHandle: FileHandle?
-    private var buffer = Data()
-    private let queue = DispatchQueue(label: "org.ksholokhov.amr.bitperfect.logstream", qos: .utility)
+    internal var sigtermSource: DispatchSourceSignal?
+    internal var sigintSource: DispatchSourceSignal?
+    internal var buffer = Data()
+    internal var bufferReadOffset: Int = 0
+    internal let queue = DispatchQueue(label: "org.ksholokhov.amr.bitperfect.logstream", qos: .utility)
 
-    private var pendingRate: Double?
-    private var pendingBitDepth: Int?
-    private var debounceWorkItem: DispatchWorkItem?
+    internal var pendingRate: Double?
+    internal var pendingBitDepth: Int?
+    internal var debounceWorkItem: DispatchWorkItem?
+    internal var lossyFallbackWorkItem: DispatchWorkItem?
 
     // Track format cache to avoid mid-playback re-negotiation on re-played tracks
     private let cacheLock = NSLock()
@@ -130,7 +165,13 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0, 352800.0, 384000.0, 705600.0, 768000.0
     ]
 
-    private init() {}
+    private init() {
+        if UserDefaults.standard.object(forKey: "BitPerfectAutoSwitchEnabled") == nil {
+            self._fastIsEnabled = true
+        } else {
+            self._fastIsEnabled = UserDefaults.standard.bool(forKey: "BitPerfectAutoSwitchEnabled")
+        }
+    }
 
     deinit {
         stop()
@@ -151,6 +192,12 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         let key = "\(artist.trimmingCharacters(in: .whitespacesAndNewlines)):\(title.trimmingCharacters(in: .whitespacesAndNewlines))".lowercased()
         cacheLock.lock()
         trackFormatCache[key] = (sampleRate, bitDepth)
+        cacheLock.unlock()
+    }
+
+    internal func cacheLockedTrackKeyFormat(_ lockedKey: String, sampleRate: Double, bitDepth: Int) {
+        cacheLock.lock()
+        trackFormatCache[lockedKey] = (sampleRate, bitDepth)
         cacheLock.unlock()
     }
 
@@ -205,6 +252,22 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             return
         }
 
+        // Guard against delayed keyed track notification overwriting a fresh authoritative ALACDecoder lock established moments earlier while currentLockedTrackKey was still nil!
+        if !clearPrebuffer, let key = cleanKey, !key.isEmpty,
+           self.currentLockedTrackKey == nil,
+           self.isFormatLockedForCurrentTrack, self.isAuthoritativelyLocked,
+           Date().timeIntervalSince(self.lockTimestamp) < 3.5,
+           let lockedRate = self.currentDetectedSampleRate {
+            self.currentLockedTrackKey = key
+            let lockedDepth = self.currentDetectedBitDepth ?? (lockedRate >= 48000.0 ? 24 : 16)
+            if self.currentIsLossless {
+                self.cacheLockedTrackKeyFormat(key, sampleRate: lockedRate, bitDepth: lockedDepth)
+            }
+            SpectralIntegrityAnalyzer.shared.resetForNewTrack(trackKey: key)
+            NSLog("[BitPerfectLogMonitor] 🛡 Adopted track key '%@' onto active authoritative lock (%.1f kHz, %d-bit)", key, lockedRate / 1000.0, lockedDepth)
+            return
+        }
+
         if let key = cleanKey, !key.isEmpty {
             self.currentLockedTrackKey = key
         } else {
@@ -213,9 +276,14 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
 
         self.debounceWorkItem?.cancel()
         self.debounceWorkItem = nil
+        self.lossyFallbackWorkItem?.cancel()
+        self.lossyFallbackWorkItem = nil
         self.pendingRate = nil
         self.pendingBitDepth = nil
         self.formatSwitchCountForCurrentTrack = 0
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.scheduledSmartTransitionStart = nil
+        }
         SpectralIntegrityAnalyzer.shared.resetForNewTrack(trackKey: cleanKey ?? "")
 
         if let sr = expectedSampleRate, let norm = self.normalizeRate(sr) {
@@ -227,7 +295,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             self.pendingNextTrackFormat = nil
             NSLog("[BitPerfectLogMonitor] 🔄 Track state reset with pre-inspected format: %.1f kHz, %d-bit [Format Locked]", norm / 1000.0, depth)
             self.confirmSampleRate(norm, bitDepth: depth, isLossless: true, reason: "PreInspectedTrackFormat")
-        } else if let key = cleanKey, !key.isEmpty, let prebuffered = self.pendingNextTrackFormat, Date().timeIntervalSince(prebuffered.timestamp) < 45.0 {
+        } else if let key = cleanKey, !key.isEmpty, let prebuffered = self.pendingNextTrackFormat, Date().timeIntervalSince(prebuffered.timestamp) < 120.0 {
             // Apply Gapless Pre-buffered Format strictly at the start of the new track
             self.pendingNextTrackFormat = nil
             self.isFormatLockedForCurrentTrack = true
@@ -238,7 +306,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         } else {
             if clearPrebuffer || cleanKey != nil {
                 self.pendingNextTrackFormat = nil
-            } else if let prebuffered = self.pendingNextTrackFormat, Date().timeIntervalSince(prebuffered.timestamp) >= 15.0 {
+            } else if let prebuffered = self.pendingNextTrackFormat, Date().timeIntervalSince(prebuffered.timestamp) >= 120.0 {
                 self.pendingNextTrackFormat = nil
             }
             self.currentDetectedSampleRate = nil
@@ -249,18 +317,50 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             self.lockTimestamp = .distantPast
             NSLog("[BitPerfectLogMonitor] 🔄 Track state reset on track change (Format lock released)")
 
-            // If playing a lossy AAC stream that emits no ALAC decoder log within 1.1s, fall back to standard 44.1 kHz / 16-bit PCM
+            // If playing a lossy AAC stream that emits no ALAC decoder log, fall back to standard 44.1 kHz / 16-bit PCM
+            // ONLY after Music.app has genuinely started rendering audio frames (prevents false AAC lock during cloud buffering / CDN stalls).
             if !PlaybackRouter.shared.isTestingEnvironment, let key = cleanKey, !key.isEmpty {
-                let fallbackItem = DispatchWorkItem { [weak self] in
-                    guard let self = self else { return }
-                    guard !self.isFormatLockedForCurrentTrack, self.currentLockedTrackKey == key else { return }
-                    self.isFormatLockedForCurrentTrack = true
-                    self.isAuthoritativelyLocked = false
-                    self.lockTimestamp = Date()
-                    self.confirmSampleRate(44100.0, bitDepth: 16, isLossless: false, reason: "AACStreamDefault16Bit44kHz")
+                var activeAudioDetectedAt: Date? = nil
+                func scheduleLossyFallbackCheck(attempt: Int, delay: TimeInterval) {
+                    let checkItem = DispatchWorkItem { [weak self] in
+                        guard let self = self else { return }
+                        guard !self.isFormatLockedForCurrentTrack, self.currentLockedTrackKey == key else { return }
+                        let (stillTransitioning, cachedState, cachedPos) = PlaybackStateStore.shared.withLock {
+                            (
+                                PlaybackStateStore.shared.isStagingCloudTrack || PlaybackStateStore.shared.isTransitioningTrack,
+                                PlaybackStateStore.shared.lastPlayerStatusCache?.status.playerState ?? "stopped",
+                                PlaybackStateStore.shared.lastPlayerStatusCache?.status.position ?? 0.0
+                            )
+                        }
+                        let hasAudioStarted = !stillTransitioning && (
+                            (cachedState == "playing" && cachedPos > 0.15) ||
+                            AudioProcessTapService.isMusicAppRunningAudioOutput()
+                        )
+                        if !hasAudioStarted {
+                            activeAudioDetectedAt = nil
+                            if attempt < 24 {
+                                scheduleLossyFallbackCheck(attempt: attempt + 1, delay: 2.5)
+                            }
+                            return
+                        }
+                        let now = Date()
+                        if activeAudioDetectedAt == nil {
+                            activeAudioDetectedAt = now
+                        }
+                        // Ensure at least 2.2s of genuine audio output elapsed so delayed ALACDecoder log lines are never raced
+                        if let started = activeAudioDetectedAt, attempt > 0, now.timeIntervalSince(started) < 2.2 {
+                            scheduleLossyFallbackCheck(attempt: attempt + 1, delay: 2.2)
+                            return
+                        }
+                        self.isFormatLockedForCurrentTrack = true
+                        self.isAuthoritativelyLocked = false
+                        self.lockTimestamp = now
+                        self.confirmSampleRate(44100.0, bitDepth: 16, isLossless: false, reason: "AACStreamDefault16Bit44kHz")
+                    }
+                    self.lossyFallbackWorkItem = checkItem
+                    self.queue.asyncAfter(deadline: .now() + delay, execute: checkItem)
                 }
-                self.debounceWorkItem = fallbackItem
-                self.queue.asyncAfter(deadline: .now() + 1.1, execute: fallbackItem)
+                scheduleLossyFallbackCheck(attempt: 0, delay: 3.6)
             }
         }
     }
@@ -273,28 +373,35 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             let depth = !isLossless ? 16 : (bitDepth > 0 ? bitDepth : (normalized >= 48000.0 ? 24 : 16))
             self.debounceWorkItem?.cancel()
             self.debounceWorkItem = nil
+            self.lossyFallbackWorkItem?.cancel()
+            self.lossyFallbackWorkItem = nil
             self.isFormatLockedForCurrentTrack = true
             self.confirmSampleRate(normalized, bitDepth: depth, isLossless: isLossless, reason: "LocalTrackMetadata")
         }
     }
 
     private func startInternal() {
-        stopInternal()
-
-        guard isEnabled else {
-            NSLog("[BitPerfectLogMonitor] Bit-Perfect auto-switch is disabled, skipping log stream.")
+        if PlaybackRouter.shared.isTestingEnvironment {
             return
         }
+
+        if let existing = self.process, existing.isRunning {
+            return
+        }
+        stopInternal()
+        reapPreviousLogStreamPIDFile()
+        installSignalCleanupIfNeeded()
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/log")
 
-        // Focused predicate on Music process to minimize CPU overhead and avoid coreaudiod spam
-        let predicate = #"(process == "Music" OR subsystem == "com.apple.Music") AND (eventMessage CONTAINS[c] "sample" OR eventMessage CONTAINS[c] "lossless" OR eventMessage CONTAINS[c] "asbd" OR eventMessage CONTAINS[c] "kHz")"#
+        // Focused predicate on Music process to minimize CPU overhead, capture lossless ALAC stream rates,
+        // and observe MediaPlaybackCore Smart Transition / Dead-Air cutoff timestamps before AutoPlay bleed.
+        let predicate = #"(process == "Music" OR subsystem == "com.apple.Music") AND (eventMessage CONTAINS[c] "sample" OR eventMessage CONTAINS[c] "lossless" OR eventMessage CONTAINS[c] "asbd" OR eventMessage CONTAINS[c] "kHz" OR eventMessage CONTAINS "Observe transition start:" OR eventMessage CONTAINS "overlapStartSourceTime:" OR eventMessage CONTAINS "smartTransitionWillBegin" OR eventMessage CONTAINS "overlappedPlaybackWillBegin")"#
 
         proc.arguments = [
             "stream",
-            "--style", "json",
+            "--style", "ndjson",
             "--level", "debug",
             "--predicate", predicate
         ]
@@ -329,6 +436,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         do {
             try proc.run()
             self.process = proc
+            writeLogStreamPIDFile(proc.processIdentifier)
             NSLog("[BitPerfectLogMonitor] 🚀 Focused log stream started successfully (PID: \(proc.processIdentifier)).")
         } catch {
             NSLog("[BitPerfectLogMonitor] ❌ Failed to start log stream: \(error)")
@@ -340,224 +448,47 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         outputHandle?.readabilityHandler = nil
         outputHandle = nil
         buffer.removeAll()
+        bufferReadOffset = 0
 
         if let proc = process {
-            proc.terminationHandler = nil
-            if proc.isRunning {
-                proc.terminate()
-                kill(proc.processIdentifier, SIGKILL)
-            }
             process = nil
-        }
-    }
-
-    // MARK: - Stream Processing
-
-    private func drainBuffer() {
-        while let range = buffer.firstRange(of: Data([0x0A])) { // '\n'
-            let lineData = buffer.subdata(in: buffer.startIndex..<range.lowerBound)
-            buffer.removeSubrange(buffer.startIndex...range.lowerBound)
-
-            guard let line = String(data: lineData, encoding: .utf8), !line.isEmpty else {
-                continue
-            }
-            handleLine(line)
-        }
-    }
-
-    private func handleLine(_ line: String) {
-        guard let data = line.data(using: .utf8) else { return }
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            let message = (json["eventMessage"] as? String)
-                ?? (json["message"] as? String)
-                ?? (json["formattedMessage"] as? String)
-
-            if let msg = message {
-                parseMessage(msg)
-            }
-        } else {
-            parseMessage(line)
-        }
-    }
-
-    private func parseMessage(_ message: String) {
-        let lower = message.lowercased()
-
-        // 1. Strict negative filter: immediately drop feedback loops, hardware rates, pre-buffering
-        for ignored in Self.ignoredSubstrings {
-            if lower.contains(ignored) {
-                return
-            }
-        }
-
-        let fullRange = NSRange(message.startIndex..<message.endIndex, in: message)
-
-        // 2. Authoritative ALAC Decoder log (rate + bit depth)
-        if let match = Self.alacDecoderPattern.firstMatch(in: message, options: [], range: fullRange),
-           match.numberOfRanges > 2,
-           let rateRange = Range(match.range(at: 1), in: message),
-           let depthRange = Range(match.range(at: 2), in: message),
-           let rawRate = Double(message[rateRange]),
-           let rate = normalizeRate(rawRate),
-           let rawDepth = Int(message[depthRange]) {
-            let depth = rawDepth > 0 ? rawDepth : (rate >= 48000.0 ? 24 : 16)
-            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: true, isLossless: true, reason: "ALACDecoder: \(message)")
-            return
-        }
-
-        // 3. FigPlaybackReport (rate + bit depth)
-        if let match = Self.figPlaybackReportPattern.firstMatch(in: message, options: [], range: fullRange),
-           match.numberOfRanges > 2,
-           let rateRange = Range(match.range(at: 1), in: message),
-           let depthRange = Range(match.range(at: 2), in: message),
-           let rawRate = Double(message[rateRange]),
-           let rate = normalizeRate(rawRate),
-           let rawDepth = Int(message[depthRange]) {
-            let isAAC = lower.contains("qaac") || lower.contains("aac")
-            if isAAC {
-                if isFormatLockedForCurrentTrack && currentIsLossless {
-                    return
+            proc.terminationHandler = nil
+            clearLogStreamPIDFile()
+            if proc.isRunning {
+                let pid = proc.processIdentifier
+                proc.terminate()
+                queue.asyncAfter(deadline: .now() + 0.15) {
+                    if proc.isRunning {
+                        kill(pid, SIGKILL)
+                    }
                 }
-                sampleRateDetected(rate, bitDepth: 16, isAuthoritative: false, isLossless: false, reason: "FigPlaybackReport(AAC): \(message)")
-                return
             }
-            // Ignore preliminary 0-bit / 16-bit FigStreamPlayer reports if already locked on 24-bit ALAC, or normalize 0-bit reports
-            if rawDepth <= 0 {
-                if isFormatLockedForCurrentTrack {
-                    return
-                }
-                let inferredDepth = (rate >= 48000.0) ? 24 : 16
-                sampleRateDetected(rate, bitDepth: inferredDepth, isAuthoritative: false, isLossless: true, reason: "FigPlaybackReport(0-bit): \(message)")
-                return
-            }
-            if rawDepth == 16 && isFormatLockedForCurrentTrack && currentDetectedBitDepth == 24 {
-                return
-            }
-            sampleRateDetected(rate, bitDepth: rawDepth, isAuthoritative: true, isLossless: true, reason: "FigPlaybackReport: \(message)")
-            return
         }
-
-        // 4. CoreMedia AudioQueue build (generic preliminary)
-        if let match = Self.audioQueueBuildPattern.firstMatch(in: message, options: [], range: fullRange),
-           match.numberOfRanges > 1,
-           let rateRange = Range(match.range(at: 1), in: message),
-           let rawRate = Double(message[rateRange]),
-           let rate = normalizeRate(rawRate) {
-            let isAAC = lower.contains("aac")
-            let depth = isAAC ? 16 : ((rate >= 48000.0) ? 24 : 16)
-            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: false, isLossless: !isAAC, reason: "subaq_buildCAAudioQueue: \(message)")
-            return
-        }
-
-        // 5. CoreMedia AudioQueue startup sync (generic preliminary)
-        if let match = Self.audioQueueSyncPattern.firstMatch(in: message, options: [], range: fullRange),
-           match.numberOfRanges > 1,
-           let rateRange = Range(match.range(at: 1), in: message),
-           let rawRate = Double(message[rateRange]),
-           let rate = normalizeRate(rawRate) {
-            let depth = (rate >= 48000.0) ? 24 : 16
-            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: false, isLossless: true, reason: "subaq_performStartupSync: \(message)")
-            return
-        }
-
-        // 6. Generic decoder (AAC, MP3, etc. - preliminary)
-        if let match = Self.genericDecoderPattern.firstMatch(in: message, options: [], range: fullRange),
-           match.numberOfRanges > 1,
-           let rateRange = Range(match.range(at: 1), in: message),
-           let rawRate = Double(message[rateRange]),
-           let rate = normalizeRate(rawRate) {
-            let isLossy = lower.contains("aac") || lower.contains("mp3")
-            let depth = isLossy ? 16 : ((rate >= 48000.0) ? 24 : 16)
-            sampleRateDetected(rate, bitDepth: depth, isAuthoritative: false, isLossless: !isLossy, reason: "GenericDecoder: \(message)")
-            return
-        }
-    }
-
-    // Negative filter: drop hardware updates, pre-buffering, and non-playback logs
-    private static let ignoredSubstrings: [String] = [
-        "mdevicesamplerate",
-        "adapttodevice",
-        "default-output",
-        "auhal",
-        "memixerchannel",
-        "aqme",
-        "output stream",
-        "updateformat",
-        "updatestreamformat",
-        "output render format",
-        "devicelatency",
-        "audio device latency",
-        "priming duration",
-        "raw duration",
-        "pts",
-        "itemoverlap",
-        "figplayeroverlap",
-        "speedramp",
-        "timebase",
-        "alternatefilter",
-        "mediaformatinfo",
-        "activeformat:",
-        "qc+3"
-    ]
-
-    // MARK: - Regex Parsers for Active Playback
-
-    // Authoritative ALAC Decoder: gives both exact sample rate and bit depth of actively decoded stream
-    private static let alacDecoderPattern = try! NSRegularExpression(
-        pattern: #"(?i)ACAppleLosslessDecoder.*Input format:\s*\d+\s*ch,\s*([0-9]+(?:\.[0-9]+)?)\s*Hz,\s*alac(?:\s*\([^)]*\))?\s*from\s*([0-9]+)-bit"#,
-        options: []
-    )
-
-    // Authoritative FigStreamPlayer active playback report: gives sample rate and bit depth
-    private static let figPlaybackReportPattern = try! NSRegularExpression(
-        pattern: #"(?i)fpfs_ReportAudioPlaybackThroughFigLog:.*\[SampleRate\s*([0-9]+)\].*\[BitDepth\s*([0-9]+)\]"#,
-        options: []
-    )
-
-    // Authoritative AudioQueue creation when active audio pipeline is constructed
-    private static let audioQueueBuildPattern = try! NSRegularExpression(
-        pattern: #"(?i)subaq_buildCAAudioQueue:.*(?:Creating|Created new) AudioQueue with format:'(?:qlac|alac|lpcm|aac\s*)',.*sampleRate:([0-9]+)"#,
-        options: []
-    )
-
-    // Authoritative AudioQueue startup sync when samples begin playback
-    private static let audioQueueSyncPattern = try! NSRegularExpression(
-        pattern: #"(?i)faq->srcASBD->mSampleRate\s*([0-9]+)"#,
-        options: []
-    )
-
-    // Authoritative generic decoder for lossy / other formats (AAC, MP3)
-    private static let genericDecoderPattern = try! NSRegularExpression(
-        pattern: #"(?i)Input format:\s*\d+\s*ch,\s*([0-9]+(?:\.[0-9]+)?)\s*Hz,\s*(?:'?(?:aac|mp3|alac|qlac)'?)"#,
-        options: []
-    )
-
-    public func normalizeRate(_ val: Double) -> Double? {
-        guard val > 0 else { return nil }
-        var hz = val
-        if val < 1000.0 {
-            hz = val * 1000.0
-        }
-
-        // Snap to nearest standard rate if within 300 Hz
-        if let nearest = Self.standardRates.min(by: { abs($0 - hz) < abs($1 - hz) }), abs(nearest - hz) <= 300.0 {
-            return nearest
-        }
-        return hz
     }
 
     // MARK: - DAC Reconnect / Device Switch Support
 
     public func reapplyCurrentFormat() {
-        guard isEnabled, let rate = currentDetectedSampleRate else { return }
+        let dspActive = AudioEngineController.shared.isActivePipelineHook
+        let dspConfigured = AudioEngineController.shared.currentConfigurationSnapshot().mode != .bitPerfectPassthrough
+        let dlnaActive = DLNADiscoveryManager.shared.hasActiveRenderer
+        guard (isEnabled || dspActive || (dspConfigured && dlnaActive)), let rate = currentDetectedSampleRate else { return }
         let bitDepth = currentDetectedBitDepth ?? (rate >= 48000.0 ? 24 : 16)
+        if dspActive {
+            let effectiveTapRate = AudioProcessTapService.shared.resolveEffectiveTapSampleRate(forRequestedRate: Int(rate.rounded()))
+            AudioProcessTapService.shared.setFormat(sampleRate: effectiveTapRate, bitDepth: bitDepth)
+            Task {
+                await AudioEngineController.shared.notifySourceSampleRateChanged(Double(effectiveTapRate))
+            }
+            return
+        }
         NSLog("[BitPerfectLogMonitor] 🔄 Reapplying current format to audio device: %.1f kHz, %d-бит", rate / 1000.0, bitDepth)
         applyFormat(rate: rate, bitDepth: bitDepth)
     }
 
     // MARK: - Debounce & Apply
 
-    private func sampleRateDetected(_ rate: Double, bitDepth: Int, isAuthoritative: Bool, isLossless: Bool = true, reason: String) {
+    internal func sampleRateDetected(_ rate: Double, bitDepth: Int, isAuthoritative: Bool, isLossless: Bool = true, reason: String) {
         // Filter out unreasonable rates
         guard rate >= 44100.0 && rate <= 768000.0 else { return }
         let validDepth = !isLossless ? 16 : (bitDepth > 0 ? bitDepth : (rate >= 48000.0 ? 24 : 16))
@@ -566,11 +497,20 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         // Once format is locked for the current playing track (isFormatLockedForCurrentTrack == true),
         // NEVER invoke CoreAudioDeviceManager.setFormat again mid-track!
         // Exception: if a preliminary/fallback lock occurred on a slow network start (!isAuthoritativelyLocked)
-        // and the authoritative ALAC decoder arrives within 4.5s, upgrade the current track format immediately.
+        // and the authoritative ALAC decoder arrives within 12.0s, or bit-depth/lossless upgrades within 3.5s.
         if isFormatLockedForCurrentTrack {
             if isAuthoritative {
-                if (!isAuthoritativelyLocked && Date().timeIntervalSince(lockTimestamp) < 4.5) ||
-                   (rate == currentDetectedSampleRate && Date().timeIntervalSince(lockTimestamp) < 3.5) {
+                if isAuthoritativelyLocked &&
+                   rate == currentDetectedSampleRate &&
+                   validDepth == currentDetectedBitDepth &&
+                   isLossless == currentIsLossless {
+                    return
+                }
+                let elapsed = Date().timeIntervalSince(lockTimestamp)
+                if (!isAuthoritativelyLocked && elapsed < 12.0) ||
+                   (rate == currentDetectedSampleRate && (validDepth != currentDetectedBitDepth || isLossless != currentIsLossless) && elapsed < 3.5) {
+                    lossyFallbackWorkItem?.cancel()
+                    lossyFallbackWorkItem = nil
                     isAuthoritativelyLocked = true
                     currentIsLossless = isLossless
                     confirmSampleRate(rate, bitDepth: validDepth, isLossless: isLossless, reason: reason)
@@ -592,6 +532,8 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         if isAuthoritative {
             debounceWorkItem?.cancel()
             debounceWorkItem = nil
+            lossyFallbackWorkItem?.cancel()
+            lossyFallbackWorkItem = nil
             isFormatLockedForCurrentTrack = true
             isAuthoritativelyLocked = true
             lockTimestamp = Date()
@@ -612,6 +554,8 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         let item = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             guard !self.isFormatLockedForCurrentTrack else { return }
+            self.lossyFallbackWorkItem?.cancel()
+            self.lossyFallbackWorkItem = nil
             self.isFormatLockedForCurrentTrack = true
             self.isAuthoritativelyLocked = false
             self.lockTimestamp = Date()
@@ -621,7 +565,10 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         queue.asyncAfter(deadline: .now() + 0.6, execute: item)
     }
 
-    private func confirmSampleRate(_ rate: Double, bitDepth: Int, isLossless: Bool = true, reason: String) {
+    internal func confirmSampleRate(_ rate: Double, bitDepth: Int, isLossless: Bool = true, reason: String) {
+        lossyFallbackWorkItem?.cancel()
+        lossyFallbackWorkItem = nil
+
         let validDepth = !isLossless ? 16 : (bitDepth > 0 ? bitDepth : (rate >= 48000.0 ? 24 : 16))
         currentDetectedSampleRate = rate
         currentDetectedBitDepth = validDepth
@@ -633,9 +580,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
 
         if isLossless {
             if let lockedKey = currentLockedTrackKey, !lockedKey.isEmpty {
-                cacheLock.lock()
-                trackFormatCache[lockedKey] = (rate, validDepth)
-                cacheLock.unlock()
+                cacheLockedTrackKeyFormat(lockedKey, sampleRate: rate, bitDepth: validDepth)
             } else if let curTrack = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache })?.status.track {
                 cacheTrackFormat(artist: curTrack.artist, title: curTrack.name, sampleRate: rate, bitDepth: validDepth)
             }
@@ -649,14 +594,23 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
 
         formatSwitchCountForCurrentTrack += 1
         let enabled = self.isEnabled
-        if enabled {
+        let dspActive = AudioEngineController.shared.isActivePipelineHook
+        let dspConfigured = AudioEngineController.shared.currentConfigurationSnapshot().mode != .bitPerfectPassthrough
+        let dlnaActive = DLNADiscoveryManager.shared.hasActiveRenderer
+        if dspActive {
+            let effectiveTapRate = AudioProcessTapService.shared.resolveEffectiveTapSampleRate(forRequestedRate: Int(rate.rounded()))
+            AudioProcessTapService.shared.setFormat(sampleRate: effectiveTapRate, bitDepth: validDepth)
+            Task {
+                await AudioEngineController.shared.notifySourceSampleRateChanged(Double(effectiveTapRate))
+            }
+        } else if enabled || (dspConfigured && dlnaActive) {
             applyFormat(rate: rate, bitDepth: validDepth)
         }
 
         let callback = self.onFormatChanged
         DispatchQueue.main.async {
             callback?(rate, validDepth, desc)
-            if enabled {
+            if enabled || dspActive || dspConfigured {
                 NotificationCenter.default.post(
                     name: .bitPerfectFormatDidChange,
                     object: nil,
@@ -664,7 +618,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
                         "sampleRate": rate,
                         "bitDepth": validDepth,
                         "description": desc,
-                        "isEnabled": enabled
+                        "isEnabled": enabled || dspActive || dspConfigured
                     ]
                 )
             }
@@ -675,9 +629,45 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
     }
 
-    private func applyFormat(rate: Double, bitDepth: Int) {
-        CoreAudioDeviceManager.shared.setFormat(sampleRate: rate, bitDepth: bitDepth)
-        AudioProcessTapService.shared.setFormat(sampleRate: Int(rate), bitDepth: bitDepth)
+    internal func applyFormat(rate: Double, bitDepth: Int) {
+        if AudioEngineController.shared.isActivePipelineHook {
+            let effectiveTapRate = AudioProcessTapService.shared.resolveEffectiveTapSampleRate(forRequestedRate: Int(rate.rounded()))
+            AudioProcessTapService.shared.setFormat(sampleRate: effectiveTapRate, bitDepth: bitDepth)
+            Task {
+                await AudioEngineController.shared.notifySourceSampleRateChanged(Double(effectiveTapRate))
+            }
+        } else if DLNADiscoveryManager.shared.hasActiveRenderer {
+            let requestedTapRate = Int(rate.rounded())
+            let effectiveTapDepth = (bitDepth == 16) ? 16 : 24
+            if AudioProcessTapService.shared.subscriberCount > 0,
+               (AudioProcessTapService.shared.sampleRate != requestedTapRate || AudioProcessTapService.shared.bitDepth != effectiveTapDepth) {
+                DLNADiscoveryManager.shared.closeLiveStreamConnectionsForFormatSwitch()
+            }
+            CoreAudioDeviceManager.shared.setFormat(sampleRate: rate, bitDepth: bitDepth)
+            AudioProcessTapService.shared.setFormat(sampleRate: requestedTapRate, bitDepth: bitDepth)
+        } else {
+            CoreAudioDeviceManager.shared.setFormat(sampleRate: rate, bitDepth: bitDepth)
+            var effectiveLocalRate = rate
+            if !PlaybackRouter.shared.isTestingEnvironment,
+               let defID = CoreAudioDeviceManager.shared.getDefaultOutputDeviceID(), defID != 0 {
+                let avail = CoreAudioDeviceManager.shared.availableSampleRates(deviceID: defID)
+                if !avail.isEmpty && !avail.contains(where: { abs($0 - rate) < 1.0 }) {
+                    let candidates = [rate / 2.0, rate / 4.0, (Int(rate.rounded()) % 48_000 == 0) ? 48_000.0 : 44_100.0]
+                    if let subRate = candidates.first(where: { cand in cand >= 44_100.0 && avail.contains(where: { abs($0 - cand) < 1.0 }) }) {
+                        effectiveLocalRate = subRate
+                    } else {
+                        let hwRate = HALDeviceManager.nominalSampleRate(deviceID: defID)
+                        if hwRate >= 44_100.0 {
+                            effectiveLocalRate = hwRate
+                        }
+                    }
+                }
+            }
+            if RoomAcousticService.shared.isLocalPassthroughEQActive {
+                RoomAcousticService.shared.notifyLocalOutputFormatChanged(sampleRateHz: effectiveLocalRate)
+            }
+            AudioProcessTapService.shared.setFormat(sampleRate: Int(effectiveLocalRate.rounded()), bitDepth: bitDepth)
+        }
     }
 
     public func formatQualityString(rate: Double, bitDepth: Int, isLossless: Bool = true) -> String {

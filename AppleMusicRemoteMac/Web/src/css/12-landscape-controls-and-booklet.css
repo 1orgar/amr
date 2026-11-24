@@ -1,0 +1,611 @@
+/* Mobile Landscape Mode: TV-Style Horizontal Player (Left: Artwork, Right: Progress & Controls, No WLED/Library/Close) */
+@media only screen and (max-height: 540px) and (min-width: 568px) and (orientation: landscape) and (hover: none) and (pointer: coarse) {
+  body:not(.keyboard-open) #standby-tv-overlay {
+    display: flex !important;
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    padding: 14px calc(max(var(--safe-right), 24px)) 14px calc(max(var(--safe-left), 24px)) !important;
+    z-index: 9999 !important;
+  }
+
+  #standby-tv-overlay .standby-top-bar,
+  #standby-tv-overlay .standby-top-right,
+  #standby-btn-library,
+  #standby-btn-wled-toggle,
+  #btn-close-standby,
+  #standby-wled-badge,
+  #standby-library-modal,
+  #top-settings-popover {
+    display: none !important;
+  }
+
+  #standby-tv-overlay .standby-content {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    grid-template-rows: auto auto !important;
+    align-content: center !important;
+    align-items: stretch !important;
+    justify-content: center !important;
+    column-gap: clamp(20px, 4.5vw, 40px) !important;
+    row-gap: 6px !important;
+    max-width: 880px !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 auto !important;
+  }
+
+  #standby-tv-overlay .standby-badges-row {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    justify-content: flex-start !important;
+    margin: 0 !important;
+  }
+
+  #standby-tv-overlay .standby-artwork-col {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+  }
+
+  #standby-tv-overlay .standby-art-frame {
+    width: min(68dvh, 34vw) !important;
+    height: min(68dvh, 34vw) !important;
+    min-width: 185px !important;
+    min-height: 185px !important;
+    max-width: 260px !important;
+    max-height: 260px !important;
+    border-radius: 18px !important;
+    animation: none !important;
+  }
+
+  #standby-tv-overlay .standby-meta-col {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    align-items: stretch !important;
+    min-width: 0 !important;
+    gap: 4px !important;
+    text-align: left !important;
+  }
+
+  #standby-tv-overlay .standby-headings {
+    align-items: flex-start !important;
+    gap: 3px !important;
+  }
+
+  #standby-tv-overlay .standby-dac-badge,
+  #standby-tv-overlay .standby-spectral-badge {
+    padding: 4px 10px !important;
+    font-size: 10px !important;
+  }
+
+  #standby-tv-overlay .standby-title {
+    font-size: clamp(19px, 3vw, 26px) !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+  }
+
+  #standby-tv-overlay .standby-artist {
+    font-size: clamp(14px, 2vw, 18px) !important;
+  }
+
+  #standby-tv-overlay .standby-album {
+    font-size: clamp(12px, 1.6vw, 14px) !important;
+  }
+
+  #standby-tv-overlay .standby-progress-section {
+    margin-top: 0 !important;
+    gap: 5px !important;
+    max-width: 100% !important;
+  }
+
+  #standby-tv-overlay .standby-progress-track {
+    height: 7px !important;
+  }
+
+  #standby-tv-overlay .standby-time-row {
+    font-size: 12px !important;
+  }
+
+  #standby-tv-overlay .standby-controls {
+    margin-top: 0 !important;
+    gap: 14px !important;
+  }
+
+  #standby-tv-overlay .standby-volume-section.hidden {
+    display: none !important;
+  }
+
+  #standby-tv-overlay .standby-volume-section:not(.hidden) {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  #standby-tv-overlay .standby-vol-slider-wrap {
+    height: 30px !important;
+  }
+
+  #standby-tv-overlay .standby-vol-mute-btn {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  #standby-tv-overlay .standby-volume-text {
+    font-size: 12px !important;
+  }
+
+  #standby-tv-overlay .standby-ctrl-btn {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  #standby-tv-overlay .standby-ctrl-btn svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  #standby-tv-overlay .standby-ctrl-play {
+    width: 52px !important;
+    height: 52px !important;
+  }
+
+  #standby-tv-overlay .standby-ctrl-play svg {
+    width: 25px !important;
+    height: 25px !important;
+  }
+
+  #standby-tv-overlay .standby-fav-btn {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  #standby-tv-overlay .standby-fav-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+}
+
+/* ==========================================================================
+   APPLE DIGITAL BOOKLET VIEWER (PDF READER)
+   - Desktop / Tablet Landscape: Replaces right column (.inline-right-pane)
+   - StandBy TV & Mobile Portrait: Fullscreen (.fullscreen-mode)
+   - Pages rendered sequentially on full width of the area
+   ========================================================================== */
+
+.btn-booklet {
+  position: relative;
+}
+
+.btn-booklet.active {
+  color: #fa2d48 !important;
+  background: rgba(250, 45, 72, 0.16) !important;
+}
+
+.booklet-viewer-overlay,
+.booklet-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 10200;
+  display: flex;
+  flex-direction: column;
+  background: #0a0a0e;
+  color: #ffffff;
+  user-select: text;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow: hidden;
+}
+
+/* Desktop / Tablet Landscape: replaces right content area while left player column stays visible */
+.booklet-viewer-overlay.inline-right-pane {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 420px;
+  width: auto;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 800;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0c0c10;
+}
+
+/* StandBy TV Mode & Mobile Portrait/Landscape: Fullscreen overlay */
+.booklet-viewer-overlay.fullscreen-mode {
+  inset: 0 !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 10220 !important;
+  border-left: none;
+}
+
+.booklet-viewer-overlay.hidden {
+  display: none !important;
+}
+
+.booklet-close-btn {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: 20px;
+  z-index: 20;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(18, 18, 24, 0.92);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.booklet-close-btn:hover {
+  background: rgba(255, 69, 58, 0.42);
+  border-color: rgba(255, 69, 58, 0.65);
+}
+
+.booklet-close-btn:active {
+  transform: scale(0.96);
+}
+
+.booklet-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y pinch-zoom;
+  padding: 0 0 max(24px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.booklet-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.95rem;
+}
+
+/* Sequential Full-Width Pages Stack */
+.booklet-pages-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.booklet-seq-page-card {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #0d0d12;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.booklet-seq-page-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  background: #0d0d12;
+}
+
+/* Native System-Font Digital Booklet Layout (Mobile / Tablet / Desktop / TV) */
+.booklet-native-page {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: calc(max(24px, env(safe-area-inset-top)) + 36px) clamp(18px, 4vw, 44px) 32px;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(20, 18, 28, 0.55) 0%, rgba(10, 10, 14, 0.95) 100%);
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif);
+}
+
+.booklet-native-page + .booklet-native-page {
+  padding-top: 32px;
+}
+
+.booklet-native-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 14px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.booklet-native-kicker {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fa2d48;
+}
+
+.booklet-native-edition-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.booklet-native-cover-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: left;
+}
+
+.booklet-native-cover-img {
+  width: min(100%, 420px);
+  aspect-ratio: 1 / 1;
+  border-radius: 18px;
+  object-fit: cover;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  margin-bottom: 24px;
+  background: #16161f;
+}
+
+.booklet-native-cover-meta {
+  width: 100%;
+}
+
+.booklet-native-album-title {
+  margin: 0 0 6px;
+  font-size: clamp(1.5rem, 5vw, 2.15rem);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.booklet-native-album-artist {
+  margin: 0 0 10px;
+  font-size: clamp(1.125rem, 3.6vw, 1.4rem);
+  font-weight: 600;
+  color: #fa2d48;
+}
+
+.booklet-native-album-sub {
+  margin: 0 0 16px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.booklet-native-quote {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.58;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.booklet-native-sec-header {
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.booklet-native-sec-title {
+  margin: 6px 0 4px;
+  font-size: clamp(1.25rem, 4vw, 1.65rem);
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.booklet-native-sec-sub {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.booklet-native-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.booklet-native-para {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.62;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.booklet-native-specs-card {
+  margin-top: 24px;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px 20px;
+}
+
+.booklet-native-spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.booklet-native-spec-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.booklet-native-spec-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.35;
+}
+
+.booklet-native-tracks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.booklet-native-track-card {
+  position: relative;
+  padding: 16px 16px 16px 20px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.booklet-native-track-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #fa2d48;
+}
+
+.booklet-native-track-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.booklet-native-track-title-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.booklet-native-track-num {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fa2d48;
+  flex-shrink: 0;
+}
+
+.booklet-native-track-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+}
+
+.booklet-native-track-dur {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.78);
+  flex-shrink: 0;
+}
+
+.booklet-native-track-badges {
+  margin-top: 5px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(250, 128, 148, 0.95);
+  line-height: 1.4;
+}
+
+.booklet-native-track-comm {
+  margin: 10px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.58;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.booklet-native-track-credits {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.booklet-native-credit-row {
+  font-size: 0.875rem;
+  line-height: 1.48;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.booklet-native-credit-label {
+  font-weight: 700;
+  font-size: 0.8125rem;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.booklet-native-footer {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+@media (max-width: 767px), (max-height: 540px) {
+  .booklet-close-btn {
+    top: max(12px, env(safe-area-inset-top));
+    right: 12px;
+  }
+
+  .booklet-native-page {
+    padding: calc(max(16px, env(safe-area-inset-top)) + 42px) 16px 26px;
+  }
+
+  .booklet-native-specs-card {
+    grid-template-columns: 1fr;
+    padding: 14px 16px;
+    gap: 12px;
+  }
+}
+

@@ -93,6 +93,8 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
     private var isWatchdogRunning: Bool = false
     private var isRecoveringInProgress: Bool = false
     private var isApplescriptProbeRunning: Bool = false
+    private var probeStartedAt: Date?
+    private var probeGeneration: UInt64 = 0
 
     // MARK: - Public Properties
 
@@ -226,8 +228,9 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         }
 
         // Skip aggressive ScriptingBridge probing during cold launch warmup, active bulk AppleScript,
-        // track/format transitions, or when Music.app has already proven responsive within the last 4.5s.
-        if probeHandler == nil && !isTestDIModeLocked {
+        // track/format transitions, or when Music.app has already proven responsive within the last 4.5s
+        // ONLY while already marked healthy (.running); if unhealthy, probe immediately to restore sync!
+        if currentState == .running && probeHandler == nil && !isTestDIModeLocked {
             if now.timeIntervalSince(lastLaunchDate) < launchGracePeriod {
                 stateLock.unlock()
                 cooldownNotify?()
@@ -240,8 +243,13 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
                 return
             }
             if isApplescriptProbeRunning {
+                let stuckThreshold = max(probeTimeout * 2.0, 6.0)
+                let isProbeDeadlocked = probeStartedAt.map { now.timeIntervalSince($0) > stuckThreshold } ?? false
                 stateLock.unlock()
                 cooldownNotify?()
+                if isProbeDeadlocked {
+                    handleProbeResult(success: false)
+                }
                 return
             }
         }
@@ -286,17 +294,24 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
             return await customProbe()
         }
 
-        // Single-flight guard: never stack multiple ScriptingBridge probes or count overlap as an extra failure
-        let canStart: Bool = stateLock.withLock {
+        // Single-flight guard: never stack multiple ScriptingBridge probes on probeQueue,
+        // while still reporting timeouts if a prior app.playerState call deadlocked > max(probeTimeout * 2.0, 6.0).
+        let probeDecision: (shouldStart: Bool, timedOutDeadlock: Bool, gen: UInt64) = stateLock.withLock {
+            let now = nowProvider()
             if isApplescriptProbeRunning {
-                return false
+                let stuckThreshold = max(probeTimeout * 2.0, 6.0)
+                let isStuck = probeStartedAt.map { now.timeIntervalSince($0) > stuckThreshold } ?? false
+                return (false, isStuck, probeGeneration)
             }
+            probeGeneration &+= 1
             isApplescriptProbeRunning = true
-            return true
+            probeStartedAt = now
+            return (true, false, probeGeneration)
         }
-        guard canStart else {
-            return nil
+        if !probeDecision.shouldStart {
+            return probeDecision.timedOutDeadlock ? false : nil
         }
+        let myGen = probeDecision.gen
 
         let timeout = max(1.5, self.probeTimeout)
         let sbTicks = max(30, Int((timeout - 0.6) * 60.0))
@@ -314,7 +329,10 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
                 }
                 if let self = self {
                     self.stateLock.lock()
-                    self.isApplescriptProbeRunning = false
+                    if self.probeGeneration == myGen {
+                        self.isApplescriptProbeRunning = false
+                        self.probeStartedAt = nil
+                    }
                     if ok {
                         self.lastConfirmedResponsiveDate = self.nowProvider()
                     }
@@ -421,6 +439,9 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
 
     public func handleAppTerminated(pid: pid_t) {
         stateLock.lock()
+        isApplescriptProbeRunning = false
+        probeStartedAt = nil
+        probeGeneration &+= 1
         if !isRecoveringInProgress {
             let notify = transitionToStateLocked(.terminated, reason: "Music.app terminated (PID: \(pid))")
             let shouldRecover = autoRestartEnabled && (!PlaybackRouter.shared.isTestingEnvironment || processLauncher != nil || processTerminator != nil)
@@ -495,9 +516,18 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
                 Thread.sleep(forTimeInterval: 0.05)
             }
 
-            // If still alive, force kill
+            // If still alive, force kill and wait for kernel + LaunchServices teardown before relaunching
+            var sentSigKill = false
             for pid in getRunningPids() {
                 forceTerminatePid(pid)
+                sentSigKill = true
+            }
+            if sentSigKill {
+                let forceKillDeadline = nowProvider().addingTimeInterval(1.5)
+                while !getRunningPids().isEmpty && nowProvider() < forceKillDeadline {
+                    Thread.sleep(forTimeInterval: 0.05)
+                }
+                Thread.sleep(forTimeInterval: 0.35)
             }
         }
 
@@ -513,15 +543,23 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
             return
         }
 
-        // 3. Await readiness
+        // 3. Await readiness (retrying launch once if LaunchServices dropped an early openApplication request)
         var isReady = false
         if PlaybackRouter.shared.isTestingEnvironment || processLauncher != nil {
             isReady = true
         } else {
-            let readyDeadline = nowProvider().addingTimeInterval(10.0)
+            let startWait = nowProvider()
+            let readyDeadline = startWait.addingTimeInterval(10.0)
+            var didRetryLaunch = false
             while nowProvider() < readyDeadline {
                 Thread.sleep(forTimeInterval: 0.25)
                 let pidsNow = getRunningPids()
+                if pidsNow.isEmpty && !didRetryLaunch && nowProvider().timeIntervalSince(startWait) >= 1.5 {
+                    didRetryLaunch = true
+                    NSLog("[MusicAppLifecycleManager] 🔁 Retrying Music.app launch after post-kill settle...")
+                    _ = launchInstance()
+                    continue
+                }
                 if !pidsNow.isEmpty {
                     if let app = MusicAppProvider.shared.createIsolatedMusicApp(timeoutTicks: 60) {
                         let state = app.playerState
@@ -537,6 +575,9 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
 
         stateLock.lock()
         isRecoveringInProgress = false
+        isApplescriptProbeRunning = false
+        probeStartedAt = nil
+        probeGeneration &+= 1
 
         if isReady {
             consecutiveFailures = 0
@@ -632,6 +673,8 @@ public final class MusicAppLifecycleManager: @unchecked Sendable {
         }
         isRecoveringInProgress = false
         isApplescriptProbeRunning = false
+        probeStartedAt = nil
+        probeGeneration &+= 1
         stateLock.unlock()
     }
 }

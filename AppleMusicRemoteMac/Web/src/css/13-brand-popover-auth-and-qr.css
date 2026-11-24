@@ -1,0 +1,507 @@
+/* --- Interactive Top-Left Brand Pill & AMR Version/Device Popover --- */
+.brand-pill-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 5px 10px 5px 6px;
+  margin-left: -6px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.brand-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.brand-pill-btn:active {
+  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.amr-info-popover {
+  position: fixed;
+  top: max(56px, calc(env(safe-area-inset-top) + 46px));
+  left: max(16px, env(safe-area-inset-left));
+  width: min(350px, calc(100vw - 32px));
+  max-height: calc(100dvh - 72px);
+  overflow-y: auto;
+  z-index: 10200;
+  background: rgba(22, 22, 28, 0.94);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  padding: 16px;
+  color: var(--text-primary);
+  animation: popoverFadeIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#amr-info-popover .modal-card {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.amr-info-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.amr-info-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.amr-info-app-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(250, 36, 60, 0.35);
+}
+
+.amr-info-brand-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.amr-info-title-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.amr-info-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.amr-info-ver-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(250, 36, 60, 0.22);
+  border: 1px solid rgba(250, 36, 60, 0.45);
+  color: #ff6478;
+}
+
+.amr-info-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.amr-info-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.amr-info-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.amr-info-meta-item {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.amr-info-meta-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+}
+
+.amr-info-meta-val {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amr-info-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.amr-info-field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.amr-node-input-wrap {
+  margin: 3px 0 2px;
+}
+
+.amr-device-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #2e2e34;
+  background: #1c1c20;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.amr-device-name-input:focus {
+  border-color: #30d158;
+  background: #222228;
+}
+
+.amr-node-switch {
+  align-self: center;
+  margin-left: 6px;
+}
+
+.amr-info-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.amr-info-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.amr-info-toggle-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.amr-info-toggle-desc {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* iOS Style Switch */
+.ios-switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ios-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ios-switch-slider {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 26px;
+  transition: background-color 0.22s ease;
+}
+
+.ios-switch-slider::before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ios-switch input:checked + .ios-switch-slider {
+  background-color: #30d158;
+}
+
+.ios-switch input:checked + .ios-switch-slider::before {
+  transform: translateX(20px);
+}
+
+/* --- Device Authorization Waiting Overlay --- */
+#device-auth-overlay {
+  z-index: 25000;
+}
+
+.device-auth-card {
+  max-width: 400px;
+  width: calc(100vw - 36px);
+  padding: 28px 24px;
+}
+
+.device-auth-icon-ring {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 159, 10, 0.14);
+  border: 1px solid rgba(255, 159, 10, 0.45);
+  color: #ff9f0a;
+  box-shadow: 0 0 24px rgba(255, 159, 10, 0.25);
+}
+
+.device-auth-meta-box {
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.device-auth-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.device-auth-meta-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.device-auth-short-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #ff9f0a;
+  background: rgba(255, 159, 10, 0.14);
+  border: 1px solid rgba(255, 159, 10, 0.35);
+  padding: 3px 9px;
+  border-radius: 7px;
+}
+
+.device-auth-name-edit {
+  flex: 1;
+  max-width: 190px;
+}
+
+.device-auth-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  outline: none;
+}
+
+.device-auth-name-input:focus {
+  border-color: rgba(255, 159, 10, 0.65);
+}
+
+.device-auth-uid-caption {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  word-break: break-all;
+}
+
+/* ==========================================================================
+   Share Access & QR Code inside Build Info Node (#amr-info-popover)
+   ========================================================================== */
+
+.amr-share-actions-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.amr-share-access-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(48, 209, 88, 0.35);
+  background: rgba(48, 209, 88, 0.12);
+  color: #30d158;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+
+.amr-share-access-btn:hover {
+  background: rgba(48, 209, 88, 0.2);
+  border-color: rgba(48, 209, 88, 0.55);
+}
+
+.amr-share-access-btn:active {
+  transform: scale(0.97);
+}
+
+.amr-share-access-btn.active {
+  background: rgba(48, 209, 88, 0.24);
+  border-color: rgba(48, 209, 88, 0.7);
+  color: #52e577;
+}
+
+.amr-share-qr-panel {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  animation: amrFadeSlideIn 0.2s ease-out;
+}
+
+.amr-share-qr-panel.hidden {
+  display: none !important;
+}
+
+@keyframes amrFadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.amr-share-qr-box {
+  width: 184px;
+  height: 184px;
+  padding: 8px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.amr-share-qr-img {
+  width: 168px;
+  height: 168px;
+  display: block;
+  image-rendering: pixelated;
+  border-radius: 6px;
+}
+
+.amr-share-qr-hint {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 280px;
+}
+
+.amr-share-url-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 11px;
+  color: #30d158;
+  background: rgba(48, 209, 88, 0.1);
+  border: 1px solid rgba(48, 209, 88, 0.25);
+  padding: 5px 10px;
+  border-radius: 8px;
+  max-width: 100%;
+  word-break: break-all;
+  user-select: all;
+}
+
+.amr-share-qr-btn-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.amr-share-sub-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.amr-share-sub-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.amr-share-sub-btn:active {
+  transform: scale(0.97);
+}
+

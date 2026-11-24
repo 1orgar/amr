@@ -24,7 +24,7 @@ public final class QRCodeWindow: NSWindowController {
         )
         window.title = "Apple Music Remote — QR Code"
         window.isReleasedWhenClosed = false
-        window.level = .floating
+        window.level = .normal
         window.center()
 
         super.init(window: window)

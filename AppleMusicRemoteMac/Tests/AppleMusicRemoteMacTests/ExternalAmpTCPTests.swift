@@ -11,6 +11,7 @@ final class ExternalAmpTCPTests: XCTestCase {
     private var savedAmpCap: Int = 96
     private var savedSoundCheck: Bool = false
     private var savedLowVolSmartNorm: Bool = true
+    private var savedCompressionComp: Bool = true
 
     override func setUp() {
         super.setUp()
@@ -22,9 +23,11 @@ final class ExternalAmpTCPTests: XCTestCase {
         savedAmpCap = ExternalAmpTCPController.shared.maxVolumeCap
         savedSoundCheck = ExternalAmpTCPController.shared.isSoundCheckEnabled
         savedLowVolSmartNorm = ExternalAmpTCPController.shared.isLowVolumeSmartNormEnabled
+        savedCompressionComp = ExternalAmpTCPController.shared.isCompressionCompensationEnabled
     }
 
     override func tearDown() {
+        ExternalAmpTCPController.shared.isCompressionCompensationEnabled = savedCompressionComp
         ExternalAmpTCPController.shared.isLowVolumeSmartNormEnabled = savedLowVolSmartNorm
         ExternalAmpTCPController.shared.isSoundCheckEnabled = savedSoundCheck
         PlaybackStateStore.shared.isVolumeLockedTo100 = savedLock100
@@ -562,5 +565,80 @@ final class ExternalAmpTCPTests: XCTestCase {
         ExternalAmpTCPController.shared.processIncomingChunkForTesting("volume=00$")
         XCTAssertEqual(ExternalAmpTCPController.shared.currentVolume, 25)
         XCTAssertEqual(ExternalAmpTCPController.shared.baseListeningVolume, 25)
+    }
+
+    func testPsychoacousticCompressionCompensationAndDoubleAttenuationGuard() {
+        // 1. Dynamic audiophile track (Crest 13.5 dB >= 10.5 dB) must NOT receive artificial boost
+        let dynGain = ExternalAmpTCPController.computeEffectiveSoundCheckGainDb(
+            rawGainDb: -4.2,
+            compressionCompensation: true,
+            crestFactorDb: 13.5,
+            digitalSoundCheckAlreadyActive: false
+        )
+        XCTAssertEqual(dynGain ?? 0, -4.2, accuracy: 0.01)
+
+        // 2. Brickwalled "Loudness War" master (iTunNORM = -10.5 dB, Crest = 5.0 dB):
+        // Deficit = 10.5 - 5.0 = 5.5 dB -> +2.475 dB relief -> effective gain -8.025 dB (-8 steps instead of -11)
+        let crushedGain = ExternalAmpTCPController.computeEffectiveSoundCheckGainDb(
+            rawGainDb: -10.5,
+            compressionCompensation: true,
+            crestFactorDb: 5.0,
+            digitalSoundCheckAlreadyActive: false
+        )
+        XCTAssertEqual(crushedGain ?? 0, -8.025, accuracy: 0.05)
+
+        // 3. Verify live ExternalAmpTCPController state transitions (Crest update, toggle, and Music.app SC Guard)
+        PlaybackStateStore.shared.isVolumeLockedTo100 = true
+        ExternalAmpTCPController.shared.updateConfiguration(
+            profile: .rotel,
+            host: "127.0.0.1",
+            port: 59596,
+            maxVolumeCap: 80,
+            isEnabled: true
+        )
+        ExternalAmpTCPController.shared.isLowVolumeSmartNormEnabled = true
+        ExternalAmpTCPController.shared.isCompressionCompensationEnabled = true
+        ExternalAmpTCPController.shared.isSoundCheckEnabled = true
+
+        ExternalAmpTCPController.shared.applyTrackSoundCheck(trackKey: "ref:neutral", gainDb: 0.0)
+        ExternalAmpTCPController.shared.setVolume(50)
+        XCTAssertEqual(ExternalAmpTCPController.shared.baseListeningVolume, 50)
+
+        // Initial metadata arrives (-10.5 dB, crest not yet measured -> raw -11 step offset -> ampVol = 39)
+        let trackKey = "metallica:death magnetic"
+        ExternalAmpTCPController.shared.applyTrackSoundCheck(trackKey: trackKey, gainDb: -10.5)
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentTrackVolumeOffset, -11)
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentVolume, 39)
+
+        // Live SpectralIntegrityAnalyzer reports crushed Crest = 5.0 dB (Music.app digital SC is OFF)
+        ExternalAmpTCPController.shared.updateLiveTrackDynamics(
+            trackKey: trackKey,
+            crestFactorDb: 5.0,
+            digitalSoundCheckAlreadyActive: false
+        )
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentTrackCrestDb ?? 0, 5.0, accuracy: 0.01)
+        XCTAssertFalse(ExternalAmpTCPController.shared.isDigitalSoundCheckDetected)
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentTrackVolumeOffset, -8)
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentVolume, 42)
+
+        // Toggling Compression Compensation OFF immediately reverts to raw -11 offset (ampVol = 39)
+        ExternalAmpTCPController.shared.isCompressionCompensationEnabled = false
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentTrackVolumeOffset, -11)
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentVolume, 39)
+
+        // Toggling Compression Compensation back ON restores -8 offset (ampVol = 42)
+        ExternalAmpTCPController.shared.isCompressionCompensationEnabled = true
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentTrackVolumeOffset, -8)
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentVolume, 42)
+
+        // If Music.app internal digital Sound Check is detected simultaneously, cancel duplicate hardware attenuation (offset = 0 -> ampVol = 50)
+        ExternalAmpTCPController.shared.updateLiveTrackDynamics(
+            trackKey: trackKey,
+            crestFactorDb: 5.0,
+            digitalSoundCheckAlreadyActive: true
+        )
+        XCTAssertTrue(ExternalAmpTCPController.shared.isDigitalSoundCheckDetected)
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentTrackVolumeOffset, 0)
+        XCTAssertEqual(ExternalAmpTCPController.shared.currentVolume, 50)
     }
 }

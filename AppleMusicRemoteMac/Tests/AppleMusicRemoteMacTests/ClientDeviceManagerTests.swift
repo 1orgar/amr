@@ -103,4 +103,80 @@ final class ClientDeviceManagerTests: XCTestCase {
         XCTAssertTrue(record.isAuthorized)
         XCTAssertTrue(manager.isConnectionAuthorized(connectionId: connId))
     }
+
+    func testPerDeviceDACAndDSPPresetPermissions() {
+        let manager = ClientDeviceManager.shared
+        let connId = UUID()
+        let headlessConnId = UUID()
+        let testDeviceId = "test-perms-\(UUID().uuidString.lowercased())"
+
+        defer {
+            manager.unregisterConnection(connectionId: connId)
+            manager.removeDevice(deviceId: testDeviceId)
+        }
+
+        // Unbound headless connections remain allowed
+        XCTAssertTrue(manager.canConnectionSelectDAC(connectionId: headlessConnId))
+        XCTAssertTrue(manager.canConnectionSelectDSPPreset(connectionId: headlessConnId))
+
+        let initial = manager.registerConnection(
+            connectionId: connId,
+            deviceId: testDeviceId,
+            deviceName: "iPad Гостевой",
+            deviceType: "tablet",
+            preferredLockScreen: false,
+            remoteIP: "192.168.1.120"
+        )
+        XCTAssertTrue(initial.allowDACSelection)
+        XCTAssertTrue(initial.allowDSPPresetSelection)
+        XCTAssertEqual(initial.dictionary["allow_dac_selection"] as? Bool, true)
+        XCTAssertEqual(initial.dictionary["allow_dsp_preset_selection"] as? Bool, true)
+
+        // While pending authorization, neither DAC nor DSP mutations are permitted
+        XCTAssertFalse(manager.canConnectionSelectDAC(connectionId: connId))
+        XCTAssertFalse(manager.canConnectionSelectDSPPreset(connectionId: connId))
+
+        // Authorize device -> both allowed by default
+        manager.setAuthorized(deviceId: testDeviceId, authorized: true)
+        XCTAssertTrue(manager.canConnectionSelectDAC(connectionId: connId))
+        XCTAssertTrue(manager.canConnectionSelectDSPPreset(connectionId: connId))
+
+        // Disable DAC selection only
+        manager.setAllowDACSelection(deviceId: testDeviceId, enabled: false)
+        XCTAssertFalse(manager.canConnectionSelectDAC(connectionId: connId))
+        XCTAssertTrue(manager.canConnectionSelectDSPPreset(connectionId: connId))
+        XCTAssertEqual(manager.getDevice(deviceId: testDeviceId)?.dictionary["allow_dac_selection"] as? Bool, false)
+
+        // Disable DSP preset selection as well
+        manager.setAllowDSPPresetSelection(deviceId: testDeviceId, enabled: false)
+        XCTAssertFalse(manager.canConnectionSelectDAC(connectionId: connId))
+        XCTAssertFalse(manager.canConnectionSelectDSPPreset(connectionId: connId))
+        XCTAssertEqual(manager.getDevice(deviceId: testDeviceId)?.dictionary["allow_dsp_preset_selection"] as? Bool, false)
+
+        // Re-enable DAC selection
+        manager.setAllowDACSelection(deviceId: testDeviceId, enabled: true)
+        XCTAssertTrue(manager.canConnectionSelectDAC(connectionId: connId))
+        XCTAssertFalse(manager.canConnectionSelectDSPPreset(connectionId: connId))
+    }
+
+    func testLegacyClientDeviceRecordJSONDecodesWithPermissionsEnabledByDefault() throws {
+        let legacyJSON = """
+        {
+          "deviceId": "legacy-uid-1234",
+          "shortId": "1234",
+          "deviceName": "Legacy iPhone",
+          "deviceType": "mobile",
+          "isAuthorized": true,
+          "lockScreenControls": true,
+          "lastSeenTimestamp": 1730000000,
+          "lastIPAddress": "192.168.1.50"
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(ClientDeviceRecord.self, from: legacyJSON)
+        XCTAssertEqual(decoded.deviceId, "legacy-uid-1234")
+        XCTAssertTrue(decoded.isAuthorized)
+        XCTAssertTrue(decoded.allowDACSelection)
+        XCTAssertTrue(decoded.allowDSPPresetSelection)
+    }
 }

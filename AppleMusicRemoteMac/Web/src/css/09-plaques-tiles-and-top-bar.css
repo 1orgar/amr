@@ -1,0 +1,584 @@
+/* ==========================================================================
+   Apple Music Cloud Tiles Grid & Station Ambient Animations
+   ========================================================================== */
+
+@keyframes stationGradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes stationPulseGlow {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(250, 45, 72, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 8px 30px rgba(121, 40, 202, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  }
+}
+
+@keyframes plaqueSpinCW {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes plaqueSpinCCW {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes plaqueBreathe {
+  0%, 100% { transform: scale(0.95); opacity: 0.82; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes plaqueHeartBeat {
+  0%, 100% { transform: scale(0.94); }
+  35% { transform: scale(1.08); }
+  65% { transform: scale(0.98); }
+  85% { transform: scale(1.05); }
+}
+
+@keyframes plaqueWavePulse {
+  0% { transform: scaleY(0.76); }
+  50% { transform: scaleY(1.16); }
+  100% { transform: scaleY(0.88); }
+}
+
+@keyframes plaqueFloatY {
+  0%, 100% { transform: translateY(-6px); }
+  50% { transform: translateY(6px); }
+}
+
+@keyframes plaqueDashFlow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -120; }
+}
+
+@keyframes plaqueOrbMove {
+  0%, 100% { transform: translate(-18px, -14px) scale(1); opacity: 0.55; }
+  50% { transform: translate(22px, 16px) scale(1.22); opacity: 0.85; }
+}
+
+.animated-plaque-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: 240% 240% !important;
+  animation: stationGradientShift 9s ease-in-out infinite alternate;
+  user-select: none;
+}
+
+.animated-plaque-orb {
+  position: absolute;
+  width: 68%;
+  height: 68%;
+  border-radius: 50%;
+  filter: blur(26px);
+  pointer-events: none;
+  animation: plaqueOrbMove 6.5s ease-in-out infinite alternate;
+}
+
+.animated-plaque-svg {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.plaque-origin-center {
+  transform-origin: 250px 235px;
+}
+
+.plaque-spin-slow {
+  transform-origin: 250px 235px;
+  animation: plaqueSpinCW 22s linear infinite;
+}
+
+.plaque-spin-med {
+  transform-origin: 250px 235px;
+  animation: plaqueSpinCW 13s linear infinite;
+}
+
+.plaque-spin-rev {
+  transform-origin: 250px 235px;
+  animation: plaqueSpinCCW 17s linear infinite;
+}
+
+.plaque-breathe {
+  transform-origin: 250px 235px;
+  animation: plaqueBreathe 3.2s ease-in-out infinite;
+}
+
+.plaque-heartbeat {
+  transform-origin: 250px 235px;
+  animation: plaqueHeartBeat 2.4s ease-in-out infinite;
+}
+
+.plaque-wave-anim {
+  transform-origin: 250px 235px;
+  animation: plaqueWavePulse 1.8s ease-in-out infinite alternate;
+}
+
+.plaque-float-y {
+  transform-origin: 250px 235px;
+  animation: plaqueFloatY 3.6s ease-in-out infinite;
+}
+
+.plaque-dash-flow {
+  animation: plaqueDashFlow 6s linear infinite;
+}
+
+#view-home.hidden .animated-plaque-wrap,
+#view-home.hidden .animated-plaque-orb,
+#view-home.hidden .animated-plaque-svg *,
+#view-home.hidden .station-animated-bg,
+#view-home:not(.active) .animated-plaque-wrap,
+#view-home:not(.active) .animated-plaque-orb,
+#view-home:not(.active) .animated-plaque-svg *,
+#view-home:not(.active) .station-animated-bg {
+  animation-play-state: paused !important;
+}
+
+/* Station Animated Fallback & Background */
+.station-card .media-card-art-fallback,
+.station-animated-bg {
+  background-size: 250% 250% !important;
+  animation: stationGradientShift 12s ease infinite alternate;
+}
+
+.station-card:hover .media-card-art-wrap,
+.collection-tile.is-station:hover .collection-tile-art-wrap {
+  animation: stationPulseGlow 3s ease-in-out infinite;
+}
+
+/* Collection Tiles Grid View (Screenshot 5 / Apple Music Cloud) */
+.collection-tiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 24px 20px;
+  padding: 16px 24px 60px 24px;
+}
+
+@media (max-width: 767px), (max-height: 540px) {
+  .collection-tiles-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px 12px;
+    padding: 12px 14px 80px 14px;
+  }
+}
+
+.collection-tile {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--transition-fast);
+  position: relative;
+  min-width: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: 200px 240px;
+}
+
+.collection-tile:hover {
+  transform: translateY(-4px);
+}
+
+.collection-tile:active {
+  transform: scale(0.97);
+}
+
+.collection-tile-art-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #18181a;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.collection-tile-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.collection-tile:hover .collection-tile-art {
+  transform: scale(1.04);
+}
+
+.collection-tile-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+  color: #ffffff;
+  background-size: 250% 250%;
+  animation: stationGradientShift 12s ease infinite alternate;
+}
+
+.collection-tile-fallback svg {
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.collection-tile-fallback-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+/* music Emblem Badge on top right of tile artwork */
+.apple-music-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.apple-music-badge svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.collection-tile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.collection-tile-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.collection-tile-sub {
+  font-size: 12px;
+  color: #8e8e93;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+/* ==========================================================================
+   StandBy / TV Mode (Motion Covers) & WLED DDP Ambilight Settings
+   ========================================================================== */
+
+.top-header-right-actions,
+.desktop-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.top-bar-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f7;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.top-bar-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.top-bar-pill-btn:active {
+  transform: scale(0.96);
+}
+
+.top-bar-pill-btn.active {
+  background: rgba(250, 35, 59, 0.2);
+  border-color: rgba(250, 35, 59, 0.55);
+  color: #ffffff;
+}
+
+.top-bar-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.top-bar-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.top-bar-icon-btn.active {
+  background: rgba(250, 35, 59, 0.22);
+  border-color: rgba(250, 35, 59, 0.6);
+  color: #ff455b;
+}
+
+.wled-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #636366;
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.wled-status-dot.active {
+  background: #30d158;
+  box-shadow: 0 0 8px rgba(48, 209, 88, 0.85);
+}
+
+/* Top Bar Settings Popover */
+.top-settings-popover {
+  position: fixed;
+  top: 62px;
+  right: 24px;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  background: rgba(22, 22, 26, 0.96);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+  z-index: 10050;
+  padding: 16px 18px;
+  color: #ffffff;
+  animation: popoverFadeIn 0.18s ease-out;
+}
+
+.top-settings-popover.hidden {
+  display: none !important;
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.top-settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 14px;
+}
+
+.top-settings-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #ff375f;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.top-settings-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.top-settings-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #aeaeb2;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-settings-close:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.top-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.top-settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+}
+
+.top-settings-label-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.top-settings-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f5f5f7;
+}
+
+.top-settings-sublabel {
+  font-size: 11px;
+  color: #8e8e93;
+}
+
+.top-settings-checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: #fa233b;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.top-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.top-settings-input,
+.top-settings-select {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.top-settings-input:focus,
+.top-settings-select:focus {
+  border-color: #fa233b;
+}
+
+.top-settings-footer {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-standby-launch {
+  width: 100%;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fa233b, #ff5b72);
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+.btn-standby-launch:hover {
+  opacity: 0.92;
+}
+
+.btn-standby-launch:active {
+  transform: scale(0.98);
+}
+
+/* Player Motion Cover Video */
+.player-motion-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.55s ease;
+}
+
+.player-motion-video.visible {
+  opacity: 1;
+}
+

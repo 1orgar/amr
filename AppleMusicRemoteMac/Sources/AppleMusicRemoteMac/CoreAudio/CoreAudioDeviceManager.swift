@@ -9,6 +9,31 @@
 import Foundation
 import CoreAudio
 
+public struct DeviceDSPCapabilities: Sendable, Equatable {
+    public let transportType: String
+    public let isUSB: Bool
+    public let maxBitDepth: Int
+    public let supportsNOS: Bool
+    public let supportsDSDDoP: Bool
+    public let maxDSDRate: Int
+
+    public init(
+        transportType: String,
+        isUSB: Bool,
+        maxBitDepth: Int,
+        supportsNOS: Bool,
+        supportsDSDDoP: Bool,
+        maxDSDRate: Int
+    ) {
+        self.transportType = transportType
+        self.isUSB = isUSB
+        self.maxBitDepth = maxBitDepth
+        self.supportsNOS = supportsNOS
+        self.supportsDSDDoP = supportsDSDDoP
+        self.maxDSDRate = maxDSDRate
+    }
+}
+
 public struct AudioOutputDevice: Identifiable, Hashable, Sendable {
     public let id: AudioDeviceID
     public let uid: String
@@ -17,6 +42,12 @@ public struct AudioOutputDevice: Identifiable, Hashable, Sendable {
     public let currentSampleRate: Double
     public let availableSampleRates: [Double]
     public let isDefault: Bool
+    public let transportType: String
+    public let isUSB: Bool
+    public let maxBitDepth: Int
+    public let supportsNOS: Bool
+    public let supportsDSDDoP: Bool
+    public let maxDSDRate: Int
 
     public init(
         id: AudioDeviceID,
@@ -25,7 +56,13 @@ public struct AudioOutputDevice: Identifiable, Hashable, Sendable {
         iconName: String,
         currentSampleRate: Double,
         availableSampleRates: [Double],
-        isDefault: Bool
+        isDefault: Bool,
+        transportType: String = "unknown",
+        isUSB: Bool = false,
+        maxBitDepth: Int = 24,
+        supportsNOS: Bool = false,
+        supportsDSDDoP: Bool = false,
+        maxDSDRate: Int = 0
     ) {
         self.id = id
         self.uid = uid
@@ -34,6 +71,12 @@ public struct AudioOutputDevice: Identifiable, Hashable, Sendable {
         self.currentSampleRate = currentSampleRate
         self.availableSampleRates = availableSampleRates
         self.isDefault = isDefault
+        self.transportType = transportType
+        self.isUSB = isUSB
+        self.maxBitDepth = maxBitDepth
+        self.supportsNOS = supportsNOS
+        self.supportsDSDDoP = supportsDSDDoP
+        self.maxDSDRate = maxDSDRate
     }
 
     public var dictionary: [String: Any] {
@@ -44,7 +87,13 @@ public struct AudioOutputDevice: Identifiable, Hashable, Sendable {
             "icon": iconName,
             "currentSampleRate": currentSampleRate,
             "availableSampleRates": availableSampleRates,
-            "isDefault": isDefault
+            "isDefault": isDefault,
+            "transportType": transportType,
+            "isUSB": isUSB,
+            "maxBitDepth": maxBitDepth,
+            "supportsNOS": supportsNOS,
+            "supportsDSDDoP": supportsDSDDoP,
+            "maxDSDRate": maxDSDRate
         ]
     }
 }
@@ -118,17 +167,19 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
     private static let keyMutingGuardDurationMs = "DACMutingGuardDurationMs"
     public static let supportedMutingGuardDurationsMs: [Int] = [50, 100, 150, 250]
 
-    private let mutingGuardLock = NSLock()
-    private let mutingGuardQueue = DispatchQueue(label: "org.ksholokhov.amr.dacmutingguard", qos: .userInteractive)
-    private var unmuteWorkItem: DispatchWorkItem?
-    private var isMutingGuardEnabledInternal: Bool
-    private var mutingGuardDurationMsInternal: Int
-    private var isMutingGuardActiveInternal: Bool = false
-    private var mutingGuardActivationCountInternal: Int = 0
-    private var preGuardAppVolume: Int?
-    private var preGuardWasDucked: Bool = false
-    private var preGuardUnduckedVolume: Int?
-    private var hardwareMutedDeviceID: AudioDeviceID?
+    internal let mutingGuardLock = NSLock()
+    internal let mutingGuardQueue = DispatchQueue(label: "org.ksholokhov.amr.dacmutingguard", qos: .userInteractive)
+    internal var unmuteWorkItem: DispatchWorkItem?
+    internal var mutingGuardGeneration: UInt64 = 0
+    internal var isMutingGuardEnabledInternal: Bool
+    internal var mutingGuardDurationMsInternal: Int
+    internal var isMutingGuardActiveInternal: Bool = false
+    internal var mutingGuardActivationCountInternal: Int = 0
+    internal var preGuardAppVolume: Int?
+    internal var pendingAsyncVolumeRestoreTarget: Int?
+    internal var preGuardWasDucked: Bool = false
+    internal var preGuardUnduckedVolume: Int?
+    internal var hardwareMutedDeviceID: AudioDeviceID?
 
     /// Whether DAC Muting Guard (click-free relay switching) is enabled in app configuration.
     public var isMutingGuardEnabled: Bool {
@@ -183,13 +234,22 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         return mutingGuardActivationCountInternal
     }
 
-    private let listenerLock = NSLock()
-    private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
-    private var sampleRateListenerBlock: AudioObjectPropertyListenerBlock?
-    private var devicesListListenerBlock: AudioObjectPropertyListenerBlock?
-    private var monitoredDeviceID: AudioDeviceID?
+    internal let listenerLock = NSLock()
+    internal let halNotifyQueue = DispatchQueue(label: "org.ksholokhov.amr.coreaudio.notify", qos: .utility)
+    internal let halWorkerQueue = DispatchQueue(label: "org.ksholokhov.amr.coreaudio.worker", qos: .utility)
+    internal var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
+    internal var sampleRateListenerBlock: AudioObjectPropertyListenerBlock?
+    internal var devicesListListenerBlock: AudioObjectPropertyListenerBlock?
+    internal var monitoredDeviceID: AudioDeviceID?
+    internal var _lastKnownDefaultOutputID: AudioDeviceID = 0
+
+    internal var lastKnownDefaultOutputID: AudioDeviceID {
+        get { listenerLock.withLock { _lastKnownDefaultOutputID } }
+        set { listenerLock.withLock { _lastKnownDefaultOutputID = newValue } }
+    }
 
     private init() {
+        HALDeviceManager.ensureDetachedHALRunLoop()
         if UserDefaults.standard.object(forKey: Self.keyMutingGuardEnabled) == nil {
             self.isMutingGuardEnabledInternal = false
         } else {
@@ -234,6 +294,16 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
                 let sampleRate = doubleProperty(objectID: deviceID, selector: kAudioDevicePropertyNominalSampleRate) ?? 44100.0
                 let availableRates = availableSampleRates(deviceID: deviceID)
                 let icon = transportIconName(deviceID: deviceID)
+                let rawTransport = uint32Property(objectID: deviceID, selector: kAudioDevicePropertyTransportType)
+                let streamCaps = outputStreamCapabilities(deviceID: deviceID)
+                let dspCaps = Self.evaluateDSPCapabilities(
+                    rawTransport: rawTransport,
+                    name: name,
+                    uid: uid,
+                    availableRates: availableRates,
+                    maxBitDepth: streamCaps.maxBitDepth,
+                    hasStereoOutput: streamCaps.hasStereoOutput
+                )
 
                 return AudioOutputDevice(
                     id: deviceID,
@@ -242,7 +312,13 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
                     iconName: icon,
                     currentSampleRate: sampleRate,
                     availableSampleRates: availableRates,
-                    isDefault: (deviceID == defaultID)
+                    isDefault: (deviceID == defaultID),
+                    transportType: dspCaps.transportType,
+                    isUSB: dspCaps.isUSB,
+                    maxBitDepth: dspCaps.maxBitDepth,
+                    supportsNOS: dspCaps.supportsNOS,
+                    supportsDSDDoP: dspCaps.supportsDSDDoP,
+                    maxDSDRate: dspCaps.maxDSDRate
                 )
             }
     }
@@ -278,7 +354,9 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         let size = UInt32(MemoryLayout<AudioDeviceID>.size)
         let status = AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, size, &newID)
         if status == noErr {
-            updateSampleRateMonitoring(for: id)
+            halWorkerQueue.async { [weak self] in
+                self?.updateSampleRateMonitoring(for: id)
+            }
             return true
         }
         return false
@@ -344,25 +422,45 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
 
     @discardableResult
     public func setFormat(sampleRate: Double, bitDepth: Int? = nil, for deviceID: AudioDeviceID? = nil) -> Bool {
+        // Если активен гибридный DSP-конвейер (SDM DoP / HQ NOS PCM), физический ЦАП управляется исключительно
+        // через HALDeviceManager в Non-Mixable Integer / Hog Mode — защищаем его от сброса частоты внешними вызовами.
+        if AudioEngineController.shared.isActivePipelineHook {
+            let activeDSPDevice = AudioEngineController.shared.activeHardwareOutputDeviceID
+            if activeDSPDevice != 0 && (deviceID == nil || deviceID == activeDSPDevice) {
+                Task {
+                    await AudioEngineController.shared.notifySourceSampleRateChanged(sampleRate)
+                }
+                return true
+            }
+        }
+
         guard let targetID = deviceID ?? getDefaultOutputDeviceID() else { return false }
         guard let targetRate = nearestSupportedSampleRate(sampleRate, deviceID: targetID) else { return false }
 
         let currentRate = doubleProperty(objectID: targetID, selector: kAudioDevicePropertyNominalSampleRate) ?? 0
 
+        let defaultDevID = getDefaultOutputDeviceID()
+        let isTargetingDefaultOutput = (deviceID == nil) || (targetID == defaultDevID)
+
         // If rate is already identical and bit depth does not require modification, skip CoreAudio calls
         let needsRateSwitch = abs(currentRate - targetRate) >= 0.5
         let needsBitDepthSwitch = (bitDepth != nil) && !isCurrentBitDepth(UInt32(bitDepth!), deviceID: targetID, sampleRate: targetRate)
         if !needsRateSwitch && !needsBitDepthSwitch {
+            if isTargetingDefaultOutput && RoomAcousticService.shared.isLocalPassthroughEQActive {
+                RoomAcousticService.shared.notifyLocalOutputFormatChanged(sampleRateHz: targetRate)
+            }
             return true
         }
 
         let useMutingGuard = isMutingGuardEnabled && (needsRateSwitch || needsBitDepthSwitch)
         let guardMs = mutingGuardDurationMs
+        var guardGeneration: UInt64 = 0
         if useMutingGuard {
-            engageMutingGuardPreSwitch(deviceID: targetID, durationMs: guardMs, fromRate: currentRate, toRate: targetRate)
+            guardGeneration = engageMutingGuardPreSwitch(deviceID: targetID, durationMs: guardMs, fromRate: currentRate, toRate: targetRate)
         }
 
         var rateChanged = false
+        var effectiveAppliedRate = currentRate > 0 ? currentRate : targetRate
         if needsRateSwitch {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyNominalSampleRate,
@@ -377,559 +475,52 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
                 let size = UInt32(MemoryLayout<Double>.size)
                 if AudioObjectSetPropertyData(targetID, &address, 0, nil, size, &rate) == noErr {
                     rateChanged = true
+                    effectiveAppliedRate = targetRate
+                } else {
+                    // Fallback when high-res direct attempt (e.g. 192 kHz on 96 kHz max built-in speakers) is rejected by hardware
+                    let avail = availableSampleRates(deviceID: targetID)
+                    let submultiples = [targetRate / 2.0, targetRate / 4.0]
+                    let fallbackCandidate = submultiples.first(where: { sub in avail.contains(where: { abs($0 - sub) < 1.0 }) })
+                        ?? avail.max()
+                    if let fb = fallbackCandidate {
+                        if abs(currentRate - fb) < 0.5 {
+                            effectiveAppliedRate = currentRate
+                        } else {
+                            var fbRate = fb
+                            if AudioObjectSetPropertyData(targetID, &address, 0, nil, size, &fbRate) == noErr {
+                                rateChanged = true
+                                effectiveAppliedRate = fb
+                            }
+                        }
+                    }
                 }
             }
         }
 
         var bitsChanged = false
         if let targetBits = bitDepth, targetBits > 0 {
-            bitsChanged = setStreamBitDepth(UInt32(targetBits), sampleRate: targetRate, deviceID: targetID)
+            bitsChanged = setStreamBitDepth(UInt32(targetBits), sampleRate: effectiveAppliedRate, deviceID: targetID)
+        }
+
+        if isTargetingDefaultOutput && RoomAcousticService.shared.isLocalPassthroughEQActive {
+            RoomAcousticService.shared.notifyLocalOutputFormatChanged(sampleRateHz: effectiveAppliedRate)
         }
 
         if useMutingGuard {
-            scheduleMutingGuardPostSwitchRelease(deviceID: targetID, durationMs: guardMs, targetRate: targetRate)
+            scheduleMutingGuardPostSwitchRelease(
+                deviceID: targetID,
+                durationMs: guardMs,
+                targetRate: effectiveAppliedRate,
+                generation: guardGeneration
+            )
         }
 
         if rateChanged || bitsChanged {
             let bitDepthStr = bitDepth != nil ? ", \(bitDepth!) бит" : ""
             let guardTag = useMutingGuard ? " [🔇 DAC Muting Guard \(guardMs)ms]" : ""
             NSLog("[CoreAudioDeviceManager] ✅ Switched device %u format: %.1f kHz%@ (was %.1f kHz)%@",
-                  targetID, targetRate / 1000.0, bitDepthStr, currentRate / 1000.0, guardTag)
+                  targetID, effectiveAppliedRate / 1000.0, bitDepthStr, currentRate / 1000.0, guardTag)
         }
         return (!needsRateSwitch || rateChanged) && (!needsBitDepthSwitch || bitsChanged)
-    }
-
-    // MARK: - DAC Muting Guard Implementation (Click-Free Relay Switching)
-
-    /// Executes a deterministic DAC Muting Guard cycle around a custom format-switch closure (used in live switching & unit tests).
-    public func performClickFreeSwitchCycle(
-        deviceID: AudioDeviceID = 0,
-        fromRate: Double,
-        toRate: Double,
-        switchOperation: () -> Void,
-        completion: (() -> Void)? = nil
-    ) {
-        let needsSwitch = abs(fromRate - toRate) >= 0.5
-        guard isMutingGuardEnabled && needsSwitch else {
-            switchOperation()
-            completion?()
-            return
-        }
-        let guardMs = mutingGuardDurationMs
-        engageMutingGuardPreSwitch(deviceID: deviceID, durationMs: guardMs, fromRate: fromRate, toRate: toRate)
-        switchOperation()
-        scheduleMutingGuardPostSwitchRelease(deviceID: deviceID, durationMs: guardMs, targetRate: toRate, completion: completion)
-    }
-
-    public func updateSavedGuardVolumeIfNeeded(_ newVol: Int, isDucked: Bool) {
-        mutingGuardLock.lock()
-        if isMutingGuardActiveInternal {
-            preGuardAppVolume = newVol
-            preGuardWasDucked = isDucked
-            if !isDucked {
-                preGuardUnduckedVolume = newVol
-            } else if preGuardUnduckedVolume == nil {
-                preGuardUnduckedVolume = AudioDuckingController.shared.originalVolume
-            }
-        }
-        mutingGuardLock.unlock()
-    }
-
-    private func engageMutingGuardPreSwitch(deviceID: AudioDeviceID, durationMs: Int, fromRate: Double, toRate: Double) {
-        AudioProcessTapService.shared.setMutingGuardZeroFill(true)
-
-        var needSoftwareMute = false
-        mutingGuardLock.lock()
-        unmuteWorkItem?.cancel()
-        unmuteWorkItem = nil
-        let wasAlreadyActive = isMutingGuardActiveInternal
-        isMutingGuardActiveInternal = true
-        mutingGuardActivationCountInternal += 1
-
-        if !wasAlreadyActive && !PlaybackRouter.shared.isTestingEnvironment {
-            preGuardWasDucked = AudioDuckingController.shared.isDucked
-            preGuardUnduckedVolume = preGuardWasDucked ? AudioDuckingController.shared.originalVolume : nil
-            let hwMuted = (deviceID != 0) && setHardwareMute(true, for: deviceID)
-            if hwMuted {
-                hardwareMutedDeviceID = deviceID
-            } else if !ExternalAmpTCPController.shared.isActive && !AppleScriptExecutor.shared.isBusy {
-                needSoftwareMute = true
-            }
-        }
-        mutingGuardLock.unlock()
-
-        // Only fall back to ScriptingBridge soundVolume when the DAC lacks hardware kAudioDevicePropertyMute
-        // and Music.app IPC is idle — never stall the DAC clock switch on contended AppleEvents.
-        if needSoftwareMute, let app = MusicAppProvider.shared.getMusicApp() {
-            let currentVol = app.soundVolume
-            if currentVol >= 0 {
-                mutingGuardLock.lock()
-                preGuardAppVolume = currentVol
-                mutingGuardLock.unlock()
-            }
-            app.soundVolume = 0
-        }
-
-        // Drain CoreAudio output FIFO with digital silence before flipping the hardware oscillator/relay
-        let preDelaySec: Double
-        if PlaybackRouter.shared.isTestingEnvironment {
-            preDelaySec = min(0.015, Double(durationMs) * 0.30 / 1000.0)
-        } else if Thread.isMainThread {
-            preDelaySec = min(0.020, Double(durationMs) * 0.25 / 1000.0)
-        } else {
-            preDelaySec = min(0.045, Double(durationMs) * 0.30 / 1000.0)
-        }
-        if preDelaySec > 0.001 {
-            usleep(UInt32(preDelaySec * 1_000_000))
-        }
-    }
-
-    private func scheduleMutingGuardPostSwitchRelease(
-        deviceID: AudioDeviceID,
-        durationMs: Int,
-        targetRate: Double,
-        completion: (() -> Void)? = nil
-    ) {
-        let postDelaySec: Double
-        if PlaybackRouter.shared.isTestingEnvironment {
-            postDelaySec = min(0.035, Double(durationMs) * 0.70 / 1000.0)
-        } else {
-            postDelaySec = max(0.025, Double(durationMs) * 0.70 / 1000.0)
-        }
-
-        mutingGuardLock.lock()
-        unmuteWorkItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            self.releaseMutingGuard(targetRate: targetRate)
-            completion?()
-        }
-        unmuteWorkItem = item
-        mutingGuardLock.unlock()
-
-        mutingGuardQueue.asyncAfter(deadline: .now() + postDelaySec, execute: item)
-    }
-
-    private func releaseMutingGuard(targetRate: Double) {
-        mutingGuardLock.lock()
-        let mutedDev = hardwareMutedDeviceID
-        hardwareMutedDeviceID = nil
-        let savedVol = preGuardAppVolume
-        preGuardAppVolume = nil
-        let wasDuckedAtEngage = preGuardWasDucked
-        preGuardWasDucked = false
-        let savedUnduckedVol = preGuardUnduckedVolume
-        preGuardUnduckedVolume = nil
-        isMutingGuardActiveInternal = false
-        unmuteWorkItem = nil
-        mutingGuardLock.unlock()
-
-        if !PlaybackRouter.shared.isTestingEnvironment {
-            if let devID = mutedDev, devID != 0 {
-                _ = setHardwareMute(false, for: devID)
-            }
-            let isDLNAMuted = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isDLNAMuted }
-            if !isDLNAMuted && savedVol != nil {
-                let targetAppVol: Int
-                if AudioDuckingController.shared.isDucked {
-                    targetAppVol = wasDuckedAtEngage
-                        ? (savedVol ?? AudioDuckingController.shared.currentDuckedVolume)
-                        : AudioDuckingController.shared.currentDuckedVolume
-                } else if PlaybackStateStore.shared.isVolumeLockedTo100 {
-                    targetAppVol = 100
-                } else if wasDuckedAtEngage {
-                    let simVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
-                    targetAppVol = savedUnduckedVol ?? simVol
-                } else {
-                    let simVol = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.simulatedVolume }
-                    targetAppVol = savedVol ?? simVol
-                }
-                DispatchQueue.global(qos: .utility).async {
-                    if let app = MusicAppProvider.shared.getMusicApp() {
-                        app.soundVolume = targetAppVol
-                    }
-                }
-            }
-        }
-
-        AudioProcessTapService.shared.setMutingGuardZeroFill(false)
-    }
-
-    @discardableResult
-    private func setHardwareMute(_ mute: Bool, for deviceID: AudioDeviceID) -> Bool {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyMute,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var isSettable: DarwinBoolean = false
-        guard AudioObjectHasProperty(deviceID, &address),
-              AudioObjectIsPropertySettable(deviceID, &address, &isSettable) == noErr,
-              isSettable.boolValue else {
-            return false
-        }
-        var val: UInt32 = mute ? 1 : 0
-        let size = UInt32(MemoryLayout<UInt32>.size)
-        return AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, &val) == noErr
-    }
-
-    private func isCurrentBitDepth(_ targetBits: UInt32, deviceID: AudioDeviceID, sampleRate: Double) -> Bool {
-        var streamsAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreams,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var streamsSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(deviceID, &streamsAddress, 0, nil, &streamsSize) == noErr, streamsSize > 0 else { return true }
-
-        let streamCount = Int(streamsSize) / MemoryLayout<AudioStreamID>.size
-        var streamIDs = [AudioStreamID](repeating: 0, count: streamCount)
-        guard AudioObjectGetPropertyData(deviceID, &streamsAddress, 0, nil, &streamsSize, &streamIDs) == noErr else { return true }
-
-        for sID in streamIDs {
-            var physAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioStreamPropertyPhysicalFormat,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            var currentASBD = AudioStreamBasicDescription()
-            var currentASBDSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-            if AudioObjectGetPropertyData(sID, &physAddress, 0, nil, &currentASBDSize, &currentASBD) == noErr {
-                if currentASBD.mBitsPerChannel != targetBits {
-                    return false
-                }
-            }
-        }
-        return true
-    }
-
-    @discardableResult
-    private func setStreamBitDepth(_ targetBits: UInt32, sampleRate: Double, deviceID: AudioDeviceID) -> Bool {
-        var streamsAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreams,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var streamsSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(deviceID, &streamsAddress, 0, nil, &streamsSize) == noErr, streamsSize > 0 else { return false }
-
-        let streamCount = Int(streamsSize) / MemoryLayout<AudioStreamID>.size
-        var streamIDs = [AudioStreamID](repeating: 0, count: streamCount)
-        guard AudioObjectGetPropertyData(deviceID, &streamsAddress, 0, nil, &streamsSize, &streamIDs) == noErr else { return false }
-
-        var anyChanged = false
-        for sID in streamIDs {
-            var physAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioStreamPropertyPhysicalFormat,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-
-            var isSettable: DarwinBoolean = false
-            guard AudioObjectIsPropertySettable(sID, &physAddress, &isSettable) == noErr, isSettable.boolValue else { continue }
-
-            var currentASBD = AudioStreamBasicDescription()
-            var currentASBDSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-            if AudioObjectGetPropertyData(sID, &physAddress, 0, nil, &currentASBDSize, &currentASBD) == noErr {
-                if currentASBD.mBitsPerChannel == targetBits && abs(currentASBD.mSampleRate - sampleRate) < 0.5 {
-                    anyChanged = true
-                    continue // Already configured
-                }
-            }
-
-            var availAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioStreamPropertyAvailablePhysicalFormats,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            var availSize: UInt32 = 0
-            guard AudioObjectGetPropertyDataSize(sID, &availAddress, 0, nil, &availSize) == noErr, availSize > 0 else { continue }
-
-            let count = Int(availSize) / MemoryLayout<AudioStreamRangedDescription>.size
-            var ranged = [AudioStreamRangedDescription](repeating: AudioStreamRangedDescription(), count: count)
-            guard AudioObjectGetPropertyData(sID, &availAddress, 0, nil, &availSize, &ranged) == noErr else { continue }
-
-            let rateMatches = ranged.filter {
-                sampleRate >= ($0.mSampleRateRange.mMinimum - 0.5) &&
-                sampleRate <= ($0.mSampleRateRange.mMaximum + 0.5)
-            }
-
-            if let match = rateMatches.first(where: { $0.mFormat.mBitsPerChannel == targetBits }) {
-                var newASBD = match.mFormat
-                newASBD.mSampleRate = sampleRate
-                let asbdSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-                if AudioObjectSetPropertyData(sID, &physAddress, 0, nil, asbdSize, &newASBD) == noErr {
-                    anyChanged = true
-                }
-            }
-        }
-        return anyChanged
-    }
-
-    // MARK: - Hardware Volume
-
-    public func outputVolume() -> Float? {
-        guard let deviceID = getDefaultOutputDeviceID(),
-              let (selector, elements) = volumeAddress(deviceID: deviceID) else {
-            return nil
-        }
-
-        var values: [Float] = []
-        for element in elements {
-            var address = AudioObjectPropertyAddress(
-                mSelector: selector,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-            var value = Float32(0)
-            var size = UInt32(MemoryLayout<Float32>.size)
-            if AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value) == noErr {
-                values.append(value)
-            }
-        }
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Float(values.count)
-    }
-
-    @discardableResult
-    public func setOutputVolume(_ volume: Float) -> Bool {
-        guard let deviceID = getDefaultOutputDeviceID(),
-              let (selector, elements) = volumeAddress(deviceID: deviceID) else {
-            return false
-        }
-
-        let clamped = min(max(volume, 0.0), 1.0)
-        var success = false
-        for element in elements {
-            var address = AudioObjectPropertyAddress(
-                mSelector: selector,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-            var isSettable: DarwinBoolean = false
-            guard AudioObjectIsPropertySettable(deviceID, &address, &isSettable) == noErr, isSettable.boolValue else {
-                continue
-            }
-            var val = Float32(clamped)
-            let size = UInt32(MemoryLayout<Float32>.size)
-            if AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, &val) == noErr {
-                success = true
-            }
-        }
-        return success
-    }
-
-    // MARK: - Internal Helpers
-
-    private func hasOutputStreams(deviceID: AudioDeviceID) -> Bool {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreams,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size) == noErr else { return false }
-        return size >= UInt32(MemoryLayout<AudioStreamID>.size)
-    }
-
-    private func volumeAddress(deviceID: AudioDeviceID) -> (selector: AudioObjectPropertySelector, elements: [AudioObjectPropertyElement])? {
-        let virtualMainVolume = AudioObjectPropertySelector(0x766D_7663) // 'vmvc'
-        let candidates: [AudioObjectPropertyElement] = [kAudioObjectPropertyElementMain, 1, 2]
-
-        for selector in [kAudioDevicePropertyVolumeScalar, virtualMainVolume] {
-            let present = candidates.filter { element in
-                var address = AudioObjectPropertyAddress(
-                    mSelector: selector,
-                    mScope: kAudioDevicePropertyScopeOutput,
-                    mElement: element
-                )
-                return AudioObjectHasProperty(deviceID, &address)
-            }
-            if present.contains(kAudioObjectPropertyElementMain) {
-                return (selector, [kAudioObjectPropertyElementMain])
-            }
-            if !present.isEmpty {
-                return (selector, present)
-            }
-        }
-        return nil
-    }
-
-    public func transportIconName(deviceID: AudioDeviceID) -> String {
-        guard let transport = uint32Property(objectID: deviceID, selector: kAudioDevicePropertyTransportType) else {
-            return "speaker.wave.2.fill"
-        }
-
-        switch transport {
-        case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE:
-            return "headphones"
-        case kAudioDeviceTransportTypeBuiltIn:
-            return "laptopcomputer"
-        case kAudioDeviceTransportTypeUSB, kAudioDeviceTransportTypeThunderbolt,
-             kAudioDeviceTransportTypeFireWire, kAudioDeviceTransportTypePCI:
-            return "hifispeaker.fill"
-        case kAudioDeviceTransportTypeAirPlay:
-            return "airplayaudio"
-        case kAudioDeviceTransportTypeHDMI, kAudioDeviceTransportTypeDisplayPort:
-            return "tv"
-        case kAudioDeviceTransportTypeAggregate, kAudioDeviceTransportTypeVirtual:
-            return "waveform"
-        default:
-            return "speaker.wave.2.fill"
-        }
-    }
-
-    private func stringProperty(objectID: AudioObjectID, selector: AudioObjectPropertySelector) -> String? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: selector,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        guard AudioObjectHasProperty(objectID, &address) else { return nil }
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(objectID, &address, 0, nil, &size) == noErr else { return nil }
-        var unmanagedString: Unmanaged<CFString>?
-        let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &unmanagedString)
-        guard status == noErr, let cf = unmanagedString?.takeRetainedValue() else { return nil }
-        return cf as String
-    }
-
-    private func uint32Property(objectID: AudioObjectID, selector: AudioObjectPropertySelector) -> UInt32? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: selector,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        guard AudioObjectHasProperty(objectID, &address) else { return nil }
-        var value = UInt32(0)
-        var size = UInt32(MemoryLayout<UInt32>.size)
-        let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &value)
-        guard status == noErr else { return nil }
-        return value
-    }
-
-    private func doubleProperty(objectID: AudioObjectID, selector: AudioObjectPropertySelector) -> Double? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: selector,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        guard AudioObjectHasProperty(objectID, &address) else { return nil }
-        var value = Double(0)
-        var size = UInt32(MemoryLayout<Double>.size)
-        let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &value)
-        guard status == noErr else { return nil }
-        return value
-    }
-
-    // MARK: - Property Listeners
-
-    private func setupHardwareListeners() {
-        // 1. Listen for default output device changes
-        var defaultDeviceAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let defaultBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            guard let self = self else { return }
-            let devices = self.getOutputDevices()
-            self.onDevicesChanged?(devices)
-            if let defID = self.getDefaultOutputDeviceID() {
-                self.updateSampleRateMonitoring(for: defID)
-            }
-            BitPerfectLogMonitor.shared.reapplyCurrentFormat()
-        }
-        self.defaultDeviceListenerBlock = defaultBlock
-        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defaultDeviceAddress, nil, defaultBlock)
-
-        // 2. Listen for device list changes
-        var devicesListAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        let listBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            guard let self = self else { return }
-            let devices = self.getOutputDevices()
-            self.onDevicesChanged?(devices)
-            BitPerfectLogMonitor.shared.reapplyCurrentFormat()
-        }
-        self.devicesListListenerBlock = listBlock
-        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &devicesListAddress, nil, listBlock)
-
-        if let defaultID = getDefaultOutputDeviceID() {
-            updateSampleRateMonitoring(for: defaultID)
-        }
-    }
-
-    private func updateSampleRateMonitoring(for deviceID: AudioDeviceID) {
-        listenerLock.lock()
-        let oldID = monitoredDeviceID
-        let oldBlock = sampleRateListenerBlock
-        monitoredDeviceID = deviceID
-
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            guard let self = self else { return }
-            let currentRate = self.doubleProperty(objectID: deviceID, selector: kAudioDevicePropertyNominalSampleRate) ?? 44100.0
-            self.onSampleRateChanged?(deviceID, currentRate)
-            let devices = self.getOutputDevices()
-            self.onDevicesChanged?(devices)
-        }
-        self.sampleRateListenerBlock = block
-        listenerLock.unlock()
-
-        if let oldID = oldID, let oldBlock = oldBlock {
-            var oldAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyNominalSampleRate,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectRemovePropertyListenerBlock(oldID, &oldAddress, nil, oldBlock)
-        }
-
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        AudioObjectAddPropertyListenerBlock(deviceID, &address, nil, block)
-    }
-
-    private func removeHardwareListeners() {
-        if let defaultBlock = defaultDeviceListenerBlock {
-            var defaultDeviceAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defaultDeviceAddress, nil, defaultBlock)
-        }
-
-        if let listBlock = devicesListListenerBlock {
-            var devicesListAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDevices,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &devicesListAddress, nil, listBlock)
-        }
-
-        listenerLock.lock()
-        let oldID = monitoredDeviceID
-        let oldBlock = sampleRateListenerBlock
-        monitoredDeviceID = nil
-        sampleRateListenerBlock = nil
-        listenerLock.unlock()
-
-        if let oldID = oldID, let oldBlock = oldBlock {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyNominalSampleRate,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectRemovePropertyListenerBlock(oldID, &address, nil, oldBlock)
-        }
     }
 }

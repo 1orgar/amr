@@ -17,10 +17,13 @@ public final class DiagnosticLogger: @unchecked Sendable {
     private let maxLogFileBytes: UInt64 = 5 * 1024 * 1024 // 5 MB rotation threshold
     private let queue = DispatchQueue(label: "com.amr.diagnostic.logger", qos: .utility)
     private let stateLock = NSLock()
+    private let clientRateLock = NSLock()
+    private var clientLogTimestamps: [TimeInterval] = []
+    private let maxGlobalClientLogsPerWindow: Int = 30
+    private let clientLogWindowSeconds: TimeInterval = 10.0
 
     private var _isEnabled: Bool
     private var isPipeInstalled: Bool = false
-    private var origStdoutFD: Int32 = -1
     private var origStderrFD: Int32 = -1
     private var pipeReadFD: Int32 = -1
     private var pipeWriteFD: Int32 = -1
@@ -83,7 +86,7 @@ public final class DiagnosticLogger: @unchecked Sendable {
             ensureLogDirectoryAndFileLocked()
             installStdioTeeIfNeededLocked()
             let banner = "\n================================================================================\n" +
-                         "[\(Self.isoTimestamp())] Diagnostic File Logging ENABLED — Apple Music Remote v2.5.0\n" +
+                         "[\(Self.isoTimestamp())] Diagnostic File Logging ENABLED — Apple Music Remote v3.0.0\n" +
                          "Log File: \(logFileURL.path)\n" +
                          "================================================================================\n"
             writeRawToLogFileLocked(banner)
@@ -102,7 +105,42 @@ public final class DiagnosticLogger: @unchecked Sendable {
     }
 
     public func logClientEvent(device: String, level: String, message: String) {
-        NSLog("[ClientLog][%@][%@] %@", device, level.uppercased(), message)
+        let now = Date().timeIntervalSince1970
+        let allowed: Bool = {
+            clientRateLock.lock()
+            defer { clientRateLock.unlock() }
+            clientLogTimestamps.removeAll { now - $0 >= clientLogWindowSeconds }
+            guard clientLogTimestamps.count < maxGlobalClientLogsPerWindow else {
+                return false
+            }
+            clientLogTimestamps.append(now)
+            return true
+        }()
+        guard allowed else { return }
+
+        let safeDevice = Self.sanitizeLogToken(device, maxChars: 64)
+        let safeLevel = Self.sanitizeLogToken(level, maxChars: 16).uppercased()
+        let safeMsg = Self.sanitizeLogToken(message, maxChars: 500)
+        guard !safeMsg.isEmpty else { return }
+        NSLog("[ClientLog][%@][%@] %@", safeDevice, safeLevel, safeMsg)
+    }
+
+    private static func sanitizeLogToken(_ raw: String, maxChars: Int) -> String {
+        var out = ""
+        out.reserveCapacity(min(raw.count, maxChars))
+        var count = 0
+        for scalar in raw.unicodeScalars {
+            if count >= maxChars { break }
+            if scalar == "\r" || scalar == "\n" || scalar == "\t" {
+                out.unicodeScalars.append(" ")
+            } else if scalar.value < 0x20 || scalar.value == 0x7F {
+                continue
+            } else {
+                out.unicodeScalars.append(scalar)
+            }
+            count += 1
+        }
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func clearLog() {
@@ -111,8 +149,12 @@ public final class DiagnosticLogger: @unchecked Sendable {
                 Darwin.close(logFileFD)
                 logFileFD = -1
             }
-            try? FileManager.default.removeItem(at: logFileURL)
-            try? FileManager.default.removeItem(at: oldLogFileURL)
+            if !Self.isSymlinkPath(logFileURL.path) {
+                try? FileManager.default.removeItem(at: logFileURL)
+            }
+            if !Self.isSymlinkPath(oldLogFileURL.path) {
+                try? FileManager.default.removeItem(at: oldLogFileURL)
+            }
             if isEnabled {
                 ensureLogDirectoryAndFileLocked()
                 let header = "[\(Self.isoTimestamp())] Log cleared by user.\n"
@@ -122,10 +164,12 @@ public final class DiagnosticLogger: @unchecked Sendable {
     }
 
     public func logFileSizeDescription() -> String {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
-              let size = attrs[.size] as? UInt64 else {
+        var st = Darwin.stat()
+        guard Darwin.lstat(logFileURL.path, &st) == 0,
+              (st.st_mode & S_IFMT) == S_IFREG else {
             return "0 КБ"
         }
+        let size = UInt64(max(0, st.st_size))
         if size < 1024 {
             return "\(size) Б"
         } else if size < 1024 * 1024 {
@@ -140,6 +184,7 @@ public final class DiagnosticLogger: @unchecked Sendable {
         queue.sync {
             ensureLogDirectoryAndFileLocked()
         }
+        guard !Self.isSymlinkPath(logFileURL.path) else { return }
         NSWorkspace.shared.open(logFileURL)
     }
 
@@ -148,36 +193,63 @@ public final class DiagnosticLogger: @unchecked Sendable {
         queue.sync {
             ensureLogDirectoryAndFileLocked()
         }
+        guard !Self.isSymlinkPath(logFileURL.path) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([logFileURL])
     }
 
     // MARK: - Internal POSIX Pipe Tee & Rotation
 
+    private static func isSymlinkPath(_ path: String) -> Bool {
+        var st = Darwin.stat()
+        guard Darwin.lstat(path, &st) == 0 else { return false }
+        return (st.st_mode & S_IFMT) == S_IFLNK
+    }
+
     private func ensureLogDirectoryAndFileLocked() {
-        try? FileManager.default.createDirectory(at: logDirectoryURL, withIntermediateDirectories: true)
+        guard !Self.isSymlinkPath(logDirectoryURL.path) else { return }
+        try? FileManager.default.createDirectory(
+            at: logDirectoryURL,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        _ = Darwin.chmod(logDirectoryURL.path, S_IRWXU)
+
         if logFileFD < 0 {
-            logFileFD = Darwin.open(
+            guard !Self.isSymlinkPath(logFileURL.path) else { return }
+            let fd = Darwin.open(
                 logFileURL.path,
-                O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
+                O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC,
                 S_IRUSR | S_IWUSR
             )
-            if logFileFD >= 0 {
-                _ = Darwin.fchmod(logFileFD, S_IRUSR | S_IWUSR)
+            guard fd >= 0 else { return }
+            var st = Darwin.stat()
+            if Darwin.fstat(fd, &st) != 0 || (st.st_mode & S_IFMT) != S_IFREG {
+                Darwin.close(fd)
+                return
             }
+            _ = Darwin.fchmod(fd, S_IRUSR | S_IWUSR)
+            logFileFD = fd
         }
     }
 
     private func rotateIfNeededLocked() {
         guard logFileFD >= 0 else { return }
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
-              let size = attrs[.size] as? UInt64,
-              size >= maxLogFileBytes else {
+        var st = Darwin.stat()
+        guard Darwin.fstat(logFileFD, &st) == 0,
+              (st.st_mode & S_IFMT) == S_IFREG,
+              UInt64(max(0, st.st_size)) >= maxLogFileBytes else {
             return
         }
         Darwin.close(logFileFD)
         logFileFD = -1
+        guard !Self.isSymlinkPath(oldLogFileURL.path),
+              !Self.isSymlinkPath(logFileURL.path) else {
+            return
+        }
         try? FileManager.default.removeItem(at: oldLogFileURL)
-        try? FileManager.default.moveItem(at: logFileURL, to: oldLogFileURL)
+        if (try? FileManager.default.moveItem(at: logFileURL, to: oldLogFileURL)) != nil {
+            _ = Darwin.chmod(oldLogFileURL.path, S_IRUSR | S_IWUSR)
+        }
         ensureLogDirectoryAndFileLocked()
         let rotatedNotice = "[\(Self.isoTimestamp())] Log rotated at 5 MB (previous saved to amr.old.log)\n"
         writeRawToLogFileLocked(rotatedNotice)
@@ -202,19 +274,16 @@ public final class DiagnosticLogger: @unchecked Sendable {
         _ = Darwin.fcntl(pipeReadFD, F_SETFD, FD_CLOEXEC)
         _ = Darwin.fcntl(pipeWriteFD, F_SETFD, FD_CLOEXEC)
 
+        // Only pipeReadFD is non-blocking so DispatchSourceRead drains cleanly;
+        // pipeWriteFD (stdout/stderr) stays blocking so bursts never drop output with EAGAIN.
         let readFlags = Darwin.fcntl(pipeReadFD, F_GETFL, 0)
         if readFlags >= 0 {
             _ = Darwin.fcntl(pipeReadFD, F_SETFL, readFlags | O_NONBLOCK)
         }
-        let writeFlags = Darwin.fcntl(pipeWriteFD, F_GETFL, 0)
-        if writeFlags >= 0 {
-            _ = Darwin.fcntl(pipeWriteFD, F_SETFL, writeFlags | O_NONBLOCK)
-        }
 
-        origStdoutFD = Darwin.dup(STDOUT_FILENO)
         origStderrFD = Darwin.dup(STDERR_FILENO)
-        if origStdoutFD >= 0 {
-            _ = Darwin.fcntl(origStdoutFD, F_SETFD, FD_CLOEXEC)
+        if origStderrFD < 0 {
+            origStderrFD = Darwin.dup(STDOUT_FILENO)
         }
         if origStderrFD >= 0 {
             _ = Darwin.fcntl(origStderrFD, F_SETFD, FD_CLOEXEC)
@@ -243,10 +312,9 @@ public final class DiagnosticLogger: @unchecked Sendable {
         while true {
             let bytesRead = Darwin.read(pipeReadFD, &buffer, buffer.count)
             if bytesRead > 0 {
-                // 1. Always forward to original stderr (or stdout) so terminal / daemon redirection stays intact
-                let targetOrigFD = origStderrFD >= 0 ? origStderrFD : origStdoutFD
-                if targetOrigFD >= 0 {
-                    _ = Darwin.write(targetOrigFD, &buffer, bytesRead)
+                // 1. Always forward to original stderr so terminal / launchd redirection stays intact
+                if origStderrFD >= 0 {
+                    _ = Darwin.write(origStderrFD, &buffer, bytesRead)
                 }
 
                 // 2. If file logging is enabled, write to ~/Library/Logs/AppleMusicRemoteMac/amr.log

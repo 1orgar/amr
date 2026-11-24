@@ -2,10 +2,28 @@
 //  MusicKitManager+Playlists.swift
 //  AppleMusicRemoteMac
 //
+//  Cloud queue playlists, library playlist deletion, playlist track fetching by ID,
+//  and hybrid Replay playlist assembly.
+//
 
 import Foundation
 
 extension MusicKitManager {
+
+    internal func storePlaylistTracksCached(id: String, tracks: [TrackInfo]) {
+        withLock {
+            if playlistTracksCache[id] == nil && playlistTracksCache.count >= Self.maxPlaylistTracksCacheEntries {
+                let now = Date()
+                playlistTracksCache = playlistTracksCache.filter { now.timeIntervalSince($0.value.timestamp) < 3600.0 }
+                if playlistTracksCache.count >= Self.maxPlaylistTracksCacheEntries,
+                   let oldestKey = playlistTracksCache.min(by: { $0.value.timestamp < $1.value.timestamp })?.key {
+                    playlistTracksCache.removeValue(forKey: oldestKey)
+                }
+            }
+            playlistTracksCache[id] = (timestamp: Date(), tracks: tracks)
+        }
+    }
+
     public func createTemporaryCloudPlaylist(name: String = "Очередь AMR", trackCatalogIds: [String]) async -> String? {
         return await syncCloudQueuePlaylist(trackCatalogIds: trackCatalogIds, name: name)
     }
@@ -15,7 +33,10 @@ extension MusicKitManager {
             NSLog("[MusicKitManager] Cannot sync iCloud playlist: missing developer or user token")
             return nil
         }
-        guard !trackCatalogIds.isEmpty else { return nil }
+        let validCatalogIds = trackCatalogIds
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { Self.isValidResourceIdentifier($0) }
+        guard !validCatalogIds.isEmpty else { return nil }
 
         // Step 1: Clean up previous temporary cloud playlist from iCloud
         let oldCloudId = withLock { lastTemporaryCloudPlaylistId }
@@ -30,7 +51,6 @@ extension MusicKitManager {
             .replacingOccurrences(of: "\"", with: "\\\"")
 
         // Remove any old temporary queue playlists in Music.app so they do not accumulate
-        // and so that their deletion syncs to iCloud, ensuring only ONE queue playlist exists.
         if !PlaybackRouter.shared.isTestingEnvironment {
             _ = AppleScriptExecutor.shared.execute("""
             tell application "Music"
@@ -46,14 +66,14 @@ extension MusicKitManager {
         }
 
         // Step 2: Create new playlist with all track catalog IDs via Cloud API
-        guard let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists") else { return nil }
+        guard let url = Self.makeAppleMusicAPIURL(path: "/v1/me/library/playlists") else { return nil }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
         req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let trackData = trackCatalogIds.map { ["id": $0, "type": "songs"] }
+        let trackData = validCatalogIds.map { ["id": $0, "type": "songs"] }
         let payload: [String: Any] = [
             "attributes": [
                 "name": name,
@@ -81,12 +101,13 @@ extension MusicKitManager {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let arr = json["data"] as? [[String: Any]],
                let first = arr.first,
-               let plId = first["id"] as? String {
+               let plId = first["id"] as? String,
+               Self.isValidResourceIdentifier(plId) {
                 createdPlaylistId = plId
                 withLock {
                     lastTemporaryCloudPlaylistId = plId
                 }
-                NSLog("[MusicKitManager] ✅ Created cloud queue playlist: '%@' with %d tracks", plId, trackCatalogIds.count)
+                NSLog("[MusicKitManager] ✅ Created cloud queue playlist: '%@' with %d tracks", plId, validCatalogIds.count)
             }
         } catch {
             NSLog("[MusicKitManager] ❌ Error creating cloud queue playlist: %@", error.localizedDescription)
@@ -100,7 +121,7 @@ extension MusicKitManager {
         }
 
         // Step 3: Wait for Music.app to sync the playlist and its tracks into its local library cache
-        let targetMin = min(trackCatalogIds.count, max(minTracks, 1))
+        let targetMin = min(validCatalogIds.count, max(minTracks, 1))
         for _ in 1...60 {
             let (ok, out) = AppleScriptExecutor.shared.execute("""
             tell application "Music"
@@ -130,9 +151,12 @@ extension MusicKitManager {
     public func addTracksToTemporaryCloudPlaylist(trackCatalogIds: [String]) async -> Bool {
         guard let devToken = getDeveloperToken(), let uToken = getUserToken(), !uToken.isEmpty else { return false }
         let plId = withLock { lastTemporaryCloudPlaylistId }
-        guard let playlistId = plId, !trackCatalogIds.isEmpty else { return false }
+        let validIds = trackCatalogIds
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { Self.isValidResourceIdentifier($0) }
+        guard let playlistId = plId, Self.isValidResourceIdentifier(playlistId), !validIds.isEmpty else { return false }
 
-        guard let addUrl = URL(string: "https://api.music.apple.com/v1/me/library/playlists/\(playlistId)/tracks") else {
+        guard let addUrl = Self.makeAppleMusicAPIURL(path: "/v1/me/library/playlists/\(playlistId)/tracks") else {
             return false
         }
         var addReq = URLRequest(url: addUrl)
@@ -141,7 +165,7 @@ extension MusicKitManager {
         addReq.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
         addReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let trackData = trackCatalogIds.map { ["id": $0, "type": "songs"] }
+        let trackData = validIds.map { ["id": $0, "type": "songs"] }
         let addPayload: [String: Any] = ["data": trackData]
         guard let addBody = try? JSONSerialization.data(withJSONObject: addPayload) else { return false }
         addReq.httpBody = addBody
@@ -149,7 +173,7 @@ extension MusicKitManager {
         do {
             let (addData, addResp) = try await session.data(for: addReq)
             if let addHttp = addResp as? HTTPURLResponse, (addHttp.statusCode == 200 || addHttp.statusCode == 201 || addHttp.statusCode == 204) {
-                NSLog("[MusicKitManager] ✅ Successfully appended %d tracks into temporary iCloud playlist '%@'", trackCatalogIds.count, playlistId)
+                NSLog("[MusicKitManager] ✅ Successfully appended %d tracks into temporary iCloud playlist '%@'", validIds.count, playlistId)
                 return true
             } else {
                 let addErr = String(data: addData, encoding: .utf8) ?? ""
@@ -163,8 +187,11 @@ extension MusicKitManager {
     }
 
     public func deleteTemporaryCloudPlaylist(playlistId: String) async -> Bool {
-        guard let devToken = getDeveloperToken(), let uToken = getUserToken(), !uToken.isEmpty else { return false }
-        guard let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists/\(playlistId)") else { return false }
+        let cleanId = playlistId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isValidResourceIdentifier(cleanId),
+              let devToken = getDeveloperToken(),
+              let uToken = getUserToken(), !uToken.isEmpty else { return false }
+        guard let url = Self.makeAppleMusicAPIURL(path: "/v1/me/library/playlists/\(cleanId)") else { return false }
 
         var req = URLRequest(url: url)
         req.httpMethod = "DELETE"
@@ -174,16 +201,92 @@ extension MusicKitManager {
         do {
             let (data, resp) = try await session.data(for: req)
             if let http = resp as? HTTPURLResponse, (http.statusCode == 200 || http.statusCode == 204) {
-                NSLog("[MusicKitManager] 🗑 Deleted temporary iCloud playlist: '%@'", playlistId)
+                NSLog("[MusicKitManager] 🗑 Deleted temporary iCloud playlist: '%@'", cleanId)
                 return true
             } else if let http = resp as? HTTPURLResponse {
                 let errStr = String(data: data, encoding: .utf8) ?? ""
-                NSLog("[MusicKitManager] ⚠️ Delete iCloud playlist status %d for '%@': %@", http.statusCode, playlistId, errStr)
+                NSLog("[MusicKitManager] ⚠️ Delete iCloud playlist status %d for '%@': %@", http.statusCode, cleanId, errStr)
             }
         } catch {
             NSLog("[MusicKitManager] Error deleting iCloud playlist: %@", error.localizedDescription)
         }
         return false
+    }
+
+    public func deleteUserLibraryPlaylist(playlistId: String? = nil, name: String) async -> Bool {
+        let cleanId = playlistId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        invalidatePlaylistTracksCache()
+        invalidateCloudLibraryPlaylistsCache()
+
+        guard !PlaybackRouter.shared.isTestingEnvironment,
+              let devToken = getDeveloperToken(),
+              let uToken = getUserToken(),
+              !uToken.isEmpty else {
+            return false
+        }
+
+        var candidateIds: [String] = []
+        if cleanId.hasPrefix("p."), Self.isValidResourceIdentifier(cleanId) {
+            candidateIds.append(cleanId)
+        }
+
+        if candidateIds.isEmpty && (!cleanName.isEmpty || !cleanId.isEmpty) {
+            let lang = getPreferredLanguageTag()
+            if let listUrl = Self.makeAppleMusicAPIURL(
+                path: "/v1/me/library/playlists",
+                queryItems: [
+                    URLQueryItem(name: "limit", value: "100"),
+                    URLQueryItem(name: "include", value: "catalog"),
+                    URLQueryItem(name: "l", value: lang)
+                ]
+            ) {
+                var req = URLRequest(url: listUrl, timeoutInterval: 4.0)
+                req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
+                req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
+                req.setValue("application/json", forHTTPHeaderField: "Accept")
+                req.setValue(lang, forHTTPHeaderField: "Accept-Language")
+
+                if let (data, resp) = try? await session.data(for: req),
+                   let http = resp as? HTTPURLResponse, http.statusCode == 200,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let arr = json["data"] as? [[String: Any]] {
+                    for item in arr {
+                        guard let libPlId = item["id"] as? String, Self.isValidResourceIdentifier(libPlId) else { continue }
+                        let attrs = (item["attributes"] as? [String: Any]) ?? [:]
+                        let pName = (attrs["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        var matched = false
+                        if !cleanName.isEmpty && (pName.caseInsensitiveCompare(cleanName) == .orderedSame || LibraryService.playlistsSharePersonalMixAlias(pName, cleanName)) {
+                            matched = true
+                        }
+                        if !matched, !cleanId.isEmpty,
+                           let playParams = attrs["playParams"] as? [String: Any],
+                           let globalId = playParams["globalId"] as? String,
+                           globalId.caseInsensitiveCompare(cleanId) == .orderedSame {
+                            matched = true
+                        }
+                        if !matched, !cleanId.isEmpty,
+                           let rels = item["relationships"] as? [String: Any],
+                           let catObj = rels["catalog"] as? [String: Any],
+                           let catData = catObj["data"] as? [[String: Any]],
+                           catData.contains(where: { ($0["id"] as? String)?.caseInsensitiveCompare(cleanId) == .orderedSame }) {
+                            matched = true
+                        }
+                        if matched && !candidateIds.contains(libPlId) {
+                            candidateIds.append(libPlId)
+                        }
+                    }
+                }
+            }
+        }
+
+        var deletedAny = false
+        for libId in candidateIds {
+            if await deleteTemporaryCloudPlaylist(playlistId: libId) {
+                deletedAny = true
+            }
+        }
+        return deletedAny
     }
 
     // MARK: - Playlist Tracks by ID (MusicKit Catalog & Library)
@@ -205,7 +308,7 @@ extension MusicKitManager {
             return nil
         }) {
             if !PlaybackRouter.shared.isTestingEnvironment {
-                return LibraryService.shared.resolveLocalLibraryMatches(cached, updateNames: false)
+                return LibraryService.shared.resolveLocalLibraryMatches(cached, updateNames: false, includeStagedTemporary: false)
             }
             return cached
         }
@@ -214,18 +317,24 @@ extension MusicKitManager {
             return await getPersonalizedReplayTracks()
         }
 
-        guard let token = getDeveloperToken() else { return [] }
+        guard Self.isValidResourceIdentifier(cleanId),
+              let token = getDeveloperToken() else { return [] }
         let uToken = getUserToken()
-        let sf = (storefront?.lowercased() ?? getUserStorefront()).trimmingCharacters(in: .whitespacesAndNewlines)
-        let primarySf = sf.isEmpty ? "us" : sf
+        let primarySf = Self.sanitizedStorefront(storefront, fallback: getUserStorefront())
         let lang = getPreferredLanguageTag()
 
         var fetchedTracks: [TrackInfo] = []
 
         // 1. Catalog tracks endpoint: GET /v1/catalog/{sf}/playlists/{id}/tracks
         func tryCatalogTracks(storefrontToTry: String) async -> [TrackInfo] {
-            let langQuery = "?l=\(lang)&limit=100"
-            guard let url = URL(string: "https://api.music.apple.com/v1/catalog/\(storefrontToTry)/playlists/\(cleanId)/tracks\(langQuery)") else { return [] }
+            guard Self.isValidStorefrontCode(storefrontToTry),
+                  let url = Self.makeAppleMusicAPIURL(
+                      path: "/v1/catalog/\(storefrontToTry)/playlists/\(cleanId)/tracks",
+                      queryItems: [
+                          URLQueryItem(name: "l", value: lang),
+                          URLQueryItem(name: "limit", value: "100")
+                      ]
+                  ) else { return [] }
             var req = URLRequest(url: url)
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             if let u = uToken, !u.isEmpty {
@@ -251,8 +360,11 @@ extension MusicKitManager {
         // 2. Catalog full playlist endpoint with relationships: GET /v1/catalog/{sf}/playlists/{id}
         if fetchedTracks.isEmpty {
             func tryCatalogPlaylist(storefrontToTry: String) async -> [TrackInfo] {
-                let langQuery = "?l=\(lang)"
-                guard let url = URL(string: "https://api.music.apple.com/v1/catalog/\(storefrontToTry)/playlists/\(cleanId)\(langQuery)") else { return [] }
+                guard Self.isValidStorefrontCode(storefrontToTry),
+                      let url = Self.makeAppleMusicAPIURL(
+                          path: "/v1/catalog/\(storefrontToTry)/playlists/\(cleanId)",
+                          queryItems: [URLQueryItem(name: "l", value: lang)]
+                      ) else { return [] }
                 var req = URLRequest(url: url)
                 req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 if let u = uToken, !u.isEmpty {
@@ -282,7 +394,13 @@ extension MusicKitManager {
 
         // 3. User iCloud Library playlist endpoint: GET /v1/me/library/playlists/{id}/tracks
         if fetchedTracks.isEmpty, let u = uToken, !u.isEmpty, (cleanId.hasPrefix("p.") || cleanId.hasPrefix("pl.")) {
-            if let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists/\(cleanId)/tracks?limit=100&l=\(lang)") {
+            if let url = Self.makeAppleMusicAPIURL(
+                path: "/v1/me/library/playlists/\(cleanId)/tracks",
+                queryItems: [
+                    URLQueryItem(name: "limit", value: "100"),
+                    URLQueryItem(name: "l", value: lang)
+                ]
+            ) {
                 var req = URLRequest(url: url)
                 req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 req.setValue(u, forHTTPHeaderField: "Music-User-Token")
@@ -300,413 +418,13 @@ extension MusicKitManager {
 
         if !fetchedTracks.isEmpty {
             if !PlaybackRouter.shared.isTestingEnvironment {
-                fetchedTracks = LibraryService.shared.resolveLocalLibraryMatches(fetchedTracks, updateNames: false)
+                fetchedTracks = LibraryService.shared.resolveLocalLibraryMatches(fetchedTracks, updateNames: false, includeStagedTemporary: false)
             }
-            withLock {
-                playlistTracksCache[cleanId] = (timestamp: Date(), tracks: fetchedTracks)
-            }
+            storePlaylistTracksCached(id: cleanId, tracks: fetchedTracks)
             NSLog("[MusicKitManager] 📋 Fetched & cached %d tracks for playlist '%@'", fetchedTracks.count, cleanId)
         }
 
         return fetchedTracks
-    }
-
-    // MARK: - Fast Cloud Song Library Staging (On-Demand & Pre-Staging)
-
-    private static let stageDedupLock = NSLock()
-    private static var recentlyStagedCatalogIds: [String: Date] = [:]
-
-    @discardableResult
-    public func stageCloudSongsInLibrarySync(catalogIds: [String]) -> Bool {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return true }
-        guard let devToken = getDeveloperToken(), let uToken = getUserToken(), !uToken.isEmpty else {
-            return false
-        }
-        let allValidIds = Array(Set(catalogIds.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { Int($0) != nil && !$0.isEmpty })).prefix(10)
-        guard !allValidIds.isEmpty else { return false }
-
-        let now = Date()
-        let idsToSend: [String] = Self.stageDedupLock.withLock {
-            Self.recentlyStagedCatalogIds = Self.recentlyStagedCatalogIds.filter { now.timeIntervalSince($0.value) < 15.0 }
-            let fresh = allValidIds.filter { Self.recentlyStagedCatalogIds[$0] == nil }
-            for cid in fresh {
-                Self.recentlyStagedCatalogIds[cid] = now
-            }
-            return fresh
-        }
-        if idsToSend.isEmpty {
-            return true
-        }
-
-        let idsParam = idsToSend.joined(separator: ",")
-        guard let url = URL(string: "https://api.music.apple.com/v1/me/library?ids%5Bsongs%5D=\(idsParam)") else { return false }
-
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
-        req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
-
-        let sema = DispatchSemaphore(value: 0)
-        let boxLock = NSLock()
-        var ok = false
-        let task = session.dataTask(with: req) { _, resp, _ in
-            if let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) {
-                boxLock.lock()
-                ok = true
-                boxLock.unlock()
-            }
-            sema.signal()
-        }
-        task.resume()
-        if sema.wait(timeout: .now() + 4.0) == .timedOut {
-            task.cancel()
-        }
-        boxLock.lock()
-        defer { boxLock.unlock() }
-        return ok
-    }
-
-    public func resolveCatalogSongIdInUserStorefrontSync(name: String, artist: String) -> String? {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return nil }
-        guard let devToken = getDeveloperToken() else { return nil }
-        let sf = getUserStorefront()
-        let lang = getPreferredLanguageTag()
-        let query = "\(name) \(artist)".trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return nil }
-        let encoded = query.amrQueryValueEncoded
-        guard let url = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=songs&limit=5&l=\(lang)") else { return nil }
-
-        var req = URLRequest(url: url)
-        req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(lang, forHTTPHeaderField: "Accept-Language")
-        if let uToken = getUserToken(), !uToken.isEmpty {
-            req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
-        }
-
-        let sema = DispatchSemaphore(value: 0)
-        let boxLock = NSLock()
-        var resolvedId: String?
-        let targetNameNorm = LibraryService.normalizeMatchingTitle(name)
-        let targetBaseNorm = LibraryService.normalizeMatchingTitle(Self.extractBaseTrackTitle(name))
-        let targetArtistNorm = artist.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let task = session.dataTask(with: req) { data, resp, _ in
-            defer { sema.signal() }
-            guard let d = data, let http = resp as? HTTPURLResponse, http.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                  let results = json["results"] as? [String: Any],
-                  let songs = results["songs"] as? [String: Any],
-                  let arr = songs["data"] as? [[String: Any]], !arr.isEmpty else { return }
-
-            for item in arr {
-                guard let sid = item["id"] as? String, !sid.isEmpty,
-                      let attr = item["attributes"] as? [String: Any] else { continue }
-                let rawSName = (attr["name"] as? String) ?? ""
-                let sName = LibraryService.normalizeMatchingTitle(rawSName)
-                let sBase = LibraryService.normalizeMatchingTitle(Self.extractBaseTrackTitle(rawSName))
-                let sArtist = ((attr["artistName"] as? String) ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-                let artistOk = targetArtistNorm.isEmpty || (!sArtist.isEmpty && (sArtist.contains(targetArtistNorm) || targetArtistNorm.contains(sArtist)))
-                if artistOk && (sName == targetNameNorm || (!targetBaseNorm.isEmpty && sBase == targetBaseNorm)) {
-                    boxLock.lock()
-                    resolvedId = sid
-                    boxLock.unlock()
-                    return
-                }
-            }
-            if targetArtistNorm.isEmpty {
-                let firstId = arr.first?["id"] as? String
-                boxLock.lock()
-                resolvedId = firstId
-                boxLock.unlock()
-            }
-        }
-        task.resume()
-        if sema.wait(timeout: .now() + 3.5) == .timedOut {
-            task.cancel()
-        }
-        boxLock.lock()
-        defer { boxLock.unlock() }
-        return resolvedId
-    }
-
-    private static func extractBaseTrackTitle(_ title: String) -> String {
-        var s = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let parenIdx = s.firstIndex(of: "(") {
-            let prefix = s[..<parenIdx].trimmingCharacters(in: .whitespacesAndNewlines)
-            if prefix.count >= 2 {
-                s = prefix
-            }
-        }
-        if let bracketIdx = s.firstIndex(of: "[") {
-            let prefix = s[..<bracketIdx].trimmingCharacters(in: .whitespacesAndNewlines)
-            if prefix.count >= 2 {
-                s = prefix
-            }
-        }
-        if let dashRange = s.range(of: " - ") {
-            let prefix = s[..<dashRange.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
-            if prefix.count >= 2 {
-                s = prefix
-            }
-        }
-        return s.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func extractPrimaryArtist(_ artist: String) -> String {
-        var s = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        for sep in [",", " & ", " feat.", " ft."] {
-            if let r = s.range(of: sep, options: .caseInsensitive) {
-                let prefix = s[..<r.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
-                if prefix.count >= 2 {
-                    s = prefix
-                    break
-                }
-            }
-        }
-        return s
-    }
-
-    public func resolveLocalizedCatalogSongTitleSync(catalogId: String) -> (name: String, artist: String)? {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return nil }
-        let cleanId = catalogId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanId.isEmpty, Int(cleanId) != nil, let devToken = getDeveloperToken() else { return nil }
-        let sf = getUserStorefront()
-        let lang = getPreferredLanguageTag()
-        guard let url = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/songs/\(cleanId)?l=\(lang)") else { return nil }
-
-        var req = URLRequest(url: url)
-        req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(lang, forHTTPHeaderField: "Accept-Language")
-        if let uToken = getUserToken(), !uToken.isEmpty {
-            req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
-        }
-
-        let sema = DispatchSemaphore(value: 0)
-        let boxLock = NSLock()
-        var resolved: (name: String, artist: String)?
-        let task = session.dataTask(with: req) { data, resp, _ in
-            defer { sema.signal() }
-            guard let d = data, let http = resp as? HTTPURLResponse, http.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                  let arr = json["data"] as? [[String: Any]],
-                  let first = arr.first,
-                  let attr = first["attributes"] as? [String: Any],
-                  let locName = attr["name"] as? String, !locName.isEmpty else { return }
-            let locArtist = (attr["artistName"] as? String) ?? ""
-            boxLock.lock()
-            resolved = (locName, locArtist)
-            boxLock.unlock()
-        }
-        task.resume()
-        if sema.wait(timeout: .now() + 2.5) == .timedOut {
-            task.cancel()
-        }
-        boxLock.lock()
-        defer { boxLock.unlock() }
-        return resolved
-    }
-
-    public func findTrackDatabaseIdInMusicApp(name: String, artist: String, preferredDbId: Int? = nil, checkSubscriptionPlaylists: Bool = true) -> Int? {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return nil }
-        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let validPrefId = (preferredDbId != nil && preferredDbId! > 0 && preferredDbId! < 10_000_000) ? preferredDbId! : 0
-        guard !cleanName.isEmpty || validPrefId > 0 else { return nil }
-
-        let escN = cleanName.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let baseName = Self.extractBaseTrackTitle(cleanName)
-        let escBase = (baseName.isEmpty ? cleanName : baseName).replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let primaryArtist = Self.extractPrimaryArtist(artist)
-        let escA = primaryArtist.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-
-        // Fast indexed search path for library playlist 1 (takes ~3ms even on large libraries when track is not present yet)
-        if !checkSubscriptionPlaylists && !escBase.isEmpty {
-            let prefIdClause = validPrefId > 0 ? """
-                try
-                    return database ID of (first track of library playlist 1 whose database ID is \(validPrefId))
-                end try
-            """ : ""
-            let fastScript = """
-            tell application "Music"
-                \(prefIdClause)
-                try
-                    set foundList to (search (library playlist 1) for "\(escBase)")
-                    repeat with tr in foundList
-                        set trName to (name of tr as string)
-                        set trArtist to (artist of tr as string)
-                        if (trName is "\(escN)" or trName contains "\(escBase)") and ("\(escA)" is "" or trArtist contains "\(escA)") then
-                            return database ID of tr
-                        end if
-                    end repeat
-                end try
-                return 0
-            end tell
-            """
-            let (fOk, fOut) = AppleScriptExecutor.shared.execute(fastScript)
-            if fOk, let str = fOut?.trimmingCharacters(in: .whitespacesAndNewlines), let dbId = Int(str), dbId > 0 {
-                return dbId
-            }
-            return nil
-        }
-
-        let prefSubCheck = checkSubscriptionPlaylists ? """
-            repeat with sp in (get every subscription playlist)
-                try
-                    return database ID of (first track of sp whose database ID is \(validPrefId))
-                end try
-            end repeat
-        """ : ""
-
-        let prefCheck = validPrefId > 0 ? """
-            try
-                return database ID of (first track of library playlist 1 whose database ID is \(validPrefId))
-            end try
-            \(prefSubCheck)
-        """ : ""
-
-        let indexedSearchCheck = !escBase.isEmpty ? """
-            try
-                set foundList to (search (library playlist 1) for "\(escBase)")
-                repeat with tr in foundList
-                    set trName to (name of tr as string)
-                    set trArtist to (artist of tr as string)
-                    if (trName is "\(escN)" or trName contains "\(escBase)") and ("\(escA)" is "" or trArtist contains "\(escA)") then
-                        return database ID of tr
-                    end if
-                end repeat
-            end try
-        """ : ""
-
-        let subNameCheck = (checkSubscriptionPlaylists && !escBase.isEmpty) ? """
-            repeat with sp in (get every subscription playlist)
-                try
-                    set foundSubList to (search sp for "\(escBase)")
-                    repeat with tr in foundSubList
-                        set trName to (name of tr as string)
-                        set trArtist to (artist of tr as string)
-                        if (trName is "\(escN)" or trName contains "\(escBase)") and ("\(escA)" is "" or trArtist contains "\(escA)") then
-                            return database ID of tr
-                        end if
-                    end repeat
-                end try
-            end repeat
-        """ : ""
-
-        let script = """
-        tell application "Music"
-            \(prefCheck)
-            \(indexedSearchCheck)
-            \(subNameCheck)
-            try
-                return database ID of (first track of library playlist 1 whose name is "\(escN)")
-            end try
-            return 0
-        end tell
-        """
-        let (ok, out) = AppleScriptExecutor.shared.execute(script)
-        if ok, let str = out?.trimmingCharacters(in: .whitespacesAndNewlines), let dbId = Int(str), dbId > 0 {
-            return dbId
-        }
-        return nil
-    }
-
-    private static let stagePollLock = NSLock()
-
-    public func stageAndResolveCloudTrackInLibrarySync(id: String?, url: String?, name: String, artist: String, timeout: TimeInterval = 11.0, expectedGeneration: UInt64? = nil) -> Int? {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return nil }
-        guard hasUserToken else { return nil }
-
-        let prefId = id.flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }.flatMap { ($0 > 0 && $0 < 10_000_000) ? $0 : nil }
-
-        // 1. Check if already in library playlist 1 (fast indexed search)
-        if let existingId = findTrackDatabaseIdInMusicApp(name: name, artist: artist, preferredDbId: prefId, checkSubscriptionPlaylists: false) {
-            return existingId
-        }
-
-        // 2. Determine Apple Music catalog song ID (must be >= 10_000_000, not a local database ID)
-        var catalogId: String? = nil
-        if let u = url, let comp = URLComponents(string: u),
-           let qi = comp.queryItems?.first(where: { $0.name == "i" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let num = Int(qi), num >= 10_000_000 {
-            catalogId = qi
-        }
-        if catalogId == nil, let rawId = id?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let num = Int(rawId), num >= 10_000_000 {
-            catalogId = rawId
-        }
-        if catalogId == nil && !name.isEmpty {
-            catalogId = resolveCatalogSongIdInUserStorefrontSync(name: name, artist: artist)
-        }
-        if catalogId == nil, let rawId = id?.trimmingCharacters(in: .whitespacesAndNewlines), Int(rawId) != nil {
-            catalogId = rawId
-        }
-
-        guard let initialId = catalogId, !initialId.isEmpty else { return nil }
-
-        // 2b. Check localized (l=ru) song title from Apple Music catalog (e.g. "Mallow Blue" -> "マロウブルー")
-        var localizedTitle: String? = nil
-        var localizedArtist: String? = nil
-        if let loc = resolveLocalizedCatalogSongTitleSync(catalogId: initialId), loc.name != name {
-            localizedTitle = loc.name
-            localizedArtist = loc.artist.isEmpty ? artist : loc.artist
-            if let existingLocId = findTrackDatabaseIdInMusicApp(name: loc.name, artist: localizedArtist ?? artist, checkSubscriptionPlaylists: false) {
-                return existingLocId
-            }
-        }
-
-        _ = stageCloudSongsInLibrarySync(catalogIds: [initialId])
-
-        let start = Date()
-        var effectiveTimeout = timeout
-        var didTryStorefrontResolve = false
-        while Date().timeIntervalSince(start) < effectiveTimeout {
-            if let expGen = expectedGeneration {
-                let curGen = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.playbackGeneration }
-                if curGen != expGen {
-                    return nil
-                }
-            }
-            Thread.sleep(forTimeInterval: 0.3)
-            if let expGen = expectedGeneration {
-                let curGen = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.playbackGeneration }
-                if curGen != expGen {
-                    return nil
-                }
-            }
-            // Serialize AppleScript polling so background pre-staging and foreground play never double-poll Music.app
-            let resolvedDbId: Int? = Self.stagePollLock.withLock {
-                if let found = findTrackDatabaseIdInMusicApp(name: name, artist: artist, checkSubscriptionPlaylists: false) {
-                    return found
-                }
-                if let locN = localizedTitle, let foundLoc = findTrackDatabaseIdInMusicApp(name: locN, artist: localizedArtist ?? artist, checkSubscriptionPlaylists: false) {
-                    return foundLoc
-                }
-                return nil
-            }
-            if let dbId = resolvedDbId {
-                PlaybackStateStore.shared.registerStagedTemporaryTrack(dbId: dbId)
-                LibraryService.shared.registerStagedTrackInCache(dbId: dbId, name: localizedTitle ?? name, artist: localizedArtist ?? artist)
-                NSLog("[MusicKitManager] ⚡️ Staged cloud track '%@' — '%@' into Music.app (dbId=%d in %.2fs)",
-                      name, artist, dbId, Date().timeIntervalSince(start))
-                return dbId
-            }
-            // Only if after 3.8s the track hasn't appeared (normal iCloud sync takes 2.0-3.5s),
-            // resolve canonical ID in user's storefront with strict artist check and re-stage.
-            if !didTryStorefrontResolve && Date().timeIntervalSince(start) >= 3.8 && !name.isEmpty {
-                didTryStorefrontResolve = true
-                if let sfId = resolveCatalogSongIdInUserStorefrontSync(name: name, artist: artist), sfId != initialId {
-                    NSLog("[MusicKitManager] 🔄 Re-staging '%@' with storefront ID %@ (was %@)", name, sfId, initialId)
-                    if let loc = resolveLocalizedCatalogSongTitleSync(catalogId: sfId), loc.name != name {
-                        localizedTitle = loc.name
-                        localizedArtist = loc.artist.isEmpty ? artist : loc.artist
-                    }
-                    _ = stageCloudSongsInLibrarySync(catalogIds: [sfId])
-                    effectiveTimeout = max(effectiveTimeout, Date().timeIntervalSince(start) + 4.5)
-                }
-            }
-        }
-        return nil
     }
 
     // MARK: - Personalized Replay Tracks (Cloud + Local Hybrid)
@@ -729,7 +447,13 @@ extension MusicKitManager {
         let uToken = getUserToken()
         let lang = getPreferredLanguageTag()
         if let dToken = devToken, let userT = uToken, !userT.isEmpty {
-            if let libUrl = URL(string: "https://api.music.apple.com/v1/me/library/playlists?limit=100&l=\(lang)") {
+            if let libUrl = Self.makeAppleMusicAPIURL(
+                path: "/v1/me/library/playlists",
+                queryItems: [
+                    URLQueryItem(name: "limit", value: "100"),
+                    URLQueryItem(name: "l", value: lang)
+                ]
+            ) {
                 var req = URLRequest(url: libUrl)
                 req.setValue("Bearer \(dToken)", forHTTPHeaderField: "Authorization")
                 req.setValue(userT, forHTTPHeaderField: "Music-User-Token")
@@ -744,12 +468,10 @@ extension MusicKitManager {
                         let attrs = item["attributes"] as? [String: Any] ?? [:]
                         let name = (attrs["name"] as? String ?? "").lowercased()
                         return name.contains("replay") || name.contains("итоги")
-                    }), let realId = found["id"] as? String, !realId.isEmpty {
+                    }), let realId = found["id"] as? String, Self.isValidResourceIdentifier(realId) {
                         let cloudReplayTracks = await getPlaylistTracksById(playlistId: realId)
                         if !cloudReplayTracks.isEmpty {
-                            withLock {
-                                playlistTracksCache["replay_playlist"] = (timestamp: Date(), tracks: cloudReplayTracks)
-                            }
+                            storePlaylistTracksCached(id: "replay_playlist", tracks: cloudReplayTracks)
                             return cloudReplayTracks
                         }
                     }
@@ -763,7 +485,7 @@ extension MusicKitManager {
             let n = r.title.lowercased()
             if n.contains("replay") || n.contains("итоги") || n.contains("favorite") || n.contains("любим") {
                 let plId = r.id
-                if plId.hasPrefix("pl.") || plId.hasPrefix("p.") {
+                if (plId.hasPrefix("pl.") || plId.hasPrefix("p.")) && Self.isValidResourceIdentifier(plId) {
                     let cloudTracks = await getPlaylistTracksById(playlistId: plId)
                     for t in cloudTracks {
                         let k = "\(t.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(t.artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
@@ -801,294 +523,8 @@ extension MusicKitManager {
             }
         }
 
-        withLock {
-            playlistTracksCache["replay_playlist"] = (timestamp: Date(), tracks: result)
-        }
+        storePlaylistTracksCached(id: "replay_playlist", tracks: result)
         NSLog("[MusicKitManager] 🎵 Formed hybrid Replay tracks: %d tracks (cloud + local)", result.count)
         return result
-    }
-
-    // MARK: - Add Playlist / Album to User Library
-
-    private func triggerCloudLibrarySyncInMusicApp() {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return }
-        let pUpd = Process()
-        pUpd.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        pUpd.arguments = ["-e", """
-        tell application "System Events" to tell process "Music"
-            try
-                set libMenu to menu 1 of (first menu item of menu 1 of menu bar item 3 of menu bar 1 whose name contains "Медиатека" or name contains "Library")
-                click (first menu item of libMenu whose name contains "облачн" or name contains "Cloud")
-            end try
-        end tell
-        """]
-        let doneSema = DispatchSemaphore(value: 0)
-        pUpd.terminationHandler = { _ in
-            doneSema.signal()
-        }
-        do {
-            try pUpd.run()
-            if doneSema.wait(timeout: .now() + 3.0) == .timedOut {
-                if pUpd.isRunning {
-                    pUpd.terminate()
-                }
-            }
-        } catch {
-            // Ignore osascript launch failure
-        }
-    }
-
-    private func extractCatalogIdsFromTracks(_ tracks: [TrackInfo]) -> [String] {
-        var ids: [String] = []
-        var seen = Set<String>()
-        for t in tracks {
-            var candidate = (t.catalogId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if candidate.isEmpty {
-                let rawId = t.id.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let num = Int(rawId), num > 10_000_000 {
-                    candidate = rawId
-                }
-            }
-            if candidate.isEmpty, let u = t.url, !u.isEmpty {
-                if let comps = URLComponents(string: u),
-                   let iVal = comps.queryItems?.first(where: { $0.name == "i" })?.value,
-                   let num = Int(iVal), num > 10_000_000 {
-                    candidate = iVal
-                } else {
-                    let cleanPath = u.components(separatedBy: "?").first ?? u
-                    if let lastSeg = cleanPath.split(separator: "/").last,
-                       let num = Int(lastSeg), num > 10_000_000 {
-                        candidate = String(lastSeg)
-                    }
-                }
-            }
-            if !candidate.isEmpty && !seen.contains(candidate) {
-                seen.insert(candidate)
-                ids.append(candidate)
-            }
-        }
-        return ids
-    }
-
-    public func addPlaylistToLibrary(playlistId: String, name: String = "", tracks: [TrackInfo] = []) async -> Bool {
-        var targetId = playlistId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let devToken = getDeveloperToken()
-        let uToken = getUserToken()
-
-        let isExplicitCustomPlaylist = targetId == "replay_playlist" || targetId == "custom_queue" || targetId == "ai_queue" || (targetId.isEmpty && !tracks.isEmpty)
-
-        // 1. If targetId is empty or not a standard pl./p. ID (and not a custom track list), try resolving via catalog search by name
-        if (targetId.isEmpty || (!targetId.hasPrefix("pl.") && !targetId.hasPrefix("p."))) && !cleanName.isEmpty && !isExplicitCustomPlaylist,
-           let token = devToken {
-            let sf = getUserStorefront()
-            let lang = getPreferredLanguageTag()
-            let encoded = cleanName.amrQueryValueEncoded
-            if let searchUrl = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=playlists&limit=5&l=\(lang)") {
-                var sReq = URLRequest(url: searchUrl)
-                sReq.timeoutInterval = 4.0
-                sReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                sReq.setValue("application/json", forHTTPHeaderField: "Accept")
-                if let (sData, sResp) = try? await session.data(for: sReq),
-                   let sHttp = sResp as? HTTPURLResponse, sHttp.statusCode == 200,
-                   let sJson = try? JSONSerialization.jsonObject(with: sData) as? [String: Any],
-                   let results = sJson["results"] as? [String: Any],
-                   let plsObj = results["playlists"] as? [String: Any],
-                   let plsData = plsObj["data"] as? [[String: Any]] {
-                    for item in plsData {
-                        if let pid = item["id"] as? String,
-                           let attrs = item["attributes"] as? [String: Any],
-                           let pName = attrs["name"] as? String,
-                           pName.localizedCaseInsensitiveCompare(cleanName) == .orderedSame || pName.localizedCaseInsensitiveContains(cleanName) {
-                            targetId = pid
-                            break
-                        }
-                    }
-                    if targetId.isEmpty, let firstId = plsData.first?["id"] as? String {
-                        targetId = firstId
-                    }
-                }
-            }
-        }
-
-        // 2. Try standard Apple Music API POST /v1/me/library?ids[playlists]=...
-        if let token = devToken, let u = uToken, !u.isEmpty,
-           (targetId.hasPrefix("pl.") || targetId.hasPrefix("p.")) {
-            if let url = URL(string: "https://api.music.apple.com/v1/me/library?ids[playlists]=\(targetId)") {
-                var req = URLRequest(url: url)
-                req.httpMethod = "POST"
-                req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                req.setValue(u, forHTTPHeaderField: "Music-User-Token")
-                if let (_, resp) = try? await session.data(for: req),
-                   let http = resp as? HTTPURLResponse,
-                   (http.statusCode == 200 || http.statusCode == 201 || http.statusCode == 202 || http.statusCode == 204) {
-                    NSLog("[MusicKitManager] ✅ Successfully added catalog playlist '%@' to user library", targetId)
-                    triggerCloudLibrarySyncInMusicApp()
-                    LibraryService.shared.invalidatePlaylistsCache()
-                    return true
-                } else {
-                    NSLog("[MusicKitManager] ⚠️ ids[playlists] did not succeed for '%@', falling back to creating library playlist", targetId)
-                }
-            }
-        }
-
-        // 3. Fallback: Create a new user library playlist with tracks via POST /v1/me/library/playlists
-        var effectiveTracks = tracks
-        if effectiveTracks.isEmpty && !targetId.isEmpty {
-            effectiveTracks = await getPlaylistTracksById(playlistId: targetId)
-        }
-        if let token = devToken, let u = uToken, !u.isEmpty {
-            let songIds = extractCatalogIdsFromTracks(effectiveTracks)
-            if !songIds.isEmpty, let createUrl = URL(string: "https://api.music.apple.com/v1/me/library/playlists") {
-                var req = URLRequest(url: createUrl)
-                req.httpMethod = "POST"
-                req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                req.setValue(u, forHTTPHeaderField: "Music-User-Token")
-                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let plTitle = cleanName.isEmpty ? "Плейлист Apple Music" : cleanName
-                let trackData = songIds.map { ["id": $0, "type": "songs"] }
-                let payload: [String: Any] = [
-                    "attributes": [
-                        "name": plTitle,
-                        "description": "Добавлено через Apple Music Remote"
-                    ],
-                    "relationships": [
-                        "tracks": [
-                            "data": trackData
-                        ]
-                    ]
-                ]
-                if let body = try? JSONSerialization.data(withJSONObject: payload) {
-                    req.httpBody = body
-                    if let (_, resp) = try? await session.data(for: req),
-                       let http = resp as? HTTPURLResponse,
-                       (http.statusCode == 200 || http.statusCode == 201 || http.statusCode == 202) {
-                        NSLog("[MusicKitManager] ✅ Created user library playlist '%@' with %d tracks", plTitle, songIds.count)
-                        triggerCloudLibrarySyncInMusicApp()
-                        LibraryService.shared.invalidatePlaylistsCache()
-                        return true
-                    }
-                }
-            }
-        }
-
-        // 4. Local Music.app AppleScript fallback for local playlists
-        if !cleanName.isEmpty && !PlaybackRouter.shared.isTestingEnvironment {
-            let escName = cleanName.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-            let (ok, _) = AppleScriptExecutor.shared.execute("""
-            tell application "Music"
-                try
-                    if not (exists user playlist "\(escName)") then
-                        make new user playlist with properties {name:"\(escName)"}
-                    end if
-                    return "ok"
-                on error
-                    return "error"
-                end try
-            end tell
-            """)
-            if ok {
-                LibraryService.shared.invalidatePlaylistsCache()
-                return true
-            }
-        }
-
-        return false
-    }
-
-    public func addAlbumToLibrary(albumId: String, name: String, artist: String, tracks: [TrackInfo] = []) async -> Bool {
-        let cleanId = albumId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        var targetAlbumId = ""
-        if let num = Int(cleanId), num > 10_000_000 {
-            targetAlbumId = cleanId
-        }
-
-        // Extract album ID from track URL if needed (e.g. https://music.apple.com/us/album/name/1673536063?i=...)
-        if targetAlbumId.isEmpty {
-            for t in tracks {
-                if let u = t.url, u.contains("/album/") {
-                    let cleanPath = u.components(separatedBy: "?").first ?? u
-                    if let lastSeg = cleanPath.split(separator: "/").last,
-                       let num = Int(lastSeg), num > 10_000_000 {
-                        targetAlbumId = String(lastSeg)
-                        break
-                    }
-                }
-            }
-        }
-
-        let devToken = getDeveloperToken()
-        let uToken = getUserToken()
-
-        // Search catalog by name + artist if targetAlbumId is still empty
-        if targetAlbumId.isEmpty, let token = devToken, (!cleanName.isEmpty || !cleanArtist.isEmpty) {
-            let sf = getUserStorefront()
-            let lang = getPreferredLanguageTag()
-            let query = "\(cleanName) \(cleanArtist)".trimmingCharacters(in: .whitespacesAndNewlines)
-            let encoded = query.amrQueryValueEncoded
-            if let searchUrl = URL(string: "https://api.music.apple.com/v1/catalog/\(sf)/search?term=\(encoded)&types=albums&limit=3&l=\(lang)") {
-                var sReq = URLRequest(url: searchUrl)
-                sReq.timeoutInterval = 4.0
-                sReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                sReq.setValue("application/json", forHTTPHeaderField: "Accept")
-                if let (sData, sResp) = try? await session.data(for: sReq),
-                   let sHttp = sResp as? HTTPURLResponse, sHttp.statusCode == 200,
-                   let sJson = try? JSONSerialization.jsonObject(with: sData) as? [String: Any],
-                   let results = sJson["results"] as? [String: Any],
-                   let albumsObj = results["albums"] as? [String: Any],
-                   let albumsData = albumsObj["data"] as? [[String: Any]],
-                   let firstId = albumsData.first?["id"] as? String {
-                    targetAlbumId = firstId
-                }
-            }
-        }
-
-        if let token = devToken, let u = uToken, !u.isEmpty {
-            // 1. Add album by catalog ID: POST /v1/me/library?ids[albums]=...
-            if !targetAlbumId.isEmpty,
-               let url = URL(string: "https://api.music.apple.com/v1/me/library?ids[albums]=\(targetAlbumId)") {
-                var req = URLRequest(url: url)
-                req.httpMethod = "POST"
-                req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                req.setValue(u, forHTTPHeaderField: "Music-User-Token")
-                if let (_, resp) = try? await session.data(for: req),
-                   let http = resp as? HTTPURLResponse,
-                   (http.statusCode == 200 || http.statusCode == 201 || http.statusCode == 202 || http.statusCode == 204) {
-                    NSLog("[MusicKitManager] ✅ Successfully added album '%@' (%@) to user library", cleanName, targetAlbumId)
-                    triggerCloudLibrarySyncInMusicApp()
-                    return true
-                }
-            }
-
-            // 2. Fallback: Add album tracks via POST /v1/me/library?ids[songs]=...
-            let songIds = extractCatalogIdsFromTracks(tracks)
-            if !songIds.isEmpty {
-                let joinedIds = songIds.prefix(50).joined(separator: ",")
-                if let url = URL(string: "https://api.music.apple.com/v1/me/library?ids[songs]=\(joinedIds)") {
-                    var req = URLRequest(url: url)
-                    req.httpMethod = "POST"
-                    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                    req.setValue(u, forHTTPHeaderField: "Music-User-Token")
-                    if let (_, resp) = try? await session.data(for: req),
-                       let http = resp as? HTTPURLResponse,
-                       (http.statusCode == 200 || http.statusCode == 201 || http.statusCode == 202 || http.statusCode == 204) {
-                        NSLog("[MusicKitManager] ✅ Successfully added %d album tracks for '%@' to user library", songIds.count, cleanName)
-                        triggerCloudLibrarySyncInMusicApp()
-                        return true
-                    }
-                }
-            }
-        }
-
-        // 3. Fallback: Local Music.app addToLibrary
-        var anyAdded = false
-        for t in tracks {
-            if LibraryService.shared.addToLibrary(trackId: t.numericId, name: t.name, artist: t.artist, url: t.url) {
-                anyAdded = true
-            }
-        }
-        return anyAdded
     }
 }

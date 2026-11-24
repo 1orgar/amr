@@ -1,0 +1,526 @@
+  <!-- Track Actions & Station Picker Modal (••• Menu) -->
+  <div id="station-picker-modal" class="modal-backdrop hidden" aria-hidden="true" role="dialog">
+    <div class="modal-card station-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Действия с треком</h3>
+          <span class="modal-tag">APPLE MUSIC</span>
+        </div>
+        <button id="btn-close-station-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="station-modal-track-banner" class="station-modal-track-banner hidden">
+          <img id="station-modal-track-art" class="station-modal-track-art" src="apple-touch-icon.svg" alt="">
+          <div class="station-modal-track-texts">
+            <span id="station-modal-track-title" class="station-modal-track-title">—</span>
+            <span id="station-modal-track-sub" class="station-modal-track-sub">—</span>
+          </div>
+        </div>
+        <div class="station-options-list">
+          <button id="btn-add-track-library" class="station-option-btn hidden" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Добавить трек в медиатеку</span>
+              <span id="station-opt-add-lib-sub" class="station-opt-secondary">Сохранить композицию в Apple Music</span>
+            </div>
+          </button>
+
+          <button id="btn-remove-track-library" class="station-option-btn station-option-danger hidden" type="button">
+            <div class="station-opt-icon danger-opt-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Удалить трек из медиатеки</span>
+              <span id="station-opt-remove-lib-sub" class="station-opt-secondary">Удалить из медиатеки Apple Music</span>
+            </div>
+          </button>
+
+          <button id="btn-go-to-album" class="station-option-btn" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M6 12c0-1.7.7-3.2 1.8-4.2"/>
+                <circle cx="12" cy="12" r="2.5"/>
+                <path d="M18 12c0 1.7-.7 3.2-1.8 4.2"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Перейти к альбому</span>
+              <span id="station-opt-album-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+
+          <button id="btn-open-booklet" class="station-option-btn station-option-booklet hidden" type="button">
+            <div class="station-opt-icon booklet-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Цифровой буклет (PDF)</span>
+              <span id="station-opt-booklet-sub" class="station-opt-secondary">Официальный буклет альбома Apple Music</span>
+            </div>
+          </button>
+
+          <button id="btn-ai-mix-by-track" class="station-option-btn station-option-ai" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+                <path d="M5 3v4M3 5h4M19 17v4M17 19h4"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">ИИ-подбор по вайбу трека</span>
+              <span id="station-opt-ai-vibe-sub" class="station-opt-secondary">Семантическая волна Apple Neural Engine</span>
+            </div>
+          </button>
+
+          <button id="btn-sonic-bridge-by-track" class="station-option-btn station-option-ai" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 17c3.5-6 6.5-9 9-9s5.5 3 9 9"/>
+                <line x1="2" y1="17" x2="22" y2="17"/>
+                <line x1="8" y1="11.5" x2="8" y2="17"/>
+                <line x1="12" y1="8" x2="12" y2="17"/>
+                <line x1="16" y1="11.5" x2="16" y2="17"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Sonic Bridge от этого трека</span>
+              <span id="station-opt-sonic-bridge-sub" class="station-opt-secondary">Плавный ИИ-маршрут к другому треку или артисту</span>
+            </div>
+          </button>
+
+          <button id="btn-station-by-track" class="station-option-btn" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4.93 19.07a10 10 0 0 1 0-14.14"/>
+                <path d="M7.76 16.24a6 6 0 0 1 0-8.48"/>
+                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                <path d="M16.24 7.76a6 6 0 0 1 0 8.48"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Создать радио по треку</span>
+              <span id="station-opt-track-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+
+          <button id="btn-station-by-artist" class="station-option-btn" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Создать радио по исполнителю</span>
+              <span id="station-opt-artist-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+
+          <button id="btn-go-to-library-artist" class="station-option-btn hidden" type="button">
+            <div class="station-opt-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Перейти к артисту в медиатеке</span>
+              <span id="station-opt-lib-artist-name" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+
+          <button id="btn-remove-artist-library" class="station-option-btn station-option-danger hidden" type="button">
+            <div class="station-opt-icon danger-opt-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+            </div>
+            <div class="station-opt-details">
+              <span class="station-opt-primary">Удалить исполнителя из медиатеки</span>
+              <span id="station-opt-remove-artist-sub" class="station-opt-secondary">—</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Signal Path Inspector Modal (Roon-like Audio Pipeline) -->
+  <div id="quality-modal" class="modal-backdrop hidden" aria-hidden="true" role="dialog">
+    <div class="modal-card signal-path-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Тракт сигнала</h3>
+          <span class="modal-tag">BIT-PERFECT DIRECT</span>
+        </div>
+        <button id="btn-close-modal" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-body signal-path-body">
+        <div class="signal-split-col signal-split-left">
+          <!-- Verified Bit-Perfect Card (Top Summary Banner) -->
+          <div class="signal-verified-card">
+            <div class="signal-verified-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+            </div>
+            <div class="signal-verified-info">
+              <div class="signal-verified-title">Bit-Perfect Verified</div>
+              <div class="signal-verified-desc">Частота ЦАП аппаратно синхронизирована с потоком. Деградация разрядности исключена.</div>
+            </div>
+          </div>
+
+          <div class="signal-path-chain">
+            <!-- Step 1: Audio Source -->
+            <div class="signal-node" id="signal-node-source">
+              <div class="signal-node-dot active"></div>
+              <div class="signal-node-main">
+                <div class="signal-node-top">
+                  <span class="signal-node-badge">ИСТОЧНИК</span>
+                  <span id="signal-source-badge" class="signal-node-format">ALAC Lossless</span>
+                </div>
+                <div id="signal-source-title" class="signal-node-name">Apple Music</div>
+                <div id="signal-source-details" class="signal-node-meta">24-bit / 192.0 kHz ALAC</div>
+              </div>
+            </div>
+
+            <div class="signal-connector">
+              <div class="signal-connector-line"></div>
+            </div>
+
+            <!-- Step 2: AMR Engine -->
+            <div class="signal-node" id="signal-node-engine">
+              <div class="signal-node-dot active"></div>
+              <div class="signal-node-main">
+                <div class="signal-node-top">
+                  <span class="signal-node-badge">АУДИОДВИЖОК</span>
+                  <span id="signal-engine-badge" class="signal-node-format highlight-green">0.0 dB FS</span>
+                </div>
+                <div id="signal-engine-name" class="signal-node-name">AMR CoreAudio Engine</div>
+                <div id="signal-engine-details" class="signal-node-meta">Bit-Perfect 100% Lock • Zero DSP • Bypass микшера</div>
+
+                <!-- Interactive Hybrid DSP Engine Preset Selector -->
+                <div id="signal-dsp-controls" class="signal-dsp-controls">
+                  <label id="dsp-preset-field" class="signal-dsp-field">
+                    <span class="signal-dsp-label">Пресет DSP</span>
+                    <select id="dsp-preset-select" class="top-settings-select signal-dsp-select">
+                      <option value="builtin_passthrough">Bit-Perfect Passthrough (Выкл)</option>
+                      <option value="builtin_dsd256_sacd">SACD Эталон (DSD256 • 7EC-Balanced)</option>
+                      <option value="builtin_dsd256_super_metal">Макс. сцена и воздух (DSD256 • 7EC-Super • Metal)</option>
+                      <option value="builtin_dsd128_transient">Атака и драйв (DSD128 • 7EC-Transient)</option>
+                      <option value="builtin_dsd64_spdif">Оптика / Коаксиал S/PDIF (DSD64 DoP)</option>
+                      <option value="builtin_hq_nos_r2r">Мультибит / R2R (HQ PCM NOS • LNS15)</option>
+                    </select>
+                  </label>
+                  <div id="dsp-preset-readonly-note" class="signal-dsp-readonly-note hidden"></div>
+                  <div id="dsp-preset-subtitle" class="signal-dsp-preset-subtitle">Прямая побитовая передача PCM без оверсэмплинга и модуляции</div>
+                  <div id="dsp-telemetry-pill" class="signal-dsp-telemetry hidden">
+                    <span id="dsp-telemetry-text">Hog Mode • Integer • CPU 0.0% • Буфер 50%</span>
+                  </div>
+
+                  <!-- 64-Bit Mastering De-Clipper (Loudness War Peak Restorer) -->
+                  <div id="signal-declip-controls" class="signal-drc-controls">
+                    <div class="signal-drc-header">
+                      <span id="signal-declip-label" class="signal-dsp-label">⚡️ Реставратор клиппинга (De-Clipper)</span>
+                      <span id="declip-gain-badge" class="signal-drc-badge">100% Bit-Perfect</span>
+                    </div>
+                    <div id="mastering-declip-field" class="late-night-profile-bar">
+                      <select id="mastering-declip-select" class="top-settings-select signal-dsp-select" aria-label="Реставратор клиппинга (De-Clipper)">
+                        <option value="off">Выкл (100% Bit-Perfect)</option>
+                        <option value="auto">Авто — Умная защита (DR ≤ 10)</option>
+                        <option value="gentle">Деликатный (до +2.8 дБ пиков)</option>
+                        <option value="studio">Студийная реставрация (до +4.2 дБ)</option>
+                      </select>
+                    </div>
+                    <div id="mastering-declip-readonly-note" class="signal-dsp-readonly-note hidden"></div>
+                    <div id="mastering-declip-subtitle" class="signal-dsp-preset-subtitle">Прямой 100% Bit-Perfect тракт без реконструкции срезанных верхушек волны.</div>
+                  </div>
+
+                  <!-- Weiss-Style Mastering Dynamic De-Esser -->
+                  <div id="signal-deesser-controls" class="signal-drc-controls">
+                    <div class="signal-drc-header">
+                      <span id="signal-deesser-label" class="signal-dsp-label">💎 Де-эссер (Weiss De-Esser)</span>
+                      <span id="deesser-gain-badge" class="signal-drc-badge">100% Bit-Perfect</span>
+                    </div>
+                    <div id="mastering-deesser-field" class="late-night-profile-bar">
+                      <select id="mastering-deesser-select" class="top-settings-select signal-dsp-select" aria-label="Де-эссер (Weiss De-Esser)">
+                        <option value="off">Выкл (100% Bit-Perfect)</option>
+                        <option value="gentle">Деликатный — Планары / Яркий ВЧ (до -3.5 дБ)</option>
+                        <option value="vocal">Студийный Weiss — Резкий вокал (до -6.0 дБ)</option>
+                      </select>
+                    </div>
+                    <div id="mastering-deesser-readonly-note" class="signal-dsp-readonly-note hidden"></div>
+                    <div id="mastering-deesser-subtitle" class="signal-dsp-preset-subtitle">Прямой 100% Bit-Perfect тракт без динамического подавления сибилянтов.</div>
+                  </div>
+
+                  <!-- Audiophile Late-Night Dynamic Range Control (Night Concert Mode) -->
+                  <div id="signal-late-night-controls" class="signal-drc-controls">
+                    <div class="signal-drc-header">
+                      <span class="signal-dsp-label">🌙 Ночной режим (DRC)</span>
+                      <span id="late-night-gain-badge" class="signal-drc-badge">100% Bit-Perfect</span>
+                    </div>
+                    <div id="late-night-drc-field" class="late-night-profile-bar">
+                      <select id="late-night-drc-select" class="top-settings-select signal-dsp-select" aria-label="Ночной режим (DRC)">
+                        <option value="off">Выкл (100% Bit-Perfect)</option>
+                        <option value="gentle">Деликатный — Джаз / Вокал (до +6 дБ)</option>
+                        <option value="concert">Ночной концерт — Симфония / OST (до +9.5 дБ)</option>
+                      </select>
+                    </div>
+                    <div id="late-night-drc-readonly-note" class="signal-dsp-readonly-note hidden"></div>
+                    <div id="late-night-drc-subtitle" class="signal-dsp-preset-subtitle">Прямой 100% Bit-Perfect тракт без динамической обработки сигнала.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="signal-connector">
+              <div class="signal-connector-line"></div>
+            </div>
+
+            <!-- Step 3: Hardware Output DAC -->
+            <div class="signal-node" id="signal-node-dac">
+              <div class="signal-node-dot active"></div>
+              <div class="signal-node-main">
+                <div class="signal-node-top">
+                  <span class="signal-node-badge">ВЫХОДНОЙ ЦАП</span>
+                  <span id="signal-dac-rate" class="signal-node-format">192.0 кГц</span>
+                </div>
+                <div id="signal-dac-name" class="signal-node-name">Аудиовыход</div>
+                <div id="signal-dac-details" class="signal-node-meta">Прямое подключение macOS CoreAudio</div>
+              </div>
+              <button id="btn-open-devices" class="btn-signal-action" type="button" title="Сменить устройство вывода">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                </svg>
+                <span>ЦАП</span>
+              </button>
+            </div>
+
+            <div id="signal-connector-amp" class="signal-connector hidden">
+              <div class="signal-connector-line"></div>
+            </div>
+
+            <!-- Step 4: External Amplifier / Preamp (TCP Volume Control) -->
+            <div class="signal-node hidden" id="signal-node-amp">
+              <div id="signal-amp-dot" class="signal-node-dot active"></div>
+              <div class="signal-node-main">
+                <div class="signal-node-top">
+                  <span class="signal-node-badge">УСИЛИТЕЛЬ</span>
+                  <span id="signal-amp-volume-badge" class="signal-node-format">50%</span>
+                </div>
+                <div id="signal-amp-name" class="signal-node-name">Rotel</div>
+                <div id="signal-amp-details" class="signal-node-meta">Управление громкостью по TCP • Лимит до 80%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="signal-split-col signal-split-right">
+          <!-- Quick Room Frequency Response Measurement (iPhone / iPad Mic + Auto-PEQ 64-bit + Cloud Sync) -->
+          <div id="signal-room-eq-card" class="signal-spectral-card signal-room-eq-card">
+            <div class="signal-spectral-header">
+              <div class="signal-spectral-top">
+                <span class="signal-node-badge">АЧХ КОМНАТЫ • AUTO-PEQ 64-BIT • CLOUD</span>
+                <span id="room-eq-status-badge" class="spectral-verdict-badge neutral">ВЫКЛ</span>
+              </div>
+              <div class="room-eq-profile-bar">
+                <button id="btn-room-eq-toggle" class="room-eq-toggle-btn" type="button" aria-pressed="false" title="Включить или выключить коррекцию комнаты">Выкл</button>
+                <select id="room-profile-select" class="top-settings-select room-profile-select" aria-label="Профиль АЧХ комнаты">
+                  <option value="">Нет профилей замера</option>
+                </select>
+                <button id="btn-delete-room-profile" class="room-eq-icon-btn hidden" type="button" title="Удалить выбранный профиль АЧХ" aria-label="Удалить профиль АЧХ">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div id="room-eq-chart-wrap" class="room-eq-chart-wrap">
+              <svg id="room-eq-svg" class="room-eq-svg" viewBox="0 0 360 112" preserveAspectRatio="none" aria-label="График АЧХ комнаты">
+                <line x1="0" y1="18" x2="360" y2="18" class="room-eq-grid-line"/>
+                <line x1="0" y1="56" x2="360" y2="56" class="room-eq-grid-zero"/>
+                <line x1="0" y1="94" x2="360" y2="94" class="room-eq-grid-line"/>
+                <line x1="84" y1="0" x2="84" y2="112" class="room-eq-grid-vline"/>
+                <line x1="204" y1="0" x2="204" y2="112" class="room-eq-grid-vline"/>
+                <line x1="324" y1="0" x2="324" y2="112" class="room-eq-grid-vline"/>
+                <polyline id="room-eq-line-target" class="room-eq-line-target" points="0,56 360,56"/>
+                <polyline id="room-eq-line-measured" class="room-eq-line-measured" points=""/>
+                <polyline id="room-eq-line-corrected" class="room-eq-line-corrected" points=""/>
+              </svg>
+              <div class="room-eq-legend">
+                <span class="room-eq-legend-item"><i class="dot target"></i>Целевая</span>
+                <span class="room-eq-legend-item"><i class="dot measured"></i>Замер микрофона</span>
+                <span class="room-eq-legend-item"><i class="dot corrected"></i>Auto-PEQ</span>
+              </div>
+              <div class="spectral-rta-axis">
+                <span>20 Гц</span>
+                <span>100 Гц</span>
+                <span>1 кГц</span>
+                <span>10 кГц</span>
+                <span>20 кГц</span>
+              </div>
+            </div>
+
+            <div id="room-eq-bands-list" class="room-eq-bands-list hidden"></div>
+
+            <div id="room-measure-progress-wrap" class="room-measure-progress-wrap hidden">
+              <div class="room-measure-progress-bar">
+                <div id="room-measure-progress-fill" class="room-measure-progress-fill"></div>
+              </div>
+              <div id="room-measure-status-text" class="room-measure-status-text">Калибровочный розовый шум...</div>
+            </div>
+
+            <div id="room-measure-actions" class="room-measure-actions">
+              <button id="btn-start-room-measure" class="btn-room-measure-primary" type="button">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+                <span id="btn-start-room-measure-label">Быстрый замер микрофоном</span>
+              </button>
+              <button id="btn-upload-room-audio" class="btn-room-measure-secondary" type="button" title="Нативная запись микрофоном iPhone / iPad (работает по LAN HTTP без HTTPS)">
+                <span>Запись iOS</span>
+              </button>
+              <button id="btn-stop-room-measure" class="btn-room-measure-stop hidden" type="button">Стоп</button>
+              <input type="file" id="room-mic-file-input" accept="audio/*" capture class="hidden">
+            </div>
+
+            <div id="room-measure-locked-note" class="signal-dsp-readonly-note hidden">
+              Быстрое измерение АЧХ комнаты отключено для этого устройства в системных настройках Mac.
+            </div>
+
+            <div id="room-eq-desc" class="signal-spectral-desc">
+              Сядьте в точку прослушивания с iPhone / iPad: Mac подаст эталонный розовый шум на АС и построит 64-bit Auto-PEQ фильтр с синхронизацией в iCloud.
+            </div>
+          </div>
+
+          <!-- Spectral Integrity & Upsampling Detector (Accelerate vDSP FFT RTA) -->
+          <div id="signal-spectral-card" class="signal-spectral-card">
+            <div class="signal-spectral-header">
+              <div class="signal-spectral-top">
+                <span class="signal-node-badge">СПЕКТРАЛЬНЫЙ ВЕРИФИКАТОР • vDSP FFT</span>
+                <span id="spectral-verdict-badge" class="spectral-verdict-badge authentic">TRUE HI-RES</span>
+              </div>
+              <div id="spectral-verdict-title" class="signal-spectral-title">Verified True Hi-Res</div>
+            </div>
+
+            <div class="spectral-rta-wrap">
+              <div id="spectral-rta-bars" class="spectral-rta-bars" aria-label="RTA спектр аудиосигнала"></div>
+              <div id="spectral-cutoff-marker" class="spectral-cutoff-marker">
+                <span id="spectral-cutoff-marker-label" class="spectral-cutoff-marker-label">22.05 кГц CD</span>
+              </div>
+            </div>
+            <div class="spectral-rta-axis">
+              <span>20 Гц</span>
+              <span>1 кГц</span>
+              <span>10 кГц</span>
+              <span id="spectral-axis-ref">22.05 кГц</span>
+              <span id="spectral-axis-nyquist">48.0 кГц</span>
+            </div>
+
+            <div class="spectral-metrics-grid">
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Полоса ВЧ</span>
+                <span id="spectral-metric-cutoff" class="spectral-metric-val">44.2 кГц</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Ультразвук (&gt;22k)</span>
+                <span id="spectral-metric-ultra" class="spectral-metric-val">-48 dBFS</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Разрядность LSB</span>
+                <span id="spectral-metric-bits" class="spectral-metric-val">24-бит (Честный)</span>
+              </div>
+            </div>
+
+            <div id="spectral-verdict-desc" class="signal-spectral-desc">
+              Подлинный студийный Hi-Res мастер: зафиксирована живая ультразвуковая составляющая и активность всех 24 бит.
+            </div>
+          </div>
+
+          <!-- Loudness War Detector (TT DR Meter) + EBU R128 (LUFS & 4x True Peak) + Stereo Phase Correlation Meter -->
+          <div id="signal-mastering-card" class="signal-spectral-card signal-mastering-card">
+            <div class="signal-spectral-header">
+              <div class="signal-spectral-top">
+                <span class="signal-node-badge">МАСТЕРИНГ И ДИНАМИКА • EBU R128 / TT DR</span>
+                <span id="mastering-dr-badge" class="spectral-verdict-badge neutral">DR АНАЛИЗ...</span>
+              </div>
+              <div id="mastering-verdict-title" class="signal-spectral-title">Анализ динамического диапазона...</div>
+            </div>
+
+            <div class="spectral-metrics-grid mastering-metrics-grid">
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Integrated</span>
+                <span id="mastering-lufs-int" class="spectral-metric-val">— LUFS</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Short-Term (3s)</span>
+                <span id="mastering-lufs-st" class="spectral-metric-val">— LUFS</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">True Peak (4x)</span>
+                <span id="mastering-true-peak" class="spectral-metric-val">— dBTP</span>
+              </div>
+              <div class="spectral-metric-pill">
+                <span class="spectral-metric-label">Диапазон LRA</span>
+                <span id="mastering-lra" class="spectral-metric-val">— LU</span>
+              </div>
+            </div>
+
+            <div class="phase-meter-section">
+              <div class="phase-meter-header">
+                <span class="phase-meter-label">Фазовый коррелометр стереопанорамы</span>
+                <span id="phase-meter-val" class="phase-meter-readout">+1.00</span>
+              </div>
+              <div class="phase-corr-track" aria-label="Фазовая корреляция стереосигнала от -1 до +1">
+                <div class="phase-corr-neg-zone"></div>
+                <div class="phase-corr-zero-tick"></div>
+                <div id="phase-meter-fill" class="phase-corr-fill positive" style="left: 50%; width: 50%;"></div>
+                <div id="phase-meter-dot" class="phase-corr-dot" style="left: 100%;"></div>
+              </div>
+              <div class="phase-corr-axis">
+                <span>-1.0 Противофаза</span>
+                <span>0.0 Стерео</span>
+                <span>+1.0 Моно</span>
+              </div>
+              <div class="phase-stereo-subrow">
+                <span>Ширина M/S: <strong id="stereo-width-val">0%</strong></span>
+                <span>Баланс L/R: <strong id="stereo-balance-val">0.0 дБ</strong></span>
+                <span id="isp-clips-badge" class="isp-clips-pill hidden">ISP &gt;0 dBTP: 0</span>
+              </div>
+            </div>
+
+            <div id="mastering-verdict-desc" class="signal-spectral-desc">
+              Накопление 3-секундных блоков PCM для расчёта официального индекса TT Dynamic Range и громкости ITU-R BS.1770-4.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+

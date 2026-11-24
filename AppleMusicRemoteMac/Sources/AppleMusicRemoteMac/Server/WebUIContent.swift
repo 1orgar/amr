@@ -80,7 +80,17 @@ public enum WebUIContent {
 
     public static let swJS: String = #"""
 // Apple Music Remote (AMR) - Service Worker for PWA
-const CACHE_NAME = 'amr-shell-v18';
+const CACHE_NAME = 'amr-shell-5931dc28';
+
+const SHELL_PATHS = new Set([
+  '/',
+  '/index.html',
+  '/app.js',
+  '/style.css',
+  '/manifest.json',
+  '/apple-touch-icon.svg'
+]);
+
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -92,6 +102,8 @@ const STATIC_ASSETS = [
   '/apple-touch-icon-180.png',
   '/apple-touch-icon-192.png',
   '/apple-touch-icon-512.png',
+  '/assets/silence.m4a',
+  '/assets/silence.wav',
   '/assets/stations/CoverPersonal.png',
   '/assets/stations/CoverDiscovery.png',
   '/assets/stations/CoverAppleMusic1.png',
@@ -107,30 +119,57 @@ const STATIC_ASSETS = [
   '/assets/stations/CoverJazz.png'
 ];
 
+function normalizedCacheKey(url) {
+  return new URL(url.pathname, url.origin).href;
+}
+
+function fetchShellWithTimeout(request, timeoutMs = 3500) {
+  const controller = new AbortController();
+  const timerId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(request, {
+    cache: 'no-cache',
+    signal: controller.signal
+  }).finally(() => {
+    clearTimeout(timerId);
+  });
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return Promise.allSettled(STATIC_ASSETS.map((u) => cache.add(u))).catch((err) => {
-        console.warn('AMR ServiceWorker pre-cache notice:', err);
-      });
-    })
+    caches.open(CACHE_NAME)
+      .then((cache) =>
+        Promise.allSettled(
+          STATIC_ASSETS.map((assetPath) => {
+            const assetUrl = new URL(assetPath, self.location.origin);
+            return fetch(assetUrl.href, { cache: 'no-cache' }).then((res) => {
+              if (res && res.status === 200) {
+                return cache.put(normalizedCacheKey(assetUrl), res);
+              }
+            });
+          })
+        ).catch((err) => {
+          console.warn('AMR ServiceWorker pre-cache notice:', err);
+        })
+      )
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME && key.startsWith('amr-shell-')) {
-            return caches.delete(key);
-          }
-        })
-      );
-    })
+    caches.keys()
+      .then((keys) =>
+        Promise.all(
+          keys.map((key) => {
+            if (key !== CACHE_NAME && key.startsWith('amr-shell-')) {
+              return caches.delete(key);
+            }
+            return undefined;
+          })
+        )
+      )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -138,68 +177,83 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return;
   if (event.request.headers.has('range')) return;
+  if (event.request.method !== 'GET') return;
 
-  // Always bypass cache for API endpoints, WebSocket, audio streams, live artwork, and non-GET requests
+  // Always bypass cache for API endpoints, WebSocket, audio streams, and live artwork
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/ws') ||
     url.pathname.startsWith('/stream/') ||
     url.pathname === '/artwork.jpg' ||
-    event.request.method !== 'GET'
+    url.pathname === '/sw.js'
   ) {
     return;
   }
 
-  // Network-first for code assets (HTML, app.js, style.css) so updates are immediate
-  if (
-    event.request.headers.get('accept')?.includes('text/html') ||
-    url.pathname === '/app.js' ||
-    url.pathname === '/style.css' ||
-    url.pathname === '/manifest.json'
-  ) {
+  const acceptHeader = event.request.headers.get('accept') || '';
+  const isHtmlNavigation = event.request.mode === 'navigate' || acceptHeader.includes('text/html');
+  const isShellAsset = SHELL_PATHS.has(url.pathname) || isHtmlNavigation;
+
+  // Network-first with 3.5s timeout and normalized cache keys for shell assets
+  if (isShellAsset) {
+    const targetPathname = SHELL_PATHS.has(url.pathname) ? url.pathname : '/';
+    const cacheKey = new URL(targetPathname, url.origin).href;
+
     event.respondWith(
-      fetch(event.request)
+      fetchShellWithTimeout(event.request, 3500)
         .then((response) => {
           if (response && response.status === 200) {
             const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+            event.waitUntil(
+              caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, copy))
+            );
           }
           return response;
         })
         .catch(() =>
-          caches.match(event.request)
-            .then((cached) => cached || caches.match(event.request, { ignoreSearch: true }))
-            .then((cached) => cached || new Response('Offline', { status: 503, statusText: 'Offline' }))
+          caches.open(CACHE_NAME).then((cache) =>
+            cache.match(cacheKey).then((cached) => {
+              if (cached) return cached;
+              if (isHtmlNavigation) {
+                return cache.match(new URL('/', url.origin).href)
+                  .then((rootCached) => rootCached || cache.match(new URL('/index.html', url.origin).href));
+              }
+              return null;
+            })
+          ).then((cached) => cached || new Response('Offline', { status: 503, statusText: 'Offline' }))
         )
     );
     return;
   }
 
-  // Cache-first with background revalidation for static assets
+  // Cache-first with background revalidation for static assets (icons, silence.wav, station covers)
+  const assetCacheKey = normalizedCacheKey(url);
   event.respondWith(
-    caches.match(event.request)
-      .then((exact) => exact || caches.match(event.request, { ignoreSearch: true }))
-      .then((cached) => {
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.match(assetCacheKey).then((cached) => {
         if (cached) {
-          fetch(event.request)
-            .then((networkRes) => {
-              if (networkRes && networkRes.status === 200) {
-                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkRes));
-              }
-            })
-            .catch(() => {});
+          event.waitUntil(
+            fetch(event.request)
+              .then((networkRes) => {
+                if (networkRes && networkRes.status === 200) {
+                  return cache.put(assetCacheKey, networkRes.clone());
+                }
+              })
+              .catch(() => {})
+          );
           return cached;
         }
         return fetch(event.request)
           .then((networkRes) => {
             if (networkRes && networkRes.status === 200) {
               const copy = networkRes.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+              event.waitUntil(cache.put(assetCacheKey, copy));
             }
             return networkRes;
           })
           .catch(() => new Response('Offline', { status: 503, statusText: 'Offline' }));
       })
+    )
   );
 });
 """#

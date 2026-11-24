@@ -933,4 +933,289 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertTrue(qAfterClear.upcomingTracks.isEmpty)
         XCTAssertEqual(qAfterClear.historyTracks.map(\.id), ["t0"])
     }
+
+    func testRepeatOneTrackPersistsInStatusAndLoopsCustomQueue() {
+        defer {
+            _ = PlaybackTransportController.shared.setRepeat(mode: "off")
+            PlaybackStateStore.shared.resetCustomQueue()
+        }
+
+        // 1. Verify setRepeat("one") and aliases ("track", "1") persist in PlaybackStateStore & PlayerStatusEngine
+        XCTAssertTrue(PlaybackTransportController.shared.setRepeat(mode: "track"))
+        XCTAssertEqual(PlaybackStateStore.shared.repeatMode, "one")
+        XCTAssertEqual(PlayerStatusEngine.shared.getPlayerStatus().repeatMode, "one")
+
+        XCTAssertTrue(PlaybackTransportController.shared.setRepeat(mode: "1"))
+        XCTAssertEqual(PlaybackStateStore.shared.repeatMode, "one")
+
+        // 2. Single-track custom queue with Repeat One: EOF and Next must loop index 0 without ending queue
+        let soloTrack = TrackInfo(id: "solo-1", numericId: 501, name: "Solo Loop", artist: "Test Artist", duration: 210, isLocal: true, index: 1)
+        _ = PlaybackRouter.shared.playCustomTracks([soloTrack], startIndex: 0, shuffle: false, queueName: "Solo Queue")
+        XCTAssertEqual(PlaybackStateStore.shared.repeatMode, "one", "Starting a track must preserve user-selected Repeat One mode")
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-eof-solo")
+        }
+        XCTAssertTrue(PlaybackStateStore.shared.isCustomQueuePlayback, "1-track custom queue must stay active on EOF when Repeat One is enabled")
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+        }
+        PlaybackTransportController.shared.resetDebounceForTesting()
+        XCTAssertTrue(PlaybackTransportController.shared.nextTrack())
+        XCTAssertTrue(PlaybackStateStore.shared.isCustomQueuePlayback)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+
+        // 3. Multi-track custom queue at index 1 with Repeat One:
+        //    - Natural EOF replays current track (index 1) infinitely
+        //    - Manual Next skips to index 2 (Apple Music UX), and at end of queue (index 2) replays index 2
+        let tracks = [
+            TrackInfo(id: "m0", numericId: 601, name: "First", artist: "Artist", duration: 180, isLocal: true, index: 1),
+            TrackInfo(id: "m1", numericId: 602, name: "Second", artist: "Artist", duration: 180, isLocal: true, index: 2),
+            TrackInfo(id: "m2", numericId: 603, name: "Third", artist: "Artist", duration: 180, isLocal: true, index: 3)
+        ]
+        _ = PlaybackRouter.shared.playCustomTracks(tracks, startIndex: 1, shuffle: false, queueName: "Multi Queue")
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+            QueueManager.shared.advanceOrEndCustomQueueUnlocked(reason: "test-eof-multi")
+        }
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1, "EOF with Repeat One must replay current track index 1")
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+        }
+        PlaybackTransportController.shared.resetDebounceForTesting()
+        XCTAssertTrue(PlaybackTransportController.shared.nextTrack())
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2, "Manual Next advances to next track (index 2) which then loops on Repeat One")
+
+        // At end of queue (index 2) with Repeat One, both EOF and manual Next stay on index 2 without ending queue
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+        }
+        PlaybackTransportController.shared.resetDebounceForTesting()
+        XCTAssertTrue(PlaybackTransportController.shared.nextTrack())
+        XCTAssertTrue(PlaybackStateStore.shared.isCustomQueuePlayback)
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2)
+
+        // Turn Repeat Off confirms status resets cleanly
+        XCTAssertTrue(PlaybackTransportController.shared.setRepeat(mode: "off"))
+        XCTAssertEqual(PlayerStatusEngine.shared.getPlayerStatus().repeatMode, "off")
+    }
+
+    func testRepeatModeCyclingOffAllOneOffPersistsAcrossStatusQueries() {
+        defer {
+            _ = PlaybackTransportController.shared.setRepeat(mode: "off")
+            PlaybackStateStore.shared.resetCustomQueue()
+        }
+        PlaybackStateStore.shared.resetCustomQueue()
+        PlaybackStateStore.shared.invalidateStatusCache(optimisticState: "stopped")
+
+        // Rapid consecutive cycle off -> all -> one -> off while stopped (no active custom queue or playlist)
+        let sequence = ["off", "all", "one", "off", "all", "one", "off"]
+        for expected in sequence {
+            XCTAssertTrue(PlaybackTransportController.shared.setRepeat(mode: expected))
+            XCTAssertEqual(PlaybackStateStore.shared.repeatMode, expected, "Store repeatMode must equal \(expected)")
+            let statusImmediate = PlayerStatusEngine.shared.getPlayerStatus()
+            XCTAssertEqual(statusImmediate.repeatMode, expected, "Immediate getPlayerStatus() must preserve \(expected)")
+
+            // Even if status cache expires / is invalidated while stopped, repeatMode must NOT revert to 'off'
+            PlaybackStateStore.shared.invalidateStatusCache()
+            let statusUncached = PlayerStatusEngine.shared.getPlayerStatus()
+            XCTAssertEqual(statusUncached.repeatMode, expected, "Uncached getPlayerStatus() while stopped must preserve \(expected)")
+        }
+    }
+
+    func testStaleDuplicateForeignNotificationDoesNotDoubleAdvanceQueue() {
+        let track0 = TrackInfo(id: "ut-q0", numericId: nil, name: "UnitTest Open Eyes", artist: "UnitTest Apes", duration: 188.6, isLocal: false, index: 1)
+        let track1 = TrackInfo(id: "ut-q1", numericId: nil, name: "UnitTest Sweet Apocalypse", artist: "UnitTest Lambert", duration: 163.0, isLocal: false, index: 2)
+        let track2 = TrackInfo(id: "ut-q2", numericId: nil, name: "UnitTest Remember", artist: "UnitTest Olafur", duration: 295.0, isLocal: false, index: 3)
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track0, track1, track2]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.lastConfirmedTrackTime = Date().addingTimeInterval(-187.0)
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-188.0)
+            PlaybackStateStore.shared.lastSkipTime = .distantPast
+            PlaybackStateStore.shared.isUserPaused = false
+        }
+
+        // 1. Track 0 reaches end and Music.app briefly emits foreign track #1 -> advances 0 -> 1
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "UnitTest Kids Arent Alright",
+            "Artist": "UnitTest Offspring"
+        ])
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1, "First foreign track notification must advance 0 -> 1")
+
+        // 2. Track 1 ("UnitTest Sweet Apocalypse") starts playing and confirms (+0.8s), clearing lastSkipTime
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "UnitTest Sweet Apocalypse",
+            "Artist": "UnitTest Lambert"
+        ])
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+        XCTAssertTrue(PlaybackStateStore.shared.currentTrackPlaybackConfirmed)
+        XCTAssertFalse(PlaybackStateStore.shared.isTransitioningTrack)
+
+        // 3. Delayed duplicate DistributedNotification for the same foreign track arrives +0.35s later:
+        //    MUST be ignored and MUST NOT skip Track 1 to Track 2!
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "UnitTest Kids Arent Alright",
+            "Artist": "UnitTest Offspring"
+        ])
+        XCTAssertEqual(
+            PlaybackStateStore.shared.activeCustomQueueIndex,
+            1,
+            "Stale duplicate foreign notification after Track 1 confirmation must NEVER skip Track 1 -> Track 2"
+        )
+
+        // 4. Even if foreign cooldown is simulated as expired at +5s, same foreign key within 12s + newly confirmed guard blocks skip
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastForeignInterceptTime = Date().addingTimeInterval(-5.0)
+        }
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "UnitTest Kids Arent Alright",
+            "Artist": "UnitTest Offspring"
+        ])
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+
+        // 5. After Track 1 genuinely plays to completion (163s later), a new foreign track advances 1 -> 2 cleanly
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-163.0)
+            PlaybackStateStore.shared.lastConfirmedTrackTime = Date().addingTimeInterval(-162.0)
+            PlaybackStateStore.shared.lastForeignInterceptTime = Date().addingTimeInterval(-163.0)
+            PlaybackStateStore.shared.lastKnownPosition = 162.5
+        }
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "UnitTest Next Library Song",
+            "Artist": "UnitTest Library Artist"
+        ])
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2, "Legitimate EOF foreign track after full playback must advance 1 -> 2")
+    }
+
+    func testSmartTransitionCutoffPreventsVengeanceAutoPlayBleed() {
+        let vengeance = TrackInfo(
+            id: "3183",
+            numericId: 3183,
+            name: "Vengeance",
+            artist: "coldrain",
+            album: "Vengeance - Single",
+            duration: 238.534,
+            isLocal: true,
+            index: 1
+        )
+        let likeFlames = TrackInfo(
+            id: "1583000001",
+            numericId: nil,
+            name: "Like Flames",
+            artist: "MindaRyn",
+            album: "Like Flames",
+            duration: 245.0,
+            isLocal: false,
+            index: 2
+        )
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [vengeance, likeFlames]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.isUserPaused = false
+            PlaybackStateStore.shared.repeatMode = "off"
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-235.0)
+            // MediaPlaybackCore scheduled Dead-Air / Smart Transition at 236.0s (2.534s before 238.534s EOF)
+            PlaybackStateStore.shared.scheduledSmartTransitionStart = 236.0
+            PlaybackStateStore.shared.lastKnownPosition = 235.80
+            PlaybackStateStore.shared.lastPlayerStatusCache = (
+                timestamp: Date(),
+                status: PlayerStatus(
+                    playerState: "playing",
+                    position: 235.80,
+                    duration: 238.534,
+                    track: vengeance
+                )
+            )
+        }
+
+        // At 235.80s (>= 236.0 - 0.22 = 235.78s), poller must advance BEFORE Music.app mixes AutoPlay at 236.006s!
+        QueueManager.shared.checkAndAutoAdvanceCloudQueue()
+
+        XCTAssertEqual(
+            PlaybackStateStore.shared.activeCustomQueueIndex,
+            1,
+            "QueueManager must advance at 235.80s before Music.app Smart Transition begins at 236.0s"
+        )
+        XCTAssertNil(
+            PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart },
+            "Advancing to next track must reset scheduledSmartTransitionStart"
+        )
+
+        // Also verify Sonic AutoMix Beat-Matched Filtered Cross-Fade (~22s before EOF, e.g. Like Flames 225.45s / 247.39s)
+        let thirdTrack = TrackInfo(
+            id: "1600000099",
+            numericId: nil,
+            name: "Final Frontier",
+            artist: "Synthsoldier",
+            album: "Single",
+            duration: 210.0,
+            isLocal: false,
+            index: 3
+        )
+        PlaybackStateStore.shared.withLock {
+            var lf = likeFlames
+            lf.duration = 247.39
+            PlaybackStateStore.shared.activeCustomQueue = [vengeance, lf, thirdTrack]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 1
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.scheduledSmartTransitionStart = 225.45
+            PlaybackStateStore.shared.lastKnownPosition = 225.25
+            PlaybackStateStore.shared.lastPlayerStatusCache = (
+                timestamp: Date(),
+                status: PlayerStatus(
+                    playerState: "playing",
+                    position: 225.25,
+                    duration: 247.39,
+                    track: lf
+                )
+            )
+        }
+        QueueManager.shared.checkAndAutoAdvanceCloudQueue()
+        XCTAssertEqual(
+            PlaybackStateStore.shared.activeCustomQueueIndex,
+            2,
+            "QueueManager must also catch Sonic AutoMix transitions ~22s before track duration"
+        )
+    }
+
+    func testSettingsTabHasDedicatedTVSection() {
+        let tabs = SettingsTab.allCases
+        XCTAssertEqual(tabs, [.general, .tv, .playback, .dsp, .amplifier, .wled, .advanced])
+        XCTAssertEqual(SettingsTab.tv.symbolName, "tv")
+    }
+
+    @MainActor
+    func testSettingsWindowAllSevenTabsLayoutCleanly() {
+        let settings = SettingsWindow.shared
+        XCTAssertNotNil(settings.window)
+        for tab in SettingsTab.allCases {
+            settings.selectTabForTesting(tab)
+            XCTAssertEqual(settings.window?.title, tab.windowTitle)
+            let frameWidth = settings.window?.contentView?.frame.width ?? 0
+            XCTAssertEqual(frameWidth, 700, accuracy: 2.0, "Tab \(tab) must maintain uniform 700pt Music.app width")
+        }
+    }
 }

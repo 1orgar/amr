@@ -1,0 +1,283 @@
+      <!-- Queue View -->
+      <section id="view-queue" class="view-panel content-view">
+        <header class="section-header">
+          <div>
+            <h2 class="section-title">Очередь воспроизведения</h2>
+            <p id="queue-subtitle" class="section-subtitle">0 треков</p>
+          </div>
+          <div class="queue-header-actions">
+            <button id="btn-save-queue-playlist" class="btn-ghost btn-save-queue" type="button" title="Сохранить очередь в плейлист Apple Music">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              <span id="btn-save-queue-text">В плейлист</span>
+            </button>
+            <button id="btn-clear-queue" class="btn-ghost" type="button">Очистить далее</button>
+          </div>
+        </header>
+
+        <div class="scroll-pane">
+          <!-- Previous / History Section -->
+          <div id="queue-history-group" class="queue-group queue-history-group" style="display: none;">
+            <div class="queue-group-header">
+              <h3 class="group-title">ПРЕДЫДУЩИЕ</h3>
+              <button id="btn-toggle-queue-history" class="btn-queue-history-toggle hidden" type="button">Показать все</button>
+            </div>
+            <div id="queue-history-list" class="track-list">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Currently Playing Section -->
+          <div id="queue-current-group" class="queue-group">
+            <h3 class="group-title">СЕЙЧАС ИГРАЕТ</h3>
+            <div id="queue-current-track" class="track-list">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Upcoming Section -->
+          <div class="queue-group">
+            <h3 class="group-title">ДАЛЕЕ В ОЧЕРЕДИ</h3>
+            <div id="queue-upcoming-list" class="track-list">
+              <div class="empty-state">Нет предстоящих треков</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Playlists View -->
+      <section id="view-playlists" class="view-panel content-view">
+        <div id="playlists-only-pane" class="library-pane">
+          <header class="section-header library-section-header">
+            <div>
+              <h2 class="section-title">Плейлисты</h2>
+              <p id="playlists-section-subtitle" class="section-subtitle">Плейлисты Apple Music</p>
+            </div>
+            <div class="library-header-controls">
+              <button id="btn-refresh-playlists" class="btn-ghost" type="button" title="Обновить плейлисты">Обновить</button>
+            </div>
+          </header>
+
+          <div class="scroll-pane">
+            <div id="playlists-grid" class="playlists-grid">
+              <div class="loading-state">Загрузка плейлистов...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Library View -->
+      <section id="view-library" class="view-panel content-view">
+        <!-- Library Browse Pane (4 Subtabs: Недавние / Артисты / Альбомы / Треки) -->
+        <div id="playlists-browse-pane" class="library-pane">
+          <header class="section-header library-section-header">
+            <div class="library-title-row">
+              <div>
+                <h2 class="section-title">Медиатека</h2>
+                <p id="library-section-subtitle" class="section-subtitle">Недавно добавленные</p>
+              </div>
+              <button id="btn-refresh-library" class="btn-ghost btn-refresh-library-mobile" type="button" title="Обновить медиатеку">Обновить</button>
+            </div>
+            <div class="library-header-controls">
+              <div class="library-segmented" role="tablist" aria-label="Раздел медиатеки">
+                <button id="library-seg-recent" class="library-seg-btn active" type="button" role="tab" aria-selected="true" data-subtab="recent">Недавние</button>
+                <button id="library-seg-artists" class="library-seg-btn" type="button" role="tab" aria-selected="false" data-subtab="artists">Артисты</button>
+                <button id="library-seg-albums" class="library-seg-btn" type="button" role="tab" aria-selected="false" data-subtab="albums">Альбомы</button>
+                <button id="library-seg-songs" class="library-seg-btn" type="button" role="tab" aria-selected="false" data-subtab="songs">Треки</button>
+              </div>
+              <button id="btn-refresh-library-desktop" class="btn-ghost btn-refresh-library-desktop" type="button" title="Обновить медиатеку">Обновить</button>
+            </div>
+          </header>
+
+          <div class="scroll-pane" id="library-scroll-pane">
+            <!-- Subtab 1: Недавние -->
+            <div id="library-recent-pane" class="library-subpane">
+              <div class="loading-state">Загрузка недавних...</div>
+            </div>
+
+            <!-- Subtab 2: Артисты -->
+            <div id="library-artists-pane" class="library-subpane hidden">
+              <div id="library-artists-toolbar" class="library-inline-toolbar hidden">
+                <div class="library-filter-box">
+                  <svg class="library-filter-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input type="search" id="library-artists-filter" placeholder="Поиск по артистам медиатеки..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                  <button id="btn-clear-artists-filter" class="library-filter-clear hidden" type="button" aria-label="Очистить">&times;</button>
+                </div>
+              </div>
+              <div id="library-artists-list" class="library-artists-list">
+                <div class="loading-state">Загрузка артистов...</div>
+              </div>
+            </div>
+
+            <!-- Subtab 3: Альбомы -->
+            <div id="library-albums-grid" class="playlists-grid hidden">
+              <div class="loading-state">Загрузка альбомов...</div>
+            </div>
+
+            <!-- Subtab 4: Треки -->
+            <div id="library-songs-pane" class="library-subpane hidden">
+              <div id="library-songs-toolbar" class="library-inline-toolbar hidden">
+                <div class="library-filter-box">
+                  <svg class="library-filter-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input type="search" id="library-songs-filter" placeholder="Фильтр треков медиатеки..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                  <button id="btn-clear-songs-filter" class="library-filter-clear hidden" type="button" aria-label="Очистить">&times;</button>
+                </div>
+                <div class="library-songs-quick-actions">
+                  <button id="btn-play-library-songs" class="btn-search-action btn-search-play-all" type="button">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                      <polygon points="6 3 20 12 6 21 6 3"/>
+                    </svg>
+                    <span>Слушать</span>
+                  </button>
+                  <button id="btn-shuffle-library-songs" class="btn-search-action btn-search-shuffle" type="button">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="16 3 21 3 21 8"/>
+                      <line x1="4" y1="20" x2="21" y2="3"/>
+                      <polyline points="21 16 21 21 16 21"/>
+                      <line x1="15" y1="15" x2="21" y2="21"/>
+                      <line x1="4" y1="4" x2="9" y2="9"/>
+                    </svg>
+                    <span>Перемешать</span>
+                  </button>
+                </div>
+              </div>
+              <div id="library-songs-list" class="track-list">
+                <div class="loading-state">Загрузка треков медиатеки...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Library Artist Detail Pane (Drill-down) -->
+        <div id="library-artist-detail-pane" class="library-pane hidden">
+          <header class="detail-header">
+            <button id="btn-back-to-artists" class="btn-back" type="button">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span>Артисты</span>
+            </button>
+          </header>
+
+          <div class="detail-hero artist-detail-hero">
+            <div class="artist-detail-avatar-wrap">
+              <img id="artist-detail-artwork" class="detail-art artist-detail-art hidden" src="apple-touch-icon.svg" alt="Исполнитель">
+              <div id="artist-detail-initials" class="artist-detail-initials">♪</div>
+            </div>
+            <div class="detail-info">
+              <span class="detail-badge">ИСПОЛНИТЕЛЬ В МЕДИАТЕКЕ</span>
+              <h2 id="artist-detail-title" class="detail-title">Исполнитель</h2>
+              <p id="artist-detail-meta" class="detail-meta">0 треков</p>
+              <div class="detail-actions">
+                <button id="btn-play-artist-library" class="btn-primary-action" type="button">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <polygon points="6 3 20 12 6 21 6 3"/>
+                  </svg>
+                  <span>Слушать</span>
+                </button>
+                <button id="btn-shuffle-artist-library" class="btn-secondary-action" type="button">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 3 21 3 21 8"/>
+                    <line x1="4" y1="20" x2="21" y2="3"/>
+                    <polyline points="21 16 21 21 16 21"/>
+                    <line x1="15" y1="15" x2="21" y2="21"/>
+                    <line x1="4" y1="4" x2="9" y2="9"/>
+                  </svg>
+                  <span>Перемешать</span>
+                </button>
+                <button id="btn-remove-artist-detail-library" class="btn-danger-ghost" type="button" title="Удалить исполнителя из медиатеки">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </svg>
+                  <span>Удалить из медиатеки</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="scroll-pane" id="artist-detail-content">
+            <div class="loading-state">Загрузка медиатеки артиста...</div>
+          </div>
+        </div>
+
+        <!-- Playlist / Album Detail Pane (Drill-down) -->
+        <div id="playlist-detail-pane" class="library-pane hidden">
+          <header class="detail-header">
+            <button id="btn-back-to-playlists" class="btn-back" type="button">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span id="detail-back-label">Медиатека</span>
+            </button>
+          </header>
+
+          <div class="detail-hero">
+            <img id="detail-artwork" class="detail-art" src="apple-touch-icon.svg" alt="Обложка плейлиста" data-fallback-icon="apple-touch-icon.svg">
+            <div class="detail-info">
+              <span id="detail-badge" class="detail-badge">ПЛЕЙЛИСТ</span>
+              <h2 id="detail-title" class="detail-title">Название</h2>
+              <p id="detail-meta" class="detail-meta">0 треков</p>
+              <div class="detail-actions">
+                <button id="btn-play-playlist" class="btn-primary-action" type="button">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <polygon points="6 3 20 12 6 21 6 3"/>
+                  </svg>
+                  <span>Слушать</span>
+                </button>
+                <button id="btn-shuffle-playlist" class="btn-secondary-action" type="button">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 3 21 3 21 8"/>
+                    <line x1="4" y1="20" x2="21" y2="3"/>
+                    <polyline points="21 16 21 21 16 21"/>
+                    <line x1="15" y1="15" x2="21" y2="21"/>
+                    <line x1="4" y1="4" x2="9" y2="9"/>
+                  </svg>
+                  <span>Перемешать</span>
+                </button>
+                <button id="btn-add-playlist-library" class="btn-secondary-action" type="button" title="Добавить в медиатеку Apple Music">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  <span id="btn-add-playlist-library-text">В медиатеку</span>
+                </button>
+                <button id="btn-remove-detail-library" class="btn-danger-ghost hidden" type="button" title="Удалить из медиатеки Apple Music">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </svg>
+                  <span id="btn-remove-detail-library-text">Удалить из медиатеки</span>
+                </button>
+                <button id="btn-detail-booklet" class="btn-secondary-action hidden" type="button" title="Открыть цифровой буклет альбома (PDF)">
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                  </svg>
+                  <span>Буклет PDF</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="scroll-pane">
+            <div id="playlist-tracks-list" class="track-list">
+              <div class="loading-state">Загрузка треков...</div>
+            </div>
+            <div id="album-completeness-banner-slot"></div>
+          </div>
+        </div>
+      </section>
+

@@ -50,34 +50,49 @@ extension MusicKitManager {
             return nil
         }
 
-        let lang = getPreferredLanguageTag()
-        guard let url = URL(string: "https://api.music.apple.com/v1/me/stations/personal?l=\(lang)") else { return nil }
-        var req = URLRequest(url: url)
-        req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
-        req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue(lang, forHTTPHeaderField: "Accept-Language")
+        let skipDirectEndpoint = withLock { self.personalStationEndpointUnavailable }
+        if !skipDirectEndpoint {
+            let lang = getPreferredLanguageTag()
+            if let url = Self.makeAppleMusicAPIURL(
+                path: "/v1/me/stations/personal",
+                queryItems: [URLQueryItem(name: "l", value: lang)]
+            ) {
+                var req = URLRequest(url: url)
+                req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
+                req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
+                req.setValue("application/json", forHTTPHeaderField: "Accept")
+                req.setValue(lang, forHTTPHeaderField: "Accept-Language")
 
-        do {
-            let (data, resp) = try await session.data(for: req)
-            guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
-                let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
-                NSLog("[MusicKitManager] ⚠️ fetchPersonalStation HTTP status %d", status)
-                return nil
-            }
-            if let station = Self.parsePersonalStation(data: data) {
-                withLock {
-                    var current = self.personalDataCache ?? PersonalDataCache()
-                    current.personalStation = station
-                    current.timestamp = Date()
-                    self.personalDataCache = current
+                do {
+                    let (data, resp) = try await session.data(for: req)
+                    if let http = resp as? HTTPURLResponse, http.statusCode == 200 {
+                        if let station = Self.parsePersonalStation(data: data) {
+                            withLock {
+                                var current = self.personalDataCache ?? PersonalDataCache()
+                                current.personalStation = station
+                                current.timestamp = Date()
+                                self.personalDataCache = current
+                            }
+                            return station
+                        }
+                    } else {
+                        let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
+                        if status == 404 || status == 403 {
+                            withLock { self.personalStationEndpointUnavailable = true }
+                            NSLog("[MusicKitManager] ℹ️ /v1/me/stations/personal returned HTTP %d — using /v1/me/recommendations for personal station", status)
+                        } else {
+                            NSLog("[MusicKitManager] ⚠️ fetchPersonalStation HTTP status %d", status)
+                        }
+                    }
+                } catch {
+                    NSLog("[MusicKitManager] ❌ fetchPersonalStation error: %@", error.localizedDescription)
                 }
-                return station
             }
-        } catch {
-            NSLog("[MusicKitManager] ❌ fetchPersonalStation error: %@", error.localizedDescription)
         }
-        return nil
+
+        // Fallback: resolve personal station ("Моя станция" / "<User>'s Station") from /v1/me/recommendations
+        _ = await fetchPersonalRecommendations(limit: 30)
+        return getCachedPersonalData()?.personalStation
     }
 
     public func fetchPersonalRecommendations(limit: Int = 30) async -> [PersonalRecommendationGroup] {
@@ -90,7 +105,14 @@ extension MusicKitManager {
         }
 
         let lang = getPreferredLanguageTag()
-        guard let url = URL(string: "https://api.music.apple.com/v1/me/recommendations?limit=\(limit)&l=\(lang)") else { return [] }
+        let clampedLimit = max(1, min(limit, 30))
+        guard let url = Self.makeAppleMusicAPIURL(
+            path: "/v1/me/recommendations",
+            queryItems: [
+                URLQueryItem(name: "limit", value: "\(clampedLimit)"),
+                URLQueryItem(name: "l", value: lang)
+            ]
+        ) else { return [] }
         var req = URLRequest(url: url)
         req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
         req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
@@ -162,7 +184,8 @@ extension MusicKitManager {
               let first = arr.first else {
             return nil
         }
-        let id = first["id"] as? String ?? "station_personal"
+        let rawId = first["id"] as? String ?? "station_personal"
+        let id = isValidResourceIdentifier(rawId) ? rawId : "station_personal"
         let attrs = first["attributes"] as? [String: Any] ?? [:]
         let name = attrs["name"] as? String ?? "Моя станция"
         let url = attrs["url"] as? String ?? "https://music.apple.com/station/my-station/\(id)"
@@ -246,7 +269,6 @@ extension MusicKitManager {
 
         for group in groups {
             let groupTitleLower = group.title.lowercased()
-            // Skip "Recently Played" when collecting mixes so we prioritize fresh recommendations first
             let isRecentlyPlayed = groupTitleLower.contains("recently") || groupTitleLower.contains("недавно")
 
             for res in group.contents where res.type == "playlists" {
@@ -306,29 +328,39 @@ extension MusicKitManager {
                                   lower.contains("в моем вкусе") ||
                                   res.id.hasPrefix("ra.q-")
 
-                let isPersonal = (lower.contains("station") || lower.contains("станция")) &&
-                                 (lower.contains("my ") || lower.contains("моя") || res.id.hasPrefix("ra.u-")) &&
-                                 !isDiscovery
+                let hasStationWord = lower.contains("station") || lower.contains("станци")
+                let isPersonal = !isDiscovery && (
+                    res.id.hasPrefix("ra.u-") ||
+                    (hasStationWord && (
+                        lower.contains("my ") ||
+                        lower.contains("моя") ||
+                        lower.contains("'s ") ||
+                        lower.contains("’s ") ||
+                        lower.hasPrefix("станция ")
+                    ))
+                )
 
                 if isDiscovery && discovery == nil {
+                    let safeId = isValidResourceIdentifier(res.id) ? res.id : "ra.q-discovery"
                     discovery = StationInfo(
                         id: res.id,
                         name: res.name.isEmpty ? "Станция открытий" : res.name,
                         subtitle: res.subtitle ?? "Новая музыка на основе ваших вкусов",
                         artwork: res.artworkUrl ?? "/assets/stations/CoverDiscovery.png",
-                        url: res.url ?? "https://music.apple.com/station/item/\(res.id)",
+                        url: res.url ?? "https://music.apple.com/station/item/\(safeId)",
                         isLive: false,
                         color: "linear-gradient(135deg, #7928ca, #ff0080)",
                         isPersonal: true,
                         provider: "Apple Music"
                     )
                 } else if isPersonal && personal == nil {
+                    let safeId = isValidResourceIdentifier(res.id) ? res.id : "station_personal"
                     personal = StationInfo(
                         id: res.id,
                         name: res.name.isEmpty ? "Моя станция" : res.name,
                         subtitle: res.subtitle ?? "Любимые треки и персональные рекомендации",
                         artwork: res.artworkUrl ?? defaultPersonalStationArtwork,
-                        url: res.url ?? "https://music.apple.com/station/my-station/\(res.id)",
+                        url: res.url ?? "https://music.apple.com/station/my-station/\(safeId)",
                         isLive: false,
                         color: "linear-gradient(135deg, #fa233b, #fb5c74)",
                         isPersonal: true,

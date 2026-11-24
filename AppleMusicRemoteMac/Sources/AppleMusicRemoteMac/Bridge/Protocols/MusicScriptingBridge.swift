@@ -93,14 +93,53 @@ extension SBObject {
 public final class MusicAppProvider: @unchecked Sendable {
     public static let shared = MusicAppProvider()
 
-    public var onMusicAppTerminated: (@Sendable () -> Void)?
-    public var onMusicAppLaunched: (@Sendable () -> Void)?
+    public var onMusicAppTerminated: (@Sendable () -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _onMusicAppTerminated
+        }
+        set {
+            lock.lock()
+            _onMusicAppTerminated = newValue
+            lock.unlock()
+        }
+    }
+
+    public var onMusicAppLaunched: (@Sendable () -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _onMusicAppLaunched
+        }
+        set {
+            lock.lock()
+            _onMusicAppLaunched = newValue
+            lock.unlock()
+        }
+    }
 
     private let lock = NSLock()
+    private var _onMusicAppTerminated: (@Sendable () -> Void)?
+    private var _onMusicAppLaunched: (@Sendable () -> Void)?
+    private var launchedObservers: [() -> Void] = []
+    private var terminatedObservers: [() -> Void] = []
     private var musicApp: MusicApplicationProtocol?
     private var lastMusicPid: pid_t = 0
     private var launchObserver: NSObjectProtocol?
     private var terminateObserver: NSObjectProtocol?
+
+    public func addMusicAppLaunchedObserver(_ observer: @escaping () -> Void) {
+        lock.lock()
+        launchedObservers.append(observer)
+        lock.unlock()
+    }
+
+    public func addMusicAppTerminatedObserver(_ observer: @escaping () -> Void) {
+        lock.lock()
+        terminatedObservers.append(observer)
+        lock.unlock()
+    }
 
     public var isMusicAppRunning: Bool {
         !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty
@@ -130,17 +169,23 @@ public final class MusicAppProvider: @unchecked Sendable {
             queue: .main
         ) { [weak self] notif in
             guard let app = notif.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.bundleIdentifier == "com.apple.Music" else { return }
+                  app.bundleIdentifier == "com.apple.Music",
+                  let self = self else { return }
             NSLog("[MusicAppProvider] 🟢 Music.app launched (PID: %d)", app.processIdentifier)
-            self?.lock.lock()
-            self?.musicApp = nil
-            self?.lastMusicPid = 0
-            self?.lock.unlock()
+            self.lock.lock()
+            self.musicApp = nil
+            self.lastMusicPid = 0
+            let primaryCallback = self._onMusicAppLaunched
+            let extraObservers = self.launchedObservers
+            self.lock.unlock()
 
             PlaybackStateStore.shared.invalidateStatusCache()
             PlaybackStateStore.shared.invalidateQueueCache()
             MusicAppLifecycleManager.shared.handleAppLaunched(pid: app.processIdentifier)
-            self?.onMusicAppLaunched?()
+            primaryCallback?()
+            for observer in extraObservers {
+                observer()
+            }
 
             if !PlaybackRouter.shared.isTestingEnvironment {
                 DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.5) {
@@ -163,16 +208,22 @@ public final class MusicAppProvider: @unchecked Sendable {
             queue: .main
         ) { [weak self] notif in
             guard let app = notif.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.bundleIdentifier == "com.apple.Music" else { return }
+                  app.bundleIdentifier == "com.apple.Music",
+                  let self = self else { return }
             NSLog("[MusicAppProvider] ⚪ Music.app terminated (PID: %d)", app.processIdentifier)
-            self?.lock.lock()
-            self?.musicApp = nil
-            self?.lastMusicPid = 0
-            self?.lock.unlock()
+            self.lock.lock()
+            self.musicApp = nil
+            self.lastMusicPid = 0
+            let primaryCallback = self._onMusicAppTerminated
+            let extraObservers = self.terminatedObservers
+            self.lock.unlock()
 
             PlaybackStateStore.shared.resetPlaybackState()
             MusicAppLifecycleManager.shared.handleAppTerminated(pid: app.processIdentifier)
-            self?.onMusicAppTerminated?()
+            primaryCallback?()
+            for observer in extraObservers {
+                observer()
+            }
 
             DispatchQueue.main.async {
                 MenuManager.shared.updateMenuState()

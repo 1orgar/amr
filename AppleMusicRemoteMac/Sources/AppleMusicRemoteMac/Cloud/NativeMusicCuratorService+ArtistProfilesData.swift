@@ -1,0 +1,448 @@
+import Foundation
+
+extension NativeMusicCuratorService {
+
+    // MARK: - Curated Artist Style & Peer Graph
+
+    internal static func buildArtistStyleProfiles() -> [ArtistStyleProfile] {
+        return [
+            ArtistStyleProfile(
+                canonicalArtist: "Tool",
+                aliases: ["tool", "тул", "toolband"],
+                archetypeId: "prog_alt_metal",
+                styleTitleRu: "Прогрессив-метал и полиритмический арт-рок",
+                styleTitleEn: "Progressive Metal & Polyrhythmic Art-Rock",
+                customDescriptionRu: "Гипнотические полиритмические риффы, сложные нечётные размеры, глубокий бас Justin Chancellor и масштабная динамика школы Tool и родственных прог-метал проектов.",
+                customDescriptionEn: "Hypnotic polyrhythmic riffs, intricate odd meters, visceral bass articulation, and monumental progressive metal dynamics inspired by Tool.",
+                seedQueries: [
+                    "Tool Lateralus",
+                    "Tool Aenima",
+                    "Tool Fear Inoculum",
+                    "A Perfect Circle Mer de Noms",
+                    "Porcupine Tree In Absentia",
+                    "Karnivool Sound Awake",
+                    "Soen Lotus",
+                    "Wheel Moving Backwards",
+                    "Deftones White Pony",
+                    "Puscifer Conditions of My Parole",
+                    "Opeth Damnation",
+                    "Mastodon Crack the Skye"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Kraftwerk",
+                aliases: ["kraftwerk", "крафтверк", "крафтверг"],
+                archetypeId: "analog_electro_krautrock",
+                styleTitleRu: "Аналоговая электроника и краут-рок",
+                styleTitleEn: "Analog Electronic Pioneers & Krautrock",
+                customDescriptionRu: "Винтажные аналоговые синтезаторы, роботизированный вокодер, гипнотическая моторик-пульсация дюссельдорфской школы и пионеры электронной сцены.",
+                customDescriptionEn: "Vintage analog synthesizers, robotic vocoders, hypnotic Düsseldorf motorik pulse, and electronic pioneers.",
+                seedQueries: [
+                    "Kraftwerk The Man-Machine",
+                    "Kraftwerk Trans-Europe Express",
+                    "Kraftwerk Computer World",
+                    "Jean-Michel Jarre Oxygene",
+                    "Tangerine Dream Phaedra",
+                    "Yellow Magic Orchestra Solid State Survivor",
+                    "Neu! Neu! 75",
+                    "Giorgio Moroder From Here to Eternity",
+                    "Boards of Canada Music Has the Right to Children",
+                    "Röyksopp Melody A.M.",
+                    "Aphex Twin Selected Ambient Works 85-92",
+                    "Can Future Days"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Daft Punk",
+                aliases: ["daft punk", "дафт панк"],
+                archetypeId: "french_touch_nudisco",
+                styleTitleRu: "Французский электро-фанк и диско-грув",
+                styleTitleEn: "French Touch, Electro-Funk & Nu-Disco",
+                customDescriptionRu: "Упругий фанковый бас, винтажные синтезаторы, ток-бокс и вокодер, живая студийная секция и эталонный грув эстетики Daft Punk и French Touch.",
+                customDescriptionEn: "Punchy funk basslines, vintage synthesizers, vocoders, live studio instrumentation, and signature French Touch groove.",
+                seedQueries: [
+                    "Daft Punk Random Access Memories",
+                    "Daft Punk Discovery",
+                    "Justice Cross",
+                    "Parcels Day/Night",
+                    "Air Moon Safari",
+                    "L'Imperatrice Tako Tsubo",
+                    "Cassius 1999",
+                    "Modjo Modjo",
+                    "Jamiroquai Travelling Without Moving",
+                    "Chromeo Fancy Footwork",
+                    "Breakbot By Your Side",
+                    "Giorgio Moroder From Here to Eternity"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Pink Floyd",
+                aliases: ["pink floyd", "пинк флойд", "флойд", "david gilmour", "дэвид гилмор", "roger waters", "роджер уотерс"],
+                archetypeId: "prog_rock_70s",
+                styleTitleRu: "Аналоговый прог-рок 70-х и широкая сцена",
+                styleTitleEn: "70s Analog Progressive Rock & Wide Soundstage",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Pink Floyd Wish You Were Here",
+                    "Pink Floyd The Dark Side of the Moon",
+                    "David Gilmour On an Island",
+                    "Alan Parsons Project Eye in the Sky",
+                    "Porcupine Tree The Sky Moves Sideways",
+                    "Camel Mirage",
+                    "Dire Straits Love Over Gold",
+                    "King Crimson In the Court of the Crimson King",
+                    "Steven Wilson The Raven That Refused to Sing",
+                    "Supertramp Crime of the Century",
+                    "Air Moon Safari",
+                    "RPWL World Through My Eyes"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Deftones",
+                aliases: ["deftones", "дефтонс", "дефтоунс", "team sleep", "crosses"],
+                archetypeId: "prog_alt_metal",
+                styleTitleRu: "Атмосферный альт-метал и тяжёлый шугейз",
+                styleTitleEn: "Atmospheric Alt-Metal & Heavy Shoegaze",
+                customDescriptionRu: "Контраст обволакивающего гитарного реверба и плотных низкочастотных риффов, чувственный вокал и гипнотическая ночная атмосфера.",
+                customDescriptionEn: "Lush shoegaze reverb colliding with heavy downtuned riffs and hypnotic nocturnal dynamics.",
+                seedQueries: [
+                    "Deftones White Pony",
+                    "Deftones Diamond Eyes",
+                    "Deftones Koi No Yokan",
+                    "A Perfect Circle Thirteenth Step",
+                    "Tool Lateralus",
+                    "Team Sleep Team Sleep",
+                    "Loathe I Let It in and It Took Everything",
+                    "Chevelle Wonder What's Next",
+                    "Incubus Morning View",
+                    "Smashing Pumpkins Siamese Dream",
+                    "Karnivool Sound Awake",
+                    "Katatonia The Great Cold Distance"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Radiohead",
+                aliases: ["radiohead", "радиохед", "радиохэд", "thom yorke", "том йорк", "the smile"],
+                archetypeId: "alt_rock_postpunk",
+                styleTitleRu: "Экспериментальный арт-рок и электроника",
+                styleTitleEn: "Experimental Art-Rock & Electronic Melancholy",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Radiohead In Rainbows",
+                    "Radiohead OK Computer",
+                    "Radiohead Kid A",
+                    "The Smile A Light for Attracting Attention",
+                    "Thom Yorke The Eraser",
+                    "Portishead Third",
+                    "Massive Attack Mezzanine",
+                    "Sigur Ros Agaetis byrjun",
+                    "Alt-J An Awesome Wave",
+                    "Archive Londinium",
+                    "Porcupine Tree Stupid Dream",
+                    "Talk Talk Laughing Stock"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Depeche Mode",
+                aliases: ["depeche mode", "депеш мод", "дэпеш мод"],
+                archetypeId: "alt_rock_postpunk",
+                styleTitleRu: "Тёмный синт-поп, дарквейв и электро-рок",
+                styleTitleEn: "Dark Synth-Pop, Darkwave & Electro-Rock",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Depeche Mode Violator",
+                    "Depeche Mode Songs of Faith and Devotion",
+                    "Depeche Mode Ultra",
+                    "New Order Power, Corruption & Lies",
+                    "The Cure Disintegration",
+                    "Camouflage Voices & Images",
+                    "Tears for Fears Songs from the Big Chair",
+                    "Massive Attack Mezzanine",
+                    "Nine Inch Nails Pretty Hate Machine",
+                    "Placebo Black Market Music",
+                    "Röyksopp The Inevitable End",
+                    "Editors The Back Room"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Metallica",
+                aliases: ["metallica", "металлика", "металика"],
+                archetypeId: "heavy_metal_hard_rock",
+                styleTitleRu: "Трэш-метал и монументальный хеви-метал",
+                styleTitleEn: "Thrash Metal & Monumental Heavy Metal",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Metallica Master of Puppets",
+                    "Metallica Metallica",
+                    "Metallica Ride the Lightning",
+                    "Megadeth Rust in Peace",
+                    "Iron Maiden Powerslave",
+                    "Black Sabbath Paranoid",
+                    "Pantera Vulgar Display of Power",
+                    "Testament The Gathering",
+                    "Judas Priest Painkiller",
+                    "Alice in Chains Dirt",
+                    "Gojira Magma",
+                    "Avenged Sevenfold Nightmare"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Rammstein",
+                aliases: ["rammstein", "раммштайн", "рамштайн", "lindemann", "линдеманн"],
+                archetypeId: "heavy_metal_hard_rock",
+                styleTitleRu: "Индастриал-метал и Neue Deutsche Härte",
+                styleTitleEn: "Industrial Metal & Neue Deutsche Härte",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Rammstein Mutter",
+                    "Rammstein Reise, Reise",
+                    "Rammstein Sehnsucht",
+                    "Nine Inch Nails The Downward Spiral",
+                    "Oomph! Wahrheit oder Pflicht",
+                    "Eisbrecher Antikörper",
+                    "Megaherz Herzwerk II",
+                    "Marilyn Manson Antichrist Superstar",
+                    "Ministry Psalm 69",
+                    "Rob Zombie Hellbilly Deluxe",
+                    "KMFDM Nihil",
+                    "Lindemann Skills in Pills"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "The Prodigy",
+                aliases: ["the prodigy", "prodigy", "продиджи"],
+                archetypeId: "analog_electro_krautrock",
+                styleTitleRu: "Биг-бит, брейкбит и рейв-электроника 90-х",
+                styleTitleEn: "Big Beat, Breakbeat & High-Energy Rave",
+                customDescriptionRu: "Взрывной ломаный ритм, кислотные синтезаторы Roland TB-303 и эталонный драйв британской биг-бит и брейкбит-сцены.",
+                customDescriptionEn: "Explosive breakbeats, acid synthesizers, and high-octane British big beat energy.",
+                seedQueries: [
+                    "The Prodigy The Fat of the Land",
+                    "The Prodigy Music for the Jilted Generation",
+                    "The Chemical Brothers Dig Your Own Hole",
+                    "The Chemical Brothers Surrender",
+                    "The Crystal Method Vegas",
+                    "Fatboy Slim You've Come a Long Way, Baby",
+                    "Propellerheads Decksandrumsandrockandroll",
+                    "Leftfield Leftism",
+                    "Underworld Dubnobasswithmyheadman",
+                    "Orbital In Sides",
+                    "Justice Cross",
+                    "Pendulum Hold Your Colour"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Кино",
+                aliases: ["кино", "группа кино", "виктор цой", "цой", "kino", "viktor tsoi"],
+                archetypeId: "alt_rock_postpunk",
+                styleTitleRu: "Русский пост-панк и ленинградская новая волна",
+                styleTitleEn: "Russian Post-Punk & New Wave Classics",
+                customDescriptionRu: "Мелодичная бас-линия, драм-машина, звенящая гитара Каспаряна и культовая атмосфера ленинградского рок-клуба и отечественного пост-панка.",
+                customDescriptionEn: "Melodic post-punk basslines, drum machines, jangly guitars, and iconic Leningrad rock club atmosphere.",
+                seedQueries: [
+                    "Кино Группа крови",
+                    "Кино Звезда по имени Солнце",
+                    "Кино Черный альбом",
+                    "Наутилус Помпилиус Разлука",
+                    "Агата Кристи Опиум",
+                    "Альянс На заре",
+                    "Би-2 Би-2",
+                    "Сплин Гранатовый альбом",
+                    "ДДТ Актриса Весна",
+                    "Молчат Дома Этажи",
+                    "Пикник Египтянин",
+                    "Земфира Земфира"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Молчат Дома",
+                aliases: ["молчат дома", "molchat doma", "ploho", "дурной вкус", "буерак"],
+                archetypeId: "alt_rock_postpunk",
+                styleTitleRu: "Холодный пост-панк, колдвейв и синт-вейв",
+                styleTitleEn: "Modern Post-Punk, Coldwave & Minimal Synth",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Молчат Дома Этажи",
+                    "Молчат Дома Монумент",
+                    "Кино Группа крови",
+                    "Альянс На заре",
+                    "Joy Division Unknown Pleasures",
+                    "New Order Power, Corruption & Lies",
+                    "The Cure Seventeen Seconds",
+                    "Lebanon Hanover Tomb for Two",
+                    "She Past Away Belirdi Gece",
+                    "Дурной Вкус Светомузыка",
+                    "Ploho Куда птицы улетают умирать",
+                    "Буерак Танцы по расчёту"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Massive Attack",
+                aliases: ["massive attack", "массив аттак", "portishead", "портисхед", "tricky", "трики"],
+                archetypeId: "triphop_downtempo_90s",
+                styleTitleRu: "Бристольский трип-хоп и глубокий даунтемпо",
+                styleTitleEn: "Bristol Trip-Hop & Deep Downtempo",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Massive Attack Mezzanine",
+                    "Massive Attack Blue Lines",
+                    "Portishead Dummy",
+                    "Tricky Maxinquaye",
+                    "UNKLE Psyence Fiction",
+                    "Archive Londinium",
+                    "Morcheeba Big Calm",
+                    "Thievery Corporation The Mirror Conspiracy",
+                    "Hooverphonic A New Stereophonic Sound Spectacular",
+                    "Kruder & Dorfmeister The K&D Sessions",
+                    "Lamb Lamb",
+                    "Bonobo Black Sands"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Porcupine Tree",
+                aliases: ["porcupine tree", "поркупайн три", "steven wilson", "стивен уилсон"],
+                archetypeId: "prog_alt_metal",
+                styleTitleRu: "Современный прогрессив-рок и аудиофильский арт-метал",
+                styleTitleEn: "Modern Progressive Rock & Audiophile Art-Metal",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Porcupine Tree In Absentia",
+                    "Porcupine Tree Deadwing",
+                    "Steven Wilson The Raven That Refused to Sing",
+                    "Steven Wilson Hand. Cannot. Erase.",
+                    "Opeth Damnation",
+                    "Riverside Second Life Syndrome",
+                    "Anathema Weather Systems",
+                    "Pineapple Thief Your Wilderness",
+                    "Tool Lateralus",
+                    "Katatonia The Great Cold Distance",
+                    "Karnivool Sound Awake",
+                    "Pink Floyd Wish You Were Here"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Nirvana",
+                aliases: ["nirvana", "нирвана", "kurt cobain", "курт кобейн", "alice in chains", "элис ин чейнс", "soundgarden"],
+                archetypeId: "heavy_metal_hard_rock",
+                styleTitleRu: "Сиэтлский гранж и альтернативный рок 90-х",
+                styleTitleEn: "Seattle Grunge & 90s Alternative Rock",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Nirvana Nevermind",
+                    "Nirvana MTV Unplugged in New York",
+                    "Alice in Chains Dirt",
+                    "Alice in Chains Jar of Flies",
+                    "Soundgarden Superunknown",
+                    "Pearl Jam Ten",
+                    "Stone Temple Pilots Core",
+                    "Mad Season Above",
+                    "Smashing Pumpkins Siamese Dream",
+                    "Pixies Doolittle",
+                    "Foo Fighters The Colour and the Shape",
+                    "Audioslave Audioslave"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Led Zeppelin",
+                aliases: ["led zeppelin", "лед зеппелин", "зеппелин", "deep purple", "дип перпл", "black sabbath", "блэк саббат"],
+                archetypeId: "heavy_metal_hard_rock",
+                styleTitleRu: "Золотая эра хард-рока и блюз-рока 70-х",
+                styleTitleEn: "70s Golden Era Hard Rock & Heavy Blues",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Led Zeppelin Physical Graffiti",
+                    "Led Zeppelin IV",
+                    "Deep Purple Machine Head",
+                    "Black Sabbath Paranoid",
+                    "Rainbow Rising",
+                    "Cream Disraeli Gears",
+                    "Jimi Hendrix Electric Ladyland",
+                    "The Doors L.A. Woman",
+                    "AC/DC Back in Black",
+                    "Rush Moving Pictures",
+                    "Free Fire and Water",
+                    "Uriah Heep Demons and Wizards"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Tame Impala",
+                aliases: ["tame impala", "тейм импала", "gorillaz", "гориллаз"],
+                archetypeId: "alt_rock_postpunk",
+                styleTitleRu: "Нео-психоделия, синт-грув и инди-электроника",
+                styleTitleEn: "Neo-Psychedelia, Synth Groove & Indie Electronica",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Tame Impala Currents",
+                    "Tame Impala Lonerism",
+                    "Gorillaz Demon Days",
+                    "Gorillaz Plastic Beach",
+                    "MGMT Oracular Spectacular",
+                    "Unknown Mortal Orchestra Multi-Love",
+                    "Khruangbin Con Todo El Mundo",
+                    "Parcels Day/Night",
+                    "Pond The Weather",
+                    "Beach House Bloom",
+                    "Empire of the Sun Walking On a Dream",
+                    "Air Moon Safari"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Hans Zimmer",
+                aliases: ["hans zimmer", "ханс циммер", "циммер", "johann johannsson", "max richter", "макс рихтер", "ludovico einaudi", "эйнауди"],
+                archetypeId: "ambient_neoclassical_focus",
+                styleTitleRu: "Масштабная неоклассика и эпические саундтреки",
+                styleTitleEn: "Epic Cinematic Scores & Modern Neoclassical",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Hans Zimmer Interstellar",
+                    "Hans Zimmer Inception",
+                    "Max Richter The Blue Notebooks",
+                    "Johann Johannsson Orphee",
+                    "Ludovico Einaudi In a Time Lapse",
+                    "Nils Frahm All Melody",
+                    "Olafur Arnalds re:member",
+                    "Ramin Djawadi Westworld",
+                    "Clint Mansell The Fountain",
+                    "Vangelis Blade Runner",
+                    "Howard Shore The Lord of the Rings",
+                    "Hildur Gudnadottir Chernobyl"
+                ]
+            ),
+            ArtistStyleProfile(
+                canonicalArtist: "Polyphia",
+                aliases: ["polyphia", "полифия", "animals as leaders", "plini", "intervals"],
+                archetypeId: "prog_alt_metal",
+                styleTitleRu: "Инструментальный прог-рок, мат-рок и гитарный виртуоз",
+                styleTitleEn: "Instrumental Prog, Math-Rock & Virtuoso Guitar",
+                customDescriptionRu: nil,
+                customDescriptionEn: nil,
+                seedQueries: [
+                    "Polyphia Remember That You Will Die",
+                    "Polyphia New Levels New Devils",
+                    "Animals as Leaders The Joy of Motion",
+                    "Plini Handmade Cities",
+                    "Intervals Circadian",
+                    "Chon Grow",
+                    "Covet Effloresce",
+                    "Scale the Summit The Migration",
+                    "Liquid Tension Experiment",
+                    "Tesseract Altered State",
+                    "Karnivool Sound Awake",
+                    "Tool Lateralus"
+                ]
+            )
+        ]
+    }
+}

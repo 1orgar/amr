@@ -1,0 +1,182 @@
+  <!-- Top-Left AMR Version & Device Settings Modal (Signal Path Inspector Style) -->
+  <div id="amr-info-popover" class="modal-backdrop hidden" aria-hidden="true" role="dialog" aria-label="О версии и настройки устройства">
+    <div class="modal-card signal-path-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Система и Устройство</h3>
+          <span class="modal-tag">AMR v3.0.0</span>
+        </div>
+        <button id="btn-close-amr-info" class="modal-close" type="button" aria-label="Закрыть">&times;</button>
+      </div>
+
+      <div class="modal-body signal-path-body">
+        <!-- Verified AMR System Banner -->
+        <div class="signal-verified-card">
+          <div class="signal-verified-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+          </div>
+          <div class="signal-verified-info">
+            <div class="signal-verified-title">Apple Music Remote v3.0.0</div>
+            <div class="signal-verified-desc">Авторизованный клиент • Bit-Perfect CoreAudio • vDSP FFT</div>
+          </div>
+        </div>
+
+        <div class="signal-path-chain">
+          <!-- Node 1: Build & Latest Commit + Share Access QR -->
+          <div class="signal-node">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">СБОРКА</span>
+                <span id="amr-info-commit-badge" class="signal-node-format highlight-green">7278dab</span>
+              </div>
+              <div class="signal-node-name">Apple Music Remote Mac</div>
+              <div id="amr-info-commit-details" class="signal-node-meta">Последний коммит: 7278dab (2026-11-04) • Pure Swift Server</div>
+
+              <div class="amr-share-actions-row">
+                <button id="btn-share-access-qr" class="amr-share-access-btn" type="button">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+                    <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm0 2h2v2h-2v-2zm2 0h2v2h-2v-2zm-6-2h2v4h-2v-4z"/>
+                  </svg>
+                  <span id="amr-share-access-btn-label">Поделиться доступом</span>
+                </button>
+              </div>
+
+              <!-- Expandable QR Code Share Card -->
+              <div id="amr-share-qr-panel" class="amr-share-qr-panel hidden">
+                <div class="amr-share-qr-box">
+                  <img id="amr-share-qr-img" class="amr-share-qr-img" src="" alt="QR-код для быстрого подключения и авторизации" width="180" height="180">
+                </div>
+                <div id="amr-share-qr-hint" class="amr-share-qr-hint">Отсканируйте камерой смартфона или планшета — устройство подключится и авторизуется автоматически</div>
+                <div id="amr-share-url-text" class="amr-share-url-text">http://127.0.0.1:8080</div>
+                <div class="amr-share-qr-btn-group">
+                  <button id="btn-copy-share-link" class="amr-share-sub-btn" type="button">Скопировать ссылку</button>
+                  <button id="btn-native-share-link" class="amr-share-sub-btn hidden" type="button">Отправить...</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="signal-connector">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Node 2: Client Device Identity -->
+          <div class="signal-node">
+            <div class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">УСТРОЙСТВО</span>
+                <span id="amr-info-device-summary" class="signal-node-format">ID: ----</span>
+              </div>
+              <div class="amr-node-input-wrap">
+                <input id="amr-device-name-input" class="amr-device-name-input" type="text" maxlength="40" placeholder="Имя устройства" aria-label="Имя этого устройства">
+              </div>
+              <div id="amr-info-device-uid" class="signal-node-meta">Авторизовано на Mac • Защищённый UID (Cookie + Cache)</div>
+            </div>
+          </div>
+
+          <div class="signal-connector">
+            <div class="signal-connector-line"></div>
+          </div>
+
+          <!-- Node 3: Lock Screen & Dynamic Island (MediaSession) -->
+          <div class="signal-node">
+            <div id="amr-lock-node-dot" class="signal-node-dot active"></div>
+            <div class="signal-node-main">
+              <div class="signal-node-top">
+                <span class="signal-node-badge">ЭКРАН БЛОКИРОВКИ • MEDIASESSION</span>
+                <span id="amr-lock-state-badge" class="signal-node-format highlight-green">АКТИВНО</span>
+              </div>
+              <div class="signal-node-name">Экран блокировки и Dynamic Island</div>
+              <div class="signal-node-meta">Управление плеером на заблокированном экране, в Пункте управления и на Apple Watch</div>
+            </div>
+            <label class="ios-switch amr-node-switch" aria-label="Экран блокировки и Dynamic Island">
+              <input type="checkbox" id="amr-lock-screen-checkbox" checked>
+              <span class="ios-switch-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Bar / TV Mode Settings Popover (WLED DDP Mode Selector) -->
+  <div id="top-settings-popover" class="top-settings-popover hidden" aria-hidden="true" role="dialog" aria-label="Режим работы WLED DDP">
+    <div class="top-settings-header">
+      <div class="top-settings-title-group">
+        <span class="top-settings-badge">UDP 4048 · DDP</span>
+        <h4 class="top-settings-title">WLED Подсветка</h4>
+      </div>
+      <button id="btn-close-top-settings" class="top-settings-close" type="button" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="top-settings-body">
+      <div class="top-settings-field">
+        <label class="top-settings-label" for="wled-mode-select">Режим работы</label>
+        <select id="wled-mode-select" class="top-settings-select">
+          <option value="off">Без подсветки</option>
+          <option value="vu_center">Симметричный пульс (раскрытие от центра)</option>
+          <option value="shockwave">Ударная волна (кольца бита от центра)</option>
+          <option value="harmonic">Гармонический резонанс (волны цвета от центра)</option>
+          <option value="supernova">Сверхновая (ядро бита и корона от центра)</option>
+          <option value="prism_center">Призма от центра (перелив оттенков обложки)</option>
+          <option value="duet_wings">Встречный импульс (бас в центре · верх с краёв)</option>
+          <option value="spectrum">Спектральный эквалайзер (Бас · Вокал · Верх)</option>
+          <option value="breathing">Синусоида ритма (контрастная волна от центра)</option>
+          <option value="ambilight">Живой Ambilight (16 зон + пульс музыки)</option>
+          <option value="static">Статичная палитра обложки</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Apple Digital Booklet Viewer (Right Pane on Desktop/Tablet Landscape, Fullscreen on TV & Mobile Portrait) -->
+  <div id="booklet-viewer-modal" class="booklet-viewer-overlay hidden" aria-hidden="true" role="dialog" aria-label="Цифровой буклет альбома">
+    <button id="btn-close-booklet" class="booklet-close-btn" type="button" title="Закрыть буклет (Esc)" aria-label="Закрыть буклет">
+      <span>✕</span>
+      <span class="booklet-close-label">Закрыть</span>
+    </button>
+
+    <div id="booklet-viewport" class="booklet-viewport">
+      <div id="booklet-loading" class="booklet-loading hidden">
+        <div class="busy-spinner"></div>
+        <span>Загрузка буклета...</span>
+      </div>
+
+      <div id="booklet-pages-list" class="booklet-pages-list"></div>
+    </div>
+  </div>
+
+  <!-- In-App Library Delete Confirmation Modal -->
+  <div id="library-delete-confirm-modal" class="modal-backdrop confirm-modal-backdrop hidden" aria-hidden="true" role="alertdialog" aria-modal="true">
+    <div class="modal-card confirm-modal-card">
+      <div class="confirm-modal-icon">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </div>
+      <h3 id="confirm-delete-title" class="confirm-modal-title">Удалить из медиатеки?</h3>
+      <p id="confirm-delete-message" class="confirm-modal-desc">Элемент будет удалён из вашей медиатеки Apple Music.</p>
+      <div class="confirm-modal-actions">
+        <button id="btn-confirm-delete-cancel" class="btn-secondary-action confirm-btn-cancel" type="button">Отмена</button>
+        <button id="btn-confirm-delete-ok" class="btn-danger-solid confirm-btn-ok" type="button">Удалить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Busy / Action Loading Overlay -->
+  <div id="busy-overlay" class="busy-overlay hidden" aria-hidden="true" role="status">
+    <div class="busy-card">
+      <div class="busy-spinner"></div>
+      <span id="busy-message" class="busy-text">Загрузка...</span>
+    </div>
+  </div>
+
+  <script src="/app.js?v=299"></script>
+</body>
+</html>

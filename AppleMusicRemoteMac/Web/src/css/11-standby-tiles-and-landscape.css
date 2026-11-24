@@ -1,0 +1,560 @@
+.standby-spectral-badge.compressed {
+  color: #ff453a;
+  background: rgba(255, 69, 58, 0.16);
+  border-color: rgba(255, 69, 58, 0.38);
+}
+
+.standby-spectral-badge.balanced {
+  color: #ffd60a;
+  background: rgba(255, 214, 10, 0.14);
+  border-color: rgba(255, 214, 10, 0.34);
+}
+
+.standby-ctrl-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.standby-ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.standby-ctrl-play {
+  width: 74px;
+  height: 74px;
+  background: #ffffff;
+  color: #000000;
+}
+
+.standby-ctrl-play:hover {
+  background: #f2f2f7;
+}
+
+/* Full-Width Volume Bar Below Transport Controls in TV / StandBy Mode */
+.standby-volume-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 780px;
+  flex: none;
+  margin: 0;
+  padding-bottom: 2px;
+  opacity: 0.85;
+  transition: opacity 0.3s ease, transform 0.25s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.standby-volume-text {
+  font-size: clamp(12px, 1.05vw, 14.5px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 42px;
+  text-align: right;
+}
+
+.standby-volume-section.hidden {
+  display: none !important;
+}
+
+.standby-volume-section:hover,
+.standby-volume-section:focus-within,
+.standby-volume-section.vol-active-pulse {
+  opacity: 0.96;
+}
+
+.standby-vol-mute-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 0.2s ease, transform 0.15s ease, background 0.2s ease;
+  touch-action: manipulation;
+}
+
+.standby-vol-mute-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.standby-vol-mute-btn:active {
+  transform: scale(0.9);
+}
+
+.standby-vol-mute-btn.muted {
+  color: #ff453a;
+}
+
+.queue-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-save-queue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.btn-save-queue:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.btn-save-queue:active {
+  transform: scale(0.96);
+}
+
+.btn-save-queue.saved {
+  border-color: rgba(48, 209, 88, 0.45);
+  color: #30d158;
+}
+
+.standby-vol-slider-wrap {
+  position: relative;
+  flex: 1;
+  height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+/* Precision Zoom Loupe (Magnifier Bubble with Percentage) */
+.standby-vol-loupe {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(8px) scale(0.78);
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: rgba(18, 18, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), 0 0 18px rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+  z-index: 30;
+}
+
+.standby-vol-loupe::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px 5px 0 5px;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.24) transparent transparent transparent;
+}
+
+.standby-volume-section.is-scrubbing .standby-vol-loupe,
+.standby-vol-loupe.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.standby-vol-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  transition: height 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), background 0.22s ease;
+}
+
+.standby-volume-section:hover .standby-vol-track,
+.standby-volume-section:focus-within .standby-vol-track,
+.standby-volume-section.vol-active-pulse .standby-vol-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.standby-volume-section.is-scrubbing .standby-vol-track {
+  height: 11px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.standby-vol-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  transition: width 0.08s linear, background 0.25s ease;
+}
+
+.standby-volume-section:hover .standby-vol-fill,
+.standby-volume-section:focus-within .standby-vol-fill,
+.standby-volume-section.vol-active-pulse .standby-vol-fill,
+.standby-volume-section.is-scrubbing .standby-vol-fill {
+  background: linear-gradient(90deg, #ffffff 0%, var(--standby-glow-1, #ff375f) 100%);
+}
+
+.standby-vol-thumb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+  z-index: 5;
+}
+
+.standby-volume-section.is-scrubbing .standby-vol-thumb {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.standby-vol-input {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -6px;
+  bottom: -6px;
+  width: 100%;
+  height: calc(100% + 12px);
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  touch-action: none;
+  z-index: 10;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .standby-vol-slider-wrap {
+    height: 48px;
+  }
+  .standby-vol-track {
+    height: 7px;
+    background: rgba(255, 255, 255, 0.22);
+  }
+  .standby-vol-thumb {
+    transform: translate(-50%, -50%) scale(0.86);
+  }
+  .standby-volume-section.is-scrubbing .standby-vol-thumb {
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+}
+
+/* Fullscreen StandBy / TV Mode Library & Stations Grid Overlay */
+.standby-library-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  background: rgba(6, 6, 10, 0.88);
+  backdrop-filter: blur(44px) saturate(160%);
+  -webkit-backdrop-filter: blur(44px) saturate(160%);
+  display: flex;
+  flex-direction: column;
+  padding: clamp(22px, 3.5vw, 48px) clamp(28px, 5vw, 72px);
+  animation: standbyLibraryIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.standby-library-modal.hidden {
+  display: none !important;
+}
+
+@keyframes standbyLibraryIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.standby-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1640px;
+  width: 100%;
+  margin: 0 auto clamp(20px, 2.8vh, 32px) auto;
+  flex-shrink: 0;
+}
+
+.standby-library-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.standby-library-title {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.standby-library-subtitle {
+  font-size: clamp(13px, 1.3vw, 16px);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.standby-library-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 1640px;
+  margin: 0 auto;
+  padding: 6px 6px 40px 6px;
+  scroll-behavior: smooth;
+}
+
+.standby-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(180px, 18vw, 248px), 1fr));
+  gap: clamp(18px, 2.2vw, 28px);
+}
+
+.standby-square-tile {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #141418;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease, box-shadow 0.22s ease;
+  padding: 0;
+  text-align: left;
+  color: #ffffff;
+}
+
+.standby-square-tile:hover {
+  transform: translateY(-5px) scale(1.03);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.78);
+}
+
+.standby-square-tile:active {
+  transform: scale(0.97);
+}
+
+.standby-square-tile.active {
+  border-color: rgba(250, 35, 59, 0.9);
+  box-shadow: 0 18px 48px rgba(250, 35, 59, 0.35), 0 0 0 2.5px rgba(250, 35, 59, 0.65);
+}
+
+.standby-square-tile .animated-plaque-wrap {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.standby-tile-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s ease;
+}
+
+.standby-square-tile:hover .standby-tile-cover {
+  transform: scale(1.05);
+}
+
+.standby-tile-fallback {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(145deg, #23232b 0%, #121217 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.standby-tile-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.18) 45%, rgba(0, 0, 0, 0.88) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 16px 18px;
+  pointer-events: none;
+  gap: 3px;
+}
+
+.standby-tile-title {
+  font-size: clamp(14px, 1.3vw, 18px);
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.015em;
+  color: #ffffff;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+}
+
+.standby-tile-meta {
+  font-size: clamp(11.5px, 1vw, 13.5px);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.standby-tile-play-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  opacity: 0;
+  transform: scale(0.88);
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.standby-square-tile:hover .standby-tile-play-badge,
+.standby-square-tile.active .standby-tile-play-badge {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.standby-square-tile.active .standby-tile-play-badge {
+  background: #fa233b;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+@media (max-width: 900px) {
+  .standby-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    align-items: center;
+    text-align: center;
+    row-gap: 16px;
+    column-gap: 0;
+  }
+  .standby-badges-row {
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: center;
+    margin: 0 auto;
+  }
+  .standby-artwork-col {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .standby-meta-col {
+    grid-column: 1;
+    grid-row: 3;
+    align-items: center;
+  }
+  .standby-headings {
+    align-items: center;
+    width: 100%;
+  }
+  .standby-title-viewport {
+    margin-top: 0;
+  }
+  .standby-art-frame {
+    width: min(40vh, 74vw);
+    height: min(40vh, 74vw);
+  }
+  .standby-controls {
+    justify-content: center;
+  }
+  .standby-progress-section,
+  .standby-volume-section {
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+  .standby-volume-section {
+    margin-top: clamp(20px, 3vh, 32px);
+  }
+  .top-settings-popover {
+    top: 56px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+.top-bar-pill-btn.hidden,
+.top-bar-icon-btn.hidden,
+.standby-action-btn.hidden {
+  display: none !important;
+}
+
+/* Hide duplicate player-top-header buttons on PC / Tablet (they exist in desktop-nav-actions on the right) */
+@media (min-width: 768px) and (min-height: 541px) {
+  #player-btn-settings,
+  #player-btn-standby {
+    display: none !important;
+  }
+}
+
+/* Hide TV / StandBy button on Mobile */
+@media (max-width: 767px), (max-height: 540px) {
+  #btn-standby-mode,
+  #mobile-btn-standby,
+  #player-btn-standby {
+    display: none !important;
+  }
+}
+

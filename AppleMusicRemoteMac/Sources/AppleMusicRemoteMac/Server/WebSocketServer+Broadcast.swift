@@ -2,6 +2,9 @@
 //  WebSocketServer+Broadcast.swift
 //  AppleMusicRemoteMac
 //
+//  Outgoing WebSocket envelopes, per-connection backpressure tracking,
+//  and live status / audio-device broadcasts.
+//
 
 import Foundation
 import Network
@@ -45,7 +48,6 @@ extension WebSocketServer {
             payload["id"] = reqId
         }
 
-        // Sanitize data dictionary so AnyCodable or custom Swift structs/enums become native JSON types
         let sanitizedData = sanitizeForJSON(data)
         payload["data"] = sanitizedData
 
@@ -56,7 +58,7 @@ extension WebSocketServer {
         }
     }
 
-    private func sanitizeForJSON(_ value: Any) -> Any {
+    internal func sanitizeForJSON(_ value: Any) -> Any {
         if let ac = value as? AnyCodable {
             return sanitizeForJSON(ac.value ?? NSNull())
         } else if let dict = value as? [String: Any] {
@@ -98,6 +100,12 @@ extension WebSocketServer {
                 return obj
             }
             return t.name
+        } else if let sel = value as? TVLibraryAlbumSelection {
+            if let data = try? JSONEncoder().encode(sel),
+               let obj = try? JSONSerialization.jsonObject(with: data) {
+                return obj
+            }
+            return ["key": sel.key, "id": sel.id, "name": sel.name, "artist": sel.artist]
         } else if value is NSNull {
             return NSNull()
         } else {
@@ -157,7 +165,7 @@ extension WebSocketServer {
         let conns = connIds.compactMap { clients[$0] }
         clientLock.unlock()
 
-        let dict = record.dictionary
+        let dict = record.dictionaryWithSecret
         for conn in conns {
             sendEvent(name: "device_auth_status", data: dict, to: conn)
         }
@@ -167,9 +175,13 @@ extension WebSocketServer {
                 guard let self = self else { return }
                 let status = MusicBridge.shared.getPlayerStatus()
                 let aiSettings = NativeMusicCuratorService.shared.getSettingsDictionary()
+                let dspSettings = Self.buildDSPSettingsDictionary()
+                let tvConfig = TVLibraryConfigurationStore.shared.toDictionary()
                 for conn in conns {
                     self.sendEvent("player_state_changed", data: status, to: conn)
                     self.sendEvent(name: "ai_curator_settings", data: aiSettings, to: conn)
+                    self.sendEvent(name: "dsp_settings", data: dspSettings, to: conn)
+                    self.sendEvent(name: "tv_library_config", data: tvConfig, to: conn)
                 }
                 let queue = await MusicBridge.shared.getPlaybackQueue()
                 for conn in conns {
@@ -179,8 +191,8 @@ extension WebSocketServer {
         }
     }
 
-    public func pushDeviceRemoved(for record: ClientDeviceRecord) {
-        let connIds = ClientDeviceManager.shared.getConnectionIds(forDeviceId: record.deviceId)
+    public func pushDeviceRemoved(for record: ClientDeviceRecord, connectionIds: [UUID]? = nil) {
+        let connIds = connectionIds ?? ClientDeviceManager.shared.getConnectionIds(forDeviceId: record.deviceId)
         guard !connIds.isEmpty else { return }
 
         clientLock.lock()
@@ -216,23 +228,53 @@ extension WebSocketServer {
         }
     }
 
+    private func sendFrameWithBackpressure(_ frame: Data, to connection: NWConnection) {
+        let objId = ObjectIdentifier(connection)
+        sendLock.lock()
+        let isTrackedSocket: Bool = {
+            clientLock.lock()
+            defer { clientLock.unlock() }
+            return clients.values.contains(where: { $0 === connection })
+        }()
+        if isTrackedSocket {
+            let pending = (pendingOutboundFrames[objId] ?? 0) + 1
+            if pending > Self.maxPendingOutboundFrames {
+                pendingOutboundFrames.removeValue(forKey: objId)
+                sendLock.unlock()
+                NSLog("[WebSocket] ⚠️ Disconnecting slow WebSocket client due to outbound backpressure (> %d frames)", Self.maxPendingOutboundFrames)
+                connection.cancel()
+                return
+            }
+            pendingOutboundFrames[objId] = pending
+        }
+        connection.send(content: frame, completion: .contentProcessed({ [weak self] error in
+            if let self = self, isTrackedSocket {
+                self.sendLock.lock()
+                if let current = self.pendingOutboundFrames[objId] {
+                    if current <= 1 {
+                        self.pendingOutboundFrames.removeValue(forKey: objId)
+                    } else {
+                        self.pendingOutboundFrames[objId] = current - 1
+                    }
+                }
+                self.sendLock.unlock()
+            }
+            if let err = error {
+                NSLog("[WebSocket] send error: %@", err.localizedDescription)
+            }
+        }))
+        sendLock.unlock()
+    }
+
     public func sendText(_ text: String, to connection: NWConnection) {
         guard let data = text.data(using: .utf8) else { return }
         let frame = makeWebSocketFrame(payload: data, opcode: 0x01)
-        sendLock.lock()
-        defer { sendLock.unlock() }
-        connection.send(content: frame, completion: .contentProcessed({ error in
-            if let err = error {
-                NSLog("[WebSocket] sendText error: %@", err.localizedDescription)
-            }
-        }))
+        sendFrameWithBackpressure(frame, to: connection)
     }
 
     public func sendBinary(_ data: Data, to connection: NWConnection) {
         let frame = makeWebSocketFrame(payload: data, opcode: 0x02)
-        sendLock.lock()
-        defer { sendLock.unlock() }
-        connection.send(content: frame, completion: .contentProcessed({ _ in }))
+        sendFrameWithBackpressure(frame, to: connection)
     }
 
     public func broadcastText(_ text: String) {
@@ -286,10 +328,21 @@ extension WebSocketServer {
 
     public func broadcastAudioDevices() {
         let isDLNAActive = DLNADiscoveryManager.shared.hasActiveRenderer
-        var devices = CoreAudioDeviceManager.shared.getOutputDevices().map { dev -> [String: Any] in
+        let dspActiveDev = isDLNAActive ? nil : AudioEngineController.shared.activeHardwareOutputDeviceInfo
+        let coreDevices = CoreAudioDeviceManager.shared.getOutputDevices()
+
+        var devices = coreDevices.map { dev -> [String: Any] in
             var dict = dev.dictionary
             if isDLNAActive {
                 dict["isDefault"] = false
+            } else if let dspDev = dspActiveDev {
+                dict["isDefault"] = (dev.id == dspDev.id)
+                if dev.id == dspDev.id {
+                    let tel = AudioEngineController.shared.latestTelemetrySnapshot()
+                    if tel.dopCarrierRateHz > 0 {
+                        dict["sampleRate"] = Double(tel.dopCarrierRateHz)
+                    }
+                }
             }
             return dict
         }
@@ -299,9 +352,18 @@ extension WebSocketServer {
         var data: [String: Any] = ["devices": devices]
         if let activeDLNA = DLNADiscoveryManager.shared.getActiveRenderer() {
             data["current_device"] = activeDLNA.dictionary
+        } else if let dspDev = dspActiveDev,
+                  var matched = coreDevices.first(where: { $0.id == dspDev.id })?.dictionary {
+            matched["isDefault"] = true
+            let tel = AudioEngineController.shared.latestTelemetrySnapshot()
+            if tel.dopCarrierRateHz > 0 {
+                matched["sampleRate"] = Double(tel.dopCarrierRateHz)
+            }
+            data["current_device"] = matched
         } else if let defaultDev = CoreAudioDeviceManager.shared.getDefaultOutputDevice()?.dictionary {
             data["current_device"] = defaultDev
         }
         broadcastEvent(name: "audio_devices", data: data)
+        broadcastEvent(name: "dsp_settings", data: Self.buildDSPSettingsDictionary())
     }
 }

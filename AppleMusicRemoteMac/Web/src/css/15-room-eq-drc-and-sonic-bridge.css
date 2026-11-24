@@ -1,0 +1,681 @@
+/* --- Quick Room Frequency Response Measurement (iPhone / iPad Mic + Auto-PEQ 64-bit) --- */
+.signal-room-eq-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.room-eq-profile-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+}
+
+.room-eq-toggle-btn {
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.room-eq-toggle-btn.active {
+  background: rgba(48, 209, 88, 0.16);
+  border-color: rgba(48, 209, 88, 0.48);
+  color: #30d158;
+}
+
+.room-eq-toggle-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.room-profile-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.room-profile-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.room-eq-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 69, 58, 0.28);
+  background: rgba(255, 69, 58, 0.09);
+  color: #ff6961;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.room-eq-icon-btn:hover {
+  background: rgba(255, 69, 58, 0.18);
+  border-color: rgba(255, 69, 58, 0.45);
+}
+
+.room-eq-chart-wrap {
+  background: #0b0b0f;
+  border: 1px solid #202028;
+  border-radius: 10px;
+  padding: 8px 10px 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.room-eq-svg {
+  width: 100%;
+  height: 92px;
+  display: block;
+}
+
+.room-eq-grid-line {
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.room-eq-grid-zero {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1;
+}
+
+.room-eq-grid-vline {
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 1;
+}
+
+.room-eq-line-target {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.36);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.room-eq-line-measured {
+  fill: none;
+  stroke: #ff9f0a;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.room-eq-line-corrected {
+  fill: none;
+  stroke: #30d158;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.room-eq-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 9.5px;
+  color: #8e8e98;
+}
+
+.room-eq-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.room-eq-legend-item .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.room-eq-legend-item .dot.target {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.room-eq-legend-item .dot.measured {
+  background: #ff9f0a;
+}
+
+.room-eq-legend-item .dot.corrected {
+  background: #30d158;
+}
+
+.room-eq-bands-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.room-eq-band-pill {
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(100, 210, 255, 0.1);
+  border: 1px solid rgba(100, 210, 255, 0.25);
+  color: #70d7ff;
+}
+
+.room-measure-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.btn-room-measure-primary {
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(250, 45, 72, 0.45);
+  background: linear-gradient(135deg, rgba(250, 45, 72, 0.24), rgba(255, 55, 95, 0.16));
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-room-measure-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(250, 45, 72, 0.34), rgba(255, 55, 95, 0.24));
+  border-color: rgba(250, 45, 72, 0.7);
+}
+
+.btn-room-measure-primary:disabled,
+.btn-room-measure-secondary:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.btn-room-measure-secondary {
+  min-height: 34px;
+  padding: 6px 11px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-room-measure-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.btn-room-measure-stop {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 69, 58, 0.5);
+  background: rgba(255, 69, 58, 0.2);
+  color: #ff6961;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.room-measure-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.room-measure-progress-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.room-measure-progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff9f0a, #30d158);
+  transition: width 0.15s linear;
+}
+
+.room-measure-status-text {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #ffd60a;
+}
+
+/* ==========================================================================
+   Audiophile Late-Night Dynamic Range Control (Night Concert Mode)
+   ========================================================================== */
+.signal-drc-controls {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.signal-drc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.late-night-profile-bar {
+  margin-top: 2px;
+}
+
+.signal-drc-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(48, 209, 88, 0.12);
+  border: 1px solid rgba(48, 209, 88, 0.32);
+  color: #30d158;
+  white-space: nowrap;
+}
+
+.signal-drc-badge.active {
+  background: rgba(100, 210, 255, 0.16);
+  border-color: rgba(100, 210, 255, 0.42);
+  color: #70d7ff;
+}
+
+/* ==========================================================================
+   Sonic Bridge (512-D Geodesic SLERP Musical Trajectory A -> B)
+   ========================================================================== */
+.filter-chip-bridge {
+  border: 1px solid rgba(100, 210, 255, 0.45) !important;
+  background: linear-gradient(135deg, rgba(50, 173, 230, 0.16), rgba(94, 92, 230, 0.16)) !important;
+  color: #a6e3ff !important;
+  font-weight: 600 !important;
+}
+
+.filter-chip-bridge.active {
+  background: linear-gradient(135deg, #32ade6, #5e5ce6) !important;
+  border-color: rgba(255, 255, 255, 0.38) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(50, 173, 230, 0.36);
+}
+
+.ai-landing-bridge-cta {
+  margin-top: 14px;
+  padding: 11px 14px;
+  border-radius: 13px;
+  border: 1px solid rgba(100, 210, 255, 0.28);
+  background: linear-gradient(135deg, rgba(50, 173, 230, 0.13), rgba(94, 92, 230, 0.12));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  color: #ffffff;
+  transition: all 0.18s ease;
+}
+
+.ai-landing-bridge-cta:hover {
+  border-color: rgba(100, 210, 255, 0.52);
+  background: linear-gradient(135deg, rgba(50, 173, 230, 0.22), rgba(94, 92, 230, 0.2));
+  transform: translateY(-1px);
+}
+
+.ai-landing-bridge-cta-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ai-landing-bridge-cta-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #d6f2ff;
+}
+
+.ai-landing-bridge-cta-sub {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.ai-landing-bridge-cta-arrow {
+  font-size: 15px;
+  color: #70d7ff;
+  flex-shrink: 0;
+}
+
+.sonic-bridge-builder-card {
+  max-width: 680px;
+  width: 100%;
+  margin: 8px auto 14px auto;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: linear-gradient(155deg, rgba(24, 34, 52, 0.82), rgba(20, 22, 36, 0.88));
+  border: 1px solid rgba(100, 210, 255, 0.28);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.34);
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.sonic-bridge-builder-card.compact {
+  max-width: 100%;
+  margin: 0 0 12px 0;
+  padding: 14px 16px;
+}
+
+.sonic-bridge-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sonic-bridge-pill {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(50, 173, 230, 0.18);
+  border: 1px solid rgba(100, 210, 255, 0.36);
+  color: #8ee0ff;
+}
+
+.sonic-bridge-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.sonic-bridge-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.68);
+  margin: 0;
+}
+
+.sonic-bridge-endpoints-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+@media (max-width: 640px) {
+  .sonic-bridge-endpoints-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sonic-bridge-endpoint-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sonic-bridge-endpoint-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.sonic-bridge-endpoint-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.sonic-bridge-use-current-btn {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(100, 210, 255, 0.34);
+  background: rgba(100, 210, 255, 0.12);
+  color: #9be4ff;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.sonic-bridge-use-current-btn:hover:not(:disabled) {
+  background: rgba(100, 210, 255, 0.24);
+  color: #ffffff;
+}
+
+.sonic-bridge-use-current-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sonic-bridge-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.34);
+  color: #ffffff;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.sonic-bridge-input:focus {
+  border-color: rgba(100, 210, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(50, 173, 230, 0.18);
+}
+
+.sonic-bridge-swap-btn {
+  width: 36px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.16s ease;
+}
+
+@media (max-width: 640px) {
+  .sonic-bridge-swap-btn {
+    width: 100%;
+    height: 32px;
+  }
+}
+
+.sonic-bridge-swap-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.sonic-bridge-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sonic-bridge-steps-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sonic-bridge-steps-label {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 600;
+}
+
+.sonic-bridge-step-pill {
+  min-width: 34px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sonic-bridge-step-pill.active {
+  background: linear-gradient(135deg, #32ade6, #5e5ce6);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+}
+
+.sonic-bridge-submit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-sonic-bridge-build {
+  min-height: 36px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 210, 255, 0.5);
+  background: linear-gradient(135deg, #32ade6, #5e5ce6);
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+}
+
+.btn-sonic-bridge-build:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.btn-sonic-bridge-autoplay {
+  min-height: 36px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.btn-sonic-bridge-autoplay:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sonic-bridge-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.sonic-bridge-example-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(100, 210, 255, 0.22);
+  background: rgba(50, 173, 230, 0.09);
+  color: rgba(220, 244, 255, 0.9);
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.sonic-bridge-example-chip:hover {
+  background: rgba(50, 173, 230, 0.2);
+  border-color: rgba(100, 210, 255, 0.45);
+  color: #ffffff;
+}
+
+.sonic-bridge-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(100, 210, 255, 0.14);
+  border: 1px solid rgba(100, 210, 255, 0.32);
+  color: #8ee0ff;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bridge-progress-pill {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(94, 92, 230, 0.18);
+  border: 1px solid rgba(100, 210, 255, 0.28);
+  color: #b4e8ff;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+

@@ -1,15 +1,17 @@
 #!/bin/bash
 set -e
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-ROOT_DIR="$( cd "$DIR/.." && pwd )"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DIR="$SCRIPT_DIR"
+ROOT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 APP_NAME="AppleMusicRemoteMac"
-BUILD_DIR="$DIR/build"
+BUILD_DIR="$SCRIPT_DIR/build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 MODULE_CACHE="$ROOT_DIR/build/ModuleCache"
+ENTITLEMENTS_PLIST="$SCRIPT_DIR/Entitlements.plist"
 
 echo "🍎 Building 100% Pure Swift macOS Server: $APP_NAME.app..."
 
@@ -22,16 +24,29 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 SDK_PATH="$(xcrun --show-sdk-path)"
 
 echo "🔄 Syncing Web/* assets with embedded WebUIContent*.swift..."
-python3 - "$DIR" << 'PYEOF'
+if [ -f "$SCRIPT_DIR/Tools/sync_web_ui.py" ]; then
+    python3 "$SCRIPT_DIR/Tools/sync_web_ui.py"
+elif [ -f "$ROOT_DIR/Tools/sync_web_ui.py" ]; then
+    python3 "$ROOT_DIR/Tools/sync_web_ui.py"
+else
+    python3 - "$SCRIPT_DIR" << 'PYEOF'
 import os, re, sys
 base = sys.argv[1]
+
+def choose_hashes(content: str) -> str:
+    n = 3
+    while ('"""' + ('#' * n)) in content:
+        n += 1
+    return '#' * n
+
 for name, sw, prop in [("app.js", "WebUIContent+JS.swift", "appJS"), ("style.css", "WebUIContent+CSS.swift", "styleCSS"), ("index.html", "WebUIContent+HTML.swift", "indexHTML")]:
     web_path = os.path.join(base, "Web", name)
     sw_path = os.path.join(base, "Sources", "AppleMusicRemoteMac", "Server", sw)
     if os.path.isfile(web_path) and os.path.isfile(sw_path):
         with open(web_path, "r", encoding="utf-8") as f:
             web_s = f.read().rstrip("\n")
-        out = f"//\n//  {sw}\n//  AppleMusicRemoteMac\n//\n\nimport Foundation\n\nextension WebUIContent {{\n    public static let {prop}: String = #\"\"\"\n{web_s}\n\"\"\"#\n}}\n"
+        h = choose_hashes(web_s)
+        out = f"//\n//  {sw}\n//  AppleMusicRemoteMac\n//\n\nimport Foundation\n\nextension WebUIContent {{\n    public static let {prop}: String = {h}\"\"\"\n{web_s}\n\"\"\"{h}\n}}\n"
         with open(sw_path, "r", encoding="utf-8") as f:
             cur_s = f.read()
         if cur_s != out:
@@ -48,30 +63,35 @@ if os.path.isfile(core_sw_path):
         if os.path.isfile(web_path):
             with open(web_path, "r", encoding="utf-8") as f:
                 web_s = f.read().rstrip("\n")
+            h = choose_hashes(web_s)
             for prop in props:
-                pattern = rf'(public\s+static\s+let\s+{prop}\s*:\s*String\s*=\s*)(?:#"""|""")\n.*?\n\s*(?:"""#|""")'
-                core_s = re.sub(pattern, lambda m: f'{m.group(1)}#"""\n{web_s}\n"""#', core_s, flags=re.DOTALL)
+                pattern = rf'(public\s+static\s+let\s+{prop}\s*:\s*String\s*=\s*)(#+"""|""")\n.*?\n\s*(?:"""#+|""")'
+                core_s = re.sub(pattern, lambda m, ws=web_s, hh=h: f'{m.group(1)}{hh}"""\n{ws}\n"""{hh}', core_s, flags=re.DOTALL)
     if core_s != orig_core_s:
         with open(core_sw_path, "w", encoding="utf-8") as f:
             f.write(core_s)
 PYEOF
+fi
 
 echo "⚡ Compiling Swift sources with swiftc..."
 SWIFT_SOURCES=()
 while IFS= read -r -d '' file; do
     SWIFT_SOURCES+=("$file")
-done < <(find "$DIR/Sources/AppleMusicRemoteMac" -name "*.swift" -print0)
+done < <(find "$SCRIPT_DIR/Sources/AppleMusicRemoteMac" -name "*.swift" -print0)
 
 swiftc -parse-as-library \
-    -O \
+    -O -whole-module-optimization \
     -sdk "$SDK_PATH" \
     -module-cache-path "$MODULE_CACHE" \
     -target arm64-apple-macosx14.0 \
     -framework Cocoa \
+    -framework ApplicationServices \
     -framework Network \
     -framework ScriptingBridge \
     -framework CoreImage \
     -framework CoreAudio \
+    -framework AudioToolbox \
+    -framework Metal \
     -framework Accelerate \
     -framework NaturalLanguage \
     -framework PDFKit \
@@ -81,10 +101,11 @@ swiftc -parse-as-library \
     -o "$MACOS_DIR/$APP_NAME"
 
 # Copy Web UI Assets into App Bundle
-if [ -d "$DIR/Web" ]; then
+if [ -d "$SCRIPT_DIR/Web" ]; then
     echo "📦 Packaging Web UI assets into Resources/Web..."
     mkdir -p "$RESOURCES_DIR/Web"
-    cp -R "$DIR/Web/"* "$RESOURCES_DIR/Web/"
+    cp -R "$SCRIPT_DIR/Web/"* "$RESOURCES_DIR/Web/"
+    rm -rf "$RESOURCES_DIR/Web/src"
 fi
 
 # Copy Icon & MusicKit Auth Key
@@ -150,9 +171,9 @@ cat << EOF > "$CONTENTS_DIR/Info.plist"
     <key>CFBundleIdentifier</key>
     <string>org.ksholokhov.amr.mac</string>
     <key>CFBundleVersion</key>
-    <string>2.5.0</string>
+    <string>3.0.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.5.0</string>
+    <string>3.0.0</string>
     <key>AMRGitCommit</key>
     <string>$GIT_COMMIT_SHORT</string>
     <key>AMRGitCommitDate</key>
@@ -195,10 +216,11 @@ chmod +x "$MACOS_DIR/$APP_NAME"
 DEV_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -n 1 | awk -F'"' '{print $2}')
 if [ -n "$DEV_IDENTITY" ]; then
     echo "🔏 Signing macOS App with Apple Developer identity: $DEV_IDENTITY"
-    codesign -s "$DEV_IDENTITY" --force --deep "$APP_BUNDLE" 2>/dev/null || codesign -s - --force --deep "$APP_BUNDLE"
+    codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" -s "$DEV_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
+        || codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" -s - "$APP_BUNDLE"
 else
-    echo "🔏 Signing macOS App ad-hoc..."
-    codesign -s - --force --deep "$APP_BUNDLE"
+    echo "🔏 Signing macOS App ad-hoc with hardened runtime & entitlements..."
+    codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" -s - "$APP_BUNDLE"
 fi
 
 echo "✅ Pure Swift macOS App built successfully at:"

@@ -19,7 +19,10 @@ let package = Package(
         .executableTarget(
             name: "AppleMusicRemoteMac",
             dependencies: [],
-            path: "Sources/AppleMusicRemoteMac"
+            path: "Sources/AppleMusicRemoteMac",
+            resources: [
+                .copy("DSP/Oversampling/Shaders/PolyphaseOverlapSave.metal")
+            ]
         ),
         .testTarget(
             name: "AppleMusicRemoteMacTests",
