@@ -284,7 +284,9 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             rawCid = cached
         }
         if rawCid == nil && !cleanName.isEmpty {
-            if let sfCid = MusicKitManager.shared.resolveCatalogSongIdInUserStorefrontSync(name: cleanName, artist: cleanArtist), !sfCid.isEmpty {
+            if let sfCid = awaitCatalogLookup({
+                await MusicKitManager.shared.resolveCatalogSongIdInUserStorefront(name: cleanName, artist: cleanArtist)
+            }), !sfCid.isEmpty {
                 rawCid = sfCid
             }
         }
@@ -298,12 +300,16 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             triedIds.insert(prefAlt.id)
             MusicKitManager.shared.appendCachedTitleVariant(catalogId: originalCid, name: prefAlt.name, artist: prefAlt.artist)
         } else if MusicKitManager.shared.isUnstageableCatalogId(targetCid) {
-            if let firstAlt = MusicKitManager.shared.resolveAlternateCatalogSongsSync(
-                catalogId: targetCid,
-                name: cleanName,
-                artist: cleanArtist,
-                excludingIds: triedIds
-            ).first {
+            let unstageableCid = targetCid
+            let excludedSnap = triedIds
+            if let firstAlt = awaitCatalogLookup({
+                await MusicKitManager.shared.resolveAlternateCatalogSongs(
+                    catalogId: unstageableCid,
+                    name: cleanName,
+                    artist: cleanArtist,
+                    excludingIds: excludedSnap
+                ).first
+            }) {
                 MusicKitManager.shared.recordPreferredAlternateCatalogSong(for: originalCid, alternate: firstAlt)
                 targetCid = firstAlt.id
                 triedIds.insert(firstAlt.id)
@@ -312,19 +318,22 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             }
         }
 
-        // Verify availability in active storefront (`HTTP 404` -> `durationSeconds == nil`, e.g. JP `1508103497` -> US `1508140810`)
-        var inspection = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibilitySync(catalogId: targetCid)
+        // Fast 0 ms RAM cache check before starting MPMusicPlayerController; if cached as 404 (`durationSeconds == nil`), switch storefront ID first
+        var inspection = MusicKitManager.shared.cachedDirectCloudEligibility(catalogId: targetCid)
         if let info = inspection, info.durationSeconds == nil, !cleanName.isEmpty {
-            if let sfAlt = MusicKitManager.shared.resolveAlternateCatalogSongsSync(
-                catalogId: originalCid,
-                name: cleanName,
-                artist: cleanArtist,
-                excludingIds: triedIds
-            ).first {
+            let excludedSnap = triedIds
+            if let sfAlt = awaitCatalogLookup({
+                await MusicKitManager.shared.resolveAlternateCatalogSongs(
+                    catalogId: originalCid,
+                    name: cleanName,
+                    artist: cleanArtist,
+                    excludingIds: excludedSnap
+                ).first
+            }) {
                 MusicKitManager.shared.recordPreferredAlternateCatalogSong(for: originalCid, alternate: sfAlt)
                 targetCid = sfAlt.id
                 triedIds.insert(sfAlt.id)
-                inspection = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibilitySync(catalogId: targetCid)
+                inspection = MusicKitManager.shared.cachedDirectCloudEligibility(catalogId: targetCid)
             }
         }
 
@@ -341,7 +350,7 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             }
         }
 
-        // 2. Populate localized title/artist variants (`名前を呼ぶよ` <-> `Namae wo Yobuyo`) immediately + async
+        // 2. Populate localized title/artist variants (`名前を呼ぶよ` <-> `Namae wo Yobuyo`) immediately from cache + concurrently via async Task while Music.app buffers
         var initialVariants = MusicKitManager.shared.cachedTitleVariants(catalogId: originalCid)
         for v in MusicKitManager.shared.cachedTitleVariants(catalogId: targetCid)
             where !initialVariants.contains(where: { $0.name == v.name && $0.artist == v.artist }) {
@@ -360,17 +369,39 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
                 }
             }
         }
-        let cidForAsyncVariants = targetCid
-        DispatchQueue.global(qos: .userInitiated).async {
-            let fetched = MusicKitManager.shared.resolveCatalogSongTitleVariantsSync(catalogId: cidForAsyncVariants)
-            guard !fetched.isEmpty else { return }
+        let cidForAsyncWarmup = targetCid
+        Task.detached(priority: .userInitiated) { [weak self] in
+            async let inspTask = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibility(catalogId: cidForAsyncWarmup)
+            async let varsTask = MusicKitManager.shared.resolveCatalogSongTitleVariants(catalogId: cidForAsyncWarmup)
+            let (asyncInsp, fetched) = await (inspTask, varsTask)
+            var didUpdateVariants = false
             PlaybackStateStore.shared.withLock {
                 guard PlaybackStateStore.shared.playbackGeneration == expectedGeneration else { return }
+                if let durSec = asyncInsp?.durationSeconds, durSec > 0 {
+                    let idx = PlaybackStateStore.shared.activeCustomQueueIndex
+                    if idx >= 0 && idx < PlaybackStateStore.shared.activeCustomQueue.count,
+                       PlaybackStateStore.shared.activeCustomQueue[idx].duration <= 0 {
+                        PlaybackStateStore.shared.activeCustomQueue[idx].duration = durSec
+                    }
+                }
                 var merged = PlaybackStateStore.shared.activeTrackTitleVariants
+                if let catName = asyncInsp?.catalogName, !catName.isEmpty {
+                    let catArt = asyncInsp?.catalogArtist ?? cleanArtist
+                    if !merged.contains(where: { $0.name == catName && $0.artist == catArt }) {
+                        merged.append((name: catName, artist: catArt))
+                        didUpdateVariants = true
+                    }
+                }
                 for v in fetched where !merged.contains(where: { $0.name == v.name && $0.artist == v.artist }) {
                     merged.append(v)
+                    didUpdateVariants = true
                 }
-                PlaybackStateStore.shared.activeTrackTitleVariants = merged
+                if didUpdateVariants {
+                    PlaybackStateStore.shared.activeTrackTitleVariants = merged
+                }
+            }
+            if didUpdateVariants, let self = self {
+                self.broadcastNotifCondition()
             }
         }
 
@@ -480,12 +511,15 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
 
         // 4. ISRC / Multi-Locale Alternate Fallback for distributor-broken IDs (e.g. `6829729404` -> `6817136270`)
         guard isGenValid() else { return false }
-        let alternates = MusicKitManager.shared.resolveAlternateCatalogSongsSync(
-            catalogId: originalCid,
-            name: cleanName,
-            artist: cleanArtist,
-            excludingIds: triedIds
-        )
+        let alternatesSnapshot = triedIds
+        let alternates = awaitCatalogLookup({
+            await MusicKitManager.shared.resolveAlternateCatalogSongs(
+                catalogId: originalCid,
+                name: cleanName,
+                artist: cleanArtist,
+                excludingIds: alternatesSnapshot
+            )
+        }) ?? []
         for alt in alternates.prefix(2) {
             guard isGenValid() else { return false }
             triedIds.insert(alt.id)
@@ -533,5 +567,50 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
         }
 
         return false
+    }
+
+    private func broadcastNotifCondition() {
+        notifCondition.lock()
+        notifCondition.broadcast()
+        notifCondition.unlock()
+    }
+
+    private func awaitCatalogLookup<T>(_ operation: @escaping @Sendable () async -> T?, timeout: TimeInterval = 4.0) -> T? {
+        let box = CatalogLookupWaitBox<T>()
+        let task = Task.detached(priority: .userInitiated) {
+            let res = await operation()
+            box.complete(with: res)
+        }
+        let result = box.waitForResult(timeout: timeout)
+        if !result.finished {
+            task.cancel()
+        }
+        return result.value
+    }
+}
+
+private final class CatalogLookupWaitBox<T>: @unchecked Sendable {
+    private let cond = NSCondition()
+    private var finished = false
+    private var value: T?
+
+    func complete(with result: T?) {
+        cond.lock()
+        value = result
+        finished = true
+        cond.signal()
+        cond.unlock()
+    }
+
+    func waitForResult(timeout: TimeInterval) -> (finished: Bool, value: T?) {
+        let deadline = Date().addingTimeInterval(timeout)
+        cond.lock()
+        while !finished && Date() < deadline {
+            _ = cond.wait(until: deadline)
+        }
+        let done = finished
+        let out = value
+        cond.unlock()
+        return (done, out)
     }
 }

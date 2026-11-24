@@ -80,7 +80,7 @@ public enum WebUIContent {
 
     public static let swJS: String = #"""
 // Apple Music Remote (AMR) - Service Worker for PWA
-const CACHE_NAME = 'amr-shell-5931dc28';
+const CACHE_NAME = 'amr-shell-988a586e';
 
 const SHELL_PATHS = new Set([
   '/',

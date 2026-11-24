@@ -2,8 +2,8 @@
 //  AudioProcessTapService+StreamRingAndIOProc.swift
 //  AppleMusicRemoteMac
 //
-//  Real-Time CoreAudio IOProc Input Dispatcher, Lock-Free Stream PCM Ring Buffer,
-//  Block Pre-DSP Quantizer & Silence / Idle Auto-Suspend Watchdog
+//  Real-Time CoreAudio IOProc Input Handler, Lock-Free Float32 Stream Ring Offload,
+//  TPDF Dithered Quantization, Subscriber Chunk Dispatcher & Silence Fallback Generator.
 //
 
 import Foundation
@@ -13,7 +13,7 @@ import os
 
 extension AudioProcessTapService {
 
-    // MARK: - CoreAudio Audio Processing
+    // MARK: - CoreAudio Audio Processing (Zero Heap Allocations, Zero Heavy DSP in RT IOProc)
 
     internal func processCoreAudioInput(inInputData: UnsafePointer<AudioBufferList>) {
         let bufferList = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inInputData))
@@ -21,11 +21,10 @@ extension AudioProcessTapService {
 
         os_unfair_lock_lock(&mutingGuardSpinLock)
         let hasStreamSubscribers = hasActiveSubscribersFlag
+        let isZeroFillGuard = isMutingGuardZeroFill
         os_unfair_lock_unlock(&mutingGuardSpinLock)
 
-        let currentDepth = self.bitDepth
-        let currentBytesPerFrame = self.channels * (currentDepth / 8)
-        var queuedStreamBytes = false
+        var queuedStreamFrames = false
         var processedFrames = 0
         var blockPeakAbs: Float = 0.0
 
@@ -69,21 +68,15 @@ extension AudioProcessTapService {
             )
 
             if hasStreamSubscribers {
-                if isZeroFillingForMutingGuard {
-                    enqueueZeroBytesToStreamRing(byteCount: frameCount * currentBytesPerFrame, bytesPerFrame: currentBytesPerFrame)
-                } else if RoomAcousticService.shared.isTestSignalPlaying {
-                    enqueuePinkNoiseToStreamRing(frameCount: frameCount, bitDepth: currentDepth, bytesPerFrame: currentBytesPerFrame)
+                if isZeroFillGuard || RoomAcousticService.shared.isTestSignalPlaying {
+                    queuedStreamFrames = streamFloatRingBuffer.writeZeros(frameCount: frameCount) > 0
                 } else {
-                    enqueuePlanarStreamWithBlockPreDSP(
-                        leftSource: leftPtr,
-                        rightSource: rightPtr,
-                        frameCount: frameCount,
-                        sampleRate: currentRate,
-                        bitDepth: currentDepth,
-                        bytesPerFrame: currentBytesPerFrame
-                    )
+                    queuedStreamFrames = streamFloatRingBuffer.writePlanar(
+                        left: leftPtr,
+                        right: rightPtr,
+                        frameCount: frameCount
+                    ) > 0
                 }
-                queuedStreamBytes = true
             }
         } else if let firstBuffer = bufferList.first, let rawData = firstBuffer.mData {
             // Interleaved audio (Buffer 0: L, R, ... or mono/multichannel)
@@ -121,21 +114,15 @@ extension AudioProcessTapService {
             )
 
             if hasStreamSubscribers {
-                if isZeroFillingForMutingGuard {
-                    enqueueZeroBytesToStreamRing(byteCount: frameCount * currentBytesPerFrame, bytesPerFrame: currentBytesPerFrame)
-                } else if RoomAcousticService.shared.isTestSignalPlaying {
-                    enqueuePinkNoiseToStreamRing(frameCount: frameCount, bitDepth: currentDepth, bytesPerFrame: currentBytesPerFrame)
+                if isZeroFillGuard || RoomAcousticService.shared.isTestSignalPlaying {
+                    queuedStreamFrames = streamFloatRingBuffer.writeZeros(frameCount: frameCount) > 0
                 } else {
-                    enqueueInterleavedStreamWithBlockPreDSP(
-                        interleavedSource: floatPtr,
-                        srcChannels: srcChannels,
+                    queuedStreamFrames = streamFloatRingBuffer.writeInterleaved(
+                        interleaved: floatPtr,
                         frameCount: frameCount,
-                        sampleRate: currentRate,
-                        bitDepth: currentDepth,
-                        bytesPerFrame: currentBytesPerFrame
-                    )
+                        channels: srcChannels
+                    ) > 0
                 }
-                queuedStreamBytes = true
             }
         } else {
             return
@@ -155,7 +142,7 @@ extension AudioProcessTapService {
             shouldNotifyNonZeroSignal = true
         } else if processedFrames > 0
                     && isTapMuted
-                    && !isZeroFillingForMutingGuard
+                    && !isZeroFillGuard
                     && isAnalyzerPlaying {
             let blockDurSec = Double(processedFrames) / Double(max(44_100, sampleRate))
             mutedZeroSignalAccumulatedSec += blockDurSec
@@ -168,251 +155,37 @@ extension AudioProcessTapService {
         }
         os_unfair_lock_unlock(&silenceSpinLock)
 
+        var controlFlags: UInt = 0
         if shouldNotifyNonZeroSignal && RoomAcousticService.shared.isSuspendedDueToZeroedTap {
-            queue.async {
-                RoomAcousticService.shared.notifyNonZeroTapSignalDetected()
-            }
+            controlFlags |= Self.tapControlSignalNonZeroDetected
         } else if shouldSuspendMutedPassthrough && RoomAcousticService.shared.isLocalPassthroughEQActive {
-            queue.async {
-                RoomAcousticService.shared.suspendLocalPassthroughDueToZeroedTap()
-            }
+            controlFlags |= Self.tapControlSignalSuspendZeroedPassthrough
+        }
+        if controlFlags != 0 {
+            tapControlSignalSource.or(data: controlFlags)
         }
 
-        if queuedStreamBytes {
+        if queuedStreamFrames {
             streamDrainSignalSource.add(data: 1)
         }
     }
 
+    // MARK: - TPDF Dither PRNG & PCM Quantization
+
     @inline(__always)
-    internal func pushPCMBytesToStreamRing(
-        _ srcPtr: UnsafePointer<UInt8>,
-        byteCount: Int,
-        bytesPerFrame: Int
-    ) {
-        guard byteCount > 0, bytesPerFrame > 0 else { return }
-        let alignedCount = byteCount - (byteCount % bytesPerFrame)
-        guard alignedCount > 0 else { return }
-
-        os_unfair_lock_lock(&streamPCMRingSpinLock)
-        if streamPCMRingBytesPerFrame != bytesPerFrame {
-            streamPCMRingReadIdx = 0
-            streamPCMRingWriteIdx = 0
-            streamPCMRingCount = 0
-            streamPCMRingBytesPerFrame = bytesPerFrame
-        }
-
-        let maxFrameAlignedCapacity = Self.streamPCMRingCapacity - (Self.streamPCMRingCapacity % bytesPerFrame)
-        let startOffset: Int
-        let countToWrite: Int
-        if alignedCount > maxFrameAlignedCapacity {
-            countToWrite = maxFrameAlignedCapacity
-            startOffset = alignedCount - maxFrameAlignedCapacity
-        } else {
-            countToWrite = alignedCount
-            startOffset = 0
-        }
-
-        var wIdx = streamPCMRingWriteIdx
-        var rIdx = streamPCMRingReadIdx
-        var count = streamPCMRingCount
-
-        if count + countToWrite > maxFrameAlignedCapacity {
-            let overflow = (count + countToWrite) - maxFrameAlignedCapacity
-            let dropBytes = ((overflow + bytesPerFrame - 1) / bytesPerFrame) * bytesPerFrame
-            let clampedDrop = min(count, dropBytes)
-            rIdx = (rIdx + clampedDrop) & Self.streamPCMRingMask
-            count -= clampedDrop
-        }
-
-        for i in 0..<countToWrite {
-            streamPCMRingBuffer[wIdx] = srcPtr[startOffset + i]
-            wIdx = (wIdx + 1) & Self.streamPCMRingMask
-        }
-        count += countToWrite
-
-        streamPCMRingWriteIdx = wIdx
-        streamPCMRingReadIdx = rIdx
-        streamPCMRingCount = count
-        os_unfair_lock_unlock(&streamPCMRingSpinLock)
+    internal static func nextUniformFloat(_ state: inout UInt64) -> Float {
+        state ^= state >> 12
+        state ^= state << 25
+        state ^= state >> 27
+        let mixed = state &* 0x2545_F491_4F6C_DD1D
+        return Float(mixed >> 40) * (1.0 / 16_777_216.0)
     }
 
-    internal func enqueueZeroBytesToStreamRing(byteCount: Int, bytesPerFrame: Int) {
-        guard byteCount > 0, bytesPerFrame > 0 else { return }
-        let alignedCount = byteCount - (byteCount % bytesPerFrame)
-        guard alignedCount > 0 else { return }
-
-        os_unfair_lock_lock(&streamPCMRingSpinLock)
-        if streamPCMRingBytesPerFrame != bytesPerFrame {
-            streamPCMRingReadIdx = 0
-            streamPCMRingWriteIdx = 0
-            streamPCMRingCount = 0
-            streamPCMRingBytesPerFrame = bytesPerFrame
-        }
-        let maxFrameAlignedCapacity = Self.streamPCMRingCapacity - (Self.streamPCMRingCapacity % bytesPerFrame)
-        let countToWrite = min(alignedCount, maxFrameAlignedCapacity)
-        var wIdx = streamPCMRingWriteIdx
-        var rIdx = streamPCMRingReadIdx
-        var count = streamPCMRingCount
-
-        if count + countToWrite > maxFrameAlignedCapacity {
-            let overflow = (count + countToWrite) - maxFrameAlignedCapacity
-            let dropBytes = ((overflow + bytesPerFrame - 1) / bytesPerFrame) * bytesPerFrame
-            let clampedDrop = min(count, dropBytes)
-            rIdx = (rIdx + clampedDrop) & Self.streamPCMRingMask
-            count -= clampedDrop
-        }
-        for _ in 0..<countToWrite {
-            streamPCMRingBuffer[wIdx] = 0
-            wIdx = (wIdx + 1) & Self.streamPCMRingMask
-        }
-        count += countToWrite
-        streamPCMRingWriteIdx = wIdx
-        streamPCMRingReadIdx = rIdx
-        streamPCMRingCount = count
-        os_unfair_lock_unlock(&streamPCMRingSpinLock)
-    }
-
-    internal func enqueuePinkNoiseToStreamRing(
-        frameCount: Int,
-        bitDepth: Int,
-        bytesPerFrame: Int
-    ) {
-        os_unfair_lock_lock(&streamScratchSpinLock)
-        defer { os_unfair_lock_unlock(&streamScratchSpinLock) }
-
-        var offset = 0
-        while offset < frameCount {
-            let tileCount = min(Self.streamScratchTileFrames, frameCount - offset)
-            RoomAcousticService.shared.fillPinkNoiseStereoFloat32(
-                left: streamScratchL,
-                right: streamScratchR,
-                frameCount: tileCount
-            )
-            var dstIdx = 0
-            quantizeScratchTileToPCMBytes(
-                left: streamScratchL,
-                right: streamScratchR,
-                tileCount: tileCount,
-                bitDepth: bitDepth,
-                dstPtr: streamScratchPCMBytes,
-                dstIdx: &dstIdx
-            )
-            pushPCMBytesToStreamRing(streamScratchPCMBytes, byteCount: dstIdx, bytesPerFrame: bytesPerFrame)
-            offset += tileCount
-        }
-    }
-
-    internal func enqueuePlanarStreamWithBlockPreDSP(
-        leftSource: UnsafePointer<Float>,
-        rightSource: UnsafePointer<Float>,
-        frameCount: Int,
-        sampleRate: Int,
-        bitDepth: Int,
-        bytesPerFrame: Int
-    ) {
-        let currentRateDouble = Double(max(44_100, sampleRate))
-        os_unfair_lock_lock(&streamScratchSpinLock)
-        defer { os_unfair_lock_unlock(&streamScratchSpinLock) }
-
-        var offset = 0
-        while offset < frameCount {
-            let tileCount = min(Self.streamScratchTileFrames, frameCount - offset)
-            streamScratchL.update(from: leftSource.advanced(by: offset), count: tileCount)
-            streamScratchR.update(from: rightSource.advanced(by: offset), count: tileCount)
-
-            MasteringRestorationService.shared.processStreamPlanarFloat32IfEnabled(
-                left: streamScratchL,
-                right: streamScratchR,
-                frameCount: tileCount,
-                sampleRate: currentRateDouble
-            )
-            RoomAcousticService.shared.processStreamPlanarFloat32IfEnabled(
-                left: streamScratchL,
-                right: streamScratchR,
-                frameCount: tileCount,
-                sampleRate: sampleRate
-            )
-            LateNightDRCService.shared.processStreamPlanarFloat32IfEnabled(
-                left: streamScratchL,
-                right: streamScratchR,
-                frameCount: tileCount,
-                sampleRate: currentRateDouble
-            )
-
-            var dstIdx = 0
-            quantizeScratchTileToPCMBytes(
-                left: streamScratchL,
-                right: streamScratchR,
-                tileCount: tileCount,
-                bitDepth: bitDepth,
-                dstPtr: streamScratchPCMBytes,
-                dstIdx: &dstIdx
-            )
-            pushPCMBytesToStreamRing(streamScratchPCMBytes, byteCount: dstIdx, bytesPerFrame: bytesPerFrame)
-            offset += tileCount
-        }
-    }
-
-    internal func enqueueInterleavedStreamWithBlockPreDSP(
-        interleavedSource: UnsafePointer<Float>,
-        srcChannels: Int,
-        frameCount: Int,
-        sampleRate: Int,
-        bitDepth: Int,
-        bytesPerFrame: Int
-    ) {
-        let currentRateDouble = Double(max(44_100, sampleRate))
-        os_unfair_lock_lock(&streamScratchSpinLock)
-        defer { os_unfair_lock_unlock(&streamScratchSpinLock) }
-
-        var offset = 0
-        while offset < frameCount {
-            let tileCount = min(Self.streamScratchTileFrames, frameCount - offset)
-            if srcChannels >= 2 {
-                for i in 0..<tileCount {
-                    let base = (offset + i) * srcChannels
-                    streamScratchL[i] = interleavedSource[base]
-                    streamScratchR[i] = interleavedSource[base + 1]
-                }
-            } else {
-                for i in 0..<tileCount {
-                    let v = interleavedSource[offset + i]
-                    streamScratchL[i] = v
-                    streamScratchR[i] = v
-                }
-            }
-
-            MasteringRestorationService.shared.processStreamPlanarFloat32IfEnabled(
-                left: streamScratchL,
-                right: streamScratchR,
-                frameCount: tileCount,
-                sampleRate: currentRateDouble
-            )
-            RoomAcousticService.shared.processStreamPlanarFloat32IfEnabled(
-                left: streamScratchL,
-                right: streamScratchR,
-                frameCount: tileCount,
-                sampleRate: sampleRate
-            )
-            LateNightDRCService.shared.processStreamPlanarFloat32IfEnabled(
-                left: streamScratchL,
-                right: streamScratchR,
-                frameCount: tileCount,
-                sampleRate: currentRateDouble
-            )
-
-            var dstIdx = 0
-            quantizeScratchTileToPCMBytes(
-                left: streamScratchL,
-                right: streamScratchR,
-                tileCount: tileCount,
-                bitDepth: bitDepth,
-                dstPtr: streamScratchPCMBytes,
-                dstIdx: &dstIdx
-            )
-            pushPCMBytesToStreamRing(streamScratchPCMBytes, byteCount: dstIdx, bytesPerFrame: bytesPerFrame)
-            offset += tileCount
-        }
+    @inline(__always)
+    internal static func nextTPDFSample(_ state: inout UInt64) -> Float {
+        let u1 = nextUniformFloat(&state)
+        let u2 = nextUniformFloat(&state)
+        return u1 - u2
     }
 
     @inline(__always)
@@ -422,75 +195,169 @@ extension AudioProcessTapService {
         tileCount: Int,
         bitDepth: Int,
         dstPtr: UnsafeMutablePointer<UInt8>,
-        dstIdx: inout Int
+        dstIdx: inout Int,
+        enableTPDFDither: Bool = true
     ) {
-        if bitDepth == 16 {
-            for i in 0..<tileCount {
-                let leftFloat = max(-1.0, min(1.0, left[i]))
-                let rightFloat = max(-1.0, min(1.0, right[i]))
-                let leftInt16 = Int16(round(leftFloat * 32767.0))
-                dstPtr[dstIdx] = UInt8(leftInt16 & 0xFF)
-                dstPtr[dstIdx + 1] = UInt8((leftInt16 >> 8) & 0xFF)
-                dstIdx += 2
+        var seedL = ditherSeedL
+        var seedR = ditherSeedR
+        defer {
+            ditherSeedL = seedL
+            ditherSeedR = seedR
+        }
 
-                let rightInt16 = Int16(round(rightFloat * 32767.0))
-                dstPtr[dstIdx] = UInt8(rightInt16 & 0xFF)
-                dstPtr[dstIdx + 1] = UInt8((rightInt16 >> 8) & 0xFF)
-                dstIdx += 2
+        if bitDepth == 16 {
+            if enableTPDFDither {
+                for i in 0..<tileCount {
+                    let leftFloat = max(-1.0, min(1.0, left[i]))
+                    let rightFloat = max(-1.0, min(1.0, right[i]))
+                    let dL = Self.nextTPDFSample(&seedL)
+                    let dR = Self.nextTPDFSample(&seedR)
+
+                    let leftInt16 = Int16(clamping: Int32((leftFloat * 32767.0 + dL).rounded()))
+                    let leftBits = UInt16(bitPattern: leftInt16)
+                    dstPtr[dstIdx] = UInt8(truncatingIfNeeded: leftBits)
+                    dstPtr[dstIdx + 1] = UInt8(truncatingIfNeeded: leftBits >> 8)
+                    dstIdx += 2
+
+                    let rightInt16 = Int16(clamping: Int32((rightFloat * 32767.0 + dR).rounded()))
+                    let rightBits = UInt16(bitPattern: rightInt16)
+                    dstPtr[dstIdx] = UInt8(truncatingIfNeeded: rightBits)
+                    dstPtr[dstIdx + 1] = UInt8(truncatingIfNeeded: rightBits >> 8)
+                    dstIdx += 2
+                }
+            } else {
+                for i in 0..<tileCount {
+                    let leftFloat = max(-1.0, min(1.0, left[i]))
+                    let rightFloat = max(-1.0, min(1.0, right[i]))
+                    let leftInt16 = Int16(clamping: Int32((leftFloat * 32767.0).rounded()))
+                    let leftBits = UInt16(bitPattern: leftInt16)
+                    dstPtr[dstIdx] = UInt8(truncatingIfNeeded: leftBits)
+                    dstPtr[dstIdx + 1] = UInt8(truncatingIfNeeded: leftBits >> 8)
+                    dstIdx += 2
+
+                    let rightInt16 = Int16(clamping: Int32((rightFloat * 32767.0).rounded()))
+                    let rightBits = UInt16(bitPattern: rightInt16)
+                    dstPtr[dstIdx] = UInt8(truncatingIfNeeded: rightBits)
+                    dstPtr[dstIdx + 1] = UInt8(truncatingIfNeeded: rightBits >> 8)
+                    dstIdx += 2
+                }
             }
         } else {
-            for i in 0..<tileCount {
-                let leftFloat = max(-1.0, min(1.0, left[i]))
-                let rightFloat = max(-1.0, min(1.0, right[i]))
-                let leftInt32 = Int32(round(leftFloat * 8388607.0))
-                dstPtr[dstIdx] = UInt8(leftInt32 & 0xFF)
-                dstPtr[dstIdx + 1] = UInt8((leftInt32 >> 8) & 0xFF)
-                dstPtr[dstIdx + 2] = UInt8((leftInt32 >> 16) & 0xFF)
-                dstIdx += 3
+            if enableTPDFDither {
+                for i in 0..<tileCount {
+                    let leftFloat = max(-1.0, min(1.0, left[i]))
+                    let rightFloat = max(-1.0, min(1.0, right[i]))
+                    let dL = Self.nextTPDFSample(&seedL)
+                    let dR = Self.nextTPDFSample(&seedR)
 
-                let rightInt32 = Int32(round(rightFloat * 8388607.0))
-                dstPtr[dstIdx] = UInt8(rightInt32 & 0xFF)
-                dstPtr[dstIdx + 1] = UInt8((rightInt32 >> 8) & 0xFF)
-                dstPtr[dstIdx + 2] = UInt8((rightInt32 >> 16) & 0xFF)
-                dstIdx += 3
+                    let leftInt32 = max(-8_388_608, min(8_388_607, Int32((leftFloat * 8_388_607.0 + dL).rounded())))
+                    let leftBits = UInt32(bitPattern: leftInt32)
+                    dstPtr[dstIdx] = UInt8(truncatingIfNeeded: leftBits)
+                    dstPtr[dstIdx + 1] = UInt8(truncatingIfNeeded: leftBits >> 8)
+                    dstPtr[dstIdx + 2] = UInt8(truncatingIfNeeded: leftBits >> 16)
+                    dstIdx += 3
+
+                    let rightInt32 = max(-8_388_608, min(8_388_607, Int32((rightFloat * 8_388_607.0 + dR).rounded())))
+                    let rightBits = UInt32(bitPattern: rightInt32)
+                    dstPtr[dstIdx] = UInt8(truncatingIfNeeded: rightBits)
+                    dstPtr[dstIdx + 1] = UInt8(truncatingIfNeeded: rightBits >> 8)
+                    dstPtr[dstIdx + 2] = UInt8(truncatingIfNeeded: rightBits >> 16)
+                    dstIdx += 3
+                }
+            } else {
+                for i in 0..<tileCount {
+                    let leftFloat = max(-1.0, min(1.0, left[i]))
+                    let rightFloat = max(-1.0, min(1.0, right[i]))
+                    let leftInt32 = max(-8_388_608, min(8_388_607, Int32((leftFloat * 8_388_607.0).rounded())))
+                    let leftBits = UInt32(bitPattern: leftInt32)
+                    dstPtr[dstIdx] = UInt8(truncatingIfNeeded: leftBits)
+                    dstPtr[dstIdx + 1] = UInt8(truncatingIfNeeded: leftBits >> 8)
+                    dstPtr[dstIdx + 2] = UInt8(truncatingIfNeeded: leftBits >> 16)
+                    dstIdx += 3
+
+                    let rightInt32 = max(-8_388_608, min(8_388_607, Int32((rightFloat * 8_388_607.0).rounded())))
+                    let rightBits = UInt32(bitPattern: rightInt32)
+                    dstPtr[dstIdx] = UInt8(truncatingIfNeeded: rightBits)
+                    dstPtr[dstIdx + 1] = UInt8(truncatingIfNeeded: rightBits >> 8)
+                    dstPtr[dstIdx + 2] = UInt8(truncatingIfNeeded: rightBits >> 16)
+                    dstIdx += 3
+                }
             }
         }
     }
 
-    internal func drainStreamPCMRingBufferOnQueue() {
-        while true {
-            var ringBPF = 4
-            os_unfair_lock_lock(&streamPCMRingSpinLock)
-            let available = streamPCMRingCount
-            if available <= 0 {
-                os_unfair_lock_unlock(&streamPCMRingSpinLock)
-                return
-            }
-            ringBPF = max(1, streamPCMRingBytesPerFrame)
-            let rawRead = min(available, Self.streamDrainChunkBytes)
-            let alignedRead = rawRead - (rawRead % ringBPF)
-            if alignedRead <= 0 {
-                streamPCMRingReadIdx = 0
-                streamPCMRingWriteIdx = 0
-                streamPCMRingCount = 0
-                os_unfair_lock_unlock(&streamPCMRingSpinLock)
-                return
-            }
-            streamDrainScratch.removeAll(keepingCapacity: true)
-            var rIdx = streamPCMRingReadIdx
-            for _ in 0..<alignedRead {
-                streamDrainScratch.append(streamPCMRingBuffer[rIdx])
-                rIdx = (rIdx + 1) & Self.streamPCMRingMask
-            }
-            streamPCMRingReadIdx = rIdx
-            streamPCMRingCount = available - alignedRead
-            os_unfair_lock_unlock(&streamPCMRingSpinLock)
+    // MARK: - Non-RT Stream Pre-DSP & Drain Loop (Runs on `queue`)
 
-            streamDrainScratch.withUnsafeBufferPointer { bufPtr in
-                if let base = bufPtr.baseAddress {
-                    appendStreamBytesOnQueue(base, count: bufPtr.count, chunkBytesPerFrame: ringBPF)
-                }
+    internal func drainStreamPCMRingBufferOnQueue() {
+        let currentRate = self.sampleRate
+        let currentRateDouble = Double(max(44_100, currentRate))
+        let currentDepth = self.bitDepth
+        let currentBPF = max(1, self.channels * (currentDepth / 8))
+
+        while true {
+            os_unfair_lock_lock(&streamScratchSpinLock)
+            let tileCount = streamFloatRingBuffer.readPlanar(
+                intoLeft: streamScratchL,
+                intoRight: streamScratchR,
+                maxFrames: Self.streamScratchTileFrames
+            )
+            if tileCount <= 0 {
+                os_unfair_lock_unlock(&streamScratchSpinLock)
+                return
             }
+
+            var dstIdx = 0
+            if isZeroFillingForMutingGuard {
+                let zeroBytes = tileCount * currentBPF
+                memset(streamScratchPCMBytes, 0, zeroBytes)
+                dstIdx = zeroBytes
+            } else if RoomAcousticService.shared.isTestSignalPlaying {
+                RoomAcousticService.shared.fillPinkNoiseStereoFloat32(
+                    left: streamScratchL,
+                    right: streamScratchR,
+                    frameCount: tileCount
+                )
+                quantizeScratchTileToPCMBytes(
+                    left: streamScratchL,
+                    right: streamScratchR,
+                    tileCount: tileCount,
+                    bitDepth: currentDepth,
+                    dstPtr: streamScratchPCMBytes,
+                    dstIdx: &dstIdx,
+                    enableTPDFDither: true
+                )
+            } else {
+                MasteringRestorationService.shared.processStreamPlanarFloat32IfEnabled(
+                    left: streamScratchL,
+                    right: streamScratchR,
+                    frameCount: tileCount,
+                    sampleRate: currentRateDouble
+                )
+                RoomAcousticService.shared.processStreamPlanarFloat32IfEnabled(
+                    left: streamScratchL,
+                    right: streamScratchR,
+                    frameCount: tileCount,
+                    sampleRate: currentRate
+                )
+                LateNightDRCService.shared.processStreamPlanarFloat32IfEnabled(
+                    left: streamScratchL,
+                    right: streamScratchR,
+                    frameCount: tileCount,
+                    sampleRate: currentRateDouble
+                )
+                quantizeScratchTileToPCMBytes(
+                    left: streamScratchL,
+                    right: streamScratchR,
+                    tileCount: tileCount,
+                    bitDepth: currentDepth,
+                    dstPtr: streamScratchPCMBytes,
+                    dstIdx: &dstIdx,
+                    enableTPDFDither: true
+                )
+            }
+
+            appendStreamBytesOnQueue(streamScratchPCMBytes, count: dstIdx, chunkBytesPerFrame: currentBPF)
+            os_unfair_lock_unlock(&streamScratchSpinLock)
         }
     }
 

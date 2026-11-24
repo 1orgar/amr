@@ -16,9 +16,14 @@ let package = Package(
     ],
     dependencies: [],
     targets: [
+        .target(
+            name: "CAtomicPrimitives",
+            path: "Sources/CAtomicPrimitives",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "AppleMusicRemoteMac",
-            dependencies: [],
+            dependencies: ["CAtomicPrimitives"],
             path: "Sources/AppleMusicRemoteMac",
             resources: [
                 .copy("DSP/Oversampling/Shaders/PolyphaseOverlapSave.metal")

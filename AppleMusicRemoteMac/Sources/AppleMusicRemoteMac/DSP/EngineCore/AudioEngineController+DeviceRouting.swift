@@ -33,7 +33,7 @@ extension AudioEngineController {
     }
 
     internal func supportsDoPCarrier(_ deviceID: AudioDeviceID) -> Bool {
-        guard deviceID != 0, HALDeviceManager.isUSBDevice(deviceID) else { return false }
+        guard deviceID != 0, HALDeviceManager.isEligibleExternalDACDevice(deviceID) else { return false }
         let rates = halManager.supportedSampleRates(deviceID: deviceID)
         return rates.contains(where: { $0 >= 176_399.0 })
     }

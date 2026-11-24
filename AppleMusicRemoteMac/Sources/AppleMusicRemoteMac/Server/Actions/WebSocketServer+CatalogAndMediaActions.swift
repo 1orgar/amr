@@ -54,9 +54,13 @@ extension WebSocketServer {
                     return sid
                 }
                 if !topCatalogIds.isEmpty {
-                    DispatchQueue.global(qos: .utility).async {
-                        for cid in topCatalogIds {
-                            _ = MusicKitManager.shared.resolveCatalogSongTitleVariantsSync(catalogId: cid)
+                    Task.detached(priority: .utility) {
+                        await withTaskGroup(of: Void.self) { group in
+                            for cid in topCatalogIds {
+                                group.addTask {
+                                    _ = await MusicKitManager.shared.resolveCatalogSongTitleVariants(catalogId: cid)
+                                }
+                            }
                         }
                     }
                 }

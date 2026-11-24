@@ -9,6 +9,7 @@
 
 import Foundation
 import Darwin
+import CAtomicPrimitives
 
 /// Выровненное на 2 кэш-линии Apple Silicon (128 байт) хранилище атомарных индексов SPSC,
 /// исключающее False Sharing между потоком-писателем (P-Core Worker) и читателем (CoreAudio IOProc).
@@ -53,6 +54,26 @@ public struct SPSCCacheAlignedIndices {
     public init() {}
 }
 
+public extension UnsafeMutablePointer where Pointee == SPSCCacheAlignedIndices {
+    /// Указатель на `writeIndex` (смещение 0, кэш-линия #0 писателя) без разыменования `.pointee`.
+    @inlinable
+    var writeIndexAtomicPtr: UnsafeMutablePointer<Int64> {
+        UnsafeMutableRawPointer(self).assumingMemoryBound(to: Int64.self)
+    }
+
+    /// Указатель на `readIndex` (смещение 128 байт, кэш-линия #1 читателя) без разыменования `.pointee`.
+    @inlinable
+    var readIndexAtomicPtr: UnsafeMutablePointer<Int64> {
+        UnsafeMutableRawPointer(self).advanced(by: 128).assumingMemoryBound(to: Int64.self)
+    }
+
+    /// Указатель на `underrunCount` (смещение 136 байт, кэш-линия #1 читателя) без разыменования `.pointee`.
+    @inlinable
+    var underrunCountAtomicPtr: UnsafeMutablePointer<UInt64> {
+        UnsafeMutableRawPointer(self).advanced(by: 136).assumingMemoryBound(to: UInt64.self)
+    }
+}
+
 /// Zero-ARC C-совместимый дескриптор кольцевого буфера `SPSCAtomicRingBuffer`.
 /// Позволяет `@convention(c)` `AudioDeviceIOProc` читать стерео-слова напрямую по сырым указателям
 /// без вызовов `swift_retain` / `swift_release`.
@@ -81,16 +102,16 @@ public struct SPSCRingRawView {
     @inlinable
     public func read(into destination: UnsafeMutablePointer<Int32>, count: Int) -> Int {
         guard count > 0 else { return 0 }
-        let r = indicesPtr.pointee.readIndex
-        let w = indicesPtr.pointee.writeIndex
-        // Acquire barrier ПОСЛЕ чтения writeIndex и ПЕРЕД чтением данных из кольцевого буфера (ARM64 ordering)
-        OSMemoryBarrier()
+        let rPtr = indicesPtr.readIndexAtomicPtr
+        let wPtr = indicesPtr.writeIndexAtomicPtr
+        let r = amr_atomic_load_i64_relaxed(rPtr)
+        let w = amr_atomic_load_i64_acquire(wPtr)
 
         let avail = max(0, Int(w - r))
         let rawToRead = min(count, avail)
         let toRead = ((count & 1) == 0) ? (rawToRead & ~1) : rawToRead
         if toRead < count {
-            indicesPtr.pointee.underrunCount &+= 1
+            _ = amr_atomic_inc_u64_relaxed(indicesPtr.underrunCountAtomicPtr)
         }
         guard toRead > 0 else { return 0 }
 
@@ -102,9 +123,7 @@ public struct SPSCRingRawView {
             memcpy(destination.advanced(by: firstPart), buffer, secondPart * MemoryLayout<Int32>.stride)
         }
 
-        // Release barrier ПОСЛЕ чтения данных и ПЕРЕД публикацией нового readIndex
-        OSMemoryBarrier()
-        indicesPtr.pointee.readIndex = r + Int64(toRead)
+        amr_atomic_store_i64_release(rPtr, r + Int64(toRead))
         return toRead
     }
 }
@@ -172,18 +191,16 @@ public final class SPSCAtomicRingBuffer: @unchecked Sendable {
     /// Текущее число доступных для чтения элементов `Int32`.
     @inlinable
     public var availableToRead: Int {
-        let w = indicesPtr.pointee.writeIndex
-        let r = indicesPtr.pointee.readIndex
-        OSMemoryBarrier()
+        let w = amr_atomic_load_i64_acquire(indicesPtr.writeIndexAtomicPtr)
+        let r = amr_atomic_load_i64_acquire(indicesPtr.readIndexAtomicPtr)
         return max(0, Int(w - r))
     }
 
     /// Текущее свободное место для записи элементов `Int32`.
     @inlinable
     public var availableToWrite: Int {
-        let w = indicesPtr.pointee.writeIndex
-        let r = indicesPtr.pointee.readIndex
-        OSMemoryBarrier()
+        let w = amr_atomic_load_i64_acquire(indicesPtr.writeIndexAtomicPtr)
+        let r = amr_atomic_load_i64_acquire(indicesPtr.readIndexAtomicPtr)
         return max(0, capacity - Int(w - r))
     }
 
@@ -196,18 +213,14 @@ public final class SPSCAtomicRingBuffer: @unchecked Sendable {
     /// Счётчик опустошений буфера (underruns) на стороне чтения.
     @inlinable
     public var underrunCount: UInt64 {
-        let count = indicesPtr.pointee.underrunCount
-        OSMemoryBarrier()
-        return count
+        amr_atomic_load_u64_relaxed(indicesPtr.underrunCountAtomicPtr)
     }
 
     /// Сброс указателей чтения/записи и счётчика опустошений (вызывается только при остановленном IOProc).
     public func reset() {
-        OSMemoryBarrier()
-        indicesPtr.pointee.writeIndex = 0
-        indicesPtr.pointee.readIndex = 0
-        indicesPtr.pointee.underrunCount = 0
-        OSMemoryBarrier()
+        amr_atomic_store_i64_release(indicesPtr.writeIndexAtomicPtr, 0)
+        amr_atomic_store_i64_release(indicesPtr.readIndexAtomicPtr, 0)
+        amr_atomic_store_u64_relaxed(indicesPtr.underrunCountAtomicPtr, 0)
     }
 
     /// Записывает до `count` элементов `Int32` из `source`. Возвращает число реально записанных слов.
@@ -216,10 +229,10 @@ public final class SPSCAtomicRingBuffer: @unchecked Sendable {
     @inlinable
     public func write(from source: UnsafePointer<Int32>, count: Int) -> Int {
         guard count > 0 else { return 0 }
-        let w = indicesPtr.pointee.writeIndex
-        let r = indicesPtr.pointee.readIndex
-        // Acquire barrier ПОСЛЕ чтения readIndex и ПЕРЕД записью в кольцевой буфер (ARM64 ordering)
-        OSMemoryBarrier()
+        let wPtr = indicesPtr.writeIndexAtomicPtr
+        let rPtr = indicesPtr.readIndexAtomicPtr
+        let w = amr_atomic_load_i64_relaxed(wPtr)
+        let r = amr_atomic_load_i64_acquire(rPtr)
 
         let freeSpace = max(0, capacity - Int(w - r))
         let rawToWrite = min(count, freeSpace)
@@ -234,9 +247,7 @@ public final class SPSCAtomicRingBuffer: @unchecked Sendable {
             memcpy(buffer, source.advanced(by: firstPart), secondPart * MemoryLayout<Int32>.stride)
         }
 
-        // Release barrier ПОСЛЕ записи данных и ПЕРЕД публикацией нового writeIndex
-        OSMemoryBarrier()
-        indicesPtr.pointee.writeIndex = w + Int64(toWrite)
+        amr_atomic_store_i64_release(wPtr, w + Int64(toWrite))
         return toWrite
     }
 
@@ -308,25 +319,49 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
 
     @inlinable
     public var availableFramesToRead: Int {
-        let w = indicesPtr.pointee.writeIndex
-        let r = indicesPtr.pointee.readIndex
-        OSMemoryBarrier()
+        let w = amr_atomic_load_i64_acquire(indicesPtr.writeIndexAtomicPtr)
+        let r = amr_atomic_load_i64_acquire(indicesPtr.readIndexAtomicPtr)
         return max(0, Int(w - r))
     }
 
     @inlinable
     public var availableFramesToWrite: Int {
-        let w = indicesPtr.pointee.writeIndex
-        let r = indicesPtr.pointee.readIndex
-        OSMemoryBarrier()
+        let w = amr_atomic_load_i64_acquire(indicesPtr.writeIndexAtomicPtr)
+        let r = amr_atomic_load_i64_acquire(indicesPtr.readIndexAtomicPtr)
         return max(0, frameCapacity - Int(w - r))
     }
 
     public func reset() {
-        OSMemoryBarrier()
-        indicesPtr.pointee.writeIndex = 0
-        indicesPtr.pointee.readIndex = 0
-        OSMemoryBarrier()
+        amr_atomic_store_i64_release(indicesPtr.writeIndexAtomicPtr, 0)
+        amr_atomic_store_i64_release(indicesPtr.readIndexAtomicPtr, 0)
+    }
+
+    /// Неаллоцирующая запись нулевых стерео-кадров (например, при Muting Guard или тактировании тест-сигнала) из IOProc.
+    @discardableResult
+    @inlinable
+    public func writeZeros(frameCount: Int) -> Int {
+        guard frameCount > 0 else { return 0 }
+        let wPtr = indicesPtr.writeIndexAtomicPtr
+        let rPtr = indicesPtr.readIndexAtomicPtr
+        let w = amr_atomic_load_i64_relaxed(wPtr)
+        let r = amr_atomic_load_i64_acquire(rPtr)
+
+        let freeFrames = max(0, frameCapacity - Int(w - r))
+        let toWrite = min(frameCount, freeFrames)
+        guard toWrite > 0 else { return 0 }
+
+        let startIdx = Int(w) & mask
+        let firstPart = min(toWrite, frameCapacity - startIdx)
+        memset(leftBuffer.advanced(by: startIdx), 0, firstPart * MemoryLayout<Float>.stride)
+        memset(rightBuffer.advanced(by: startIdx), 0, firstPart * MemoryLayout<Float>.stride)
+        if toWrite > firstPart {
+            let secondPart = toWrite - firstPart
+            memset(leftBuffer, 0, secondPart * MemoryLayout<Float>.stride)
+            memset(rightBuffer, 0, secondPart * MemoryLayout<Float>.stride)
+        }
+
+        amr_atomic_store_i64_release(wPtr, w + Int64(toWrite))
+        return toWrite
     }
 
     /// Неаллоцирующая запись планарных буферов `left` и `right` из IOProc.
@@ -334,10 +369,10 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
     @inlinable
     public func writePlanar(left: UnsafePointer<Float>, right: UnsafePointer<Float>, frameCount: Int) -> Int {
         guard frameCount > 0 else { return 0 }
-        let w = indicesPtr.pointee.writeIndex
-        let r = indicesPtr.pointee.readIndex
-        // Acquire barrier ПОСЛЕ чтения readIndex и ПЕРЕД memcpy в буферы
-        OSMemoryBarrier()
+        let wPtr = indicesPtr.writeIndexAtomicPtr
+        let rPtr = indicesPtr.readIndexAtomicPtr
+        let w = amr_atomic_load_i64_relaxed(wPtr)
+        let r = amr_atomic_load_i64_acquire(rPtr)
 
         let freeFrames = max(0, frameCapacity - Int(w - r))
         let toWrite = min(frameCount, freeFrames)
@@ -353,9 +388,7 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
             memcpy(rightBuffer, right.advanced(by: firstPart), secondPart * MemoryLayout<Float>.stride)
         }
 
-        // Release barrier ПОСЛЕ memcpy и ПЕРЕД публикацией writeIndex
-        OSMemoryBarrier()
-        indicesPtr.pointee.writeIndex = w + Int64(toWrite)
+        amr_atomic_store_i64_release(wPtr, w + Int64(toWrite))
         return toWrite
     }
 
@@ -370,10 +403,10 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
     @inlinable
     public func writeInterleaved(interleaved: UnsafePointer<Float>, frameCount: Int, channels: Int) -> Int {
         guard frameCount > 0, channels >= 1 else { return 0 }
-        let w = indicesPtr.pointee.writeIndex
-        let r = indicesPtr.pointee.readIndex
-        // Acquire barrier ПОСЛЕ чтения readIndex и ПЕРЕД записью отсчётов
-        OSMemoryBarrier()
+        let wPtr = indicesPtr.writeIndexAtomicPtr
+        let rPtr = indicesPtr.readIndexAtomicPtr
+        let w = amr_atomic_load_i64_relaxed(wPtr)
+        let r = amr_atomic_load_i64_acquire(rPtr)
 
         let freeFrames = max(0, frameCapacity - Int(w - r))
         let toWrite = min(frameCount, freeFrames)
@@ -388,9 +421,7 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
             rightBuffer[dstIdx] = rVal
         }
 
-        // Release barrier ПОСЛЕ записи отсчётов и ПЕРЕД публикацией writeIndex
-        OSMemoryBarrier()
-        indicesPtr.pointee.writeIndex = w + Int64(toWrite)
+        amr_atomic_store_i64_release(wPtr, w + Int64(toWrite))
         return toWrite
     }
 
@@ -409,10 +440,10 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
         maxFrames: Int
     ) -> Int {
         guard maxFrames > 0 else { return 0 }
-        let r = indicesPtr.pointee.readIndex
-        let w = indicesPtr.pointee.writeIndex
-        // Acquire barrier ПОСЛЕ чтения writeIndex и ПЕРЕД чтением из буферов
-        OSMemoryBarrier()
+        let rPtr = indicesPtr.readIndexAtomicPtr
+        let wPtr = indicesPtr.writeIndexAtomicPtr
+        let r = amr_atomic_load_i64_relaxed(rPtr)
+        let w = amr_atomic_load_i64_acquire(wPtr)
 
         let avail = max(0, Int(w - r))
         let toRead = min(maxFrames, avail)
@@ -428,9 +459,7 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
             memcpy(dstRight.advanced(by: firstPart), rightBuffer, secondPart * MemoryLayout<Float>.stride)
         }
 
-        // Release barrier ПОСЛЕ копирования и ПЕРЕД публикацией readIndex
-        OSMemoryBarrier()
-        indicesPtr.pointee.readIndex = r + Int64(toRead)
+        amr_atomic_store_i64_release(rPtr, r + Int64(toRead))
         return toRead
     }
 
@@ -445,10 +474,10 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
         outMaxAbsSample: inout Double
     ) -> Int {
         guard frameCount > 0 else { return 0 }
-        let r = indicesPtr.pointee.readIndex
-        let w = indicesPtr.pointee.writeIndex
-        // Acquire barrier ПОСЛЕ чтения writeIndex и ПЕРЕД чтением из буферов
-        OSMemoryBarrier()
+        let rPtr = indicesPtr.readIndexAtomicPtr
+        let wPtr = indicesPtr.writeIndexAtomicPtr
+        let r = amr_atomic_load_i64_relaxed(rPtr)
+        let w = amr_atomic_load_i64_acquire(wPtr)
 
         let avail = max(0, Int(w - r))
         let toRead = min(frameCount, avail)
@@ -468,9 +497,7 @@ public final class SPSCStereoFloatRingBuffer: @unchecked Sendable {
         }
         outMaxAbsSample = maxPeak
 
-        // Release barrier ПОСЛЕ чтения отсчётов и ПЕРЕД публикацией readIndex
-        OSMemoryBarrier()
-        indicesPtr.pointee.readIndex = r + Int64(toRead)
+        amr_atomic_store_i64_release(rPtr, r + Int64(toRead))
         return toRead
     }
 }

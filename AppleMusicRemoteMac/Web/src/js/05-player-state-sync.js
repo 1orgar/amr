@@ -213,6 +213,9 @@
     if (data.is_bit_perfect !== undefined || data.isBitPerfect !== undefined) {
       state.isBitPerfect = data.is_bit_perfect !== undefined ? Boolean(data.is_bit_perfect) : Boolean(data.isBitPerfect);
     }
+    if (data.is_clock_synced_dsp !== undefined || data.isClockSyncedDsp !== undefined) {
+      state.isClockSyncedDsp = data.is_clock_synced_dsp !== undefined ? Boolean(data.is_clock_synced_dsp) : Boolean(data.isClockSyncedDsp);
+    }
     if (data.dac_muting_guard_enabled !== undefined || data.isDacMutingGuardEnabled !== undefined) {
       state.dacMutingGuardEnabled = data.dac_muting_guard_enabled !== undefined ? Boolean(data.dac_muting_guard_enabled) : Boolean(data.isDacMutingGuardEnabled);
     }

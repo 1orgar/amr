@@ -2,6 +2,7 @@ import Accelerate
 import CoreAudio
 import Darwin
 import Foundation
+import os
 
 /// Главный оркестратор гибридного аудиодвижка реального времени (`PCM -> DSD256 DoP / HQ NOS PCM`).
 ///
@@ -26,7 +27,7 @@ public actor AudioEngineController {
     public nonisolated let outputRingBuffer = SPSCAtomicRingBuffer(capacityWords: 1_048_576)
 
     // Атомарный снимок состояния для неблокирующего чтения из AudioProcessTapService и PlayerStatusEngine
-    internal nonisolated(unsafe) var stateLock = os_unfair_lock_s()
+    internal nonisolated let stateLock = OSAllocatedUnfairLock<Void>()
     internal nonisolated(unsafe) var _cachedConfig: EngineConfiguration
     internal nonisolated(unsafe) var _cachedTelemetry: EngineTelemetry = EngineTelemetry()
     internal nonisolated(unsafe) var _isPipelineActive: Bool = false
@@ -64,22 +65,17 @@ public actor AudioEngineController {
     // Рабочий RT-поток конвейера (Node 1 -> Node 2 -> Node 3 -> Node 4)
     internal nonisolated(unsafe) var pipelineThread: pthread_t?
     internal nonisolated(unsafe) var _workerStartGeneration: UInt64 = 0
-    internal nonisolated(unsafe) var workerStopLock = os_unfair_lock_s()
+    internal nonisolated let workerStopLock = OSAllocatedUnfairLock<Void>()
     internal nonisolated(unsafe) var _pipelineShouldStop: Bool = false
 
     internal nonisolated var pipelineShouldStop: Bool {
         @inline(__always)
         get {
-            os_unfair_lock_lock(&workerStopLock)
-            let flag = _pipelineShouldStop
-            os_unfair_lock_unlock(&workerStopLock)
-            return flag
+            workerStopLock.withLock { _pipelineShouldStop }
         }
         @inline(__always)
         set {
-            os_unfair_lock_lock(&workerStopLock)
-            _pipelineShouldStop = newValue
-            os_unfair_lock_unlock(&workerStopLock)
+            workerStopLock.withLock { _pipelineShouldStop = newValue }
         }
     }
 
@@ -131,8 +127,8 @@ public actor AudioEngineController {
     @usableFromInline
     @inline(__always)
     internal nonisolated func withStateLock<T>(_ body: () -> T) -> T {
-        os_unfair_lock_lock(&stateLock)
-        defer { os_unfair_lock_unlock(&stateLock) }
+        stateLock.lock()
+        defer { stateLock.unlock() }
         return body()
     }
 
@@ -313,9 +309,11 @@ public actor AudioEngineController {
 
         guard let desired = resolveTargetOutputDevice(cfg: cfg) else {
             if wasActive {
-                NSLog("[AudioEngineController] 🔌 Целевой внешний ЦАП отключён — останавливаем DSP-вывод")
+                NSLog("[AudioEngineController] 🔌 Целевой внешний ЦАП отключён — останавливаем DSP-вывод и возвращаем Passthrough")
                 await stopPipeline(restartTapAfterStop: true)
                 RoomAcousticService.shared.refreshLocalPassthroughEQPipeline()
+            } else {
+                AudioProcessTapService.shared.reconcileCaptureAfterRouteChange()
             }
             return
         }
@@ -419,6 +417,7 @@ public actor AudioEngineController {
             }
             refreshTelemetrySnapshot()
             if !isLocal {
+                AudioProcessTapService.shared.reconcileCaptureAfterRouteChange()
                 RoomAcousticService.shared.refreshLocalPassthroughEQPipeline()
             }
             return false
@@ -569,6 +568,7 @@ public actor AudioEngineController {
                 }
                 refreshTelemetrySnapshot()
                 if !isLocal {
+                    AudioProcessTapService.shared.reconcileCaptureAfterRouteChange()
                     RoomAcousticService.shared.refreshLocalPassthroughEQPipeline()
                 }
                 return false

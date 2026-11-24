@@ -1,0 +1,4 @@
+module CAtomicPrimitives [system] {
+    header "amr_atomics.h"
+    export *
+}

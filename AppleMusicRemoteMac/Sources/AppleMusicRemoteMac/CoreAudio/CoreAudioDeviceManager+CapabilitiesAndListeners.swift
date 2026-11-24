@@ -18,7 +18,12 @@ extension CoreAudioDeviceManager {
     ///    отсекает встроенные динамики Mac, Bluetooth, AirPlay, HDMI/DisplayPort и виртуальные/агрегатные устройства;
     /// 2) Физические выходные потоки (`kAudioStreamPropertyAvailablePhysicalFormats`) — стерео (`>= 2` кан.) и
     ///    аппаратная разрядность PCM `>= 24` бит (обязательно для маркеров DoP `0x05`/`0xFA` и 24-битного шейпера LNS15,
-    ///    отсекает 16-битные USB-гарнитуры, спикерфоны и веб-камеры);
+    /// Строгая классификация аппаратных возможностей аудиоустройства для движка AMR SDM / HQ NOS:
+    /// 1) Аппаратная шина (`kAudioDevicePropertyTransportType`) — разрешены внешние ЦАП по `USB` и `Thunderbolt`
+    ///    (встроенные динамики, Bluetooth, AirPlay, HDMI и внутренний `AMR Tap Aggregate` блокируются);
+    /// 2) Выходные потоки (`kAudioStreamPropertyAvailablePhysicalFormats` / `VirtualFormats`) — стерео (`>= 2` каналов),
+    ///    разрядность `>= 24 бит` (отсекает 16-битные USB-гарнитуры, спикерфоны и веб-камеры) и наличие знакового
+    ///    целочисленного PCM (`Signed Integer >= 24-bit`) для бит-прозрачной упаковки маркеров DSD DoP;
     /// 3) Номинальные частоты (`kAudioDevicePropertyAvailableNominalSampleRates`) — `>= 176.4 кГц` для HQ NOS PCM
     ///    и точная поддержка несущих DoP сетки SACD (`176.4 / 352.8 / 705.6 / 1411.2 кГц`) для DSD64..DSD512.
     public static func evaluateDSPCapabilities(
@@ -27,7 +32,8 @@ extension CoreAudioDeviceManager {
         uid: String,
         availableRates: [Double],
         maxBitDepth: Int,
-        hasStereoOutput: Bool
+        hasStereoOutput: Bool,
+        hasBitTransparentInteger: Bool = true
     ) -> DeviceDSPCapabilities {
         let transportKey: String = {
             guard let t = rawTransport else { return "unknown" }
@@ -57,16 +63,17 @@ extension CoreAudioDeviceManager {
 
         let isInternalAggregate = name.contains("AMR Tap Aggregate") || uid.contains("AMR-Tap-Aggregate")
         let isUSB = (transportKey == "usb") && !isInternalAggregate
+        let isEligibleExternalDAC = (transportKey == "usb" || transportKey == "thunderbolt") && !isInternalAggregate
         let maxRate = availableRates.max() ?? 0.0
         let hasRate: (Double) -> Bool = { target in
             availableRates.contains { abs($0 - target) <= 1.5 }
         }
 
-        let is24BitStereoUSBDAC = isUSB && hasStereoOutput && maxBitDepth >= 24
-        let supportsNOS = is24BitStereoUSBDAC && maxRate >= 176_399.0
+        let is24BitStereoExternalDAC = isEligibleExternalDAC && hasStereoOutput && maxBitDepth >= 24
+        let supportsNOS = is24BitStereoExternalDAC && maxRate >= 176_399.0
 
         let maxDSDRate: Int
-        if !is24BitStereoUSBDAC {
+        if !is24BitStereoExternalDAC || !hasBitTransparentInteger {
             maxDSDRate = 0
         } else if hasRate(1_411_200.0) {
             maxDSDRate = 512
@@ -85,12 +92,12 @@ extension CoreAudioDeviceManager {
             isUSB: isUSB,
             maxBitDepth: maxBitDepth,
             supportsNOS: supportsNOS,
-            supportsDSDDoP: maxDSDRate >= 64,
+            supportsDSDDoP: maxDSDRate >= 64 && hasBitTransparentInteger,
             maxDSDRate: maxDSDRate
         )
     }
 
-    internal func outputStreamCapabilities(deviceID: AudioDeviceID) -> (hasStereoOutput: Bool, maxBitDepth: Int) {
+    internal func outputStreamCapabilities(deviceID: AudioDeviceID) -> (hasStereoOutput: Bool, maxBitDepth: Int, hasBitTransparentInteger: Bool) {
         var streamAddr = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreams,
             mScope: kAudioDevicePropertyScopeOutput,
@@ -99,35 +106,53 @@ extension CoreAudioDeviceManager {
         var streamSize: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(deviceID, &streamAddr, 0, nil, &streamSize) == noErr,
               streamSize >= UInt32(MemoryLayout<AudioStreamID>.size) else {
-            return (false, 0)
+            return (false, 0, false)
         }
         let streamCount = Int(streamSize) / MemoryLayout<AudioStreamID>.size
         var streamIDs = [AudioStreamID](repeating: 0, count: streamCount)
         guard AudioObjectGetPropertyData(deviceID, &streamAddr, 0, nil, &streamSize, &streamIDs) == noErr else {
-            return (false, 0)
+            return (false, 0, false)
         }
 
         var hasStereo = false
         var maxBits = 0
+        var hasInteger24Plus = false
+
+        let inspectASBD: (AudioStreamBasicDescription) -> Void = { f in
+            guard f.mFormatID == kAudioFormatLinearPCM else { return }
+            if f.mChannelsPerFrame >= 2 {
+                hasStereo = true
+            }
+            maxBits = max(maxBits, Int(f.mBitsPerChannel))
+            let isSignedInt = (f.mFormatFlags & kAudioFormatFlagIsSignedInteger) != 0
+                && (f.mFormatFlags & kAudioFormatFlagIsFloat) == 0
+            if isSignedInt && f.mBitsPerChannel >= 24 && f.mChannelsPerFrame >= 2 {
+                hasInteger24Plus = true
+            }
+        }
+
         for sID in streamIDs where sID != 0 {
-            var physAddr = AudioObjectPropertyAddress(
-                mSelector: kAudioStreamPropertyAvailablePhysicalFormats,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            var availSize: UInt32 = 0
-            if AudioObjectGetPropertyDataSize(sID, &physAddr, 0, nil, &availSize) == noErr, availSize > 0 {
-                let count = Int(availSize) / MemoryLayout<AudioStreamRangedDescription>.size
-                var ranged = [AudioStreamRangedDescription](repeating: AudioStreamRangedDescription(), count: count)
-                if AudioObjectGetPropertyData(sID, &physAddr, 0, nil, &availSize, &ranged) == noErr {
-                    for desc in ranged where desc.mFormat.mFormatID == kAudioFormatLinearPCM {
-                        if desc.mFormat.mChannelsPerFrame >= 2 {
-                            hasStereo = true
+            var inspectedAnyList = false
+            for selector in [kAudioStreamPropertyAvailablePhysicalFormats, kAudioStreamPropertyAvailableVirtualFormats] {
+                var fmtAddr = AudioObjectPropertyAddress(
+                    mSelector: selector,
+                    mScope: kAudioObjectPropertyScopeGlobal,
+                    mElement: kAudioObjectPropertyElementMain
+                )
+                var availSize: UInt32 = 0
+                if AudioObjectGetPropertyDataSize(sID, &fmtAddr, 0, nil, &availSize) == noErr, availSize > 0 {
+                    let count = Int(availSize) / MemoryLayout<AudioStreamRangedDescription>.size
+                    var ranged = [AudioStreamRangedDescription](repeating: AudioStreamRangedDescription(), count: count)
+                    if AudioObjectGetPropertyData(sID, &fmtAddr, 0, nil, &availSize, &ranged) == noErr {
+                        inspectedAnyList = true
+                        for desc in ranged {
+                            inspectASBD(desc.mFormat)
                         }
-                        maxBits = max(maxBits, Int(desc.mFormat.mBitsPerChannel))
                     }
                 }
-            } else {
+            }
+
+            if !inspectedAnyList {
                 var curAddr = AudioObjectPropertyAddress(
                     mSelector: kAudioStreamPropertyPhysicalFormat,
                     mScope: kAudioObjectPropertyScopeGlobal,
@@ -136,14 +161,11 @@ extension CoreAudioDeviceManager {
                 var asbd = AudioStreamBasicDescription()
                 var sz = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
                 if AudioObjectGetPropertyData(sID, &curAddr, 0, nil, &sz, &asbd) == noErr {
-                    if asbd.mChannelsPerFrame >= 2 {
-                        hasStereo = true
-                    }
-                    maxBits = max(maxBits, Int(asbd.mBitsPerChannel))
+                    inspectASBD(asbd)
                 }
             }
         }
-        return (hasStereo, maxBits > 0 ? maxBits : 16)
+        return (hasStereo, maxBits > 0 ? maxBits : 16, hasInteger24Plus)
     }
 
     internal func hasOutputStreams(deviceID: AudioDeviceID) -> Bool {
@@ -248,9 +270,16 @@ extension CoreAudioDeviceManager {
                 if AudioEngineController.shared.currentConfigurationSnapshot().mode != .bitPerfectPassthrough {
                     Task {
                         await AudioEngineController.shared.handleHardwareDeviceChange()
+                        if !AudioEngineController.shared.isActivePipelineHook {
+                            BitPerfectLogMonitor.shared.reapplyCurrentFormat()
+                            if RoomAcousticService.shared.isLocalPassthroughEQActive {
+                                RoomAcousticService.shared.notifyLocalOutputFormatChanged(forceRecreateUnit: true)
+                            }
+                        }
+                        WebSocketServer.shared.broadcastAudioDevices()
+                        WebSocketServer.shared.broadcastStatus()
                     }
-                }
-                if !AudioEngineController.shared.isActivePipelineHook {
+                } else if !AudioEngineController.shared.isActivePipelineHook {
                     BitPerfectLogMonitor.shared.reapplyCurrentFormat()
                     if RoomAcousticService.shared.isLocalPassthroughEQActive {
                         RoomAcousticService.shared.notifyLocalOutputFormatChanged(forceRecreateUnit: true)
@@ -288,9 +317,16 @@ extension CoreAudioDeviceManager {
                 if AudioEngineController.shared.currentConfigurationSnapshot().mode != .bitPerfectPassthrough {
                     Task {
                         await AudioEngineController.shared.handleHardwareDeviceChange()
+                        if !AudioEngineController.shared.isActivePipelineHook && defaultOutputChanged {
+                            BitPerfectLogMonitor.shared.reapplyCurrentFormat()
+                            if RoomAcousticService.shared.isLocalPassthroughEQActive {
+                                RoomAcousticService.shared.notifyLocalOutputFormatChanged(forceRecreateUnit: true)
+                            }
+                        }
+                        WebSocketServer.shared.broadcastAudioDevices()
+                        WebSocketServer.shared.broadcastStatus()
                     }
-                }
-                if !AudioEngineController.shared.isActivePipelineHook && defaultOutputChanged {
+                } else if !AudioEngineController.shared.isActivePipelineHook && defaultOutputChanged {
                     BitPerfectLogMonitor.shared.reapplyCurrentFormat()
                     if RoomAcousticService.shared.isLocalPassthroughEQActive {
                         RoomAcousticService.shared.notifyLocalOutputFormatChanged(forceRecreateUnit: true)

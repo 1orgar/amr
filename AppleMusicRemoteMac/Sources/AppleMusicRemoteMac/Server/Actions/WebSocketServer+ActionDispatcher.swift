@@ -427,7 +427,7 @@ extension WebSocketServer {
             ? presetInfo.activeSubtitle
             : (usbAvail.hasEligibleUSBDAC
                 ? presetInfo.activeSubtitle
-                : "Внешний USB ЦАП не подключён: DSD и HQ NOS доступны только для USB ЦАП (≥ 24-бит / 176.4 кГц)")
+                : "Внешний USB / Thunderbolt ЦАП не подключён: DSD и HQ NOS доступны только для внешних USB / Thunderbolt ЦАП (≥ 24-бит / 176.4 кГц)")
         let profileKey: String = {
             switch cfg.profile {
             case .transient: return "transient"

@@ -18,9 +18,9 @@ public final class AudioProcessTapService: @unchecked Sendable {
 
     internal static let queueSpecificKey = DispatchSpecificKey<Void>()
     internal static let streamScratchTileFrames: Int = 4096
-    internal static let streamPCMRingCapacity: Int = 524_288 // 512 KB power-of-two ring buffer (0 RT heap allocs)
-    internal static let streamPCMRingMask: Int = 524_287
-    internal static let streamDrainChunkBytes: Int = 65_536
+    internal static let streamFloatRingCapacityFrames: Int = 131_072
+    internal static let tapControlSignalNonZeroDetected: UInt = 1 << 0
+    internal static let tapControlSignalSuspendZeroedPassthrough: UInt = 1 << 1
     internal static let passiveIdleSuspendTimeoutSec: Double = 45.0
     internal let queue = DispatchQueue(label: "org.ksholokhov.amr.audiotap", qos: .userInteractive)
 
@@ -131,14 +131,11 @@ public final class AudioProcessTapService: @unchecked Sendable {
     internal let streamScratchR: UnsafeMutablePointer<Float>
     internal let streamScratchPCMBytes: UnsafeMutablePointer<UInt8>
 
-    internal var streamPCMRingSpinLock = os_unfair_lock_s()
-    internal let streamPCMRingBuffer: UnsafeMutablePointer<UInt8>
-    internal var streamPCMRingReadIdx: Int = 0
-    internal var streamPCMRingWriteIdx: Int = 0
-    internal var streamPCMRingCount: Int = 0
-    internal var streamPCMRingBytesPerFrame: Int = 4
+    internal let streamFloatRingBuffer: SPSCStereoFloatRingBuffer
     internal var streamDrainSignalSource: DispatchSourceUserDataAdd!
-    internal var streamDrainScratch: [UInt8] = []
+    internal var tapControlSignalSource: DispatchSourceUserDataOr!
+    internal var ditherSeedL: UInt64 = 0x853C_49E6_748F_EA9B
+    internal var ditherSeedR: UInt64 = 0xDA3E_39CB_94B9_5BDB
 
     // Subscriber callbacks: (UUID, (Data) -> Void)
     internal var subscribers: [UUID: (Data) -> Void] = [:]
@@ -172,9 +169,7 @@ public final class AudioProcessTapService: @unchecked Sendable {
         streamScratchPCMBytes = UnsafeMutablePointer<UInt8>.allocate(capacity: maxTilePCMBytes)
         streamScratchPCMBytes.initialize(repeating: 0, count: maxTilePCMBytes)
 
-        streamPCMRingBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: Self.streamPCMRingCapacity)
-        streamPCMRingBuffer.initialize(repeating: 0, count: Self.streamPCMRingCapacity)
-        streamDrainScratch.reserveCapacity(Self.streamDrainChunkBytes)
+        streamFloatRingBuffer = SPSCStereoFloatRingBuffer(minimumFrameCapacity: Self.streamFloatRingCapacityFrames)
 
         let drainSource = DispatchSource.makeUserDataAddSource(queue: queue)
         self.streamDrainSignalSource = drainSource
@@ -182,9 +177,24 @@ public final class AudioProcessTapService: @unchecked Sendable {
             self?.drainStreamPCMRingBufferOnQueue()
         }
         drainSource.resume()
+
+        let controlSource = DispatchSource.makeUserDataOrSource(queue: queue)
+        self.tapControlSignalSource = controlSource
+        controlSource.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            let flags = self.tapControlSignalSource.data
+            if (flags & Self.tapControlSignalNonZeroDetected) != 0 {
+                RoomAcousticService.shared.notifyNonZeroTapSignalDetected()
+            }
+            if (flags & Self.tapControlSignalSuspendZeroedPassthrough) != 0 {
+                RoomAcousticService.shared.suspendLocalPassthroughDueToZeroedTap()
+            }
+        }
+        controlSource.resume()
     }
 
     deinit {
+        tapControlSignalSource?.cancel()
         streamDrainSignalSource?.cancel()
         runSyncOnQueue {
             stopCaptureInternal()
@@ -196,8 +206,6 @@ public final class AudioProcessTapService: @unchecked Sendable {
         let maxTilePCMBytes = Self.streamScratchTileFrames * 6
         streamScratchPCMBytes.deinitialize(count: maxTilePCMBytes)
         streamScratchPCMBytes.deallocate()
-        streamPCMRingBuffer.deinitialize(count: Self.streamPCMRingCapacity)
-        streamPCMRingBuffer.deallocate()
     }
 
     @inline(__always)

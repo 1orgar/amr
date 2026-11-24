@@ -223,6 +223,7 @@ extension AudioProcessTapService {
             }
         }
         if formatChanged {
+            self.streamFloatRingBuffer.reset()
             self.chunkAccumulator.removeAll()
         }
     }
@@ -513,11 +514,7 @@ extension AudioProcessTapService {
         self.tappedProcessObjectIDs.removeAll()
         syncRealTapActiveFlag()
         self.isCapturing = false
-        os_unfair_lock_lock(&self.streamPCMRingSpinLock)
-        self.streamPCMRingReadIdx = 0
-        self.streamPCMRingWriteIdx = 0
-        self.streamPCMRingCount = 0
-        os_unfair_lock_unlock(&self.streamPCMRingSpinLock)
+        self.streamFloatRingBuffer.reset()
         self.chunkAccumulator.removeAll()
         NSLog("[AudioProcessTapService] 🛑 Audio capture stopped and resources released.")
     }

@@ -81,6 +81,43 @@ extension LibraryService {
         )
     }
 
+    public func addToLibraryAsync(id: String? = nil, trackId: Int? = nil, name: String?, artist: String?, url: String?) async -> Bool {
+        let cleanName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let cleanArtist = artist?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var resolvedId = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if (resolvedId.isEmpty || (Int(resolvedId) ?? 0) < 10_000_000),
+           MusicKitManager.shared.hasUserToken,
+           !cleanName.isEmpty {
+            if let cachedCid = MusicKitManager.shared.getCachedTrackCatalogId(name: cleanName, artist: cleanArtist),
+               let num = Int(cachedCid), num >= 10_000_000 {
+                resolvedId = cachedCid
+            } else if let searchedCid = await MusicKitManager.shared.resolveCatalogSongIdInUserStorefront(name: cleanName, artist: cleanArtist),
+                      let num = Int(searchedCid), num >= 10_000_000 {
+                resolvedId = searchedCid
+            }
+        }
+        if let num = Int(resolvedId), num >= 10_000_000, MusicKitManager.shared.hasUserToken {
+            if await MusicKitManager.shared.addSongsToUserLibrary(catalogIds: [resolvedId]) {
+                let localDbId = trackId.flatMap { ($0 > 0 && $0 < 10_000_000) ? $0 : nil }
+                PlaybackStateStore.shared.promoteStagedTrackForSavedSong(
+                    dbId: localDbId,
+                    catalogId: resolvedId,
+                    name: cleanName,
+                    artist: cleanArtist
+                )
+                invalidateLibrarySongsCache()
+                return true
+            }
+        }
+        return addToLibrary(
+            id: resolvedId.isEmpty ? id : resolvedId,
+            trackId: trackId,
+            name: name,
+            artist: artist,
+            url: url
+        )
+    }
+
     public func addToLibrary(id: String?, trackId: Int? = nil, name: String?, artist: String?, url: String?) -> Bool {
         let cleanName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let cleanArtist = artist?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -172,9 +209,20 @@ extension LibraryService {
                 if let cachedCid = MusicKitManager.shared.getCachedTrackCatalogId(name: cleanName, artist: cleanArtist),
                    let num = Int(cachedCid), num >= 10_000_000 {
                     resolvedCatalogId = cachedCid
-                } else if let searchedCid = MusicKitManager.shared.resolveCatalogSongIdInUserStorefrontSync(name: cleanName, artist: cleanArtist),
-                          let num = Int(searchedCid), num >= 10_000_000 {
-                    resolvedCatalogId = searchedCid
+                } else {
+                    Task.detached(priority: .userInitiated) {
+                        if let searchedCid = await MusicKitManager.shared.resolveCatalogSongIdInUserStorefront(name: cleanName, artist: cleanArtist),
+                           let num = Int(searchedCid), num >= 10_000_000,
+                           await MusicKitManager.shared.addSongsToUserLibrary(catalogIds: [searchedCid]) {
+                            PlaybackStateStore.shared.promoteStagedTrackForSavedSong(
+                                dbId: localDbId,
+                                catalogId: searchedCid,
+                                name: cleanName,
+                                artist: cleanArtist
+                            )
+                            LibraryService.shared.invalidateLibrarySongsCache()
+                        }
+                    }
                 }
             }
             if let cid = resolvedCatalogId, !cid.isEmpty {

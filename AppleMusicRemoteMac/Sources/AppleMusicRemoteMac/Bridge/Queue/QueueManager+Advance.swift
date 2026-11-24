@@ -373,17 +373,21 @@ extension QueueManager {
         }
         guard shouldStart else { return }
 
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task.detached(priority: .userInitiated) {
             var resolvedDur: Double = 0
             if let sbDur = MusicAppProvider.shared.getMusicApp()?.currentTrack?.sbDuration, sbDur > 5.0 {
                 resolvedDur = sbDur
             }
-            if resolvedDur <= 5.0,
-               let cid = MusicKitManager.shared.getCachedTrackCatalogId(name: cleanName, artist: cleanArtist, album: "")
-                   ?? MusicKitManager.shared.resolveCatalogSongIdInUserStorefrontSync(name: cleanName, artist: cleanArtist),
-               let info = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibilitySync(catalogId: cid),
-               let catDur = info.durationSeconds, catDur > 5.0 {
-                resolvedDur = catDur
+            if resolvedDur <= 5.0 {
+                var cid = MusicKitManager.shared.getCachedTrackCatalogId(name: cleanName, artist: cleanArtist, album: "")
+                if cid == nil {
+                    cid = await MusicKitManager.shared.resolveCatalogSongIdInUserStorefront(name: cleanName, artist: cleanArtist)
+                }
+                if let validCid = cid,
+                   let info = await MusicKitManager.shared.inspectCatalogSongDirectCloudEligibility(catalogId: validCid),
+                   let catDur = info.durationSeconds, catDur > 5.0 {
+                    resolvedDur = catDur
+                }
             }
             PlaybackStateStore.shared.withLock {
                 if PlaybackStateStore.shared.resolvingRadioDurationTrackKey == key {

@@ -169,6 +169,41 @@ extension HALDeviceManager {
         return transport == kAudioDeviceTransportTypeUSB
     }
 
+    public static func isThunderboltDevice(_ deviceID: AudioDeviceID) -> Bool {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var transport: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &transport) == noErr else {
+            return false
+        }
+        return transport == kAudioDeviceTransportTypeThunderbolt
+    }
+
+    /// Проверяет, что устройство является внешним высокоскоростным ЦАП по шине USB или Thunderbolt
+    /// (исключая встроенные динамики, Bluetooth, AirPlay и внутренний агрегат `AMR Tap Aggregate`).
+    public static func isEligibleExternalDACDevice(_ deviceID: AudioDeviceID) -> Bool {
+        guard deviceID != 0 else { return false }
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var transport: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &transport) == noErr else {
+            return false
+        }
+        guard transport == kAudioDeviceTransportTypeUSB || transport == kAudioDeviceTransportTypeThunderbolt else {
+            return false
+        }
+        let name = deviceName(deviceID: deviceID)
+        return !name.contains("AMR Tap Aggregate")
+    }
+
     public static func mapASBDToHALStreamFormat(_ asbd: AudioStreamBasicDescription) -> (format: HALPhysicalStreamFormat, bitDepth: Int, isInteger: Bool) {
         if (asbd.mFormatFlags & kAudioFormatFlagIsFloat) != 0 {
             return (.float32LE, Int(asbd.mBitsPerChannel), false)

@@ -2,8 +2,9 @@
 //  MusicKitManager+CatalogResolution.swift
 //  AppleMusicRemoteMac
 //
-//  Alternate catalog song resolution (ISRC & multi-locale search), localized title/artist
-//  variants caching, and pre-flight direct cloud song eligibility inspection.
+//  Async Cross-Storefront & ISRC Song Resolution, Artist Token Overlap Matching,
+//  Localized Title Variant Lookup, and Direct Cloud Song Eligibility Inspection.
+//  100% Structured Concurrency (`async/await`, `async let`, `withTaskGroup`) — Zero `DispatchSemaphore`.
 //
 
 import Foundation
@@ -12,16 +13,16 @@ extension MusicKitManager {
 
     // MARK: - Alternate Catalog Song & Localized Title Resolution
 
-    public func resolveCatalogSongIdInUserStorefrontSync(name: String, artist: String) -> String? {
-        return resolveAlternateCatalogSongIdsSync(name: name, artist: artist, excludingIds: []).first
+    public func resolveCatalogSongIdInUserStorefront(name: String, artist: String) async -> String? {
+        return await resolveAlternateCatalogSongIds(name: name, artist: artist, excludingIds: []).first
     }
 
-    public func resolveAlternateCatalogSongIdsSync(
+    public func resolveAlternateCatalogSongIds(
         name: String,
         artist: String,
         excludingIds: Set<String>
-    ) -> [String] {
-        return resolveAlternateCatalogSongsSync(
+    ) async -> [String] {
+        return await resolveAlternateCatalogSongs(
             catalogId: nil,
             name: name,
             artist: artist,
@@ -29,13 +30,13 @@ extension MusicKitManager {
         ).map(\.id)
     }
 
-    public func resolveAlternateCatalogSongsSync(
+    public func resolveAlternateCatalogSongs(
         catalogId: String?,
         name: String,
         artist: String,
         excludingIds: Set<String>
-    ) -> [(id: String, name: String, artist: String)] {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return [] }
+    ) async -> [(id: String, name: String, artist: String)] {
+        guard !PlaybackRouter.shared.isTestingEnvironment, !Task.isCancelled else { return [] }
         guard let devToken = getDeveloperToken() else { return [] }
         let sf = Self.sanitizedStorefront(getUserStorefront())
         let primaryLang = getPreferredLanguageTag()
@@ -55,7 +56,7 @@ extension MusicKitManager {
             }
 
             // Exact ISRC recording lookup (same master audio, zero false-positive remix risk)
-            let inspection = inspectCatalogSongDirectCloudEligibilitySync(catalogId: cleanCid)
+            let inspection = await inspectCatalogSongDirectCloudEligibility(catalogId: cleanCid)
             if let rawIsrc = inspection?.isrc?.trimmingCharacters(in: .whitespacesAndNewlines),
                Self.isValidResourceIdentifier(rawIsrc),
                let isrcUrl = Self.makeAppleMusicAPIURL(
@@ -73,22 +74,17 @@ extension MusicKitManager {
                     req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
                 }
 
-                let sema = DispatchSemaphore(value: 0)
-                let boxLock = NSLock()
-                var isrcMatches: [(id: String, name: String, artist: String)] = []
-                let task = session.dataTask(with: req) { [weak self] data, resp, _ in
-                    defer { sema.signal() }
-                    guard let self = self,
-                          let d = data,
-                          let http = resp as? HTTPURLResponse, http.statusCode == 200,
-                          let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                          let arr = json["data"] as? [[String: Any]], !arr.isEmpty else { return }
-                    var localMatches: [(id: String, name: String, artist: String)] = []
+                if let (d, resp) = try? await session.data(for: req),
+                   !Task.isCancelled,
+                   let http = resp as? HTTPURLResponse, http.statusCode == 200,
+                   let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                   let arr = json["data"] as? [[String: Any]], !arr.isEmpty {
                     for item in arr {
                         guard let sid = item["id"] as? String,
                               Self.isValidResourceIdentifier(sid),
                               !excludingIds.contains(sid),
                               sid != cleanCid,
+                              !seenIds.contains(sid),
                               !self.isUnstageableCatalogId(sid),
                               let attr = item["attributes"] as? [String: Any],
                               attr["playParams"] != nil else { continue }
@@ -97,22 +93,9 @@ extension MusicKitManager {
                         if !name.isEmpty && !sName.isEmpty && LibraryService.hasConflictingVersionQualifier(name, sName) {
                             continue
                         }
-                        localMatches.append((id: sid, name: sName, artist: sArtist))
+                        seenIds.insert(sid)
+                        results.append((id: sid, name: sName, artist: sArtist))
                     }
-                    boxLock.lock()
-                    isrcMatches = localMatches
-                    boxLock.unlock()
-                }
-                task.resume()
-                if sema.wait(timeout: .now() + 3.5) == .timedOut {
-                    task.cancel()
-                }
-                boxLock.lock()
-                let fetchedIsrc = isrcMatches
-                boxLock.unlock()
-                for m in fetchedIsrc where !seenIds.contains(m.id) {
-                    seenIds.insert(m.id)
-                    results.append(m)
                 }
             }
         }
@@ -129,17 +112,19 @@ extension MusicKitManager {
         let targetNameNorm = LibraryService.normalizeMatchingTitle(effectiveSearchName)
         let targetBaseNorm = LibraryService.normalizeMatchingTitle(Self.extractBaseTrackTitle(effectiveSearchName))
         let targetArtistTokens = Self.extractArtistTokens(effectiveSearchArtist)
+        let excludedSnapshot = seenIds
 
-        func runSearchPass(langTag: String) -> (exact: [(id: String, name: String, artist: String)], crossScriptCandidates: [(id: String, name: String, artist: String)]) {
-            guard let url = Self.makeAppleMusicAPIURL(
-                path: "/v1/catalog/\(sf)/search",
-                queryItems: [
-                    URLQueryItem(name: "term", value: query),
-                    URLQueryItem(name: "types", value: "songs"),
-                    URLQueryItem(name: "limit", value: "12"),
-                    URLQueryItem(name: "l", value: langTag)
-                ]
-            ) else {
+        func runSearchPass(langTag: String) async -> (exact: [(id: String, name: String, artist: String)], crossScriptCandidates: [(id: String, name: String, artist: String)]) {
+            guard !Task.isCancelled,
+                  let url = Self.makeAppleMusicAPIURL(
+                      path: "/v1/catalog/\(sf)/search",
+                      queryItems: [
+                          URLQueryItem(name: "term", value: query),
+                          URLQueryItem(name: "types", value: "songs"),
+                          URLQueryItem(name: "limit", value: "12"),
+                          URLQueryItem(name: "l", value: langTag)
+                      ]
+                  ) else {
                 return ([], [])
             }
             var req = URLRequest(url: url, timeoutInterval: 3.2)
@@ -150,97 +135,94 @@ extension MusicKitManager {
                 req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
             }
 
-            let sema = DispatchSemaphore(value: 0)
-            let boxLock = NSLock()
-            var exactMatched: [(id: String, name: String, artist: String)] = []
-            var crossCandidates: [(id: String, name: String, artist: String)] = []
+            guard let (d, resp) = try? await session.data(for: req),
+                  !Task.isCancelled,
+                  let http = resp as? HTTPURLResponse, http.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                  let resultsObj = json["results"] as? [String: Any],
+                  let songs = resultsObj["songs"] as? [String: Any],
+                  let arr = songs["data"] as? [[String: Any]], !arr.isEmpty else {
+                return ([], [])
+            }
 
-            let task = session.dataTask(with: req) { [weak self] data, resp, _ in
-                defer { sema.signal() }
-                guard let self = self,
-                          let d = data, let http = resp as? HTTPURLResponse, http.statusCode == 200,
-                          let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                          let resultsObj = json["results"] as? [String: Any],
-                          let songs = resultsObj["songs"] as? [String: Any],
-                          let arr = songs["data"] as? [[String: Any]], !arr.isEmpty else { return }
-
-                var found: [(id: String, name: String, artist: String)] = []
-                var cross: [(id: String, name: String, artist: String)] = []
+            var found: [(id: String, name: String, artist: String)] = []
+            var cross: [(id: String, name: String, artist: String)] = []
+            for item in arr {
+                guard let sid = item["id"] as? String,
+                      Self.isValidResourceIdentifier(sid),
+                      !excludedSnapshot.contains(sid),
+                      !self.isUnstageableCatalogId(sid),
+                      let attr = item["attributes"] as? [String: Any],
+                      attr["playParams"] != nil else { continue }
+                let rawSName = (attr["name"] as? String) ?? ""
+                let rawSArtist = (attr["artistName"] as? String) ?? ""
+                if LibraryService.hasConflictingVersionQualifier(effectiveSearchName, rawSName) {
+                    continue
+                }
+                let sName = LibraryService.normalizeMatchingTitle(rawSName)
+                let sBase = LibraryService.normalizeMatchingTitle(Self.extractBaseTrackTitle(rawSName))
+                let artistOk = targetArtistTokens.isEmpty || Self.matchesAnyCandidateArtist(rawSArtist, candidates: targetArtistTokens)
+                if artistOk && (sName == targetNameNorm || (!targetBaseNorm.isEmpty && sBase == targetBaseNorm)) {
+                    if !found.contains(where: { $0.id == sid }) {
+                        found.append((id: sid, name: rawSName, artist: rawSArtist))
+                    }
+                } else if artistOk && !cross.contains(where: { $0.id == sid }) && cross.count < 3 {
+                    cross.append((id: sid, name: rawSName, artist: rawSArtist))
+                }
+            }
+            if found.isEmpty && targetArtistTokens.isEmpty {
                 for item in arr {
-                    guard let sid = item["id"] as? String,
-                          Self.isValidResourceIdentifier(sid),
-                          !seenIds.contains(sid),
-                          !self.isUnstageableCatalogId(sid),
-                          let attr = item["attributes"] as? [String: Any],
-                          attr["playParams"] != nil else { continue }
-                    let rawSName = (attr["name"] as? String) ?? ""
-                    let rawSArtist = (attr["artistName"] as? String) ?? ""
-                    if LibraryService.hasConflictingVersionQualifier(effectiveSearchName, rawSName) {
-                        continue
-                    }
-                    let sName = LibraryService.normalizeMatchingTitle(rawSName)
-                    let sBase = LibraryService.normalizeMatchingTitle(Self.extractBaseTrackTitle(rawSName))
-                    let artistOk = targetArtistTokens.isEmpty || Self.matchesAnyCandidateArtist(rawSArtist, candidates: targetArtistTokens)
-                    if artistOk && (sName == targetNameNorm || (!targetBaseNorm.isEmpty && sBase == targetBaseNorm)) {
-                        if !found.contains(where: { $0.id == sid }) {
-                            found.append((id: sid, name: rawSName, artist: rawSArtist))
-                        }
-                    } else if artistOk && !cross.contains(where: { $0.id == sid }) && cross.count < 3 {
-                        cross.append((id: sid, name: rawSName, artist: rawSArtist))
+                    if let sid = item["id"] as? String,
+                       Self.isValidResourceIdentifier(sid),
+                       !excludedSnapshot.contains(sid),
+                       !self.isUnstageableCatalogId(sid) {
+                        let attr = (item["attributes"] as? [String: Any]) ?? [:]
+                        found.append((
+                            id: sid,
+                            name: (attr["name"] as? String) ?? "",
+                            artist: (attr["artistName"] as? String) ?? ""
+                        ))
+                        break
                     }
                 }
-                if found.isEmpty && targetArtistTokens.isEmpty {
-                    for item in arr {
-                        if let sid = item["id"] as? String,
-                           Self.isValidResourceIdentifier(sid),
-                           !seenIds.contains(sid),
-                           !self.isUnstageableCatalogId(sid) {
-                            let attr = (item["attributes"] as? [String: Any]) ?? [:]
-                            found.append((
-                                id: sid,
-                                name: (attr["name"] as? String) ?? "",
-                                artist: (attr["artistName"] as? String) ?? ""
-                            ))
-                            break
-                        }
-                    }
-                }
-                boxLock.lock()
-                exactMatched = found
-                crossCandidates = cross
-                boxLock.unlock()
             }
-            task.resume()
-            if sema.wait(timeout: .now() + 3.5) == .timedOut {
-                task.cancel()
-            }
-            boxLock.lock()
-            defer { boxLock.unlock() }
-            return (exactMatched, crossCandidates)
+            return (found, cross)
         }
 
-        let primaryPass = runSearchPass(langTag: primaryLang)
+        let primaryPass = await runSearchPass(langTag: primaryLang)
         var finalItems = primaryPass.exact
 
         if finalItems.isEmpty, let alt = altLang, !alt.isEmpty, alt.caseInsensitiveCompare(primaryLang) != .orderedSame {
-            let altPass = runSearchPass(langTag: alt)
+            let altPass = await runSearchPass(langTag: alt)
             finalItems = altPass.exact
         }
 
         if finalItems.isEmpty && !primaryPass.crossScriptCandidates.isEmpty {
-            for cand in primaryPass.crossScriptCandidates.prefix(2) {
-                let variants = resolveCatalogSongTitleVariantsSync(catalogId: cand.id)
-                let matchesVariant = variants.contains { v in
-                    guard !LibraryService.hasConflictingVersionQualifier(effectiveSearchName, v.name) else { return false }
-                    let vNorm = LibraryService.normalizeMatchingTitle(v.name)
-                    let vBase = LibraryService.normalizeMatchingTitle(Self.extractBaseTrackTitle(v.name))
-                    return (!targetNameNorm.isEmpty && vNorm == targetNameNorm)
-                        || (!targetBaseNorm.isEmpty && vBase == targetBaseNorm)
+            let candidates = Array(primaryPass.crossScriptCandidates.prefix(2))
+            let matchedIdx: Int? = await withTaskGroup(of: (Int, Bool).self) { group in
+                for (idx, cand) in candidates.enumerated() {
+                    group.addTask {
+                        let variants = await self.resolveCatalogSongTitleVariants(catalogId: cand.id)
+                        let ok = variants.contains { v in
+                            guard !LibraryService.hasConflictingVersionQualifier(effectiveSearchName, v.name) else { return false }
+                            let vNorm = LibraryService.normalizeMatchingTitle(v.name)
+                            let vBase = LibraryService.normalizeMatchingTitle(Self.extractBaseTrackTitle(v.name))
+                            return (!targetNameNorm.isEmpty && vNorm == targetNameNorm)
+                                || (!targetBaseNorm.isEmpty && vBase == targetBaseNorm)
+                        }
+                        return (idx, ok)
+                    }
                 }
-                if matchesVariant {
-                    finalItems.append(cand)
-                    break
+                var best: Int? = nil
+                for await (idx, ok) in group where ok {
+                    if best == nil || idx < best! {
+                        best = idx
+                    }
                 }
+                return best
+            }
+            if let winner = matchedIdx {
+                finalItems.append(candidates[winner])
             }
         }
 
@@ -346,8 +328,9 @@ extension MusicKitManager {
     internal static let localizedTitlesCacheLock = NSLock()
     internal static var localizedTitlesCache: [String: [(name: String, artist: String)]] = [:]
 
-    internal func fetchCatalogSongTitleSync(catalogId: String, sf: String, lang: String, devToken: String) -> (name: String, artist: String)? {
-        guard Self.isValidStorefrontCode(sf),
+    internal func fetchCatalogSongTitle(catalogId: String, sf: String, lang: String, devToken: String) async -> (name: String, artist: String)? {
+        guard !Task.isCancelled,
+              Self.isValidStorefrontCode(sf),
               Self.isValidResourceIdentifier(catalogId),
               let url = Self.makeAppleMusicAPIURL(
                   path: "/v1/catalog/\(sf)/songs/\(catalogId)",
@@ -361,33 +344,22 @@ extension MusicKitManager {
             req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
         }
 
-        let sema = DispatchSemaphore(value: 0)
-        let boxLock = NSLock()
-        var resolved: (name: String, artist: String)?
-        let task = session.dataTask(with: req) { data, resp, _ in
-            defer { sema.signal() }
-            guard let d = data, let http = resp as? HTTPURLResponse, http.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                  let arr = json["data"] as? [[String: Any]],
-                  let first = arr.first,
-                  let attr = first["attributes"] as? [String: Any],
-                  let locName = attr["name"] as? String, !locName.isEmpty else { return }
-            let locArtist = (attr["artistName"] as? String) ?? ""
-            boxLock.lock()
-            resolved = (locName, locArtist)
-            boxLock.unlock()
+        guard let (d, resp) = try? await session.data(for: req),
+              !Task.isCancelled,
+              let http = resp as? HTTPURLResponse, http.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let arr = json["data"] as? [[String: Any]],
+              let first = arr.first,
+              let attr = first["attributes"] as? [String: Any],
+              let locName = attr["name"] as? String, !locName.isEmpty else {
+            return nil
         }
-        task.resume()
-        if sema.wait(timeout: .now() + 2.2) == .timedOut {
-            task.cancel()
-        }
-        boxLock.lock()
-        defer { boxLock.unlock() }
-        return resolved
+        let locArtist = (attr["artistName"] as? String) ?? ""
+        return (locName, locArtist)
     }
 
-    public func resolveCatalogSongTitleVariantsSync(catalogId: String) -> [(name: String, artist: String)] {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return [] }
+    public func resolveCatalogSongTitleVariants(catalogId: String) async -> [(name: String, artist: String)] {
+        guard !PlaybackRouter.shared.isTestingEnvironment, !Task.isCancelled else { return [] }
         let cleanId = catalogId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanId.isEmpty, Int(cleanId) != nil, let devToken = getDeveloperToken() else { return [] }
         let sf = Self.sanitizedStorefront(getUserStorefront())
@@ -400,15 +372,20 @@ extension MusicKitManager {
         }
 
         var variants: [(name: String, artist: String)] = []
-        if let p = fetchCatalogSongTitleSync(catalogId: cleanId, sf: sf, lang: primaryLang, devToken: devToken) {
-            variants.append(p)
-        }
-        if let alt = sysAltLang,
-           let s = fetchCatalogSongTitleSync(catalogId: cleanId, sf: sf, lang: alt, devToken: devToken) {
-            if !variants.contains(where: { $0.name == s.name && $0.artist == s.artist }) {
+        if let alt = sysAltLang, !alt.isEmpty, alt.caseInsensitiveCompare(primaryLang) != .orderedSame {
+            async let primaryFetch = fetchCatalogSongTitle(catalogId: cleanId, sf: sf, lang: primaryLang, devToken: devToken)
+            async let altFetch = fetchCatalogSongTitle(catalogId: cleanId, sf: sf, lang: alt, devToken: devToken)
+            let (p, s) = await (primaryFetch, altFetch)
+            if let p {
+                variants.append(p)
+            }
+            if let s, !variants.contains(where: { $0.name == s.name && $0.artist == s.artist }) {
                 variants.append(s)
             }
+        } else if let p = await fetchCatalogSongTitle(catalogId: cleanId, sf: sf, lang: primaryLang, devToken: devToken) {
+            variants.append(p)
         }
+
         if !variants.isEmpty {
             Self.localizedTitlesCacheLock.withLock {
                 if Self.localizedTitlesCache.count >= 500 {
@@ -463,8 +440,8 @@ extension MusicKitManager {
         }
     }
 
-    public func resolveLocalizedCatalogSongTitleSync(catalogId: String) -> (name: String, artist: String)? {
-        let variants = resolveCatalogSongTitleVariantsSync(catalogId: catalogId)
+    public func resolveLocalizedCatalogSongTitle(catalogId: String) async -> (name: String, artist: String)? {
+        let variants = await resolveCatalogSongTitleVariants(catalogId: catalogId)
         if variants.count >= 2 {
             return variants[1]
         }
@@ -503,108 +480,140 @@ extension MusicKitManager {
 
     internal static let directInspectionCacheLock = NSLock()
     internal static var directInspectionCache: [String: DirectCloudSongInspection] = [:]
+    private static var inFlightDirectInspectionTasks: [String: Task<DirectCloudSongInspection?, Never>] = [:]
 
-    public func inspectCatalogSongDirectCloudEligibilitySync(catalogId: String) -> DirectCloudSongInspection? {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return nil }
+    public func cachedDirectCloudEligibility(catalogId: String?) -> DirectCloudSongInspection? {
+        guard let raw = catalogId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty, Int(raw) != nil else {
+            return nil
+        }
+        return Self.directInspectionCacheLock.withLock {
+            Self.directInspectionCache[raw]
+        }
+    }
+
+    public func inspectCatalogSongDirectCloudEligibility(catalogId: String) async -> DirectCloudSongInspection? {
+        guard !PlaybackRouter.shared.isTestingEnvironment, !Task.isCancelled else { return nil }
         let cleanId = catalogId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanId.isEmpty, Int(cleanId) != nil else { return nil }
 
-        if let cached = Self.directInspectionCacheLock.withLock({ Self.directInspectionCache[cleanId] }) {
-            return cached
-        }
-        guard let devToken = getDeveloperToken() else { return nil }
-        let sf = Self.sanitizedStorefront(getUserStorefront())
-        guard let url = Self.makeAppleMusicAPIURL(
-            path: "/v1/catalog/\(sf)/songs/\(cleanId)",
-            queryItems: [
-                URLQueryItem(name: "relate", value: "station"),
-                URLQueryItem(name: "extend", value: "audioVariants")
-            ]
-        ) else {
-            return nil
-        }
-
-        var req = URLRequest(url: url, timeoutInterval: 1.5)
-        req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let uToken = getUserToken(), !uToken.isEmpty {
-            req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
-        }
-
-        let sema = DispatchSemaphore(value: 0)
-        let boxLock = NSLock()
-        var parsed: DirectCloudSongInspection?
-        let task = session.dataTask(with: req) { data, resp, _ in
-            defer { sema.signal() }
-            guard let http = resp as? HTTPURLResponse else { return }
-            if http.statusCode == 404 {
-                boxLock.lock()
-                parsed = DirectCloudSongInspection(hasStationSeed: false, isHiResLossless: false, isLossless: false, durationSeconds: nil)
-                boxLock.unlock()
-                return
+        let existingOrCached: (cached: DirectCloudSongInspection?, inFlight: Task<DirectCloudSongInspection?, Never>?) = Self.directInspectionCacheLock.withLock {
+            if let hit = Self.directInspectionCache[cleanId] {
+                return (hit, nil)
             }
-            guard http.statusCode == 200,
-                  let d = data,
-                  let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                  let arr = json["data"] as? [[String: Any]],
-                  let item = arr.first else { return }
-
-            let attr = (item["attributes"] as? [String: Any]) ?? [:]
-            let variants = (attr["audioVariants"] as? [String]) ?? []
-            let isHiRes = variants.contains { $0.caseInsensitiveCompare("hi-res-lossless") == .orderedSame }
-            let isLossless = isHiRes || variants.contains { $0.caseInsensitiveCompare("lossless") == .orderedSame }
-            let durSec: Double? = (attr["durationInMillis"] as? Double).flatMap { $0 > 0 ? ($0 / 1000.0) : nil }
-            let rawIsrc = (attr["isrc"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let rawCatName = (attr["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let rawCatArtist = (attr["artistName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            var hasStation = false
-            if let rels = item["relationships"] as? [String: Any],
-               let stationRel = rels["station"] as? [String: Any],
-               let stData = stationRel["data"] as? [[String: Any]],
-               let stId = stData.first?["id"] as? String,
-               !stId.isEmpty {
-                hasStation = true
+            if let task = Self.inFlightDirectInspectionTasks[cleanId] {
+                return (nil, task)
             }
+            return (nil, nil)
+        }
+        if let hit = existingOrCached.cached {
+            return hit
+        }
+        if let inFlight = existingOrCached.inFlight {
+            return await inFlight.value
+        }
 
-            boxLock.lock()
-            parsed = DirectCloudSongInspection(
-                hasStationSeed: hasStation,
-                isHiResLossless: isHiRes,
-                isLossless: isLossless,
-                durationSeconds: durSec,
-                isrc: (rawIsrc?.isEmpty == false) ? rawIsrc : nil,
-                catalogName: (rawCatName?.isEmpty == false) ? rawCatName : nil,
-                catalogArtist: (rawCatArtist?.isEmpty == false) ? rawCatArtist : nil
-            )
-            boxLock.unlock()
-        }
-        task.resume()
-        if sema.wait(timeout: .now() + 1.6) == .timedOut {
-            task.cancel()
-        }
-        boxLock.lock()
-        let result = parsed
-        boxLock.unlock()
-        if let valid = result {
-            Self.directInspectionCacheLock.withLock {
-                if Self.directInspectionCache.count >= 500 {
-                    var pruned: [String: DirectCloudSongInspection] = [:]
-                    for (k, v) in Self.directInspectionCache where pruned.count < 250 {
-                        pruned[k] = v
-                    }
-                    Self.directInspectionCache = pruned
+        let fetchTask = Task<DirectCloudSongInspection?, Never> { [weak self] in
+            defer {
+                Self.directInspectionCacheLock.withLock {
+                    _ = Self.inFlightDirectInspectionTasks.removeValue(forKey: cleanId)
                 }
-                Self.directInspectionCache[cleanId] = valid
             }
+            guard let self = self, let devToken = self.getDeveloperToken() else { return nil }
+            let sf = Self.sanitizedStorefront(self.getUserStorefront())
+            guard let url = Self.makeAppleMusicAPIURL(
+                path: "/v1/catalog/\(sf)/songs/\(cleanId)",
+                queryItems: [
+                    URLQueryItem(name: "relate", value: "station"),
+                    URLQueryItem(name: "extend", value: "audioVariants")
+                ]
+            ) else {
+                return nil
+            }
+
+            var req = URLRequest(url: url, timeoutInterval: 1.8)
+            req.setValue("Bearer \(devToken)", forHTTPHeaderField: "Authorization")
+            req.setValue("application/json", forHTTPHeaderField: "Accept")
+            if let uToken = self.getUserToken(), !uToken.isEmpty {
+                req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
+            }
+
+            guard let (d, resp) = try? await self.session.data(for: req),
+                  let http = resp as? HTTPURLResponse else {
+                return nil
+            }
+
+            let parsed: DirectCloudSongInspection?
+            if http.statusCode == 404 {
+                parsed = DirectCloudSongInspection(hasStationSeed: false, isHiResLossless: false, isLossless: false, durationSeconds: nil)
+            } else if http.statusCode == 200,
+                      let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                      let arr = json["data"] as? [[String: Any]],
+                      let item = arr.first {
+                let attr = (item["attributes"] as? [String: Any]) ?? [:]
+                let variants = (attr["audioVariants"] as? [String]) ?? []
+                let isHiRes = variants.contains { $0.caseInsensitiveCompare("hi-res-lossless") == .orderedSame }
+                let isLossless = isHiRes || variants.contains { $0.caseInsensitiveCompare("lossless") == .orderedSame }
+                let durSec: Double? = (attr["durationInMillis"] as? Double).flatMap { $0 > 0 ? ($0 / 1000.0) : nil }
+                let rawIsrc = (attr["isrc"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let rawCatName = (attr["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let rawCatArtist = (attr["artistName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                var hasStation = false
+                if let rels = item["relationships"] as? [String: Any],
+                   let stationRel = rels["station"] as? [String: Any],
+                   let stData = stationRel["data"] as? [[String: Any]],
+                   let stId = stData.first?["id"] as? String,
+                   !stId.isEmpty {
+                    hasStation = true
+                }
+                parsed = DirectCloudSongInspection(
+                    hasStationSeed: hasStation,
+                    isHiResLossless: isHiRes,
+                    isLossless: isLossless,
+                    durationSeconds: durSec,
+                    isrc: (rawIsrc?.isEmpty == false) ? rawIsrc : nil,
+                    catalogName: (rawCatName?.isEmpty == false) ? rawCatName : nil,
+                    catalogArtist: (rawCatArtist?.isEmpty == false) ? rawCatArtist : nil
+                )
+            } else {
+                parsed = nil
+            }
+
+            if let valid = parsed {
+                Self.directInspectionCacheLock.withLock {
+                    if Self.directInspectionCache.count >= 500 {
+                        var pruned: [String: DirectCloudSongInspection] = [:]
+                        for (k, v) in Self.directInspectionCache where pruned.count < 250 {
+                            pruned[k] = v
+                        }
+                        Self.directInspectionCache = pruned
+                    }
+                    Self.directInspectionCache[cleanId] = valid
+                }
+            }
+            return parsed
         }
-        return result
+
+        let taskToAwait: Task<DirectCloudSongInspection?, Never> = Self.directInspectionCacheLock.withLock {
+            if let raced = Self.inFlightDirectInspectionTasks[cleanId] {
+                fetchTask.cancel()
+                return raced
+            }
+            Self.inFlightDirectInspectionTasks[cleanId] = fetchTask
+            return fetchTask
+        }
+        return await taskToAwait.value
     }
 
-    public func resolveCatalogSongDurationSync(catalogId: String) -> Double? {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return nil }
+    public func resolveCatalogSongDuration(catalogId: String) async -> Double? {
+        guard !PlaybackRouter.shared.isTestingEnvironment, !Task.isCancelled else { return nil }
         let cleanId = catalogId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanId.isEmpty, Int(cleanId) != nil, let devToken = getDeveloperToken() else { return nil }
+        guard !cleanId.isEmpty, Int(cleanId) != nil else { return nil }
+        if let cachedDur = cachedDirectCloudEligibility(catalogId: cleanId)?.durationSeconds, cachedDur > 0 {
+            return cachedDur
+        }
+        guard let devToken = getDeveloperToken() else { return nil }
         let sf = Self.sanitizedStorefront(getUserStorefront())
         guard let url = Self.makeAppleMusicAPIURL(path: "/v1/catalog/\(sf)/songs/\(cleanId)") else { return nil }
 
@@ -615,26 +624,15 @@ extension MusicKitManager {
             req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
         }
 
-        let sema = DispatchSemaphore(value: 0)
-        let boxLock = NSLock()
-        var durationSec: Double?
-        let task = session.dataTask(with: req) { data, resp, _ in
-            defer { sema.signal() }
-            guard let d = data, let http = resp as? HTTPURLResponse, http.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                  let arr = json["data"] as? [[String: Any]],
-                  let attr = arr.first?["attributes"] as? [String: Any],
-                  let durMs = attr["durationInMillis"] as? Double, durMs > 0 else { return }
-            boxLock.lock()
-            durationSec = durMs / 1000.0
-            boxLock.unlock()
+        guard let (d, resp) = try? await session.data(for: req),
+              !Task.isCancelled,
+              let http = resp as? HTTPURLResponse, http.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let arr = json["data"] as? [[String: Any]],
+              let attr = arr.first?["attributes"] as? [String: Any],
+              let durMs = attr["durationInMillis"] as? Double, durMs > 0 else {
+            return nil
         }
-        task.resume()
-        if sema.wait(timeout: .now() + 2.7) == .timedOut {
-            task.cancel()
-        }
-        boxLock.lock()
-        defer { boxLock.unlock() }
-        return durationSec
+        return durMs / 1000.0
     }
 }

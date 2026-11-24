@@ -183,6 +183,7 @@ public struct PlayerStatus: Codable, Sendable {
     public var audioDeviceSampleRate: Double?
     public var audioDeviceBitDepth: Int?
     public var isBitPerfect: Bool?
+    public var isClockSyncedDsp: Bool?
     public var isDacMutingGuardEnabled: Bool?
     public var dacMutingGuardMs: Int?
     public var spectralAnalysis: SpectralAnalysisInfo?
@@ -240,6 +241,7 @@ public struct PlayerStatus: Codable, Sendable {
         case audioDeviceSampleRate = "audio_device_sample_rate"
         case audioDeviceBitDepth = "audio_device_bit_depth"
         case isBitPerfect = "is_bit_perfect"
+        case isClockSyncedDsp = "is_clock_synced_dsp"
         case isDacMutingGuardEnabled = "dac_muting_guard_enabled"
         case dacMutingGuardMs = "dac_muting_guard_ms"
         case spectralAnalysis = "spectral_analysis"
@@ -298,6 +300,7 @@ public struct PlayerStatus: Codable, Sendable {
         audioDeviceSampleRate: Double? = nil,
         audioDeviceBitDepth: Int? = nil,
         isBitPerfect: Bool? = nil,
+        isClockSyncedDsp: Bool? = nil,
         isDacMutingGuardEnabled: Bool? = nil,
         dacMutingGuardMs: Int? = nil,
         spectralAnalysis: SpectralAnalysisInfo? = nil,
@@ -354,6 +357,7 @@ public struct PlayerStatus: Codable, Sendable {
         self.audioDeviceSampleRate = audioDeviceSampleRate
         self.audioDeviceBitDepth = audioDeviceBitDepth
         self.isBitPerfect = isBitPerfect
+        self.isClockSyncedDsp = isClockSyncedDsp
         self.isDacMutingGuardEnabled = isDacMutingGuardEnabled
         self.dacMutingGuardMs = dacMutingGuardMs
         self.spectralAnalysis = spectralAnalysis
@@ -413,6 +417,7 @@ public struct PlayerStatus: Codable, Sendable {
         self.audioDeviceSampleRate = try container.decodeIfPresent(Double.self, forKey: .audioDeviceSampleRate)
         self.audioDeviceBitDepth = try container.decodeIfPresent(Int.self, forKey: .audioDeviceBitDepth)
         self.isBitPerfect = try container.decodeIfPresent(Bool.self, forKey: .isBitPerfect)
+        self.isClockSyncedDsp = try container.decodeIfPresent(Bool.self, forKey: .isClockSyncedDsp)
         self.isDacMutingGuardEnabled = try container.decodeIfPresent(Bool.self, forKey: .isDacMutingGuardEnabled)
         self.dacMutingGuardMs = try container.decodeIfPresent(Int.self, forKey: .dacMutingGuardMs)
         self.spectralAnalysis = try container.decodeIfPresent(SpectralAnalysisInfo.self, forKey: .spectralAnalysis)

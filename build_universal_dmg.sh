@@ -91,6 +91,7 @@ done < <(find "$MAC_DIR/Sources/AppleMusicRemoteMac" -name "*.swift" -print0)
 
 
 FRAMEWORKS=(
+    -I "$MAC_DIR/Sources/CAtomicPrimitives/include"
     -framework Cocoa
     -framework ApplicationServices
     -framework Network

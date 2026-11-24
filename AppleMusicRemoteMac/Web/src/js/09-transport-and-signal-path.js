@@ -253,7 +253,7 @@
       state.roomCorrectionActive ||
       (state.roomAcoustic && state.roomAcoustic.enabled && state.roomAcoustic.active_profile)
     );
-    const isClockSynced64BitDsp = !isLocalDspActive && !isLossy && isPreDspActive && ratesMatch && depthsMatch;
+    const isClockSynced64BitDsp = !isLocalDspActive && !isLossy && isPreDspActive && (Boolean(state.isClockSyncedDsp) || ratesMatch);
     const isHardwareMatched = isLocalDspActive
       ? !isInsufficientDsd
       : (isClockSynced64BitDsp || ((state.isBitPerfect !== false) && ratesMatch && depthsMatch));
@@ -411,7 +411,7 @@
     const roomEqSuffix = (state.roomCorrectionActive || (state.roomAcoustic && state.roomAcoustic.enabled && state.roomAcoustic.active_profile))
       ? ` • Room EQ (${state.roomProfileName || (state.roomAcoustic.active_profile && state.roomAcoustic.active_profile.name) || 'Auto-PEQ'})`
       : '';
-    const isDrcActive = Boolean(state.lateNightDrcMode && state.lateNightDrcMode !== 'off');
+    const isDrcActive = Boolean((state.lateNightDrcMode && state.lateNightDrcMode !== 'off') || state.lateNightDrcEnabled);
     const drcModeShort = state.lateNightDrcMode === 'concert'
       ? (IS_EN ? 'Night Concert' : 'Ночной концерт')
       : (IS_EN ? 'Gentle DRC' : 'Деликатный DRC');
@@ -540,9 +540,12 @@
         if (srcBits === outBitDepth && srcKhz === rateKhz) {
           signalVerifiedTitle.textContent = `Системный микшер macOS (${outBitDepth}/${rateKhz})`;
           signalVerifiedDesc.textContent = `Частота и разрядность совпадают (${outBitDepth}-бит / ${rateKhz} кГц), но поток проходит через микшер macOS CoreAudio.`;
+        } else if (srcKhz === rateKhz) {
+          signalVerifiedTitle.textContent = `Преобразование разрядности (${srcBits}-бит → ${outBitDepth}-бит @ ${rateKhz} кГц)`;
+          signalVerifiedDesc.textContent = `Частота дискретизации синхронизирована 1:1 (${rateKhz} кГц) без передискретизации; выполняется квантование разрядности (${srcBits}-бит → ${outBitDepth}-бит).`;
         } else {
           signalVerifiedTitle.textContent = `Передискретизация (${srcBits}/${srcKhz} → ${outBitDepth}/${rateKhz})`;
-          signalVerifiedDesc.textContent = `Частота или разрядность источника (${srcBits}-бит / ${srcKhz} кГц) отличается от текущего режима вывода (${outBitDepth}-бит / ${rateKhz} кГц).`;
+          signalVerifiedDesc.textContent = `Частота дискретизации источника (${srcBits}-бит / ${srcKhz} кГц) пересчитывается в режим вывода (${outBitDepth}-бит / ${rateKhz} кГц).`;
         }
       }
     }

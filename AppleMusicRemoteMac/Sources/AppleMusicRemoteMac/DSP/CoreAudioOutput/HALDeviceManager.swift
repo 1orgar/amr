@@ -215,6 +215,12 @@ public final class HALDeviceManager: @unchecked Sendable {
             return nil
         }
 
+        guard Self.isEligibleExternalDACDevice(deviceID) else {
+            NSLog("[HALDeviceManager] ⛔️ Отклонён запуск DSP/DoP на неподдерживаемом транспорте устройства %u (разрешены только внешние USB/Thunderbolt ЦАП)", deviceID)
+            stopAndReleaseDeviceLocked()
+            return nil
+        }
+
         // Если меняем частоту/режим на ТОМ ЖЕ устройстве, останавливаем только IOProc без сброса Hog Mode и микшера,
         // чтобы macOS не дёргала системный аудиовыход (Динамики <-> SMSL) между переключениями частот!
         if activeDeviceID != 0 && activeDeviceID != deviceID {
@@ -248,6 +254,16 @@ public final class HALDeviceManager: @unchecked Sendable {
             preferNonMixable: hogLocked || isDoPMode
         )
         if isDoPMode {
+            guard isInteger && bitDepth >= 24 else {
+                NSLog(
+                    "[HALDeviceManager] ⛔️ Отказ запуска DSD DoP на устройстве %u: поток не переключился в бит-прозрачный Integer >= 24-bit (bitDepth=%d, integer=%d)",
+                    deviceID,
+                    bitDepth,
+                    isInteger ? 1 : 0
+                )
+                rollbackFailedStartLocked(deviceID: deviceID, streamID: streamID)
+                return nil
+            }
             ensureBitTransparentHardwareControlsForDoPLocked(deviceID: deviceID)
         }
 

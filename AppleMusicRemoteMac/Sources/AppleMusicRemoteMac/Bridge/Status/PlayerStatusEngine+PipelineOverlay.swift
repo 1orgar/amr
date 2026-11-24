@@ -117,6 +117,7 @@ extension PlayerStatusEngine {
         let dspConfig = AudioEngineController.shared.currentConfigurationSnapshot()
         let dspTelemetry = AudioEngineController.shared.latestTelemetrySnapshot()
         let isDspRunning = !hasActiveDLNA && dspTelemetry.isRunning
+        status.isClockSyncedDsp = isLosslessQuality && ratesMatch && isPreDSPModifyingAudio && !isDspRunning
         status.dspMode = isDspRunning ? dspTelemetry.activeMode.rawValue : DSPEngineMode.bitPerfectPassthrough.rawValue
         let profileDisplayName: String = {
             switch dspConfig.profile {

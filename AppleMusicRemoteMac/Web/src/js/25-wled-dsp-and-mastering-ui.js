@@ -138,8 +138,8 @@
           : 'Активен внешний сетевой плеер BluOS / DLNA: передаётся Bit-Perfect PCM (DSD/NOS не поддерживаются)';
       } else if (!hasEligibleUsbDac) {
         subEl.textContent = IS_EN
-          ? 'No external USB DAC connected: DSD and HQ NOS modes require a USB DAC (≥ 24-bit / 176.4 kHz)'
-          : 'Внешний USB ЦАП не подключён: режимы DSD и HQ NOS доступны только для USB ЦАП (≥ 24-бит / 176.4 кГц)';
+          ? 'No external USB / Thunderbolt DAC connected: DSD and HQ NOS modes require a USB or Thunderbolt DAC (≥ 24-bit / 176.4 kHz)'
+          : 'Внешний USB / Thunderbolt ЦАП не подключён: режимы DSD и HQ NOS доступны только для USB / Thunderbolt ЦАП (≥ 24-бит / 176.4 кГц)';
       } else if (state.dspActivePresetSubtitle) {
         subEl.textContent = translateTextToEn(state.dspActivePresetSubtitle);
       }
@@ -164,8 +164,8 @@
     if (presetSel.value !== 'builtin_passthrough' && state.usbDacAvailable === false) {
       presetSel.value = 'builtin_passthrough';
       showToast(IS_EN
-        ? 'DSD & HQ NOS modes are available only for external USB DACs'
-        : 'Режимы DSD и HQ NOS доступны только для внешних USB ЦАП');
+        ? 'DSD & HQ NOS modes are available only for external USB / Thunderbolt DACs'
+        : 'Режимы DSD и HQ NOS доступны только для внешних USB / Thunderbolt ЦАП');
       return;
     }
     if (state.allowDspPresetSelection === false) {
@@ -268,6 +268,17 @@
       state.lateNightDrcGainDb = Number(data.current_gain_db) || 0;
     }
     syncLateNightBadgeOnly();
+    const anyPreStillActive = Boolean(
+      state.lateNightDrcEnabled ||
+      (state.masteringDeclipMode && state.masteringDeclipMode !== 'off') ||
+      (state.masteringDeesserMode && state.masteringDeesserMode !== 'off') ||
+      state.roomCorrectionActive ||
+      (state.roomAcoustic && state.roomAcoustic.enabled && state.roomAcoustic.active_profile)
+    );
+    state.isClockSyncedDsp = anyPreStillActive;
+    if (!anyPreStillActive && state.isBitPerfect === false) {
+      state.isBitPerfect = undefined;
+    }
     applyDeviceCapabilityPermissionsUI();
     if (!opts.skipSignalRefresh) {
       renderNowPlaying();

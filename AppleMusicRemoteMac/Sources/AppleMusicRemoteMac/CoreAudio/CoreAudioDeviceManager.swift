@@ -302,7 +302,8 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
                     uid: uid,
                     availableRates: availableRates,
                     maxBitDepth: streamCaps.maxBitDepth,
-                    hasStereoOutput: streamCaps.hasStereoOutput
+                    hasStereoOutput: streamCaps.hasStereoOutput,
+                    hasBitTransparentInteger: streamCaps.hasBitTransparentInteger
                 )
 
                 return AudioOutputDevice(

@@ -160,7 +160,7 @@ extension WebSocketServer {
             let name = params["name"] as? String
             let artist = params["artist"] as? String
             let url = params["url"] as? String
-            let ok = bridge.addToLibrary(id: rawIdStr, trackId: trackId, name: name, artist: artist, url: url)
+            let ok = await bridge.addToLibraryAsync(id: rawIdStr, trackId: trackId, name: name, artist: artist, url: url)
             sendSuccess(action: action, data: ["status": ok ? "ok" : "error"], id: id, to: connection)
             return true
 
@@ -288,7 +288,7 @@ extension WebSocketServer {
             let passedTrackInfos = rawTracks.map { parseTrackInfo($0) }
 
             if isSingleTrack, let single = passedTrackInfos.first {
-                let ok = bridge.addToLibrary(
+                let ok = await bridge.addToLibraryAsync(
                     id: single.catalogId ?? single.id,
                     trackId: single.numericId,
                     name: !single.name.isEmpty ? single.name : rawName,

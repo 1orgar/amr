@@ -14,13 +14,13 @@ extension MusicKitManager {
 
     /// Resolves a fast ISRC-identical alternate catalog song (`<= 1.2s`, or `0 ms` when pre-warmed)
     /// in the user's active account storefront (`getUserStorefront()`, `getPreferredLanguageTag()`).
-    internal func resolveFastIsrcBackupCatalogSongSync(
+    internal func resolveFastIsrcBackupCatalogSong(
         catalogId: String,
         name: String,
         artist: String,
         excludingIds: Set<String>
-    ) -> (id: String, name: String, artist: String)? {
-        guard !PlaybackRouter.shared.isTestingEnvironment else { return nil }
+    ) async -> (id: String, name: String, artist: String)? {
+        guard !PlaybackRouter.shared.isTestingEnvironment, !Task.isCancelled else { return nil }
         let cleanCid = catalogId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.isValidResourceIdentifier(cleanCid) else { return nil }
 
@@ -31,7 +31,7 @@ extension MusicKitManager {
         }
 
         guard let devToken = getDeveloperToken() else { return nil }
-        let inspection = inspectCatalogSongDirectCloudEligibilitySync(catalogId: cleanCid)
+        let inspection = await inspectCatalogSongDirectCloudEligibility(catalogId: cleanCid)
         guard let rawIsrc = inspection?.isrc?.trimmingCharacters(in: .whitespacesAndNewlines),
               Self.isValidResourceIdentifier(rawIsrc) else {
             return nil
@@ -57,42 +57,30 @@ extension MusicKitManager {
             req.setValue(uToken, forHTTPHeaderField: "Music-User-Token")
         }
 
-        let sema = DispatchSemaphore(value: 0)
-        let boxLock = NSLock()
-        var bestMatch: (id: String, name: String, artist: String)? = nil
-        let task = session.dataTask(with: req) { [weak self] data, resp, _ in
-            defer { sema.signal() }
-            guard let self = self,
-                  let d = data,
-                  let http = resp as? HTTPURLResponse, http.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-                  let arr = json["data"] as? [[String: Any]], !arr.isEmpty else { return }
-            for item in arr {
-                guard let sid = item["id"] as? String,
-                      Self.isValidResourceIdentifier(sid),
-                      sid != cleanCid,
-                      !excludingIds.contains(sid),
-                      !self.isUnstageableCatalogId(sid),
-                      let attr = item["attributes"] as? [String: Any],
-                      attr["playParams"] != nil else { continue }
-                let sName = (attr["name"] as? String) ?? ""
-                let sArtist = (attr["artistName"] as? String) ?? ""
-                if !name.isEmpty && !sName.isEmpty && LibraryService.hasConflictingVersionQualifier(name, sName) {
-                    continue
-                }
-                boxLock.lock()
-                bestMatch = (id: sid, name: sName, artist: sArtist)
-                boxLock.unlock()
-                break
+        guard let (d, resp) = try? await session.data(for: req),
+              !Task.isCancelled,
+              let http = resp as? HTTPURLResponse, http.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let arr = json["data"] as? [[String: Any]], !arr.isEmpty else {
+            return nil
+        }
+
+        for item in arr {
+            guard let sid = item["id"] as? String,
+                  Self.isValidResourceIdentifier(sid),
+                  sid != cleanCid,
+                  !excludingIds.contains(sid),
+                  !self.isUnstageableCatalogId(sid),
+                  let attr = item["attributes"] as? [String: Any],
+                  attr["playParams"] != nil else { continue }
+            let sName = (attr["name"] as? String) ?? ""
+            let sArtist = (attr["artistName"] as? String) ?? ""
+            if !name.isEmpty && !sName.isEmpty && LibraryService.hasConflictingVersionQualifier(name, sName) {
+                continue
             }
+            return (id: sid, name: sName, artist: sArtist)
         }
-        task.resume()
-        if sema.wait(timeout: .now() + 1.35) == .timedOut {
-            task.cancel()
-        }
-        boxLock.lock()
-        defer { boxLock.unlock() }
-        return bestMatch
+        return nil
     }
 
     /// Read-only check for permanent user library tracks; never stages cloud songs in `/v1/me/library`.

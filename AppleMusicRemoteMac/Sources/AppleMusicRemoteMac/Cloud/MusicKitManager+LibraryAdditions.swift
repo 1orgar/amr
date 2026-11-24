@@ -327,7 +327,7 @@ extension MusicKitManager {
         // 3. Fallback: Local Music.app addToLibrary
         var anyAdded = false
         for t in tracks {
-            if LibraryService.shared.addToLibrary(id: t.catalogId ?? t.id, trackId: t.numericId, name: t.name, artist: t.artist, url: t.url) {
+            if await LibraryService.shared.addToLibraryAsync(id: t.catalogId ?? t.id, trackId: t.numericId, name: t.name, artist: t.artist, url: t.url) {
                 anyAdded = true
             }
         }

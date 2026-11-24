@@ -199,8 +199,7 @@ extension QueueManager {
         }
         let candKey = canonicalForeignTrackKey(name: candidateName, artist: candidateArtist)
 
-        // Pre-flight localized variant check: if Music.app started the expected catalog song under an official
-        // localized CJK/Cyrillic title before async title-variant fetch finished, confirm it without stopping!
+        // Pre-flight localized variant check: first check 0 ms RAM cache; if cold, verify asynchronously inside the recovery Task BEFORE stopping Music.app!
         let seedToVerifyVariants: (gen: UInt64, seedId: String)? = PlaybackStateStore.shared.withLock {
             guard !PlaybackStateStore.shared.currentTrackPlaybackConfirmed,
                   !PlaybackStateStore.shared.isUserPaused,
@@ -216,11 +215,11 @@ extension QueueManager {
             return (PlaybackStateStore.shared.playbackGeneration, rawCid)
         }
         if let (vGen, vSeedId) = seedToVerifyVariants {
-            let fetchedVariants = MusicKitManager.shared.resolveCatalogSongTitleVariantsSync(catalogId: vSeedId)
-            if !fetchedVariants.isEmpty {
+            let cachedVariants = MusicKitManager.shared.cachedTitleVariants(catalogId: vSeedId)
+            if !cachedVariants.isEmpty {
                 PlaybackStateStore.shared.withLock {
                     if PlaybackStateStore.shared.playbackGeneration == vGen {
-                        PlaybackStateStore.shared.activeTrackTitleVariants = fetchedVariants
+                        PlaybackStateStore.shared.activeTrackTitleVariants = cachedVariants
                     }
                 }
                 if matchesExpectedQueueTrack(expected, candidateName: candidateName, candidateArtist: candidateArtist) {
@@ -245,7 +244,7 @@ extension QueueManager {
         }
 
         let maxSeedRecoveryAttempts = 4
-        let recoveryContext: (gen: UInt64, originalId: String, badSeedId: String, attempt: Int, triedIds: Set<String>)? = PlaybackStateStore.shared.withLock {
+        let recoveryContext: (gen: UInt64, originalId: String, badSeedId: String, attempt: Int, triedIds: Set<String>, needsColdVariantCheck: Bool)? = PlaybackStateStore.shared.withLock {
             guard !PlaybackStateStore.shared.currentTrackPlaybackConfirmed,
                   !PlaybackStateStore.shared.isUserPaused,
                   !PlaybackStateStore.shared.triedAlternateCloudSeedForCurrentTrack,
@@ -258,6 +257,7 @@ extension QueueManager {
                 : expected
             let origId = curTrack.id.trimmingCharacters(in: .whitespacesAndNewlines)
             let rawCid = (curTrack.catalogId ?? curTrack.id).trimmingCharacters(in: .whitespacesAndNewlines)
+            let coldVariants = PlaybackStateStore.shared.activeTrackTitleVariants.isEmpty && Int(rawCid) != nil
             PlaybackStateStore.shared.playbackGeneration &+= 1
             PlaybackStateStore.shared.isStagingCloudTrack = true
             let nextAttempt = PlaybackStateStore.shared.alternateCloudSeedAttemptCount + 1
@@ -278,20 +278,13 @@ extension QueueManager {
                 origId,
                 rawCid,
                 nextAttempt,
-                PlaybackStateStore.shared.triedCloudSeedIdsForCurrentTrack
+                PlaybackStateStore.shared.triedCloudSeedIdsForCurrentTrack,
+                coldVariants
             )
         }
-        guard let (capturedGen, originalId, badSeedId, attemptNum, triedIds) = recoveryContext else { return false }
+        guard let (capturedGen, originalId, badSeedId, attemptNum, triedIds, needsColdVariantCheck) = recoveryContext else { return false }
 
-        if Int(badSeedId) != nil {
-            PlaybackRouter.markDirectSeedMismatch(catalogId: badSeedId)
-        }
-        NSLog("[QueueManager] ⚠️ Cloud seed ra.%@ started '%@ — %@' instead of '%@ — %@' — switching to alternate release (attempt #%d/%d)",
-              badSeedId, candidateArtist ?? "", candidateName, expected.artist, expected.name, attemptNum, maxSeedRecoveryAttempts)
-        _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop", maxWait: 0.7, reportTimeout: false)
-        BitPerfectLogMonitor.shared.resetTrackState()
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             defer {
                 PlaybackStateStore.shared.withLock {
                     if PlaybackStateStore.shared.playbackGeneration == capturedGen {
@@ -299,19 +292,65 @@ extension QueueManager {
                     }
                 }
             }
+            guard let self = self else { return }
+
+            // 1. Async localized CJK/Cyrillic variant check (~150 ms parallel `async let`) BEFORE stopping Music.app!
+            if needsColdVariantCheck {
+                let fetchedVariants = await MusicKitManager.shared.resolveCatalogSongTitleVariants(catalogId: badSeedId)
+                if !fetchedVariants.isEmpty {
+                    PlaybackStateStore.shared.withLock {
+                        if PlaybackStateStore.shared.playbackGeneration == capturedGen {
+                            PlaybackStateStore.shared.activeTrackTitleVariants = fetchedVariants
+                        }
+                    }
+                    if self.matchesExpectedQueueTrack(expected, candidateName: candidateName, candidateArtist: candidateArtist) {
+                        PlaybackStateStore.shared.withLock {
+                            guard PlaybackStateStore.shared.playbackGeneration == capturedGen else { return }
+                            PlaybackStateStore.shared.alternateCloudSeedAttemptCount = max(0, attemptNum - 1)
+                            PlaybackStateStore.shared.triedAlternateCloudSeedForCurrentTrack = false
+                            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+                            PlaybackStateStore.shared.lastConfirmedTrackTime = Date()
+                            PlaybackStateStore.shared.activeLoadingStage = nil
+                            PlaybackStateStore.shared.activeLoadingStartedAt = nil
+                            PlaybackStateStore.shared.transitionPreviousTrackKey = nil
+                            PlaybackStateStore.shared.lastWasPlayingCloud = true
+                            PlaybackStateStore.shared.lastSkipTime = .distantPast
+                        }
+                        self.persistConfirmedAlternateSeedIfNeeded(expected: expected, confirmedName: candidateName, confirmedArtist: candidateArtist)
+                        PlaybackStateStore.shared.invalidateQueueCache()
+                        PlaybackStateStore.shared.invalidateStatusCache()
+                        WebSocketServer.shared.broadcastStatus(includeQueue: true)
+                        return
+                    }
+                }
+            }
+
+            let stillActiveBeforeStop = PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.playbackGeneration == capturedGen && !PlaybackStateStore.shared.isUserPaused
+            }
+            guard stillActiveBeforeStop else { return }
+
+            if Int(badSeedId) != nil {
+                PlaybackRouter.markDirectSeedMismatch(catalogId: badSeedId)
+            }
+            NSLog("[QueueManager] ⚠️ Cloud seed ra.%@ started '%@ — %@' instead of '%@ — %@' — switching to alternate release (attempt #%d/%d)",
+                  badSeedId, candidateArtist ?? "", candidateName, expected.artist, expected.name, attemptNum, maxSeedRecoveryAttempts)
+            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to stop", maxWait: 0.7, reportTimeout: false)
+            BitPerfectLogMonitor.shared.resetTrackState()
+
             let lookupCatalogId: String? = {
                 if let n = Int(originalId), n >= 1_000_000 { return originalId }
                 if let n = Int(badSeedId), n >= 1_000_000 { return badSeedId }
                 return nil
             }()
-            var altCandidates = MusicKitManager.shared.resolveAlternateCatalogSongsSync(
+            var altCandidates = await MusicKitManager.shared.resolveAlternateCatalogSongs(
                 catalogId: lookupCatalogId,
                 name: expected.name,
                 artist: expected.artist,
                 excludingIds: triedIds
             )
             if altCandidates.isEmpty, lookupCatalogId != nil {
-                altCandidates = MusicKitManager.shared.resolveAlternateCatalogSongsSync(
+                altCandidates = await MusicKitManager.shared.resolveAlternateCatalogSongs(
                     catalogId: nil,
                     name: expected.name,
                     artist: expected.artist,
@@ -319,12 +358,30 @@ extension QueueManager {
                 )
             }
 
+            let eligiblePrefix = Array(
+                altCandidates
+                    .filter { !triedIds.contains($0.id) && !PlaybackRouter.hasDirectSeedMismatch(catalogId: $0.id) }
+                    .prefix(6)
+            )
             var chosenAlt: (id: String, name: String, artist: String)? = nil
-            for alt in altCandidates.prefix(6) where !triedIds.contains(alt.id) && !PlaybackRouter.hasDirectSeedMismatch(catalogId: alt.id) {
-                let info = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibilitySync(catalogId: alt.id)
-                if info?.hasStationSeed != false {
-                    chosenAlt = alt
-                    break
+            if !eligiblePrefix.isEmpty {
+                let winnerIdx: Int? = await withTaskGroup(of: (Int, Bool).self) { group in
+                    for (idx, alt) in eligiblePrefix.enumerated() {
+                        group.addTask {
+                            let info = await MusicKitManager.shared.inspectCatalogSongDirectCloudEligibility(catalogId: alt.id)
+                            return (idx, info?.hasStationSeed != false)
+                        }
+                    }
+                    var best: Int? = nil
+                    for await (idx, ok) in group where ok {
+                        if best == nil || idx < best! {
+                            best = idx
+                        }
+                    }
+                    return best
+                }
+                if let w = winnerIdx {
+                    chosenAlt = eligiblePrefix[w]
                 }
             }
 
@@ -334,7 +391,7 @@ extension QueueManager {
             guard stillCurrentGen else { return }
 
             if let alt = chosenAlt {
-                let variants = MusicKitManager.shared.resolveCatalogSongTitleVariantsSync(catalogId: alt.id)
+                let variants = await MusicKitManager.shared.resolveCatalogSongTitleVariants(catalogId: alt.id)
                 let stillValidBeforeOpen = PlaybackStateStore.shared.withLock {
                     PlaybackStateStore.shared.playbackGeneration == capturedGen && !PlaybackStateStore.shared.isUserPaused
                 }
@@ -361,7 +418,7 @@ extension QueueManager {
                     return
                 }
             }
-            self?.advanceOrEndCustomQueueUnlocked(reason: "seed-mismatch-no-alt")
+            self.advanceOrEndCustomQueueUnlocked(reason: "seed-mismatch-no-alt")
         }
         return true
     }

@@ -84,6 +84,7 @@ swiftc -parse-as-library \
     -sdk "$SDK_PATH" \
     -module-cache-path "$MODULE_CACHE" \
     -target arm64-apple-macosx14.0 \
+    -I "$SCRIPT_DIR/Sources/CAtomicPrimitives/include" \
     -framework Cocoa \
     -framework ApplicationServices \
     -framework Network \

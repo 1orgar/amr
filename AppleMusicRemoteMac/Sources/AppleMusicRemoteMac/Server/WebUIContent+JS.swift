@@ -2735,6 +2735,9 @@ extension WebUIContent {
     if (data.is_bit_perfect !== undefined || data.isBitPerfect !== undefined) {
       state.isBitPerfect = data.is_bit_perfect !== undefined ? Boolean(data.is_bit_perfect) : Boolean(data.isBitPerfect);
     }
+    if (data.is_clock_synced_dsp !== undefined || data.isClockSyncedDsp !== undefined) {
+      state.isClockSyncedDsp = data.is_clock_synced_dsp !== undefined ? Boolean(data.is_clock_synced_dsp) : Boolean(data.isClockSyncedDsp);
+    }
     if (data.dac_muting_guard_enabled !== undefined || data.isDacMutingGuardEnabled !== undefined) {
       state.dacMutingGuardEnabled = data.dac_muting_guard_enabled !== undefined ? Boolean(data.dac_muting_guard_enabled) : Boolean(data.isDacMutingGuardEnabled);
     }
@@ -5104,7 +5107,7 @@ extension WebUIContent {
       state.roomCorrectionActive ||
       (state.roomAcoustic && state.roomAcoustic.enabled && state.roomAcoustic.active_profile)
     );
-    const isClockSynced64BitDsp = !isLocalDspActive && !isLossy && isPreDspActive && ratesMatch && depthsMatch;
+    const isClockSynced64BitDsp = !isLocalDspActive && !isLossy && isPreDspActive && (Boolean(state.isClockSyncedDsp) || ratesMatch);
     const isHardwareMatched = isLocalDspActive
       ? !isInsufficientDsd
       : (isClockSynced64BitDsp || ((state.isBitPerfect !== false) && ratesMatch && depthsMatch));
@@ -5262,7 +5265,7 @@ extension WebUIContent {
     const roomEqSuffix = (state.roomCorrectionActive || (state.roomAcoustic && state.roomAcoustic.enabled && state.roomAcoustic.active_profile))
       ? ` • Room EQ (${state.roomProfileName || (state.roomAcoustic.active_profile && state.roomAcoustic.active_profile.name) || 'Auto-PEQ'})`
       : '';
-    const isDrcActive = Boolean(state.lateNightDrcMode && state.lateNightDrcMode !== 'off');
+    const isDrcActive = Boolean((state.lateNightDrcMode && state.lateNightDrcMode !== 'off') || state.lateNightDrcEnabled);
     const drcModeShort = state.lateNightDrcMode === 'concert'
       ? (IS_EN ? 'Night Concert' : 'Ночной концерт')
       : (IS_EN ? 'Gentle DRC' : 'Деликатный DRC');
@@ -5391,9 +5394,12 @@ extension WebUIContent {
         if (srcBits === outBitDepth && srcKhz === rateKhz) {
           signalVerifiedTitle.textContent = `Системный микшер macOS (${outBitDepth}/${rateKhz})`;
           signalVerifiedDesc.textContent = `Частота и разрядность совпадают (${outBitDepth}-бит / ${rateKhz} кГц), но поток проходит через микшер macOS CoreAudio.`;
+        } else if (srcKhz === rateKhz) {
+          signalVerifiedTitle.textContent = `Преобразование разрядности (${srcBits}-бит → ${outBitDepth}-бит @ ${rateKhz} кГц)`;
+          signalVerifiedDesc.textContent = `Частота дискретизации синхронизирована 1:1 (${rateKhz} кГц) без передискретизации; выполняется квантование разрядности (${srcBits}-бит → ${outBitDepth}-бит).`;
         } else {
           signalVerifiedTitle.textContent = `Передискретизация (${srcBits}/${srcKhz} → ${outBitDepth}/${rateKhz})`;
-          signalVerifiedDesc.textContent = `Частота или разрядность источника (${srcBits}-бит / ${srcKhz} кГц) отличается от текущего режима вывода (${outBitDepth}-бит / ${rateKhz} кГц).`;
+          signalVerifiedDesc.textContent = `Частота дискретизации источника (${srcBits}-бит / ${srcKhz} кГц) пересчитывается в режим вывода (${outBitDepth}-бит / ${rateKhz} кГц).`;
         }
       }
     }
@@ -15004,8 +15010,8 @@ extension WebUIContent {
           : 'Активен внешний сетевой плеер BluOS / DLNA: передаётся Bit-Perfect PCM (DSD/NOS не поддерживаются)';
       } else if (!hasEligibleUsbDac) {
         subEl.textContent = IS_EN
-          ? 'No external USB DAC connected: DSD and HQ NOS modes require a USB DAC (≥ 24-bit / 176.4 kHz)'
-          : 'Внешний USB ЦАП не подключён: режимы DSD и HQ NOS доступны только для USB ЦАП (≥ 24-бит / 176.4 кГц)';
+          ? 'No external USB / Thunderbolt DAC connected: DSD and HQ NOS modes require a USB or Thunderbolt DAC (≥ 24-bit / 176.4 kHz)'
+          : 'Внешний USB / Thunderbolt ЦАП не подключён: режимы DSD и HQ NOS доступны только для USB / Thunderbolt ЦАП (≥ 24-бит / 176.4 кГц)';
       } else if (state.dspActivePresetSubtitle) {
         subEl.textContent = translateTextToEn(state.dspActivePresetSubtitle);
       }
@@ -15030,8 +15036,8 @@ extension WebUIContent {
     if (presetSel.value !== 'builtin_passthrough' && state.usbDacAvailable === false) {
       presetSel.value = 'builtin_passthrough';
       showToast(IS_EN
-        ? 'DSD & HQ NOS modes are available only for external USB DACs'
-        : 'Режимы DSD и HQ NOS доступны только для внешних USB ЦАП');
+        ? 'DSD & HQ NOS modes are available only for external USB / Thunderbolt DACs'
+        : 'Режимы DSD и HQ NOS доступны только для внешних USB / Thunderbolt ЦАП');
       return;
     }
     if (state.allowDspPresetSelection === false) {
@@ -15134,6 +15140,17 @@ extension WebUIContent {
       state.lateNightDrcGainDb = Number(data.current_gain_db) || 0;
     }
     syncLateNightBadgeOnly();
+    const anyPreStillActive = Boolean(
+      state.lateNightDrcEnabled ||
+      (state.masteringDeclipMode && state.masteringDeclipMode !== 'off') ||
+      (state.masteringDeesserMode && state.masteringDeesserMode !== 'off') ||
+      state.roomCorrectionActive ||
+      (state.roomAcoustic && state.roomAcoustic.enabled && state.roomAcoustic.active_profile)
+    );
+    state.isClockSyncedDsp = anyPreStillActive;
+    if (!anyPreStillActive && state.isBitPerfect === false) {
+      state.isBitPerfect = undefined;
+    }
     applyDeviceCapabilityPermissionsUI();
     if (!opts.skipSignalRefresh) {
       renderNowPlaying();

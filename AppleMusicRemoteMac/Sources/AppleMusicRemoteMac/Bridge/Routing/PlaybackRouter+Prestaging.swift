@@ -4,7 +4,7 @@
 //
 //  100% read-only in-memory Apple Music catalog pre-warming (storefront canonical IDs,
 //  ISRC alternates, localized cross-script title variants, and durations).
-//  Strictly ZERO writes to `/v1/me/library` or `/v1/me/library/playlists`!
+//  Structured Concurrency (`Task` + `async/await`) — zero thread-pool blocking and zero `/v1/me/library` writes!
 //
 
 import Foundation
@@ -13,13 +13,11 @@ extension PlaybackRouter {
 
     private static let prestageSeqLock = NSLock()
     private static var prestageRequestSeq: UInt64 = 0
-    private static var pendingUpcomingPrestageWorkItem: DispatchWorkItem?
+    private static var pendingUpcomingPrestageTask: Task<Void, Never>?
 
     private static let previewPrestageSeqLock = NSLock()
     private static var previewPrestageRequestSeq: UInt64 = 0
-    private static var pendingPreviewPrestageWorkItem: DispatchWorkItem?
-
-    private static let prestageWorkerQueue = DispatchQueue(label: "com.amr.router.prestage", qos: .utility)
+    private static var pendingPreviewPrestageTask: Task<Void, Never>?
 
     internal static func currentPrestageRequestSeqForTesting() -> UInt64 {
         prestageSeqLock.withLock { prestageRequestSeq }
@@ -57,12 +55,9 @@ extension PlaybackRouter {
                 let tracks = await MusicKitManager.shared.getPlaylistTracksById(playlistId: mid)
                 combinedHeadTracks.append(contentsOf: tracks.prefix(2))
             }
-            if !combinedHeadTracks.isEmpty {
-                DispatchQueue.global(qos: .utility).async {
-                    for tr in combinedHeadTracks.prefix(10) {
-                        Self.prewarmSingleCatalogTrackInRAM(tr)
-                    }
-                }
+            for tr in combinedHeadTracks.prefix(10) {
+                guard !Task.isCancelled else { break }
+                _ = await Self.prewarmSingleCatalogTrackInRAM(tr)
             }
         }
     }
@@ -82,13 +77,15 @@ extension PlaybackRouter {
 
         let capturedGen = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.playbackGeneration }
         let myPreviewSeq: UInt64 = Self.previewPrestageSeqLock.withLock {
-            Self.pendingPreviewPrestageWorkItem?.cancel()
+            Self.pendingPreviewPrestageTask?.cancel()
+            Self.pendingPreviewPrestageTask = nil
             Self.previewPrestageRequestSeq &+= 1
             return Self.previewPrestageRequestSeq
         }
 
-        let workItem = DispatchWorkItem {
+        let task = Task.detached(priority: .utility) {
             let isStillCurrentPreview: () -> Bool = {
+                guard !Task.isCancelled else { return false }
                 let latestPreviewSeq = Self.previewPrestageSeqLock.withLock { Self.previewPrestageRequestSeq }
                 guard latestPreviewSeq == myPreviewSeq else { return false }
                 return PlaybackStateStore.shared.withLock {
@@ -97,15 +94,16 @@ extension PlaybackRouter {
             }
             for tr in headCandidates {
                 guard isStillCurrentPreview() else { return }
-                Self.prewarmSingleCatalogTrackInRAM(tr)
+                _ = await Self.prewarmSingleCatalogTrackInRAM(tr)
             }
         }
         Self.previewPrestageSeqLock.withLock {
             if Self.previewPrestageRequestSeq == myPreviewSeq {
-                Self.pendingPreviewPrestageWorkItem = workItem
+                Self.pendingPreviewPrestageTask = task
+            } else {
+                task.cancel()
             }
         }
-        Self.prestageWorkerQueue.async(execute: workItem)
     }
 
     /// Pre-warms read-only catalog storefront availability (`1508103497 -> 1508140810`), ISRC alternates (`6829729404 -> 6817136270`),
@@ -140,16 +138,18 @@ extension PlaybackRouter {
         guard !initialSlice.isEmpty else { return }
 
         let mySeq: UInt64 = Self.prestageSeqLock.withLock {
-            Self.pendingUpcomingPrestageWorkItem?.cancel()
-            Self.pendingUpcomingPrestageWorkItem = nil
+            Self.pendingUpcomingPrestageTask?.cancel()
+            Self.pendingUpcomingPrestageTask = nil
             Self.prestageRequestSeq &+= 1
             return Self.prestageRequestSeq
         }
         guard !isTestingEnvironment else { return }
-        let initialDelay: TimeInterval = immediate ? 0.12 : 1.0
+        let initialDelayNanos: UInt64 = immediate ? 120_000_000 : 1_000_000_000
 
-        let workItem = DispatchWorkItem {
+        let task = Task.detached(priority: .utility) {
+            try? await Task.sleep(nanoseconds: initialDelayNanos)
             let isStillActive: () -> Bool = {
+                guard !Task.isCancelled else { return false }
                 let latestSeq = Self.prestageSeqLock.withLock { Self.prestageRequestSeq }
                 guard latestSeq == mySeq else { return false }
                 return PlaybackStateStore.shared.withLock {
@@ -178,7 +178,7 @@ extension PlaybackRouter {
             var updatedAny = false
             for t in slice {
                 guard isStillActive() else { return }
-                guard let warmed = Self.prewarmSingleCatalogTrackInRAM(t) else { continue }
+                guard let warmed = await Self.prewarmSingleCatalogTrackInRAM(t) else { continue }
 
                 PlaybackStateStore.shared.withLock {
                     guard PlaybackStateStore.shared.playbackGeneration == targetGen else { return }
@@ -211,14 +211,16 @@ extension PlaybackRouter {
         }
         Self.prestageSeqLock.withLock {
             if Self.prestageRequestSeq == mySeq {
-                Self.pendingUpcomingPrestageWorkItem = workItem
+                Self.pendingUpcomingPrestageTask = task
+            } else {
+                task.cancel()
             }
         }
-        Self.prestageWorkerQueue.asyncAfter(deadline: .now() + initialDelay, execute: workItem)
     }
 
     @discardableResult
-    private static func prewarmSingleCatalogTrackInRAM(_ track: TrackInfo) -> (validCid: String, durationSeconds: Double?)? {
+    private static func prewarmSingleCatalogTrackInRAM(_ track: TrackInfo) async -> (validCid: String, durationSeconds: Double?)? {
+        guard !Task.isCancelled else { return nil }
         let userSf = MusicKitManager.shared.getUserStorefront().trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         var cid = MusicKitManager.extractNumericCatalogId(from: track)
         var urlHasForeignSf = false
@@ -229,7 +231,7 @@ extension PlaybackRouter {
             }
         }
         if (cid == nil || urlHasForeignSf) && !track.name.isEmpty,
-           let sfId = MusicKitManager.shared.resolveCatalogSongIdInUserStorefrontSync(name: track.name, artist: track.artist) {
+           let sfId = await MusicKitManager.shared.resolveCatalogSongIdInUserStorefront(name: track.name, artist: track.artist) {
             cid = sfId
         }
         guard let rawCid = cid else { return nil }
@@ -240,9 +242,14 @@ extension PlaybackRouter {
             MusicKitManager.shared.appendCachedTitleVariant(catalogId: rawCid, name: prefAlt.name, artist: prefAlt.artist)
         }
 
-        var info = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibilitySync(catalogId: validCid)
+        let initialLookupCid = validCid
+        async let eligibilityFetch = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibility(catalogId: initialLookupCid)
+        async let initialVariantsFetch = MusicKitManager.shared.resolveCatalogSongTitleVariants(catalogId: initialLookupCid)
+        var info = await eligibilityFetch
+        _ = await initialVariantsFetch
+
         if info?.durationSeconds == nil || MusicKitManager.shared.isUnstageableCatalogId(validCid) {
-            if let sfAlt = MusicKitManager.shared.resolveAlternateCatalogSongsSync(
+            if let sfAlt = await MusicKitManager.shared.resolveAlternateCatalogSongs(
                 catalogId: rawCid,
                 name: track.name,
                 artist: track.artist,
@@ -252,10 +259,12 @@ extension PlaybackRouter {
                 MusicKitManager.shared.appendCachedTitleVariant(catalogId: rawCid, name: sfAlt.name, artist: sfAlt.artist)
                 MusicKitManager.shared.appendCachedTitleVariant(catalogId: sfAlt.id, name: sfAlt.name, artist: sfAlt.artist)
                 validCid = sfAlt.id
-                info = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibilitySync(catalogId: sfAlt.id)
+                async let altInfo = MusicKitManager.shared.inspectCatalogSongDirectCloudEligibility(catalogId: sfAlt.id)
+                async let altVars = MusicKitManager.shared.resolveCatalogSongTitleVariants(catalogId: sfAlt.id)
+                info = await altInfo
+                _ = await altVars
             }
         }
-        _ = MusicKitManager.shared.resolveCatalogSongTitleVariantsSync(catalogId: validCid)
         return (validCid: validCid, durationSeconds: info?.durationSeconds)
     }
 }

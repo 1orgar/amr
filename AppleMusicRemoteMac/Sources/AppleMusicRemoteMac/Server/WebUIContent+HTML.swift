@@ -1934,7 +1934,7 @@ extension WebUIContent {
     </div>
   </div>
 
-  <script src="/app.js?v=353b399c"></script>
+  <script src="/app.js?v=d1e2ef9a"></script>
 </body>
 </html>
 """#

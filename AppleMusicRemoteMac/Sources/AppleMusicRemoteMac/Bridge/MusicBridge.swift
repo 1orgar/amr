@@ -519,6 +519,10 @@ public final class MusicBridge: @unchecked Sendable {
         LibraryService.shared.addToLibrary(id: id, trackId: trackId, name: name, artist: artist, url: url)
     }
 
+    public func addToLibraryAsync(id: String? = nil, trackId: Int?, name: String?, artist: String?, url: String?) async -> Bool {
+        await LibraryService.shared.addToLibraryAsync(id: id, trackId: trackId, name: name, artist: artist, url: url)
+    }
+
     public func addPlaylistToLibrary(playlistId: String, name: String = "", tracks: [TrackInfo] = []) async -> Bool {
         await MusicKitManager.shared.addPlaylistToLibrary(playlistId: playlistId, name: name, tracks: tracks)
     }
