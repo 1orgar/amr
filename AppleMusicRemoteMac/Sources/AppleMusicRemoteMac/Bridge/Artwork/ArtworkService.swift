@@ -157,11 +157,17 @@ public final class ArtworkService: @unchecked Sendable {
     let artworkCache = NSCache<NSString, NSData>()
     let safeArtworkFetcher = SafeArtworkFetcher()
 
+    public static let maxNegativeArtworkEntries = 2000
+    public static let maxPlaylistUrlCacheEntries = 500
+    public static let maxNegativeAlbumEntries = 1000
+
     var playlistArtworkUrlCache: [String: String] = [:]
+    var playlistArtworkUrlOrder: [String] = []
     var paletteCache: [String: (palette: [String: Any], accessedAt: TimeInterval)] = [:]
     let maxPaletteCacheEntries = 160
     var inFlightPaletteTasks: [String: Task<PaletteResultBox, Never>] = [:]
     var negativeArtworkIds = Set<Int>()
+    var negativeArtworkIdOrder: [Int] = []
     var negativeLocalAlbums: [String: Date] = [:]
     var fetchingArtworkIds = Set<Int>()
     var negativePlaylistArtworks: [String: Date] = [:]
@@ -279,10 +285,12 @@ public final class ArtworkService: @unchecked Sendable {
             artworkCache.removeObject(forKey: "track_\(id)" as NSString)
             ArtworkDiskCache.shared.remove(key: "track_\(id)")
             negativeArtworkIds.remove(id)
+            negativeArtworkIdOrder.removeAll { $0 == id }
         } else {
             artworkCache.removeAllObjects()
             ArtworkDiskCache.shared.clear()
             negativeArtworkIds.removeAll()
+            negativeArtworkIdOrder.removeAll()
             negativeLocalAlbums.removeAll()
             cachedCurArtworkKey = ""
             cachedCurArtworkUri = ""
@@ -387,7 +395,50 @@ public final class ArtworkService: @unchecked Sendable {
             }
         }
 
-        if skipIfContended && AppleScriptExecutor.shared.isBusy {
+        if skipIfContended && AppleScriptExecutor.shared.isBusy && !ITLibraryReader.isSyntheticTrackId(id) {
+            // Even when AppleScript is contended, check in-process ITLibraryReader first before deferring
+            if let itRaw = ITLibraryReader.shared.embeddedArtworkData(
+                forTrackId: id,
+                title: meta?.name ?? "",
+                artist: effArtist,
+                album: effAlbum
+            ) {
+                let finalBytes = (NSImage(data: itRaw).flatMap { jpegData(from: $0, maxDimension: 600) }) ?? itRaw
+                artworkCache.setObject(finalBytes as NSData, forKey: cacheKey)
+                ArtworkDiskCache.shared.set(key: "track_\(id)", data: finalBytes)
+                if let albKey = albCacheKey {
+                    artworkCache.setObject(finalBytes as NSData, forKey: albKey as NSString)
+                    ArtworkDiskCache.shared.set(key: albKey, data: finalBytes)
+                }
+                return finalBytes
+            }
+            return nil
+        }
+
+        // Fast path 2: In-process iTunesLibrary.framework embedded artwork lookup (~0.1 ms, zero AppleScript IPC)
+        if let itRaw = ITLibraryReader.shared.embeddedArtworkData(
+            forTrackId: id,
+            title: meta?.name ?? "",
+            artist: effArtist,
+            album: effAlbum
+        ) {
+            let finalBytes = (NSImage(data: itRaw).flatMap { jpegData(from: $0, maxDimension: 600) }) ?? itRaw
+            artworkCache.setObject(finalBytes as NSData, forKey: cacheKey)
+            ArtworkDiskCache.shared.set(key: "track_\(id)", data: finalBytes)
+            if let albKey = albCacheKey {
+                artworkCache.setObject(finalBytes as NSData, forKey: albKey as NSString)
+                ArtworkDiskCache.shared.set(key: albKey, data: finalBytes)
+            }
+            return finalBytes
+        }
+
+        if ITLibraryReader.isSyntheticTrackId(id) {
+            lock.withLock {
+                insertNegativeArtworkIdLocked(id)
+                if let albKey = albCacheKey {
+                    insertNegativeLocalAlbumLocked(albKey)
+                }
+            }
             return nil
         }
 
@@ -427,12 +478,44 @@ public final class ArtworkService: @unchecked Sendable {
         }
 
         lock.withLock {
-            negativeArtworkIds.insert(id)
+            insertNegativeArtworkIdLocked(id)
             if let albKey = albCacheKey {
-                negativeLocalAlbums[albKey] = Date()
+                insertNegativeLocalAlbumLocked(albKey)
             }
         }
         return nil
+    }
+
+    internal func insertNegativeArtworkIdLocked(_ id: Int) {
+        guard !negativeArtworkIds.contains(id) else { return }
+        while negativeArtworkIds.count >= Self.maxNegativeArtworkEntries, !negativeArtworkIdOrder.isEmpty {
+            let evicted = negativeArtworkIdOrder.removeFirst()
+            negativeArtworkIds.remove(evicted)
+        }
+        negativeArtworkIds.insert(id)
+        negativeArtworkIdOrder.append(id)
+    }
+
+    internal func insertNegativeLocalAlbumLocked(_ albKey: String) {
+        if negativeLocalAlbums.count >= Self.maxNegativeAlbumEntries, negativeLocalAlbums[albKey] == nil {
+            let now = Date()
+            negativeLocalAlbums = negativeLocalAlbums.filter { now.timeIntervalSince($0.value) < 600.0 }
+            if negativeLocalAlbums.count >= Self.maxNegativeAlbumEntries, let firstKey = negativeLocalAlbums.keys.first {
+                negativeLocalAlbums.removeValue(forKey: firstKey)
+            }
+        }
+        negativeLocalAlbums[albKey] = Date()
+    }
+
+    internal func storePlaylistArtworkUrlLocked(name: String, url: String) {
+        if playlistArtworkUrlCache[name] == nil {
+            while playlistArtworkUrlCache.count >= Self.maxPlaylistUrlCacheEntries, !playlistArtworkUrlOrder.isEmpty {
+                let evicted = playlistArtworkUrlOrder.removeFirst()
+                playlistArtworkUrlCache.removeValue(forKey: evicted)
+            }
+            playlistArtworkUrlOrder.append(name)
+        }
+        playlistArtworkUrlCache[name] = url
     }
 
     public func getTrackArtworkDataUri(id: Int) -> String {
@@ -569,7 +652,7 @@ public final class ArtworkService: @unchecked Sendable {
         if let data = getPlaylistArtwork(name: name), !data.isEmpty {
             let uri = "data:image/jpeg;base64,\(data.base64EncodedString())"
             lock.lock()
-            playlistArtworkUrlCache[name] = uri
+            storePlaylistArtworkUrlLocked(name: name, url: uri)
             lock.unlock()
             return uri
         }
@@ -578,7 +661,7 @@ public final class ArtworkService: @unchecked Sendable {
 
     public func setPlaylistArtworkUrl(name: String, url: String) {
         lock.lock()
-        playlistArtworkUrlCache[name] = url
+        storePlaylistArtworkUrlLocked(name: name, url: url)
         lock.unlock()
     }
 
@@ -594,6 +677,7 @@ public final class ArtworkService: @unchecked Sendable {
         lock.lock()
         artworkCache.removeObject(forKey: "playlist_\(trimmed)" as NSString)
         playlistArtworkUrlCache.removeValue(forKey: trimmed)
+        playlistArtworkUrlOrder.removeAll { $0 == trimmed }
         negativePlaylistArtworks.removeValue(forKey: trimmed)
         lock.unlock()
         ArtworkDiskCache.shared.remove(key: "playlist_\(trimmed)")

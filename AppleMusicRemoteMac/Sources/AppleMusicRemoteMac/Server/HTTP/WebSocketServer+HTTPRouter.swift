@@ -6,13 +6,51 @@
 //  and API route dispatch.
 //
 
+import CryptoKit
 import Foundation
 import Network
 import zlib
 
 extension WebSocketServer {
     private static let staticAssetCacheLock = NSLock()
-    private static var staticTextAssetCache: [String: (mtime: Date?, raw: Data, gzip: Data?)] = [:]
+    private static var staticTextAssetCache: [String: (mtime: Date?, raw: Data, gzip: Data?, rawETag: String, gzipETag: String?)] = [:]
+
+    internal static let compileTimeSourceWebDirectory: URL = {
+        var url = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 {
+            url.deleteLastPathComponent()
+        }
+        return url.appendingPathComponent("Web", isDirectory: true)
+    }()
+
+    internal static func computeETag(for data: Data, variant: String? = nil) -> String {
+        let digest = SHA256.hash(data: data)
+        let hex = digest.prefix(12).map { String(format: "%02x", $0) }.joined()
+        if let v = variant, !v.isEmpty {
+            return "\"\(hex)-\(v)\""
+        }
+        return "\"\(hex)\""
+    }
+
+    internal static func matchesIfNoneMatch(_ headerValue: String?, etag: String) -> Bool {
+        guard let raw = headerValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              !etag.isEmpty else {
+            return false
+        }
+        if raw == "*" { return true }
+        let normalizedTarget = etag.hasPrefix("W/") ? String(etag.dropFirst(2)) : etag
+        for token in raw.split(separator: ",") {
+            var candidate = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            if candidate.hasPrefix("W/") {
+                candidate = String(candidate.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+            }
+            if candidate == normalizedTarget {
+                return true
+            }
+        }
+        return false
+    }
 
     private static let htmlContentSecurityPolicy =
         "default-src 'self' https://*.apple.com https://*.mzstatic.com data: blob:; " +
@@ -59,7 +97,7 @@ extension WebSocketServer {
         return compressed
     }
 
-    private func candidateWebDirectories() -> [URL] {
+    internal func candidateWebDirectories() -> [URL] {
         let currentDir = FileManager.default.currentDirectoryPath
         var baseWebDirs: [URL] = []
         if let resourcePath = Bundle.main.resourcePath {
@@ -69,10 +107,14 @@ extension WebSocketServer {
         baseWebDirs.append(URL(fileURLWithPath: currentDir).appendingPathComponent("Web"))
         baseWebDirs.append(URL(fileURLWithPath: currentDir).deletingLastPathComponent().appendingPathComponent("AppleMusicRemoteMac/Web"))
         baseWebDirs.append(URL(fileURLWithPath: currentDir).deletingLastPathComponent().appendingPathComponent("Web"))
+        baseWebDirs.append(Self.compileTimeSourceWebDirectory)
         return baseWebDirs
     }
 
-    private func loadCachedWebTextAsset(filename: String, fallback: String) -> (raw: Data, gzip: Data?) {
+    private func loadCachedWebTextAsset(
+        filename: String,
+        fallback: String
+    ) -> (raw: Data, gzip: Data?, rawETag: String, gzipETag: String?) {
         var diskURL: URL? = nil
         var diskMtime: Date? = nil
         for baseWebURL in candidateWebDirectories() {
@@ -90,7 +132,7 @@ extension WebSocketServer {
         Self.staticAssetCacheLock.lock()
         if let cached = Self.staticTextAssetCache[filename], cached.mtime == diskMtime {
             Self.staticAssetCacheLock.unlock()
-            return (cached.raw, cached.gzip)
+            return (cached.raw, cached.gzip, cached.rawETag, cached.gzipETag)
         }
         Self.staticAssetCacheLock.unlock()
 
@@ -101,11 +143,13 @@ extension WebSocketServer {
             rawData = Data(fallback.utf8)
         }
         let gz = rawData.count >= 512 ? Self.gzipCompress(rawData) : nil
+        let rTag = Self.computeETag(for: rawData)
+        let gTag = gz != nil ? Self.computeETag(for: rawData, variant: "gzip") : nil
 
         Self.staticAssetCacheLock.lock()
-        Self.staticTextAssetCache[filename] = (mtime: diskMtime, raw: rawData, gzip: gz)
+        Self.staticTextAssetCache[filename] = (mtime: diskMtime, raw: rawData, gzip: gz, rawETag: rTag, gzipETag: gTag)
         Self.staticAssetCacheLock.unlock()
-        return (rawData, gz)
+        return (rawData, gz, rTag, gTag)
     }
 
     private func clientAcceptsGzip(_ headerString: String) -> Bool {
@@ -182,44 +226,80 @@ extension WebSocketServer {
         connection: NWConnection
     ) {
         let acceptsGzip = clientAcceptsGzip(headerString)
+        let ifNoneMatch = extractHeader(named: "If-None-Match", from: headerString)
         switch path {
         case "/", "/index.html":
-            let asset = loadCachedWebTextAsset(filename: "index.html", fallback: WebUIContent.indexHTML)
-            let body = (acceptsGzip ? asset.gzip : nil) ?? asset.raw
-            let enc = (acceptsGzip && asset.gzip != nil) ? "gzip" : nil
-            sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: body, connection: connection, cacheSeconds: 0, contentEncoding: enc)
+            let asset = loadCachedWebTextAsset(filename: "index.html", fallback: WebUIContent.fallbackDiagnosticHTML)
+            let useGzip = acceptsGzip && asset.gzip != nil
+            let etag = (useGzip ? asset.gzipETag : nil) ?? asset.rawETag
+            if Self.matchesIfNoneMatch(ifNoneMatch, etag: etag) {
+                sendNotModified(etag: etag, cacheSeconds: 0, varyGzip: true, connection: connection)
+                return
+            }
+            let body = (useGzip ? asset.gzip : nil) ?? asset.raw
+            sendHTTPResponse(status: "200 OK", contentType: "text/html; charset=utf-8", body: body, connection: connection, cacheSeconds: 0, contentEncoding: useGzip ? "gzip" : nil, etag: etag)
 
         case "/style.css":
-            let asset = loadCachedWebTextAsset(filename: "style.css", fallback: WebUIContent.styleCSS)
-            let body = (acceptsGzip ? asset.gzip : nil) ?? asset.raw
-            let enc = (acceptsGzip && asset.gzip != nil) ? "gzip" : nil
-            sendHTTPResponse(status: "200 OK", contentType: "text/css; charset=utf-8", body: body, connection: connection, cacheSeconds: 0, contentEncoding: enc)
+            let asset = loadCachedWebTextAsset(filename: "style.css", fallback: "")
+            let useGzip = acceptsGzip && asset.gzip != nil
+            let etag = (useGzip ? asset.gzipETag : nil) ?? asset.rawETag
+            if Self.matchesIfNoneMatch(ifNoneMatch, etag: etag) {
+                sendNotModified(etag: etag, cacheSeconds: 0, varyGzip: true, connection: connection)
+                return
+            }
+            let body = (useGzip ? asset.gzip : nil) ?? asset.raw
+            sendHTTPResponse(status: "200 OK", contentType: "text/css; charset=utf-8", body: body, connection: connection, cacheSeconds: 0, contentEncoding: useGzip ? "gzip" : nil, etag: etag)
 
         case "/app.js":
-            let asset = loadCachedWebTextAsset(filename: "app.js", fallback: WebUIContent.appJS)
-            let body = (acceptsGzip ? asset.gzip : nil) ?? asset.raw
-            let enc = (acceptsGzip && asset.gzip != nil) ? "gzip" : nil
-            sendHTTPResponse(status: "200 OK", contentType: "application/javascript; charset=utf-8", body: body, connection: connection, cacheSeconds: 0, contentEncoding: enc)
+            let asset = loadCachedWebTextAsset(filename: "app.js", fallback: "")
+            let useGzip = acceptsGzip && asset.gzip != nil
+            let etag = (useGzip ? asset.gzipETag : nil) ?? asset.rawETag
+            if Self.matchesIfNoneMatch(ifNoneMatch, etag: etag) {
+                sendNotModified(etag: etag, cacheSeconds: 0, varyGzip: true, connection: connection)
+                return
+            }
+            let body = (useGzip ? asset.gzip : nil) ?? asset.raw
+            sendHTTPResponse(status: "200 OK", contentType: "application/javascript; charset=utf-8", body: body, connection: connection, cacheSeconds: 0, contentEncoding: useGzip ? "gzip" : nil, etag: etag)
 
         case "/manifest.json":
             let asset = loadCachedWebTextAsset(filename: "manifest.json", fallback: WebUIContent.manifestJSON)
-            sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: asset.raw, connection: connection, cacheSeconds: 0)
+            if Self.matchesIfNoneMatch(ifNoneMatch, etag: asset.rawETag) {
+                sendNotModified(etag: asset.rawETag, cacheSeconds: 0, varyGzip: false, connection: connection)
+                return
+            }
+            sendHTTPResponse(status: "200 OK", contentType: "application/json; charset=utf-8", body: asset.raw, connection: connection, cacheSeconds: 0, etag: asset.rawETag)
 
         case "/sw.js":
             let asset = loadCachedWebTextAsset(filename: "sw.js", fallback: WebUIContent.swJS)
-            let body = (acceptsGzip ? asset.gzip : nil) ?? asset.raw
-            let enc = (acceptsGzip && asset.gzip != nil) ? "gzip" : nil
-            sendHTTPResponse(status: "200 OK", contentType: "application/javascript; charset=utf-8", body: body, connection: connection, cacheSeconds: 0, contentEncoding: enc)
+            let useGzip = acceptsGzip && asset.gzip != nil
+            let etag = (useGzip ? asset.gzipETag : nil) ?? asset.rawETag
+            if Self.matchesIfNoneMatch(ifNoneMatch, etag: etag) {
+                sendNotModified(etag: etag, cacheSeconds: 0, varyGzip: true, connection: connection)
+                return
+            }
+            let body = (useGzip ? asset.gzip : nil) ?? asset.raw
+            sendHTTPResponse(status: "200 OK", contentType: "application/javascript; charset=utf-8", body: body, connection: connection, cacheSeconds: 0, contentEncoding: useGzip ? "gzip" : nil, etag: etag)
 
         case "/apple-touch-icon.svg":
             let content = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
-            sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(content.utf8), connection: connection)
+            let body = Data(content.utf8)
+            let etag = Self.computeETag(for: body)
+            if Self.matchesIfNoneMatch(ifNoneMatch, etag: etag) {
+                sendNotModified(etag: etag, cacheSeconds: 86400, varyGzip: false, connection: connection)
+                return
+            }
+            sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: body, connection: connection, cacheSeconds: 86400, etag: etag)
 
         case "/apple-touch-icon.png", "/apple-touch-icon-180.png", "/apple-touch-icon-192.png", "/apple-touch-icon-512.png", "/apple-touch-icon-precomposed.png":
             let filename = String(path.dropFirst())
             let lookupName = filename == "apple-touch-icon-precomposed.png" ? "apple-touch-icon.png" : filename
             if let data = loadWebBinaryAsset(subpath: lookupName) {
-                sendHTTPResponse(status: "200 OK", contentType: "image/png", body: data, connection: connection, cacheSeconds: 86400 * 7)
+                let etag = Self.computeETag(for: data)
+                if Self.matchesIfNoneMatch(ifNoneMatch, etag: etag) {
+                    sendNotModified(etag: etag, cacheSeconds: 86400 * 7, varyGzip: false, connection: connection)
+                    return
+                }
+                sendHTTPResponse(status: "200 OK", contentType: "image/png", body: data, connection: connection, cacheSeconds: 86400 * 7, etag: etag)
             } else {
                 let svg = loadWebAsset(filename: "apple-touch-icon.svg") ?? WebUIContent.appleTouchIconSVG
                 sendHTTPResponse(status: "200 OK", contentType: "image/svg+xml; charset=utf-8", body: Data(svg.utf8), connection: connection)
@@ -227,7 +307,12 @@ extension WebSocketServer {
 
         case "/favicon.ico":
             if let data = loadWebBinaryAsset(subpath: "apple-touch-icon-180.png") ?? loadWebBinaryAsset(subpath: "apple-touch-icon.png") {
-                sendHTTPResponse(status: "200 OK", contentType: "image/png", body: data, connection: connection, cacheSeconds: 86400 * 7)
+                let etag = Self.computeETag(for: data)
+                if Self.matchesIfNoneMatch(ifNoneMatch, etag: etag) {
+                    sendNotModified(etag: etag, cacheSeconds: 86400 * 7, varyGzip: false, connection: connection)
+                    return
+                }
+                sendHTTPResponse(status: "200 OK", contentType: "image/png", body: data, connection: connection, cacheSeconds: 86400 * 7, etag: etag)
             } else {
                 sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
             }
@@ -235,15 +320,18 @@ extension WebSocketServer {
         case let p where p.hasPrefix("/assets/"):
             handleStaticBinaryAssetHTTP(path: p, headerString: headerString, connection: connection)
 
-        case "/stream/live.wav", "/stream/live":
+        case "/stream/live.wav", "/stream/live", "/stream/live.pcm":
             guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection)
                     || isAllowedDLNAStreamRequest(connection: connection, fullPath: fullPath) else {
                 sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
                 return
             }
+            let isRawPCM = (path == "/stream/live.pcm")
             if method == "HEAD" {
                 _ = consumeHeadRequestFlag(for: connection)
-                let headResp = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n"
+                let fmt = AudioProcessTapService.shared.currentFormatSync()
+                let headMime = isRawPCM ? "audio/L\(fmt.bitDepth);rate=\(fmt.sampleRate);channels=2" : "audio/wav"
+                let headResp = "HTTP/1.1 200 OK\r\nContent-Type: \(headMime)\r\ntransferMode.dlna.org: Streaming\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n"
                 connection.send(content: Data(headResp.utf8), completion: .contentProcessed({ [weak self, weak connection] _ in
                     if let c = connection {
                         self?.untrackTCPConnection(c)
@@ -252,7 +340,7 @@ extension WebSocketServer {
                 }))
                 return
             }
-            handleLiveAudioStream(connection: connection, headerString: headerString, fullPath: fullPath)
+            handleLiveAudioStream(connection: connection, headerString: headerString, fullPath: fullPath, rawLPCM: isRawPCM)
 
         case let p where p == "/api/artwork" || p == "/api/artwork.jpg" || p == "/artwork.jpg" || p.hasPrefix("/api/artwork.jpg?") || p.hasPrefix("/api/artwork?"):
             handleCurrentArtworkHTTP(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection)
@@ -363,7 +451,13 @@ extension WebSocketServer {
             sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
             return
         }
-        serveByteRangeOrFullHTTP(data: data, contentType: cType, headerString: headerString, connection: connection, cacheSeconds: 86400 * 7)
+        let etag = Self.computeETag(for: data)
+        if extractHeader(named: "Range", from: headerString) == nil,
+           Self.matchesIfNoneMatch(extractHeader(named: "If-None-Match", from: headerString), etag: etag) {
+            sendNotModified(etag: etag, cacheSeconds: 86400 * 7, varyGzip: false, connection: connection)
+            return
+        }
+        serveByteRangeOrFullHTTP(data: data, contentType: cType, headerString: headerString, connection: connection, cacheSeconds: 86400 * 7, etag: etag)
     }
 
     internal func serveByteRangeOrFullHTTP(
@@ -371,45 +465,77 @@ extension WebSocketServer {
         contentType: String,
         headerString: String,
         connection: NWConnection,
-        cacheSeconds: Int
+        cacheSeconds: Int,
+        etag: String? = nil
     ) {
         if let rangeHeader = extractHeader(named: "Range", from: headerString),
            rangeHeader.hasPrefix("bytes=") {
-            let spec = String(rangeHeader.dropFirst(6)).trimmingCharacters(in: .whitespaces)
-            let parts = spec.components(separatedBy: "-")
-            if parts.count >= 2 {
-                let startStr = parts[0].trimmingCharacters(in: .whitespaces)
-                let endStr = parts[1].trimmingCharacters(in: .whitespaces)
-                let total = data.count
-                let start: Int
-                let end: Int
-                if startStr.isEmpty {
-                    let suffix = Int(endStr) ?? 0
-                    guard suffix > 0, total > 0 else {
-                        sendRangeNotSatisfiable(totalLength: total, connection: connection)
-                        return
-                    }
-                    start = max(0, total - suffix)
-                    end = total - 1
-                } else {
-                    guard let parsedStart = Int(startStr), parsedStart >= 0 else {
-                        sendRangeNotSatisfiable(totalLength: total, connection: connection)
-                        return
-                    }
-                    start = parsedStart
-                    let parsedEnd = endStr.isEmpty ? (total - 1) : (Int(endStr) ?? (total - 1))
-                    end = min(parsedEnd, total - 1)
-                }
-                guard start < total && start <= end else {
-                    sendRangeNotSatisfiable(totalLength: total, connection: connection)
-                    return
-                }
+            switch Self.parseHTTPByteRange(rangeHeader: rangeHeader, totalLength: data.count) {
+            case .satisfiable(let start, let end):
                 let chunk = data.subdata(in: start..<(end + 1))
-                sendPartialHTTPResponse(contentType: contentType, rangeStart: start, rangeEnd: end, totalLength: total, body: chunk, connection: connection, cacheSeconds: cacheSeconds)
+                sendPartialHTTPResponse(
+                    contentType: contentType,
+                    rangeStart: start,
+                    rangeEnd: end,
+                    totalLength: data.count,
+                    body: chunk,
+                    connection: connection,
+                    cacheSeconds: cacheSeconds,
+                    etag: etag
+                )
                 return
+            case .notSatisfiable:
+                sendRangeNotSatisfiable(totalLength: data.count, connection: connection)
+                return
+            case .none:
+                break
             }
         }
-        sendHTTPResponse(status: "200 OK", contentType: contentType, body: data, connection: connection, cacheSeconds: cacheSeconds)
+        sendHTTPResponse(status: "200 OK", contentType: contentType, body: data, connection: connection, cacheSeconds: cacheSeconds, etag: etag)
+    }
+
+    internal enum ParsedHTTPByteRange: Equatable {
+        case none
+        case satisfiable(start: Int, end: Int)
+        case notSatisfiable
+    }
+
+    internal static func parseHTTPByteRange(rangeHeader: String?, totalLength: Int) -> ParsedHTTPByteRange {
+        guard let raw = rangeHeader?.trimmingCharacters(in: .whitespacesAndNewlines),
+              raw.lowercased().hasPrefix("bytes=") else {
+            return .none
+        }
+        let spec = String(raw.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+        let firstRange = spec.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? spec
+        let parts = firstRange.components(separatedBy: "-")
+        guard parts.count >= 2 else { return .none }
+
+        let startStr = parts[0].trimmingCharacters(in: .whitespaces)
+        let endStr = parts[1].trimmingCharacters(in: .whitespaces)
+        guard totalLength > 0 else { return .notSatisfiable }
+
+        let start: Int
+        let end: Int
+        if startStr.isEmpty {
+            guard let suffix = Int(endStr), suffix > 0 else {
+                return .notSatisfiable
+            }
+            start = max(0, totalLength - suffix)
+            end = totalLength - 1
+        } else {
+            guard let parsedStart = Int(startStr), parsedStart >= 0, parsedStart < totalLength else {
+                return .notSatisfiable
+            }
+            start = parsedStart
+            if endStr.isEmpty {
+                end = totalLength - 1
+            } else if let parsedEnd = Int(endStr), parsedEnd >= start {
+                end = min(parsedEnd, totalLength - 1)
+            } else {
+                return .notSatisfiable
+            }
+        }
+        return (start <= end && start < totalLength) ? .satisfiable(start: start, end: end) : .notSatisfiable
     }
 
     // MARK: - HTTP Response Writers
@@ -458,6 +584,38 @@ extension WebSocketServer {
         }))
     }
 
+    internal func sendNotModified(
+        etag: String,
+        cacheSeconds: Int,
+        varyGzip: Bool,
+        connection: NWConnection
+    ) {
+        _ = consumeHeadRequestFlag(for: connection)
+        let keepAlive = isKeepAliveEnabled(for: connection)
+        var header = "HTTP/1.1 304 Not Modified\r\n" +
+            "ETag: \(etag)\r\n" +
+            "X-Content-Type-Options: nosniff\r\n" +
+            "Referrer-Policy: no-referrer\r\n"
+        if varyGzip {
+            header += "Vary: Accept-Encoding\r\n"
+        }
+        if cacheSeconds > 0 {
+            header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
+        } else {
+            header += "Cache-Control: no-cache\r\n"
+        }
+        if keepAlive {
+            header += "Connection: keep-alive\r\nKeep-Alive: timeout=15, max=200\r\n\r\n"
+        } else {
+            header += "Connection: close\r\n\r\n"
+        }
+        connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak self, weak connection] error in
+            if let c = connection {
+                self?.finishHTTPResponseCycle(connection: c, forceClose: error != nil || !keepAlive)
+            }
+        }))
+    }
+
     internal func sendHTTPResponse(
         status: String,
         contentType: String,
@@ -466,9 +624,12 @@ extension WebSocketServer {
         cacheSeconds: Int = 0,
         setCookie: String? = nil,
         headOnly: Bool = false,
-        contentEncoding: String? = nil
+        contentEncoding: String? = nil,
+        etag: String? = nil
     ) {
         let isHead = headOnly || consumeHeadRequestFlag(for: connection)
+        let statusForceClose = status.hasPrefix("400") || status.hasPrefix("403") || status.hasPrefix("413")
+        let keepAlive = !statusForceClose && isKeepAliveEnabled(for: connection)
         var header = "HTTP/1.1 \(status)\r\n" +
             "Content-Type: \(contentType)\r\n" +
             "Content-Length: \(body.count)\r\n" +
@@ -476,10 +637,17 @@ extension WebSocketServer {
             "Referrer-Policy: no-referrer\r\n" +
             "Accept-Ranges: bytes\r\n" +
             "Access-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\n" +
-            "Access-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID, X-AMR-Device-Secret, X-AMR-API-Token, Authorization\r\n" +
-            "Connection: close\r\n"
+            "Access-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID, X-AMR-Device-Secret, X-AMR-API-Token, Authorization\r\n"
+        if keepAlive {
+            header += "Connection: keep-alive\r\nKeep-Alive: timeout=15, max=200\r\n"
+        } else {
+            header += "Connection: close\r\n"
+        }
         if contentType.lowercased().contains("text/html") {
             header += "Content-Security-Policy: \(Self.htmlContentSecurityPolicy)\r\n"
+        }
+        if let etag = etag, !etag.isEmpty {
+            header += "ETag: \(etag)\r\n"
         }
         if let enc = contentEncoding, !enc.isEmpty {
             header += "Content-Encoding: \(enc)\r\nVary: Accept-Encoding\r\n"
@@ -497,10 +665,9 @@ extension WebSocketServer {
         if !isHead {
             respData.append(body)
         }
-        connection.send(content: respData, completion: .contentProcessed({ [weak self, weak connection] _ in
+        connection.send(content: respData, completion: .contentProcessed({ [weak self, weak connection] error in
             if let c = connection {
-                self?.untrackTCPConnection(c)
-                c.cancel()
+                self?.finishHTTPResponseCycle(connection: c, forceClose: error != nil || !keepAlive)
             }
         }))
     }
@@ -512,9 +679,11 @@ extension WebSocketServer {
         totalLength: Int,
         body: Data,
         connection: NWConnection,
-        cacheSeconds: Int = 2592000
+        cacheSeconds: Int = 2592000,
+        etag: String? = nil
     ) {
         let isHead = consumeHeadRequestFlag(for: connection)
+        let keepAlive = isKeepAliveEnabled(for: connection)
         var header = "HTTP/1.1 206 Partial Content\r\n" +
             "Content-Type: \(contentType)\r\n" +
             "Content-Range: bytes \(rangeStart)-\(rangeEnd)/\(totalLength)\r\n" +
@@ -524,20 +693,26 @@ extension WebSocketServer {
             "Accept-Ranges: bytes\r\n" +
             "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
             "Access-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID, X-AMR-Device-Secret, X-AMR-API-Token, Authorization\r\n"
+        if let etag = etag, !etag.isEmpty {
+            header += "ETag: \(etag)\r\n"
+        }
         if cacheSeconds > 0 {
             header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
         } else {
             header += "Cache-Control: no-cache\r\n"
         }
-        header += "Connection: close\r\n\r\n"
+        if keepAlive {
+            header += "Connection: keep-alive\r\nKeep-Alive: timeout=15, max=200\r\n\r\n"
+        } else {
+            header += "Connection: close\r\n\r\n"
+        }
         var respData = Data(header.utf8)
         if !isHead {
             respData.append(body)
         }
-        connection.send(content: respData, completion: .contentProcessed({ [weak self, weak connection] _ in
+        connection.send(content: respData, completion: .contentProcessed({ [weak self, weak connection] error in
             if let c = connection {
-                self?.untrackTCPConnection(c)
-                c.cancel()
+                self?.finishHTTPResponseCycle(connection: c, forceClose: error != nil || !keepAlive)
             }
         }))
     }
@@ -553,34 +728,36 @@ extension WebSocketServer {
 
     internal func sendCORSPreflight(connection: NWConnection) {
         _ = consumeHeadRequestFlag(for: connection)
-        let header = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID, X-AMR-Device-Secret, X-AMR-API-Token, Authorization\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-        connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak self, weak connection] _ in
+        let keepAlive = isKeepAliveEnabled(for: connection)
+        let connHdr = keepAlive ? "Connection: keep-alive\r\nKeep-Alive: timeout=15, max=200\r\n" : "Connection: close\r\n"
+        let header = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID, X-AMR-Device-Secret, X-AMR-API-Token, Authorization\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\n\(connHdr)\r\n"
+        connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak self, weak connection] error in
             if let c = connection {
-                self?.untrackTCPConnection(c)
-                c.cancel()
+                self?.finishHTTPResponseCycle(connection: c, forceClose: error != nil || !keepAlive)
             }
         }))
     }
 
     internal func sendRedirect(location: String, connection: NWConnection, cacheSeconds: Int = 0) {
         _ = consumeHeadRequestFlag(for: connection)
+        let keepAlive = isKeepAliveEnabled(for: connection)
         let safeLocation = location.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "")
-        var header = "HTTP/1.1 302 Found\r\nLocation: \(safeLocation)\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\nConnection: close\r\n"
+        var header = "HTTP/1.1 302 Found\r\nLocation: \(safeLocation)\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\n"
+        header += keepAlive ? "Connection: keep-alive\r\nKeep-Alive: timeout=15, max=200\r\n" : "Connection: close\r\n"
         if cacheSeconds > 0 {
             header += "Cache-Control: public, max-age=\(cacheSeconds)\r\n"
         } else {
             header += "Cache-Control: no-cache, no-store, must-revalidate\r\n"
         }
         header += "\r\n"
-        connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak self, weak connection] _ in
+        connection.send(content: Data(header.utf8), completion: .contentProcessed({ [weak self, weak connection] error in
             if let c = connection {
-                self?.untrackTCPConnection(c)
-                c.cancel()
+                self?.finishHTTPResponseCycle(connection: c, forceClose: error != nil || !keepAlive)
             }
         }))
     }
 
-    internal func loadWebAsset(filename: String) -> String? {
+    internal func loadDiskOnlyWebAsset(filename: String) -> String? {
         guard !filename.isEmpty,
               !filename.contains(".."),
               !filename.hasPrefix("/"),
@@ -597,11 +774,15 @@ extension WebSocketServer {
                 return content
             }
         }
+        return nil
+    }
 
+    internal func loadWebAsset(filename: String) -> String? {
+        if let disk = loadDiskOnlyWebAsset(filename: filename) {
+            return disk
+        }
         switch filename {
-        case "index.html": return WebUIContent.indexHTML
-        case "style.css": return WebUIContent.styleCSS
-        case "app.js": return WebUIContent.appJS
+        case "index.html": return WebUIContent.fallbackDiagnosticHTML
         case "manifest.json": return WebUIContent.manifestJSON
         case "sw.js": return WebUIContent.swJS
         case "apple-touch-icon.svg": return WebUIContent.appleTouchIconSVG

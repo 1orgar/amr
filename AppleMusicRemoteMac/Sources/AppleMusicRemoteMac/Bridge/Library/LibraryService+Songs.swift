@@ -45,6 +45,67 @@ extension LibraryService {
         let staleFallback = rawLibrarySongsCache?.tracks
         lock.unlock()
 
+        // Fast path: Native iTunesLibrary.framework (~30-80ms in-process without AppleEvents / OSA IPC)
+        if let itSnapshots = ITLibraryReader.shared.readLibrarySongSnapshots(forceReload: forceRefresh) {
+            var itResult: [TrackInfo] = []
+            itResult.reserveCapacity(itSnapshots.count)
+            for (offset, snap) in itSnapshots.enumerated() {
+                if isValidTrack(name: snap.title, artist: snap.artist, duration: snap.durationSeconds) {
+                    let dbId = snap.syntheticTrackId
+                    PlaybackStateStore.shared.setTrackMetadata(id: dbId, name: snap.title, artist: snap.artist, album: snap.album)
+                    if snap.isFileTrack && snap.sampleRateHz >= 44_100 && snap.bitsPerSample >= 16 {
+                        BitPerfectLogMonitor.shared.cacheTrackFormat(
+                            artist: snap.artist,
+                            title: snap.title,
+                            sampleRate: Double(snap.sampleRateHz),
+                            bitDepth: snap.bitsPerSample
+                        )
+                    }
+                    let encN = snap.title.amrQueryValueEncoded
+                    let encA = snap.artist.amrQueryValueEncoded
+                    let encAl = snap.album.amrQueryValueEncoded
+                    let artUrl: String
+                    if let cached = MusicKitManager.shared.getCachedTrackArtwork(name: snap.title, artist: snap.artist, album: snap.album), !cached.isEmpty {
+                        artUrl = cached
+                    } else if (snap.isFileTrack || snap.hasEmbeddedArtwork) && dbId > 0 {
+                        artUrl = "/api/artwork/track?id=\(dbId)&name=\(encN)&artist=\(encA)&album=\(encAl)"
+                    } else {
+                        artUrl = "/api/artwork/search?name=\(encN)&artist=\(encA)&album=\(encAl)"
+                    }
+                    itResult.append(
+                        TrackInfo(
+                            id: "\(dbId)",
+                            numericId: dbId,
+                            name: snap.title,
+                            artist: snap.artist,
+                            album: snap.album,
+                            duration: snap.durationSeconds,
+                            hasArtwork: !artUrl.isEmpty,
+                            artworkUrl: artUrl,
+                            favorited: false,
+                            isLocal: true,
+                            dateAdded: snap.addedTimestamp,
+                            index: offset + 1
+                        )
+                    )
+                }
+            }
+
+            var normMap = [String: [TrackInfo]](minimumCapacity: itResult.count + 64)
+            for song in itResult {
+                let norm = Self.normalizeMatchingTitle(song.name)
+                if !norm.isEmpty {
+                    normMap[norm, default: []].append(song)
+                }
+            }
+
+            lock.lock()
+            rawLibrarySongsCache = (Date(), itResult)
+            librarySongsByNormalizedTitle = normMap
+            lock.unlock()
+            return itResult
+        }
+
         let scriptSrc = """
         tell application "Music"
             try
@@ -285,6 +346,7 @@ extension LibraryService {
     }
 
     public func invalidateLibrarySongsCache() {
+        ITLibraryReader.shared.invalidate()
         lock.lock()
         rawLibrarySongsCache = nil
         subscriptionSongsCache = nil

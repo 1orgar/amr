@@ -392,13 +392,19 @@ public final class PlaybackRouter: @unchecked Sendable {
         let isRepeatOne = (storeRepeat == "one")
         let appleSongRepeat = isRepeatOne ? "one" : "off"
         let localPlayStatement = isRepeatOne ? "play foundTrack" : "play foundTrack once true"
+        let trackLookupClause: String
+        if let persistentHex = ITLibraryReader.shared.persistentIDHex(forTrackId: dbId) {
+            trackLookupClause = "set foundTrack to (first track of library playlist 1 whose persistent ID is \"\(persistentHex)\")"
+        } else {
+            trackLookupClause = "set foundTrack to (first track of library playlist 1 whose database ID is \(dbId))"
+        }
         let script = """
         tell application "Music"
             try
                 with timeout of 3 seconds
                     set foundTrack to missing value
                     try
-                        set foundTrack to (first track of library playlist 1 whose database ID is \(dbId))
+                        \(trackLookupClause)
                     end try
                     if foundTrack is missing value then
                         return "not_found"

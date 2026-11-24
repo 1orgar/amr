@@ -266,28 +266,160 @@ extension WebSocketServer {
         }
     }
 
+    internal static let motionStreamChunkSize: Int = 524_288 // 512 KB bounded RAM per active .mp4 stream
+
+    internal static func readFileByteSlice(url: URL, offset: Int, length: Int) -> Data? {
+        guard offset >= 0, length >= 0 else { return nil }
+        if length == 0 { return Data() }
+        guard let fh = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? fh.close() }
+        do {
+            try fh.seek(toOffset: UInt64(offset))
+            return try fh.read(upToCount: length)
+        } catch {
+            return nil
+        }
+    }
+
     internal func handleMotionArtworkHTTP(method: String, headerString: String, fullPath: String, bodyData: Data, connection: NWConnection) {
         guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: bodyData, connection: connection) else {
             sendHTTPResponse(status: "403 Forbidden", contentType: "application/json; charset=utf-8", body: Data("{\"status\":\"error\",\"error\":\"Device not authorized\"}".utf8), connection: connection)
             return
         }
         let hashParam = extractQueryParameter(named: "hash", from: fullPath) ?? ""
-        guard let data = MotionArtworkDiskCache.shared.getVideoData(forHash: hashParam), !data.isEmpty else {
+        let cleanHash = hashParam.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let fileMeta = MotionArtworkDiskCache.shared.videoFileLocationAndSize(forHash: cleanHash) else {
             sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
             return
         }
+
+        let etag = "\"\(cleanHash.prefix(24))\""
+        let totalSize = fileMeta.fileSize
+
         if method == "HEAD" {
             _ = consumeHeadRequestFlag(for: connection)
-            let headResp = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Length: \(data.count)\r\nAccept-Ranges: bytes\r\nCache-Control: public, max-age=604800\r\nConnection: close\r\n\r\n"
-            connection.send(content: Data(headResp.utf8), completion: .contentProcessed({ [weak self, weak connection] _ in
+            let keepAlive = isKeepAliveEnabled(for: connection)
+            let connHdr = keepAlive ? "Connection: keep-alive\r\nKeep-Alive: timeout=15, max=200\r\n" : "Connection: close\r\n"
+            let headResp = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nETag: \(etag)\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Length: \(totalSize)\r\nAccept-Ranges: bytes\r\nCache-Control: public, max-age=604800\r\n\(connHdr)\r\n"
+            connection.send(content: Data(headResp.utf8), completion: .contentProcessed({ [weak self, weak connection] error in
                 if let c = connection {
-                    self?.untrackTCPConnection(c)
-                    c.cancel()
+                    self?.finishHTTPResponseCycle(connection: c, forceClose: error != nil || !keepAlive)
                 }
             }))
             return
         }
-        serveByteRangeOrFullHTTP(data: data, contentType: "video/mp4", headerString: headerString, connection: connection, cacheSeconds: 86400 * 7)
+
+        let rangeHeader = extractHeader(named: "Range", from: headerString)
+        if rangeHeader == nil,
+           Self.matchesIfNoneMatch(extractHeader(named: "If-None-Match", from: headerString), etag: etag) {
+            sendNotModified(etag: etag, cacheSeconds: 604800, varyGzip: false, connection: connection)
+            return
+        }
+
+        let rangeStart: Int
+        let rangeEnd: Int
+        let isPartial: Bool
+        switch Self.parseHTTPByteRange(rangeHeader: rangeHeader, totalLength: totalSize) {
+        case .satisfiable(let s, let e):
+            rangeStart = s
+            rangeEnd = e
+            isPartial = true
+        case .notSatisfiable:
+            sendRangeNotSatisfiable(totalLength: totalSize, connection: connection)
+            return
+        case .none:
+            rangeStart = 0
+            rangeEnd = totalSize - 1
+            isPartial = false
+        }
+
+        guard let fh = try? FileHandle(forReadingFrom: fileMeta.url) else {
+            sendHTTPResponse(status: "404 Not Found", contentType: "text/plain", body: Data("Not Found".utf8), connection: connection)
+            return
+        }
+        do {
+            try fh.seek(toOffset: UInt64(rangeStart))
+        } catch {
+            try? fh.close()
+            sendRangeNotSatisfiable(totalLength: totalSize, connection: connection)
+            return
+        }
+
+        _ = consumeHeadRequestFlag(for: connection)
+        let keepAlive = isKeepAliveEnabled(for: connection)
+        let sliceLength = rangeEnd - rangeStart + 1
+        let connHdr = keepAlive ? "Connection: keep-alive\r\nKeep-Alive: timeout=15, max=200\r\n" : "Connection: close\r\n"
+        var respHeader: String
+        if isPartial {
+            respHeader = "HTTP/1.1 206 Partial Content\r\n" +
+                "Content-Type: video/mp4\r\n" +
+                "Content-Range: bytes \(rangeStart)-\(rangeEnd)/\(totalSize)\r\n"
+        } else {
+            respHeader = "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: video/mp4\r\n"
+        }
+        respHeader += "Content-Length: \(sliceLength)\r\n" +
+            "ETag: \(etag)\r\n" +
+            "X-Content-Type-Options: nosniff\r\n" +
+            "Referrer-Policy: no-referrer\r\n" +
+            "Accept-Ranges: bytes\r\n" +
+            "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
+            "Access-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID, X-AMR-Device-Secret, X-AMR-API-Token, Authorization\r\n" +
+            "Cache-Control: public, max-age=604800\r\n" +
+            "\(connHdr)\r\n"
+
+        connection.send(content: Data(respHeader.utf8), isComplete: false, completion: .contentProcessed({ [weak self, weak connection] error in
+            guard let self = self, let c = connection else {
+                try? fh.close()
+                return
+            }
+            if error != nil {
+                try? fh.close()
+                self.finishHTTPResponseCycle(connection: c, forceClose: true)
+                return
+            }
+            self.streamNextFileChunk(fileHandle: fh, remainingBytes: sliceLength, keepAlive: keepAlive, connection: c)
+        }))
+    }
+
+    private func streamNextFileChunk(
+        fileHandle: FileHandle,
+        remainingBytes: Int,
+        keepAlive: Bool,
+        connection: NWConnection
+    ) {
+        if remainingBytes <= 0 {
+            try? fileHandle.close()
+            finishHTTPResponseCycle(connection: connection, forceClose: !keepAlive)
+            return
+        }
+        let readSize = min(Self.motionStreamChunkSize, remainingBytes)
+        let chunk: Data
+        do {
+            chunk = (try fileHandle.read(upToCount: readSize)) ?? Data()
+        } catch {
+            try? fileHandle.close()
+            finishHTTPResponseCycle(connection: connection, forceClose: true)
+            return
+        }
+        if chunk.isEmpty {
+            try? fileHandle.close()
+            finishHTTPResponseCycle(connection: connection, forceClose: true)
+            return
+        }
+        let nextRemaining = remainingBytes - chunk.count
+        connection.send(content: chunk, isComplete: false, completion: .contentProcessed({ [weak self, weak connection] error in
+            guard let self = self, let c = connection else {
+                try? fileHandle.close()
+                return
+            }
+            if error != nil {
+                try? fileHandle.close()
+                self.finishHTTPResponseCycle(connection: c, forceClose: true)
+                return
+            }
+            self.streamNextFileChunk(fileHandle: fileHandle, remainingBytes: nextRemaining, keepAlive: keepAlive, connection: c)
+        }))
     }
 
     internal func handleBookletHTTP(path: String, fullPath: String, headerString: String, bodyData: Data, connection: NWConnection) {
@@ -513,7 +645,49 @@ extension WebSocketServer {
         }
     }
 
-    internal func handleLiveAudioStream(connection: NWConnection, headerString: String, fullPath: String) {
+    internal static func convertLittleEndianPCMToNetworkByteOrder(_ chunk: Data, bitDepth: Int) -> Data {
+        guard !chunk.isEmpty else { return chunk }
+        var out = Data(count: chunk.count)
+        chunk.withUnsafeBytes { srcRaw in
+            out.withUnsafeMutableBytes { dstRaw in
+                guard let src = srcRaw.bindMemory(to: UInt8.self).baseAddress,
+                      let dst = dstRaw.bindMemory(to: UInt8.self).baseAddress else { return }
+                if bitDepth == 24 {
+                    let samples = chunk.count / 3
+                    var idx = 0
+                    for _ in 0..<samples {
+                        dst[idx] = src[idx + 2]
+                        dst[idx + 1] = src[idx + 1]
+                        dst[idx + 2] = src[idx]
+                        idx += 3
+                    }
+                    while idx < chunk.count {
+                        dst[idx] = src[idx]
+                        idx += 1
+                    }
+                } else {
+                    let samples = chunk.count / 2
+                    var idx = 0
+                    for _ in 0..<samples {
+                        dst[idx] = src[idx + 1]
+                        dst[idx + 1] = src[idx]
+                        idx += 2
+                    }
+                    if idx < chunk.count {
+                        dst[idx] = src[idx]
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    internal func handleLiveAudioStream(
+        connection: NWConnection,
+        headerString: String,
+        fullPath: String,
+        rawLPCM: Bool = false
+    ) {
         let subscriberID = UUID()
         let streamState = LiveStreamBackpressureState(maxPendingChunks: 64)
         let streamInstanceID = extractQueryParameter(named: "sid", from: fullPath)
@@ -525,6 +699,7 @@ extension WebSocketServer {
             return
         }
 
+        cancelConnectionIdleTimeout(for: connection)
         liveStreamLock.lock()
         liveStreamConnections[subscriberID] = connection
         liveStreamLock.unlock()
@@ -581,12 +756,22 @@ extension WebSocketServer {
             effectiveBits = fmt.bitDepth
         }
 
-        let httpHeader = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n"
-        let wavHeader = AudioProcessTapService.shared.makeWAVHeader(sampleRate: effectiveRate, bitDepth: effectiveBits)
+        let streamBits = (effectiveBits == 24) ? 24 : 16
+        let contentType = rawLPCM
+            ? "audio/L\(streamBits);rate=\(effectiveRate);channels=2"
+            : "audio/wav"
+        let httpHeader = "HTTP/1.1 200 OK\r\nContent-Type: \(contentType)\r\ntransferMode.dlna.org: Streaming\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nAccept-Ranges: none\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n"
         var initData = Data(httpHeader.utf8)
-        initData.append(wavHeader)
+        if !rawLPCM {
+            let wavHeader = AudioProcessTapService.shared.makeWAVHeader(
+                sampleRate: effectiveRate,
+                bitDepth: streamBits,
+                dataLength: AudioProcessTapService.unboundedWAVDataLength
+            )
+            initData.append(wavHeader)
+        }
 
-        NSLog("[WebSocketServer] 📻 Client connected to /stream/live.wav at \(effectiveRate) Hz, \(effectiveBits)-bit (subscriber: \(subscriberID))")
+        NSLog("[WebSocketServer] 📻 Client connected to \(rawLPCM ? "/stream/live.pcm" : "/stream/live.wav") at \(effectiveRate) Hz, \(streamBits)-bit (subscriber: \(subscriberID))")
         if isAuthorizedDLNA {
             DLNADiscoveryManager.shared.noteDLNALiveStreamConnected(sid: streamInstanceID)
         }
@@ -618,7 +803,10 @@ extension WebSocketServer {
                 self.cleanupLiveAudioStream(subscriberID: subscriberID, streamState: streamState, streamInstanceID: nil, wasBackpressureClose: true)
                 return
             }
-            conn.send(content: chunk, isComplete: false, completion: .contentProcessed({ [weak self] error in
+            let outboundChunk = rawLPCM
+                ? Self.convertLittleEndianPCMToNetworkByteOrder(chunk, bitDepth: streamBits)
+                : chunk
+            conn.send(content: outboundChunk, isComplete: false, completion: .contentProcessed({ [weak self] error in
                 streamState.releaseSendSlot()
                 if let error = error {
                     if !streamState.isClosed {

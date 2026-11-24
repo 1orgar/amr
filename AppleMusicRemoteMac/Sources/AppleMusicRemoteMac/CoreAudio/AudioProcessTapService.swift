@@ -444,6 +444,8 @@ public final class AudioProcessTapService: @unchecked Sendable {
 
     // MARK: - WAV Header Helper
 
+    public static let unboundedWAVDataLength: UInt32 = 0xFFFF_FFFF
+
     public func makeWAVHeader(sampleRate: Int? = nil, bitDepth: Int? = nil, dataLength: UInt32 = 0x7FFFFFFF - 36) -> Data {
         let rawRate = sampleRate ?? self.sampleRate
         let effectiveRate = max(8_000, min(768_000, rawRate))
@@ -452,26 +454,28 @@ public final class AudioProcessTapService: @unchecked Sendable {
         let effectiveBits = Int(bd)
         let effectiveBytesPerFrame = channels * (effectiveBits / 8)
         var header = Data()
+        header.reserveCapacity(44)
         header.append(contentsOf: "RIFF".utf8)
-        var chunkSize: UInt32 = dataLength > (UInt32.max - 36) ? UInt32.max : (dataLength + 36)
+        let rawChunkSize: UInt32 = dataLength > (UInt32.max - 36) ? UInt32.max : (dataLength + 36)
+        var chunkSize = rawChunkSize.littleEndian
         header.append(Data(bytes: &chunkSize, count: 4))
         header.append(contentsOf: "WAVEfmt ".utf8)
-        var subchunk1Size: UInt32 = 16
+        var subchunk1Size = UInt32(16).littleEndian
         header.append(Data(bytes: &subchunk1Size, count: 4))
-        var audioFormat: UInt16 = 1 // Linear PCM
+        var audioFormat = UInt16(1).littleEndian // Linear PCM
         header.append(Data(bytes: &audioFormat, count: 2))
-        var numChannels = UInt16(channels)
+        var numChannels = UInt16(channels).littleEndian
         header.append(Data(bytes: &numChannels, count: 2))
-        var sRate = UInt32(effectiveRate)
+        var sRate = UInt32(effectiveRate).littleEndian
         header.append(Data(bytes: &sRate, count: 4))
-        var byteRate = UInt32(effectiveRate * effectiveBytesPerFrame)
+        var byteRate = UInt32(effectiveRate * effectiveBytesPerFrame).littleEndian
         header.append(Data(bytes: &byteRate, count: 4))
-        var blockAlign = UInt16(effectiveBytesPerFrame)
+        var blockAlign = UInt16(effectiveBytesPerFrame).littleEndian
         header.append(Data(bytes: &blockAlign, count: 2))
-        var bits = bd
+        var bits = bd.littleEndian
         header.append(Data(bytes: &bits, count: 2))
         header.append(contentsOf: "data".utf8)
-        var dSize = dataLength
+        var dSize = dataLength.littleEndian
         header.append(Data(bytes: &dSize, count: 4))
         return header
     }

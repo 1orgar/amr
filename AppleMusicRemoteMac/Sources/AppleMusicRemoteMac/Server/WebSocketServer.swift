@@ -31,10 +31,20 @@ public final class WebSocketServer: @unchecked Sendable {
     var clientHostAddresses: [UUID: String] = [:]
     var liveStreamConnections: [UUID: NWConnection] = [:]
     var headRequestConnections: Set<ObjectIdentifier> = []
+    var connectionQueues: [ObjectIdentifier: DispatchQueue] = [:]
+    var connectionClientIds: [ObjectIdentifier: UUID] = [:]
+    var keepAliveIdleTimers: [ObjectIdentifier: DispatchWorkItem] = [:]
+    var keepAliveStateByConnection: [ObjectIdentifier: (keepAlive: Bool, trailingBuffer: Data)] = [:]
     var fragmentBuffers: [ObjectIdentifier: (opcode: UInt8, data: Data)] = [:]
     var pendingOutboundFrames: [ObjectIdentifier: Int] = [:]
     var clientMessageQueues: [UUID: [String]] = [:]
     var activeClientWorkers: [UUID: Task<Void, Never>] = [:]
+
+    let httpConnectionTargetQueue = DispatchQueue(
+        label: "com.amr.server.connections",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
 
     let liveStreamLock = NSLock()
     let clientLock = NSRecursiveLock()
@@ -331,11 +341,45 @@ public final class WebSocketServer: @unchecked Sendable {
             }
         }
 
-        let queue = DispatchQueue(label: "com.amr.server.client.\(clientId.uuidString)", qos: .userInteractive)
+        let queue = DispatchQueue(
+            label: "com.amr.server.client.\(clientId.uuidString)",
+            qos: .userInitiated,
+            target: httpConnectionTargetQueue
+        )
+        let objId = ObjectIdentifier(connection)
+        clientLock.lock()
+        connectionQueues[objId] = queue
+        connectionClientIds[objId] = clientId
+        clientLock.unlock()
+
         connection.start(queue: queue)
 
         // Guard against idle / slowloris TCP connections that never complete handshake or HTTP request
-        queue.asyncAfter(deadline: .now() + 30.0) { [weak self, weak connection] in
+        scheduleConnectionIdleTimeout(clientId: clientId, connection: connection, seconds: 30.0)
+    }
+
+    internal static func shouldKeepHTTPConnectionAlive(headerString: String) -> Bool {
+        let firstLine = (headerString.components(separatedBy: "\r\n").first
+            ?? headerString.components(separatedBy: "\n").first
+            ?? "").uppercased()
+        var connHeaderValue: String? = nil
+        for line in headerString.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.lowercased().hasPrefix("connection:") {
+                connHeaderValue = String(trimmed.dropFirst("connection:".count)).trimmingCharacters(in: .whitespaces).lowercased()
+                break
+            }
+        }
+        if let connVal = connHeaderValue {
+            if connVal.contains("close") { return false }
+            if connVal.contains("keep-alive") { return true }
+        }
+        return firstLine.contains("HTTP/1.1")
+    }
+
+    internal func scheduleConnectionIdleTimeout(clientId: UUID, connection: NWConnection, seconds: TimeInterval) {
+        let objId = ObjectIdentifier(connection)
+        let work = DispatchWorkItem { [weak self, weak connection] in
             guard let self = self, let conn = connection else { return }
             let isUpgradedWS: Bool = {
                 self.clientLock.lock()
@@ -348,21 +392,72 @@ public final class WebSocketServer: @unchecked Sendable {
                 return self.liveStreamConnections.values.contains(where: { $0 === conn })
             }()
             if !isUpgradedWS && !isLiveStream {
+                self.untrackTCPConnection(conn)
                 conn.cancel()
                 self.removeClient(clientId: clientId, connection: conn)
             }
         }
+        clientLock.lock()
+        keepAliveIdleTimers[objId]?.cancel()
+        keepAliveIdleTimers[objId] = work
+        let targetQ = connectionQueues[objId] ?? httpConnectionTargetQueue
+        clientLock.unlock()
+        targetQ.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    internal func cancelConnectionIdleTimeout(for connection: NWConnection) {
+        let objId = ObjectIdentifier(connection)
+        clientLock.lock()
+        keepAliveIdleTimers.removeValue(forKey: objId)?.cancel()
+        clientLock.unlock()
+    }
+
+    internal func isKeepAliveEnabled(for connection: NWConnection) -> Bool {
+        let objId = ObjectIdentifier(connection)
+        clientLock.lock()
+        defer { clientLock.unlock() }
+        return keepAliveStateByConnection[objId]?.keepAlive ?? false
+    }
+
+    internal func finishHTTPResponseCycle(connection: NWConnection, forceClose: Bool = false) {
+        let objId = ObjectIdentifier(connection)
+        clientLock.lock()
+        let state = keepAliveStateByConnection.removeValue(forKey: objId)
+        let clientId = connectionClientIds[objId]
+        let connQueue = connectionQueues[objId]
+        clientLock.unlock()
+
+        if !forceClose, let state, state.keepAlive, let clientId {
+            scheduleConnectionIdleTimeout(clientId: clientId, connection: connection, seconds: 15.0)
+            let nextBuf = state.trailingBuffer
+            if let q = connQueue {
+                q.async { [weak self, weak connection] in
+                    guard let self = self, let c = connection else { return }
+                    self.readInitialConnection(clientId: clientId, connection: c, buffer: nextBuf)
+                }
+            } else {
+                readInitialConnection(clientId: clientId, connection: connection, buffer: nextBuf)
+            }
+        } else {
+            untrackTCPConnection(connection)
+            connection.cancel()
+        }
     }
 
     internal func untrackTCPConnection(_ connection: NWConnection) {
+        let objId = ObjectIdentifier(connection)
         clientLock.lock()
         if let match = activeTCPConnections.first(where: { $0.value === connection })?.key {
             activeTCPConnections.removeValue(forKey: match)
         }
-        headRequestConnections.remove(ObjectIdentifier(connection))
+        headRequestConnections.remove(objId)
+        keepAliveIdleTimers.removeValue(forKey: objId)?.cancel()
+        keepAliveStateByConnection.removeValue(forKey: objId)
+        connectionQueues.removeValue(forKey: objId)
+        connectionClientIds.removeValue(forKey: objId)
         clientLock.unlock()
         sendLock.lock()
-        pendingOutboundFrames.removeValue(forKey: ObjectIdentifier(connection))
+        pendingOutboundFrames.removeValue(forKey: objId)
         sendLock.unlock()
     }
 
@@ -374,6 +469,10 @@ public final class WebSocketServer: @unchecked Sendable {
         if let c = conn ?? connection {
             let objId = ObjectIdentifier(c)
             headRequestConnections.remove(objId)
+            keepAliveIdleTimers.removeValue(forKey: objId)?.cancel()
+            keepAliveStateByConnection.removeValue(forKey: objId)
+            connectionQueues.removeValue(forKey: objId)
+            connectionClientIds.removeValue(forKey: objId)
             fragmentBuffers.removeValue(forKey: objId)
             sendLock.lock()
             pendingOutboundFrames.removeValue(forKey: objId)
@@ -423,11 +522,13 @@ public final class WebSocketServer: @unchecked Sendable {
 
             guard let delim = delimiterRange else {
                 if isComplete {
+                    self.untrackTCPConnection(conn)
                     conn.cancel()
                     self.removeClient(clientId: clientId, connection: conn)
                     return
                 }
                 if current.count > 65536 {
+                    self.untrackTCPConnection(conn)
                     conn.cancel()
                     self.removeClient(clientId: clientId, connection: conn)
                     return
@@ -436,6 +537,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 return
             }
 
+            self.cancelConnectionIdleTimeout(for: conn)
             let headerData = current.subdata(in: current.startIndex..<delim.lowerBound)
             let restData = current.subdata(in: delim.upperBound..<current.endIndex)
             guard let headerString = String(data: headerData, encoding: .utf8) else {
@@ -493,10 +595,23 @@ public final class WebSocketServer: @unchecked Sendable {
                 expectedBodyLen = max(0, min(rawLen, 16 * 1024 * 1024))
             }
 
+            let wantsKeepAlive = Self.shouldKeepHTTPConnectionAlive(headerString: headerString)
             if restData.count < expectedBodyLen {
-                self.readRemainingHTTPBody(clientId: clientId, connection: conn, headerString: headerString, buffer: restData, expectedLen: expectedBodyLen)
+                self.readRemainingHTTPBody(
+                    clientId: clientId,
+                    connection: conn,
+                    headerString: headerString,
+                    buffer: restData,
+                    expectedLen: expectedBodyLen,
+                    wantsKeepAlive: wantsKeepAlive
+                )
             } else {
                 let bodySlice = expectedBodyLen > 0 ? Data(restData.prefix(expectedBodyLen)) : Data()
+                let trailing = restData.count > expectedBodyLen ? Data(restData.dropFirst(expectedBodyLen)) : Data()
+                let objId = ObjectIdentifier(conn)
+                self.clientLock.lock()
+                self.keepAliveStateByConnection[objId] = (keepAlive: wantsKeepAlive && !isComplete, trailingBuffer: trailing)
+                self.clientLock.unlock()
                 self.handleHTTPRequest(headerString: headerString, bodyData: bodySlice, connection: conn)
             }
         }
@@ -609,7 +724,14 @@ public final class WebSocketServer: @unchecked Sendable {
         }
     }
 
-    private func readRemainingHTTPBody(clientId: UUID, connection: NWConnection, headerString: String, buffer: Data, expectedLen: Int) {
+    private func readRemainingHTTPBody(
+        clientId: UUID,
+        connection: NWConnection,
+        headerString: String,
+        buffer: Data,
+        expectedLen: Int,
+        wantsKeepAlive: Bool
+    ) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 524288) { [weak self, weak connection] content, _, isComplete, error in
             guard let self = self, let conn = connection else { return }
             if let error = error {
@@ -629,9 +751,21 @@ public final class WebSocketServer: @unchecked Sendable {
             }
             if current.count >= expectedLen || isComplete {
                 let bodySlice = expectedLen > 0 ? Data(current.prefix(expectedLen)) : Data()
+                let trailing = current.count > expectedLen ? Data(current.dropFirst(expectedLen)) : Data()
+                let objId = ObjectIdentifier(conn)
+                self.clientLock.lock()
+                self.keepAliveStateByConnection[objId] = (keepAlive: wantsKeepAlive && !isComplete, trailingBuffer: trailing)
+                self.clientLock.unlock()
                 self.handleHTTPRequest(headerString: headerString, bodyData: bodySlice, connection: conn)
             } else {
-                self.readRemainingHTTPBody(clientId: clientId, connection: conn, headerString: headerString, buffer: current, expectedLen: expectedLen)
+                self.readRemainingHTTPBody(
+                    clientId: clientId,
+                    connection: conn,
+                    headerString: headerString,
+                    buffer: current,
+                    expectedLen: expectedLen,
+                    wantsKeepAlive: wantsKeepAlive
+                )
             }
         }
     }

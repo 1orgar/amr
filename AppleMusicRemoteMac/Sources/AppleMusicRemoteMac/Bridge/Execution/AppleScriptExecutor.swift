@@ -15,8 +15,17 @@ public final class AppleScriptExecutor: @unchecked Sendable {
     private let workerIdleCondition = NSCondition()
     private var isWorkerExecuting: Bool = false
     private let workerQueue = DispatchQueue(label: "com.amr.applescript.worker", qos: .userInitiated)
+    public static let maxPinnedScripts = 24
+    public static let maxDynamicScripts = 48
     /// Strictly confined to `workerQueue` per Apple TN2084.
-    private var compiledScripts: [String: NSAppleScript] = [:]
+    private var pinnedScripts: [String: NSAppleScript] = [:]
+    private var dynamicScripts: [String: NSAppleScript] = [:]
+    private var dynamicScriptOrder: [String] = []
+    private var scriptHitCounts: [String: Int] = [:]
+    private var testPinnedKeys = Set<String>()
+    private var testDynamicKeys = Set<String>()
+    private var testDynamicOrder: [String] = []
+    private let testCacheLock = NSLock()
 
     private final class ExecutionBox: @unchecked Sendable {
         var descriptor: NSAppleEventDescriptor?
@@ -72,49 +81,50 @@ public final class AppleScriptExecutor: @unchecked Sendable {
         isWorkerExecuting = true
         workerIdleCondition.unlock()
 
-        var timedSource = source
-        let lowerSource = timedSource.lowercased()
-        let hasTimeoutClause = lowerSource.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("with timeout")
-            || lowerSource.contains("\nwith timeout")
-            || lowerSource.range(of: #"(?m)^\s+with timeout\b"#, options: .regularExpression) != nil
-        if !hasTimeoutClause {
-            let tellCount = timedSource.components(separatedBy: "tell application \"Music\"").count - 1
-            let endTellCount = timedSource.components(separatedBy: "end tell").count - 1
-            if tellCount == 1,
-               endTellCount >= 1,
-               let tellRange = timedSource.range(of: "tell application \"Music\""),
-               let endTellRange = timedSource.range(of: "end tell", options: .backwards),
-               tellRange.upperBound <= endTellRange.lowerBound,
-               !timedSource[tellRange.upperBound...].hasPrefix(" to ") {
-                let prefix = timedSource[..<tellRange.upperBound]
-                let body = timedSource[tellRange.upperBound..<endTellRange.lowerBound]
-                let suffix = timedSource[endTellRange.lowerBound...]
-                timedSource = "\(prefix)\nwith timeout of 2 seconds\(body)\nend timeout\n\(suffix)"
-            } else {
-                timedSource = "with timeout of 2 seconds\n" + timedSource + "\nend timeout"
-            }
-        }
+        let scriptText = Self.wrapWithDefaultTimeoutIfNeeded(source)
+        let shouldCacheCompiled = scriptText.utf8.count <= 2048
 
         let box = ExecutionBox()
         let sema = DispatchSemaphore(value: 0)
-        let scriptText = timedSource
-        let shouldCacheCompiled = scriptText.utf8.count <= 2048
 
         workerQueue.async { [weak self] in
             autoreleasepool {
                 var error: NSDictionary?
                 let script: NSAppleScript?
-                if shouldCacheCompiled, let cached = self?.compiledScripts[scriptText] {
-                    script = cached
-                } else {
-                    let fresh = NSAppleScript(source: scriptText)
-                    if shouldCacheCompiled, let self = self, let fresh = fresh {
-                        if self.compiledScripts.count >= 32 {
-                            self.compiledScripts.removeAll(keepingCapacity: true)
-                        }
-                        self.compiledScripts[scriptText] = fresh
+                if shouldCacheCompiled, let self = self {
+                    let hits = (self.scriptHitCounts[scriptText] ?? 0) + 1
+                    if self.scriptHitCounts.count > 256 && self.scriptHitCounts[scriptText] == nil {
+                        self.scriptHitCounts.removeAll(keepingCapacity: true)
                     }
-                    script = fresh
+                    self.scriptHitCounts[scriptText] = hits
+
+                    if let pinned = self.pinnedScripts[scriptText] {
+                        script = pinned
+                    } else if let dyn = self.dynamicScripts[scriptText] {
+                        if hits >= 2 && self.pinnedScripts.count < Self.maxPinnedScripts {
+                            self.dynamicScripts.removeValue(forKey: scriptText)
+                            self.dynamicScriptOrder.removeAll { $0 == scriptText }
+                            self.pinnedScripts[scriptText] = dyn
+                        }
+                        script = dyn
+                    } else {
+                        let fresh = NSAppleScript(source: scriptText)
+                        if let fresh = fresh {
+                            if hits >= 2 && self.pinnedScripts.count < Self.maxPinnedScripts {
+                                self.pinnedScripts[scriptText] = fresh
+                            } else {
+                                while self.dynamicScripts.count >= Self.maxDynamicScripts, !self.dynamicScriptOrder.isEmpty {
+                                    let oldest = self.dynamicScriptOrder.removeFirst()
+                                    self.dynamicScripts.removeValue(forKey: oldest)
+                                }
+                                self.dynamicScripts[scriptText] = fresh
+                                self.dynamicScriptOrder.append(scriptText)
+                            }
+                        }
+                        script = fresh
+                    }
+                } else {
+                    script = NSAppleScript(source: scriptText)
                 }
                 let desc = script?.executeAndReturnError(&error)
                 if let err = error {
@@ -170,5 +180,78 @@ public final class AppleScriptExecutor: @unchecked Sendable {
     public func execute(_ source: String, maxWait: TimeInterval = 2.4, reportTimeout: Bool = true) -> (success: Bool, output: String?) {
         let (ok, out) = run(source, maxWait: maxWait, reportTimeout: reportTimeout)
         return (ok, out)
+    }
+
+    internal static func wrapWithDefaultTimeoutIfNeeded(_ source: String) -> String {
+        var timedSource = source
+        let lowerSource = timedSource.lowercased()
+        let hasTimeoutClause = lowerSource.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("with timeout")
+            || lowerSource.contains("\nwith timeout")
+            || lowerSource.range(of: #"(?m)^\s+with timeout\b"#, options: .regularExpression) != nil
+        if !hasTimeoutClause {
+            let tellCount = timedSource.components(separatedBy: "tell application \"Music\"").count - 1
+            let endTellCount = timedSource.components(separatedBy: "end tell").count - 1
+            if tellCount == 1,
+               endTellCount >= 1,
+               let tellRange = timedSource.range(of: "tell application \"Music\""),
+               let endTellRange = timedSource.range(of: "end tell", options: .backwards),
+               tellRange.upperBound <= endTellRange.lowerBound,
+               !timedSource[tellRange.upperBound...].hasPrefix(" to ") {
+                let prefix = timedSource[..<tellRange.upperBound]
+                let body = timedSource[tellRange.upperBound..<endTellRange.lowerBound]
+                let suffix = timedSource[endTellRange.lowerBound...]
+                timedSource = "\(prefix)\nwith timeout of 2 seconds\(body)\nend timeout\n\(suffix)"
+            } else {
+                timedSource = "with timeout of 2 seconds\n" + timedSource + "\nend timeout"
+            }
+        }
+        return timedSource
+    }
+
+    /// Pre-compiles and pins a recurring script (`pulseScript`, status polling) so dynamic one-off scripts never evict it.
+    public func pinScript(_ source: String) {
+        let wrapped = Self.wrapWithDefaultTimeoutIfNeeded(source)
+        guard wrapped.utf8.count <= 2048 else { return }
+        if PlaybackRouter.shared.isTestingEnvironment {
+            testCacheLock.withLock {
+                if testPinnedKeys.count < Self.maxPinnedScripts {
+                    testPinnedKeys.insert(wrapped)
+                    testDynamicKeys.remove(wrapped)
+                    testDynamicOrder.removeAll { $0 == wrapped }
+                }
+            }
+            return
+        }
+        workerQueue.async { [weak self] in
+            guard let self = self, self.pinnedScripts[wrapped] == nil else { return }
+            guard self.pinnedScripts.count < Self.maxPinnedScripts else { return }
+            if let existingDyn = self.dynamicScripts.removeValue(forKey: wrapped) {
+                self.dynamicScriptOrder.removeAll { $0 == wrapped }
+                self.pinnedScripts[wrapped] = existingDyn
+            } else if let compiled = NSAppleScript(source: wrapped) {
+                _ = compiled.compileAndReturnError(nil)
+                self.pinnedScripts[wrapped] = compiled
+            }
+        }
+    }
+
+    internal func simulateDynamicScriptInsertionForTesting(_ source: String) {
+        let wrapped = Self.wrapWithDefaultTimeoutIfNeeded(source)
+        testCacheLock.withLock {
+            guard !testPinnedKeys.contains(wrapped), !testDynamicKeys.contains(wrapped) else { return }
+            while testDynamicKeys.count >= Self.maxDynamicScripts, !testDynamicOrder.isEmpty {
+                let oldest = testDynamicOrder.removeFirst()
+                testDynamicKeys.remove(oldest)
+            }
+            testDynamicKeys.insert(wrapped)
+            testDynamicOrder.append(wrapped)
+        }
+    }
+
+    internal func isScriptCachedForTesting(_ source: String) -> (pinned: Bool, dynamic: Bool) {
+        let wrapped = Self.wrapWithDefaultTimeoutIfNeeded(source)
+        return testCacheLock.withLock {
+            (testPinnedKeys.contains(wrapped), testDynamicKeys.contains(wrapped))
+        }
     }
 }

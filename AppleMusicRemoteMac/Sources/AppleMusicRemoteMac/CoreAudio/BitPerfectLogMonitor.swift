@@ -156,9 +156,11 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     internal var debounceWorkItem: DispatchWorkItem?
     internal var lossyFallbackWorkItem: DispatchWorkItem?
 
-    // Track format cache to avoid mid-playback re-negotiation on re-played tracks
+    // Track format cache to avoid mid-playback re-negotiation on re-played tracks (bounded FIFO <= 2000 entries)
+    public static let maxTrackFormatCacheEntries = 2000
     private let cacheLock = NSLock()
     private var trackFormatCache: [String: (sampleRate: Double, bitDepth: Int)] = [:]
+    private var trackFormatCacheOrder: [String] = []
 
     // Common standard audio sample rates
     public static let standardRates: [Double] = [
@@ -191,14 +193,32 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         guard !title.isEmpty else { return }
         let key = "\(artist.trimmingCharacters(in: .whitespacesAndNewlines)):\(title.trimmingCharacters(in: .whitespacesAndNewlines))".lowercased()
         cacheLock.lock()
-        trackFormatCache[key] = (sampleRate, bitDepth)
+        storeTrackFormatLocked(key: key, sampleRate: sampleRate, bitDepth: bitDepth)
         cacheLock.unlock()
     }
 
     internal func cacheLockedTrackKeyFormat(_ lockedKey: String, sampleRate: Double, bitDepth: Int) {
+        guard !lockedKey.isEmpty else { return }
         cacheLock.lock()
-        trackFormatCache[lockedKey] = (sampleRate, bitDepth)
+        storeTrackFormatLocked(key: lockedKey, sampleRate: sampleRate, bitDepth: bitDepth)
         cacheLock.unlock()
+    }
+
+    private func storeTrackFormatLocked(key: String, sampleRate: Double, bitDepth: Int) {
+        if trackFormatCache[key] == nil {
+            while trackFormatCache.count >= Self.maxTrackFormatCacheEntries, !trackFormatCacheOrder.isEmpty {
+                let evicted = trackFormatCacheOrder.removeFirst()
+                trackFormatCache.removeValue(forKey: evicted)
+            }
+            trackFormatCacheOrder.append(key)
+        }
+        trackFormatCache[key] = (sampleRate, bitDepth)
+    }
+
+    internal var trackFormatCacheCountForTesting: Int {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return trackFormatCache.count
     }
 
     // MARK: - Lifecycle

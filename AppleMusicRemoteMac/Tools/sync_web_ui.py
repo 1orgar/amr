@@ -132,18 +132,13 @@ def sync_swift_files(amr_dir: Path, web_dir: Path) -> list[str]:
     server_dir = amr_dir / "Sources" / "AppleMusicRemoteMac" / "Server"
     updated: list[str] = []
 
-    ext_targets = [
-        ("app.js", "WebUIContent+JS.swift", "appJS"),
-        ("style.css", "WebUIContent+CSS.swift", "styleCSS"),
-        ("index.html", "WebUIContent+HTML.swift", "indexHTML"),
-    ]
-    for web_name, swift_name, prop in ext_targets:
-        web_file = web_dir / web_name
-        swift_file = server_dir / swift_name
-        if web_file.is_file():
-            swift_out = build_swift_extension_file(swift_name, prop, web_file.read_text(encoding="utf-8"))
-            if write_if_changed(swift_file, swift_out):
-                updated.append(swift_name)
+    # Remove legacy 30K-line embedded WebUIContent+{JS,CSS,HTML}.swift files if present;
+    # primary Web bundles are served directly from Resources/Web (or AppleMusicRemoteMac/Web in dev/tests).
+    for legacy_name in ("WebUIContent+JS.swift", "WebUIContent+CSS.swift", "WebUIContent+HTML.swift"):
+        legacy_path = server_dir / legacy_name
+        if legacy_path.is_file():
+            legacy_path.unlink()
+            updated.append(f"removed {legacy_name}")
 
     core_swift = server_dir / "WebUIContent.swift"
     if core_swift.is_file():

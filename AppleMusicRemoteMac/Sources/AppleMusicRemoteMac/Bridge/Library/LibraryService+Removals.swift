@@ -143,7 +143,17 @@ extension LibraryService {
         while startIdx < uniqueIds.count {
             let endIdx = min(startIdx + batchSize, uniqueIds.count)
             let batch = uniqueIds[startIdx..<endIdx]
-            let idList = batch.map { "\($0)" }.joined(separator: ", ")
+            var realDbIds: [Int] = []
+            var persistentHexIds: [String] = []
+            for id in batch {
+                if let hex = ITLibraryReader.shared.persistentIDHex(forTrackId: id) {
+                    persistentHexIds.append(hex)
+                } else {
+                    realDbIds.append(id)
+                }
+            }
+            let idList = realDbIds.map { "\($0)" }.joined(separator: ", ")
+            let hexList = persistentHexIds.map { "\"\($0)\"" }.joined(separator: ", ")
 
             let script = """
             tell application "Music"
@@ -152,7 +162,8 @@ extension LibraryService {
                     try
                         if player state is not stopped then
                             set curId to database ID of current track
-                            if curId is in {\(idList)} then
+                            set curHex to persistent ID of current track
+                            if curId is in {\(idList)} or curHex is in {\(hexList)} then
                                 stop
                                 repeat with qp in (get every user playlist whose name is "Очередь AMR")
                                     try
@@ -177,6 +188,25 @@ extension LibraryService {
                             end try
                             try
                                 if (count of (every track of library playlist 1 whose database ID is tVal)) = 0 then
+                                    set deletedCount to deletedCount + 1
+                                end if
+                            end try
+                        end if
+                    end repeat
+                    repeat with pid in {\(hexList)}
+                        set pVal to (contents of pid)
+                        set existedBefore to false
+                        try
+                            if (count of (every track of library playlist 1 whose persistent ID is pVal)) > 0 then
+                                set existedBefore to true
+                            end if
+                        end try
+                        if existedBefore then
+                            try
+                                delete (every track of library playlist 1 whose persistent ID is pVal)
+                            end try
+                            try
+                                if (count of (every track of library playlist 1 whose persistent ID is pVal)) = 0 then
                                     set deletedCount to deletedCount + 1
                                 end if
                             end try

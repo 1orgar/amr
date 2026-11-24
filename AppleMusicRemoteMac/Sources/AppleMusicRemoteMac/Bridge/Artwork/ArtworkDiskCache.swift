@@ -276,6 +276,24 @@ public final class MotionArtworkDiskCache: @unchecked Sendable {
         return "/api/artwork/motion.mp4?hash=\(hash)"
     }
 
+    public func videoFileLocationAndSize(forHash hash: String) -> (url: URL, fileSize: Int)? {
+        let cleanHash = hash.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard cleanHash.count == 64,
+              cleanHash.allSatisfy({ $0.isHexDigit }) else {
+            return nil
+        }
+        let path = videoFileURL(forHash: cleanHash)
+        guard fileManager.fileExists(atPath: path.path),
+              let size = (try? path.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+              size > 0 else {
+            return nil
+        }
+        ioQueue.async { [weak self] in
+            try? self?.fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: path.path)
+        }
+        return (path, size)
+    }
+
     public func getVideoData(forHash hash: String) -> Data? {
         let cleanHash = hash.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard cleanHash.count == 64,

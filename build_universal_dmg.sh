@@ -34,54 +34,11 @@ DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 export DEVELOPER_DIR
 SDK_PATH="$(xcrun --show-sdk-path)"
 
-echo "🔄 Syncing Web/* assets with embedded WebUIContent*.swift..."
+echo "🔄 Assembling Web/* assets..."
 if [ -f "$ROOT_DIR/AppleMusicRemoteMac/Tools/sync_web_ui.py" ]; then
     python3 "$ROOT_DIR/AppleMusicRemoteMac/Tools/sync_web_ui.py"
 elif [ -f "$ROOT_DIR/Tools/sync_web_ui.py" ]; then
     python3 "$ROOT_DIR/Tools/sync_web_ui.py"
-else
-    python3 - "$MAC_DIR" << 'PYEOF'
-import os, re, sys
-base = sys.argv[1]
-
-def choose_hashes(content: str) -> str:
-    n = 3
-    while ('"""' + ('#' * n)) in content:
-        n += 1
-    return '#' * n
-
-for name, sw, prop in [("app.js", "WebUIContent+JS.swift", "appJS"), ("style.css", "WebUIContent+CSS.swift", "styleCSS"), ("index.html", "WebUIContent+HTML.swift", "indexHTML")]:
-    web_path = os.path.join(base, "Web", name)
-    sw_path = os.path.join(base, "Sources", "AppleMusicRemoteMac", "Server", sw)
-    if os.path.isfile(web_path) and os.path.isfile(sw_path):
-        with open(web_path, "r", encoding="utf-8") as f:
-            web_s = f.read().rstrip("\n")
-        h = choose_hashes(web_s)
-        out = f"//\n//  {sw}\n//  AppleMusicRemoteMac\n//\n\nimport Foundation\n\nextension WebUIContent {{\n    public static let {prop}: String = {h}\"\"\"\n{web_s}\n\"\"\"{h}\n}}\n"
-        with open(sw_path, "r", encoding="utf-8") as f:
-            cur_s = f.read()
-        if cur_s != out:
-            with open(sw_path, "w", encoding="utf-8") as f:
-                f.write(out)
-
-core_sw_path = os.path.join(base, "Sources", "AppleMusicRemoteMac", "Server", "WebUIContent.swift")
-if os.path.isfile(core_sw_path):
-    with open(core_sw_path, "r", encoding="utf-8") as f:
-        core_s = f.read()
-    orig_core_s = core_s
-    for name, props in [("manifest.json", ("manifestJSON",)), ("sw.js", ("serviceWorkerJS", "swJS")), ("apple-touch-icon.svg", ("appleTouchIconSVG",))]:
-        web_path = os.path.join(base, "Web", name)
-        if os.path.isfile(web_path):
-            with open(web_path, "r", encoding="utf-8") as f:
-                web_s = f.read().rstrip("\n")
-            h = choose_hashes(web_s)
-            for prop in props:
-                pattern = rf'(public\s+static\s+let\s+{prop}\s*:\s*String\s*=\s*)(#+"""|""")\n.*?\n\s*(?:"""#+|""")'
-                core_s = re.sub(pattern, lambda m, ws=web_s, hh=h: f'{m.group(1)}{hh}"""\n{ws}\n"""{hh}', core_s, flags=re.DOTALL)
-    if core_s != orig_core_s:
-        with open(core_sw_path, "w", encoding="utf-8") as f:
-            f.write(core_s)
-PYEOF
 fi
 
 SWIFT_SOURCES=()
@@ -96,6 +53,7 @@ FRAMEWORKS=(
     -framework ApplicationServices
     -framework Network
     -framework ScriptingBridge
+    -framework iTunesLibrary
     -framework CoreImage
     -framework CoreAudio
     -framework AudioToolbox

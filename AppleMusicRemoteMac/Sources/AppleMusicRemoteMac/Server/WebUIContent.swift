@@ -2,13 +2,48 @@
 //  WebUIContent.swift
 //  AppleMusicRemoteMac
 //
-//  Embedded Web UI content for Apple Music Remote.
-//  HTML, CSS, and JS are split into respective WebUIContent+*.swift extensions.
+//  Web UI metadata and diagnostic fallback for Apple Music Remote.
+//  Primary HTML, CSS, and JS bundles are served directly from disk (Resources/Web or Web/).
 //
 
 import Foundation
 
 public enum WebUIContent {
+    public static let fallbackDiagnosticHTML: String = #"""
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apple Music Remote — Diagnostic Mode</title>
+  <style>
+    body { margin: 0; background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: grid; place-items: center; min-height: 100vh; }
+    main { max-width: 520px; padding: 28px; border: 1px solid #262628; border-radius: 16px; background: #141416; }
+    h1 { font-size: 18px; margin: 0 0 10px; }
+    p { font-size: 14px; line-height: 1.5; color: #9e9ea3; margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Apple Music Remote Server</h1>
+    <p>Web UI resources (Resources/Web) were not found in the active bundle path. Rebuild the application bundle with build_app.sh or run Tools/sync_web_ui.py.</p>
+  </main>
+</body>
+</html>
+"""#
+
+    public static var indexHTML: String {
+        WebSocketServer.shared.loadDiskOnlyWebAsset(filename: "index.html") ?? fallbackDiagnosticHTML
+    }
+
+    public static var styleCSS: String {
+        WebSocketServer.shared.loadDiskOnlyWebAsset(filename: "style.css") ?? ""
+    }
+
+    public static var appJS: String {
+        WebSocketServer.shared.loadDiskOnlyWebAsset(filename: "app.js") ?? ""
+    }
+
     public static let manifestJSON: String = #"""
 {
   "name": "Apple Music Remote",
