@@ -64,6 +64,8 @@ public final class SettingsWindow: NSWindowController, NSTableViewDataSource, NS
     internal var aiCuratorSwitch: NSButton!
     internal var musicAppStatusLabel: NSTextField!
     internal var launchMusicButton: NSButton!
+    internal var permissionsStatusLabel: NSTextField!
+    internal var checkPermissionsButton: NSButton!
 
     // UI Elements - Audio
     internal var devicePopUp: NSPopUpButton!

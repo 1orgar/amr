@@ -123,6 +123,30 @@ public final class ITLibraryReader: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Proactively initializes `ITLibrary` at first launch so macOS prompts for Media Library access
+    /// immediately during initial setup rather than blocking headless background queries later.
+    @discardableResult
+    public func warmupPermissionAtLaunch() -> Bool {
+        if PlaybackRouter.shared.isTestingEnvironment || AppStorageProvider.isRunningUnderXCTest {
+            return false
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = self.itLibrary {
+            _ = existing.allPlaylists.count
+            return true
+        }
+        do {
+            let created = try ITLibrary(apiVersion: "1.1")
+            _ = created.allPlaylists.count
+            self.itLibrary = created
+            return true
+        } catch {
+            NSLog("[ITLibraryReader] ℹ️ Media library warmup deferred (%@)", error.localizedDescription)
+            return false
+        }
+    }
+
     /// Reads all song items directly via `iTunesLibrary.framework` without AppleEvents IPC.
     /// Returns `nil` when running in XCTest or if `ITLibrary` cannot open the user's Music library,
     /// allowing `LibraryService` to fall back cleanly to AppleScript.

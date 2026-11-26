@@ -243,6 +243,7 @@ extension SettingsWindow {
             ? (isEn ? "🟢 Music.app is running and ready" : "🟢 Music.app запущен и готов к работе")
             : (isEn ? "⚪ Music.app is not running" : "⚪ Music.app не запущен")
         launchMusicButton.isHidden = isMusicRunning
+        permissionsStatusLabel?.stringValue = SystemPermissionsManager.shared.formattedStatusLine(isEn: isEn)
 
         devices = CoreAudioDeviceManager.shared.getOutputDevices()
         devicePopUp.removeAllItems()

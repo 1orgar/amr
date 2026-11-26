@@ -141,7 +141,7 @@ brew install --cask 1orgar/tap/amr
 2. Open the disk image and drag **`AppleMusicRemoteMac.app`** to **`/Applications`**.
    * *The binary is signed with an Apple Developer ID certificate and notarized by Apple — macOS Gatekeeper opens it cleanly with zero terminal workarounds and zero Keychain prompts.*
 3. Launch **Apple Music Remote** — a `🎵` icon appears in the macOS menu bar.
-4. Grant Automation permission to control **`Music.app`** when prompted, then click **Open Web Remote** or scan the **QR Code** from the menu bar / settings window on your phone or tablet.
+4. On first launch, approve the one-time macOS prompts (**`Music.app` Automation**, **Media & Apple Music Library**, **System Audio Capture**, and **Local Network**) so your Mac mini can operate 100% headless thereafter, then click **Open Web Remote** or scan the **QR Code** from the menu bar / settings window on your phone or tablet.
 
 > **Language Selection:** Both the native macOS app (Menu Bar + Settings) and the Web PWA automatically display **English** on all non-Russian systems (and Russian on `ru` locales, overridable anytime via `?lang=en` / `?lang=ru`).
 

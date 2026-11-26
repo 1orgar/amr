@@ -41,6 +41,7 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
     private typealias SetTwoStringsFn = @convention(c) (AnyObject, Selector, NSString, NSString) -> Void
     private typealias SetObjFn = @convention(c) (AnyObject, Selector, AnyObject) -> Void
     private typealias SetIntFn = @convention(c) (AnyObject, Selector, Int) -> Void
+    private typealias GetIntFn = @convention(c) (AnyObject, Selector) -> Int
     private typealias VoidCmdFn = @convention(c) (AnyObject, Selector) -> Void
     private typealias PrepareCompletionBlock = @convention(block) (NSError?) -> Void
     private typealias PrepareFn = @convention(c) (AnyObject, Selector, @escaping PrepareCompletionBlock) -> Void
@@ -118,6 +119,27 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
               let m = class_getInstanceMethod(cls, sel) else { return }
         let fn = unsafeBitCast(method_getImplementation(m), to: SetIntFn.self)
         fn(target, sel, value)
+    }
+
+    /// Proactively warms up `MPMusicPlayerController.systemMusicPlayer` at launch so macOS Media Library XPC
+    /// authorization is established immediately during initial setup.
+    @discardableResult
+    public func warmupPermissionAtLaunch() -> Bool {
+        guard !PlaybackRouter.shared.isTestingEnvironment,
+              !AppStorageProvider.isRunningUnderXCTest,
+              PlaybackRouter.shared.urlOpener == nil else {
+            return false
+        }
+        guard let (player, _) = ensureSystemPlayerLoaded() else {
+            return false
+        }
+        let stateSel = NSSelectorFromString("playbackState")
+        if let cls = object_getClass(player),
+           let m = class_getInstanceMethod(cls, stateSel) {
+            let fn = unsafeBitCast(method_getImplementation(m), to: GetIntFn.self)
+            _ = fn(player, stateSel)
+        }
+        return true
     }
 
     /// Stops `Music.app` playback directly over XPC (`0` AppleEvents, `< 1 ms`).

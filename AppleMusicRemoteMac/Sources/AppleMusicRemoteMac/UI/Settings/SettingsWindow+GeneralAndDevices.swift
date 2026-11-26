@@ -78,6 +78,42 @@ extension SettingsWindow {
             )
         }
 
+        permissionsStatusLabel = NSTextField(labelWithString: SystemPermissionsManager.shared.formattedStatusLine(isEn: isEn))
+        permissionsStatusLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        permissionsStatusLabel.textColor = .labelColor
+
+        checkPermissionsButton = NSButton(
+            title: isEn ? "Verify / System Settings…" : "Проверить / Настройки…",
+            target: self,
+            action: #selector(verifyPermissionsClicked)
+        )
+        checkPermissionsButton.bezelStyle = .rounded
+        checkPermissionsButton.controlSize = .small
+
+        let permTopStack = NSStackView(views: [permissionsStatusLabel, checkPermissionsButton])
+        permTopStack.orientation = .horizontal
+        permTopStack.alignment = .centerY
+        permTopStack.spacing = 10
+
+        let permSubtitle = makeMusicSubcaption(
+            isEn
+                ? "Requested automatically on first launch so headless Mac mini servers never stall on unseen macOS dialogs."
+                : "Запрашиваются автоматически при первом запуске, чтобы на headless Mac mini не зависали скрытые окна macOS."
+        )
+        let permRightStack = NSStackView(views: [permTopStack, permSubtitle])
+        permRightStack.orientation = .vertical
+        permRightStack.alignment = .leading
+        permRightStack.spacing = 4
+        permSubtitle.widthAnchor.constraint(equalTo: permRightStack.widthAnchor).isActive = true
+
+        systemSectionRows.append(
+            makeMusicTwoColumnRow(
+                category: isEn ? "Permissions:" : "Разрешения:",
+                rightContent: permRightStack,
+                topLabelOffset: 2
+            )
+        )
+
         let devicesRow = buildClientDevicesRow()
         let versionSubcaption = makeMusicSubcaption("Apple Music Remote v3.0.0 • \(ClientDeviceManager.shared.gitCommitShort)")
         let musicRightStack = NSStackView(views: [musicStatusControls, versionSubcaption])
@@ -109,6 +145,10 @@ extension SettingsWindow {
             rightContent: clientDevicesStack,
             topLabelOffset: 2
         )
+    }
+
+    @objc internal func verifyPermissionsClicked() {
+        SystemPermissionsManager.shared.recheckOrOpenPrivacySettings()
     }
 
     internal func refreshClientDevicesSection(updateWindowSize: Bool = true) {

@@ -33,6 +33,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
     }
 
     private func startNetworkAndSystemServices() {
+        // 1b. Proactively request all required macOS TCC permissions (Automation for Music.app,
+        //     Media & Apple Music Library, and System Audio Process Tap) right at launch so headless
+        //     Mac mini setups never stall on unseen TCC dialogs later when controlled from a phone.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.8) {
+            SystemPermissionsManager.shared.runLaunchPreflightAsync()
+        }
+
         // 2. Check and enforce 100% volume in Music.app off the main thread if volume lock is enabled
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.0) {
             PlaybackTransportController.shared.checkAndEnforceVolumeLock()
