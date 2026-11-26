@@ -387,9 +387,15 @@ extension NativeMusicCuratorService {
         func insertIntoPool(_ raw: [String: Any], fallback: [Double]) -> BridgeCandidate? {
             guard let cand = makeCandidate(from: raw, fallbackVec: fallback) else { return nil }
             if seenPoolKeys.contains(cand.dedupKey) || seenPoolKeys.contains(cand.titleKey) || (!cand.songId.isEmpty && seenPoolKeys.contains(cand.songId)) {
-                return pool.first {
+                if let existingIdx = pool.firstIndex(where: {
                     $0.dedupKey == cand.dedupKey || $0.titleKey == cand.titleKey || (!cand.songId.isEmpty && $0.songId == cand.songId)
+                }) {
+                    if CloudCatalogService.audioQualityScore(for: cand.song) > CloudCatalogService.audioQualityScore(for: pool[existingIdx].song) {
+                        pool[existingIdx] = cand
+                    }
+                    return pool[existingIdx]
                 }
+                return nil
             }
             seenPoolKeys.insert(cand.dedupKey)
             seenPoolKeys.insert(cand.titleKey)

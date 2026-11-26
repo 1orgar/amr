@@ -124,6 +124,7 @@ extension PlaybackTransportController {
                 PlaybackStateStore.shared.activeShuffledPlaylistName = nil
             }
             if PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty {
+                PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.removeAll()
                 let currentQueue = PlaybackStateStore.shared.activeCustomQueue
                 let curIdx = PlaybackStateStore.shared.activeCustomQueueIndex
                 let gen = PlaybackStateStore.shared.playbackGeneration

@@ -135,4 +135,61 @@ final class Phase2LibraryAndHTTPTests: XCTestCase {
         }
         XCTAssertLessThanOrEqual(monitor.trackFormatCacheCountForTesting, BitPerfectLogMonitor.maxTrackFormatCacheEntries)
     }
+
+    func testMusicLibraryPlaylistSelectionIsolatesLibraryFromPlaylistOnlySongs() throws {
+        struct MockPlaylist: Equatable {
+            let name: String
+            let isDistinguishedMusic: Bool
+            let isPrimary: Bool
+            let trackCount: Int
+        }
+
+        // Mirrors Music.app when "Add Playlist Songs to Library" is OFF:
+        // playlists hold 368 songs while Медиатека (primary) and Музыка (.kindMusic) have 0 songs.
+        let playlists: [MockPlaylist] = [
+            MockPlaylist(name: "Медиатека", isDistinguishedMusic: false, isPrimary: true, trackCount: 0),
+            MockPlaylist(name: "Классика рока", isDistinguishedMusic: false, isPrimary: false, trackCount: 199),
+            MockPlaylist(name: "Музыка", isDistinguishedMusic: true, isPrimary: false, trackCount: 0),
+            MockPlaylist(name: "Метал 2010-х: главное", isDistinguishedMusic: false, isPrimary: false, trackCount: 100),
+            MockPlaylist(name: "Anime Top Hits", isDistinguishedMusic: false, isPrimary: false, trackCount: 69)
+        ]
+
+        let selected = ITLibraryReader.selectMusicLibraryPlaylist(
+            from: playlists,
+            isDistinguishedMusic: \.isDistinguishedMusic,
+            isPrimaryLibrary: \.isPrimary
+        )
+        XCTAssertEqual(selected?.name, "Музыка")
+        XCTAssertEqual(selected?.trackCount, 0, "Must never pick non-library user/subscription playlists")
+
+        // Fallback when .kindMusic is absent uses primary library playlist ("Медиатека"), never user playlists
+        let withoutKindMusic = playlists.filter { !$0.isDistinguishedMusic }
+        let fallbackPrimary = ITLibraryReader.selectMusicLibraryPlaylist(
+            from: withoutKindMusic,
+            isDistinguishedMusic: \.isDistinguishedMusic,
+            isPrimaryLibrary: \.isPrimary
+        )
+        XCTAssertEqual(fallbackPrimary?.name, "Медиатека")
+        XCTAssertEqual(fallbackPrimary?.trackCount, 0)
+
+        // When neither exists, returns nil rather than leaking user playlists
+        let userOnly = playlists.filter { !$0.isDistinguishedMusic && !$0.isPrimary }
+        XCTAssertNil(
+            ITLibraryReader.selectMusicLibraryPlaylist(
+                from: userOnly,
+                isDistinguishedMusic: \.isDistinguishedMusic,
+                isPrimaryLibrary: \.isPrimary
+            )
+        )
+
+        // Verify AppleScript fallback in LibraryService+Songs.swift never falls back to `playlist 1`
+        let songsSourceURL = WebSocketServer.compileTimeSourceWebDirectory
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/AppleMusicRemoteMac/Bridge/Library/LibraryService+Songs.swift")
+        let songsSource = try String(contentsOf: songsSourceURL, encoding: .utf8)
+        XCTAssertFalse(
+            songsSource.contains("set p to playlist 1"),
+            "LibraryService+Songs.swift must never fall back from library playlist 1 to playlist 1"
+        )
+    }
 }

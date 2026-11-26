@@ -20,20 +20,31 @@ extension DigitalBookletService {
         case trackGuide(tracks: [CatalogTrackCredit], partIndex: Int, totalParts: Int)
 
         var title: String {
+            let isEn = AMRLocalization.isEnglish
             switch self {
             case .cover:
-                return "Обложка альбома"
+                return isEn ? "Album Cover" : "Обложка альбома"
             case .editorial(_, _, let partIdx, let totalParts):
+                if isEn {
+                    return totalParts > 1
+                        ? "Release Notes & Recording History (pt. \(partIdx)/\(totalParts))"
+                        : "Release Notes & Recording History"
+                }
                 return totalParts > 1
                     ? "О релизе и история записи (ч. \(partIdx)/\(totalParts))"
                     : "О релизе и история записи"
             case .trackGuide(let trks, _, _):
                 if let first = trks.first, let last = trks.last {
+                    if isEn {
+                        return first.number == last.number
+                            ? String(format: "Track %02d: %@", first.number, first.title)
+                            : String(format: "Track-by-Track Guide: Tracks %02d–%02d", first.number, last.number)
+                    }
                     return first.number == last.number
                         ? String(format: "Композиция %02d: %@", first.number, first.title)
                         : String(format: "Описание композиций: треки %02d–%02d", first.number, last.number)
                 }
-                return "Описание композиций"
+                return isEn ? "Track-by-Track Guide" : "Описание композиций"
             }
         }
     }
@@ -357,7 +368,13 @@ extension DigitalBookletService {
         var metaParts: [String] = []
         if !meta.genre.isEmpty { metaParts.append(meta.genre) }
         if !meta.releaseDate.isEmpty { metaParts.append(String(meta.releaseDate.prefix(4))) }
-        if !meta.tracks.isEmpty { metaParts.append("\(meta.tracks.count) композиций") }
+        if !meta.tracks.isEmpty {
+            metaParts.append(
+                AMRLocalization.isEnglish
+                    ? "\(meta.tracks.count) \(meta.tracks.count == 1 ? "track" : "tracks")"
+                    : "\(meta.tracks.count) композиций"
+            )
+        }
         let metaLine = metaParts.joined(separator: "  •  ")
 
         let subAttrs: [NSAttributedString.Key: Any] = [
@@ -412,13 +429,18 @@ extension DigitalBookletService {
     ) {
         drawBookletBackground(context: context, width: width, height: height)
 
+        let isEn = AMRLocalization.isEnglish
         let margin: CGFloat = 52
         let contentW = width - margin * 2
-        let partSuffix = totalParts > 1 ? " (СТР. \(partIndex) ИЗ \(totalParts))" : ""
+        let partSuffix = totalParts > 1
+            ? (isEn ? " (PAGE \(partIndex) OF \(totalParts))" : " (СТР. \(partIndex) ИЗ \(totalParts))")
+            : ""
 
         drawSectionHeader(
             context: context,
-            kicker: "ИСТОРИЯ СОЗДАНИЯ, ЗАПИСЬ И КОНЦЕПЦИЯ АЛЬБОМА\(partSuffix)",
+            kicker: isEn
+                ? "ALBUM STORY, RECORDING SESSIONS & EDITORIAL NOTES\(partSuffix)"
+                : "ИСТОРИЯ СОЗДАНИЯ, ЗАПИСЬ И КОНЦЕПЦИЯ АЛЬБОМА\(partSuffix)",
             title: meta.albumName,
             subtitle: meta.artistName,
             margin: margin,
@@ -461,16 +483,30 @@ extension DigitalBookletService {
             context.stroke(cardRect)
 
             let totalSec = Int(meta.tracks.reduce(0.0) { $0 + $1.durationSeconds })
-            let runtimeStr = String(format: "%d мин %02d сек (%d треков)", totalSec / 60, totalSec % 60, meta.tracks.count)
+            let runtimeStr = isEn
+                ? String(format: "%d min %02d sec (%d %@)", totalSec / 60, totalSec % 60, meta.tracks.count, meta.tracks.count == 1 ? "track" : "tracks")
+                : String(format: "%d мин %02d сек (%d треков)", totalSec / 60, totalSec % 60, meta.tracks.count)
 
-            let specs: [(label: String, value: String)] = [
-                ("ИСПОЛНИТЕЛЬ", meta.artistName),
-                ("ДАТА РЕЛИЗА", meta.releaseDate.isEmpty ? "—" : meta.releaseDate),
-                ("ЖАНР", meta.genre.isEmpty ? "—" : meta.genre),
-                ("ЛЕЙБЛ / ИЗДАТЕЛЬ", meta.recordLabel.isEmpty ? "—" : meta.recordLabel),
-                ("ХРОНОМЕТРАЖ", runtimeStr),
-                ("МАСТЕРИНГ APPLE", meta.isMasteredForItunes ? "Apple Digital Master • Lossless" : (meta.audioTraits.joined(separator: ", ").isEmpty ? "Apple Music Lossless" : meta.audioTraits.joined(separator: ", ")))
-            ]
+            let masteringVal = meta.isMasteredForItunes
+                ? "Apple Digital Master • Lossless"
+                : (meta.audioTraits.joined(separator: ", ").isEmpty ? "Apple Music Lossless" : meta.audioTraits.joined(separator: ", "))
+            let specs: [(label: String, value: String)] = isEn
+                ? [
+                    ("ARTIST", meta.artistName),
+                    ("RELEASE DATE", meta.releaseDate.isEmpty ? "—" : meta.releaseDate),
+                    ("GENRE", meta.genre.isEmpty ? "—" : meta.genre),
+                    ("RECORD LABEL", meta.recordLabel.isEmpty ? "—" : meta.recordLabel),
+                    ("RUNTIME", runtimeStr),
+                    ("APPLE MASTERING", masteringVal)
+                ]
+                : [
+                    ("ИСПОЛНИТЕЛЬ", meta.artistName),
+                    ("ДАТА РЕЛИЗА", meta.releaseDate.isEmpty ? "—" : meta.releaseDate),
+                    ("ЖАНР", meta.genre.isEmpty ? "—" : meta.genre),
+                    ("ЛЕЙБЛ / ИЗДАТЕЛЬ", meta.recordLabel.isEmpty ? "—" : meta.recordLabel),
+                    ("ХРОНОМЕТРАЖ", runtimeStr),
+                    ("МАСТЕРИНГ APPLE", masteringVal)
+                ]
 
             let colW = (contentW - 48) / 2.0
             for (idx, spec) in specs.enumerated() {

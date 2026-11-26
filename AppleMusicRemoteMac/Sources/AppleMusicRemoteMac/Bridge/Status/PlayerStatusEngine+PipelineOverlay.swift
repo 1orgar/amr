@@ -148,7 +148,12 @@ extension PlayerStatusEngine {
                     ? max(64, dspTelemetry.outputSampleRateHz / ((dspTelemetry.outputSampleRateHz % 48_000 == 0) ? 48_000 : 44_100))
                     : dspConfig.dsdRate.rawValue
                 let mhz = Double(effectiveDsdClockHz) / 1_000_000.0
-                status.dspBadge = String(format: "DSD%d DoP · %@ · %.2f МГц", effectiveDsdMult, profileDisplayName, mhz)
+                status.dspBadge = String(
+                    format: AMRLocalization.isEnglish ? "DSD%d DoP · %@ · %.2f MHz" : "DSD%d DoP · %@ · %.2f МГц",
+                    effectiveDsdMult,
+                    profileDisplayName,
+                    mhz
+                )
                 let dsdFallbackToPcm = dspTelemetry.outputSampleRateHz > 0 && dspTelemetry.outputSampleRateHz < 2_822_400
                 let isInsufficientDsd = isLosslessQuality && (
                     dsdFallbackToPcm
@@ -167,7 +172,11 @@ extension PlayerStatusEngine {
                 let effectiveNosRate = (dspTelemetry.outputSampleRateHz > 0) ? dspTelemetry.outputSampleRateHz : dspConfig.maxNOSPCMRateHz
                 let khz = Double(effectiveNosRate) / 1_000.0
                 let shaperLabel = (dspConfig.nosDitherMode == .lns15) ? "LNS15" : "TPDF"
-                status.dspBadge = String(format: "HQ NOS PCM · %@ · %.1f кГц", shaperLabel, khz)
+                status.dspBadge = String(
+                    format: AMRLocalization.isEnglish ? "HQ NOS PCM · %@ · %.1f kHz" : "HQ NOS PCM · %@ · %.1f кГц",
+                    shaperLabel,
+                    khz
+                )
                 if !dspTelemetry.outputDeviceName.isEmpty {
                     status.audioDeviceName = dspTelemetry.outputDeviceName
                 }

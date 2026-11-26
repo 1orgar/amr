@@ -536,10 +536,11 @@ extension WebSocketServer {
 
     internal func handleRoomMeasurementAnalyzeHTTP(fullPath: String, headerString: String, bodyData: Data, connection: NWConnection) {
         guard isHTTPRequestAuthorized(headerString: headerString, fullPath: fullPath, bodyData: Data(), connection: connection) else {
+            let errText = AMRLocalization.tr("Device not authorized", "Устройство не авторизовано")
             sendHTTPResponse(
                 status: "403 Forbidden",
                 contentType: "application/json; charset=utf-8",
-                body: Data("{\"status\":\"error\",\"error\":\"Устройство не авторизовано\"}".utf8),
+                body: Data("{\"status\":\"error\",\"error\":\"\(errText)\"}".utf8),
                 connection: connection
             )
             return
@@ -555,12 +556,16 @@ extension WebSocketServer {
             ?? nonEmpty(extractCookie(named: "amr_device_uid", from: headerString))
             ?? nonEmpty(queryDeviceId)
 
+        let roomDisabledErr = AMRLocalization.tr(
+            "Room acoustic measurement is disabled for this device in Mac settings",
+            "Измерение АЧХ комнаты отключено для этого устройства в настройках Mac"
+        )
         if let devId = resolvedDeviceId {
             guard ClientDeviceManager.shared.canDeviceMeasureRoom(deviceId: devId) else {
                 sendHTTPResponse(
                     status: "403 Forbidden",
                     contentType: "application/json; charset=utf-8",
-                    body: Data("{\"status\":\"error\",\"error\":\"Измерение АЧХ комнаты отключено для этого устройства в настройках Mac\"}".utf8),
+                    body: Data("{\"status\":\"error\",\"error\":\"\(roomDisabledErr)\"}".utf8),
                     connection: connection
                 )
                 return
@@ -570,7 +575,7 @@ extension WebSocketServer {
                 sendHTTPResponse(
                     status: "403 Forbidden",
                     contentType: "application/json; charset=utf-8",
-                    body: Data("{\"status\":\"error\",\"error\":\"Измерение АЧХ комнаты отключено для этого устройства в настройках Mac\"}".utf8),
+                    body: Data("{\"status\":\"error\",\"error\":\"\(roomDisabledErr)\"}".utf8),
                     connection: connection
                 )
                 return

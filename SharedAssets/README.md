@@ -19,8 +19,8 @@ Official visual design assets and Xcode Asset Catalog for Apple Music Remote (ma
   - `LiveBadge.colorset` (`#FF2D55`)
   - `SurfaceDark.colorset` (`#171720`)
 - **`StationCovers/`**: Curated Station Covers (1000x1000 master PNG & vector SVG):
-  - `CoverPersonal.imageset` — "Моя станция" / Personal Station
-  - `CoverDiscovery.imageset` — "Станция открытий" / Discovery Station
+  - `CoverPersonal.imageset` — Personal Station
+  - `CoverDiscovery.imageset` — Discovery Station
   - `CoverAppleMusic1.imageset` — Apple Music 1 Live
   - `CoverHits.imageset` — Apple Music Hits
   - `CoverCountry.imageset` — Apple Music Country

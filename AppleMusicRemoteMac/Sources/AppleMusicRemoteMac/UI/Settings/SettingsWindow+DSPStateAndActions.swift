@@ -51,7 +51,9 @@ extension SettingsWindow {
                 dspUpdatePresetButton.isEnabled = false
                 dspRenamePresetButton.isEnabled = false
                 dspDeletePresetButton.isEnabled = false
-                dspPresetSubtitleLabel.stringValue = "Выбор пресета DSP отключён при выводе на внешний плеер BluOS / DLNA (не поддерживает DSD/NOS)"
+                dspPresetSubtitleLabel.stringValue = isEn
+                    ? "DSP preset selection is disabled when streaming to an external BluOS / DLNA player (DSD/NOS unsupported)"
+                    : "Выбор пресета DSP отключён при выводе на внешний плеер BluOS / DLNA (не поддерживает DSD/NOS)"
             } else if !usbAvail.hasEligibleUSBDAC {
                 if let bpItem = dspPresetPopUp.itemArray.first {
                     dspPresetPopUp.select(bpItem)
@@ -61,7 +63,9 @@ extension SettingsWindow {
                 dspUpdatePresetButton.isEnabled = false
                 dspRenamePresetButton.isEnabled = false
                 dspDeletePresetButton.isEnabled = false
-                dspPresetSubtitleLabel.stringValue = "Режимы DSD (DoP) и HQ NOS PCM доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)"
+                dspPresetSubtitleLabel.stringValue = isEn
+                    ? "DSD (DoP) and HQ NOS PCM modes require an external USB DAC (≥ 24-bit / 176.4 kHz)"
+                    : "Режимы DSD (DoP) и HQ NOS PCM доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)"
             } else {
                 dspPresetPopUp.isEnabled = true
                 dspSaveNewPresetButton.isEnabled = true
@@ -69,19 +73,23 @@ extension SettingsWindow {
                     if let item = dspPresetPopUp.itemArray.first(where: { ($0.representedObject as? String) == matched.id }) {
                         dspPresetPopUp.select(item)
                     }
-                    dspPresetSubtitleLabel.stringValue = "Описание пресета: \(matched.subtitle)"
+                    dspPresetSubtitleLabel.stringValue = isEn
+                        ? "Preset details: \(matched.subtitle)"
+                        : "Описание пресета: \(matched.subtitle)"
                     let isCustomSelected = !matched.isBuiltIn
                     dspUpdatePresetButton.isEnabled = false
                     dspRenamePresetButton.isEnabled = isCustomSelected
                     dspDeletePresetButton.isEnabled = isCustomSelected
                 } else {
                     dspPresetPopUp.menu?.addItem(NSMenuItem.separator())
-                    dspPresetPopUp.addItem(withTitle: "✏️ Пользовательский (не сохранён)")
+                    dspPresetPopUp.addItem(withTitle: isEn ? "✏️ Custom (Unsaved)" : "✏️ Пользовательский (не сохранён)")
                     dspPresetPopUp.lastItem?.representedObject = DSPPresetManager.unsavedCustomPresetID
                     if let last = dspPresetPopUp.lastItem {
                         dspPresetPopUp.select(last)
                     }
-                    dspPresetSubtitleLabel.stringValue = "Текущие параметры: \(DSPPresetManager.summarizeConfiguration(cfg)) — нажмите «+ Сохранить как новый…»"
+                    dspPresetSubtitleLabel.stringValue = isEn
+                        ? "Current settings: \(DSPPresetManager.summarizeConfiguration(cfg)) — click '+ Save…' to store"
+                        : "Текущие параметры: \(DSPPresetManager.summarizeConfiguration(cfg)) — нажмите «+ Сохранить как новый…»"
                     let prefCustomID = DSPPresetManager.shared.preferredCustomPresetID()
                     dspUpdatePresetButton.isEnabled = (prefCustomID != nil)
                     dspRenamePresetButton.isEnabled = (prefCustomID != nil)
@@ -141,14 +149,16 @@ extension SettingsWindow {
         if dspRoomProfilePopUp != nil {
             dspRoomProfilePopUp.removeAllItems()
             if roomProfiles.isEmpty {
-                dspRoomProfilePopUp.addItem(withTitle: "Нет профилей замера")
+                dspRoomProfilePopUp.addItem(withTitle: isEn ? "No Measured Profiles" : "Нет профилей замера")
                 dspRoomProfilePopUp.isEnabled = false
                 dspRoomCorrectionSwitch.state = .off
                 dspRoomCorrectionSwitch.isEnabled = false
                 dspRoomInspectButton.isEnabled = false
                 dspRoomRenameButton.isEnabled = false
                 dspRoomDeleteButton.isEnabled = false
-                dspRoomStatusLabel.stringValue = "Откройте «Тракт сигнала» в PWA на iPhone / iPad для быстрого замера АЧХ"
+                dspRoomStatusLabel.stringValue = isEn
+                    ? "Open 'Signal Path' in the PWA on iPhone / iPad for a quick room acoustic measurement"
+                    : "Откройте «Тракт сигнала» в PWA на iPhone / iPad для быстрого замера АЧХ"
                 dspRoomStatusLabel.textColor = .secondaryLabelColor
             } else {
                 dspRoomProfilePopUp.isEnabled = true
@@ -156,7 +166,9 @@ extension SettingsWindow {
                     dspRoomProfilePopUp.addItem(withTitle: "\(prof.name) (\(prof.eqBands.count) PEQ)")
                     dspRoomProfilePopUp.lastItem?.representedObject = prof.id
                     dspRoomProfilePopUp.lastItem?.toolTip = String(
-                        format: "%@ • %d полос PEQ • Запас %.1f дБ • Макс. отклонение ±%.1f дБ",
+                        format: isEn
+                            ? "%@ • %d PEQ bands • Headroom %.1f dB • Max deviation ±%.1f dB"
+                            : "%@ • %d полос PEQ • Запас %.1f дБ • Макс. отклонение ±%.1f дБ",
                         prof.measuredOnDevice, prof.eqBands.count, prof.preampGainDB, prof.maxPeakDeviationDB
                     )
                 }
@@ -173,13 +185,17 @@ extension SettingsWindow {
                 if let prof = activeRoomProfile {
                     if isRoomEQActive {
                         dspRoomStatusLabel.stringValue = String(
-                            format: "🟢 Активна: %d PEQ • Preamp %.1f дБ • %@ (iCloud)",
+                            format: isEn
+                                ? "🟢 Active: %d PEQ • Preamp %.1f dB • %@ (iCloud)"
+                                : "🟢 Активна: %d PEQ • Preamp %.1f дБ • %@ (iCloud)",
                             prof.eqBands.count, prof.preampGainDB, prof.measuredOnDevice
                         )
                         dspRoomStatusLabel.textColor = .systemGreen
                     } else {
                         dspRoomStatusLabel.stringValue = String(
-                            format: "⚪ Выкл: «%@» (%d PEQ, %.1f дБ) — отметьте флажок выше",
+                            format: isEn
+                                ? "⚪ Off: '%@' (%d PEQ, %.1f dB) — check the box above"
+                                : "⚪ Выкл: «%@» (%d PEQ, %.1f дБ) — отметьте флажок выше",
                             prof.name, prof.eqBands.count, prof.preampGainDB
                         )
                         dspRoomStatusLabel.textColor = .secondaryLabelColor
@@ -242,32 +258,46 @@ extension SettingsWindow {
         if isDLNAActive {
             if isRoomEQActive, let prof = activeRoomProfile {
                 dspStatusLabel.stringValue = String(
-                    format: "🟢 BluOS / DLNA: активна 64-bit коррекция комнаты «%@»%@ (Preamp %.1f дБ • DSD/NOS откл.)",
+                    format: isEn
+                        ? "🟢 BluOS / DLNA: 64-bit room correction '%@'%@ active (Preamp %.1f dB • DSD/NOS off)"
+                        : "🟢 BluOS / DLNA: активна 64-bit коррекция комнаты «%@»%@ (Preamp %.1f дБ • DSD/NOS откл.)",
                     prof.name, drcSuffix, prof.preampGainDB
                 )
                 dspStatusLabel.textColor = .systemGreen
             } else if activeDRCMode.isEnabled {
-                dspStatusLabel.stringValue = "🟢 BluOS / DLNA: активен 64-bit ночной контроль динамики «\(activeDRCMode.shortLabel(isEnglish: isEn))» (DSD/NOS откл.)"
+                dspStatusLabel.stringValue = isEn
+                    ? "🟢 BluOS / DLNA: 64-bit Late-Night DRC '\(activeDRCMode.shortLabel(isEnglish: isEn))' active (DSD/NOS off)"
+                    : "🟢 BluOS / DLNA: активен 64-bit ночной контроль динамики «\(activeDRCMode.shortLabel(isEnglish: isEn))» (DSD/NOS откл.)"
                 dspStatusLabel.textColor = .systemGreen
             } else {
-                dspStatusLabel.stringValue = "ℹ️ Активен сетевой вывод BluOS / DLNA: пресеты DSD / HQ NOS отключены (поток Bit-Perfect PCM)"
+                dspStatusLabel.stringValue = isEn
+                    ? "ℹ️ BluOS / DLNA network output active: DSD / HQ NOS presets disabled (Bit-Perfect PCM stream)"
+                    : "ℹ️ Активен сетевой вывод BluOS / DLNA: пресеты DSD / HQ NOS отключены (поток Bit-Perfect PCM)"
                 dspStatusLabel.textColor = .secondaryLabelColor
             }
         } else if !isActiveDSP {
             if cfg.mode != .bitPerfectPassthrough && !usbAvail.isModeSupported(cfg.mode) {
-                dspStatusLabel.stringValue = "ℹ️ Внешний USB ЦАП не подключён: DSD / HQ NOS приостановлены, активен вывод Bit-Perfect PCM\(roomSuffix)"
+                dspStatusLabel.stringValue = isEn
+                    ? "ℹ️ No external USB DAC connected: DSD / HQ NOS paused, Bit-Perfect PCM output active\(roomSuffix)"
+                    : "ℹ️ Внешний USB ЦАП не подключён: DSD / HQ NOS приостановлены, активен вывод Bit-Perfect PCM\(roomSuffix)"
                 dspStatusLabel.textColor = .secondaryLabelColor
             } else if isRoomEQActive, let prof = activeRoomProfile {
                 dspStatusLabel.stringValue = String(
-                    format: "🟢 Локальный вывод + 64-bit Auto-PEQ комнаты «%@»%@ (%d полос, Preamp %.1f дБ)",
+                    format: isEn
+                        ? "🟢 Local output + 64-bit Auto-PEQ '%@'%@ (%d bands, Preamp %.1f dB)"
+                        : "🟢 Локальный вывод + 64-bit Auto-PEQ комнаты «%@»%@ (%d полос, Preamp %.1f дБ)",
                     prof.name, drcSuffix, prof.eqBands.count, prof.preampGainDB
                 )
                 dspStatusLabel.textColor = .systemGreen
             } else if activeDRCMode.isEnabled {
-                dspStatusLabel.stringValue = "🟢 Локальный вывод + 64-bit Ночной режим DRC «\(activeDRCMode.title(isEnglish: isEn))»"
+                dspStatusLabel.stringValue = isEn
+                    ? "🟢 Local output + 64-bit Late-Night DRC '\(activeDRCMode.title(isEnglish: isEn))'"
+                    : "🟢 Локальный вывод + 64-bit Ночной режим DRC «\(activeDRCMode.title(isEnglish: isEn))»"
                 dspStatusLabel.textColor = .systemGreen
             } else {
-                dspStatusLabel.stringValue = "Статус DSP: Bit-Perfect Passthrough (побитовая передача без оверсэмплинга)"
+                dspStatusLabel.stringValue = isEn
+                    ? "DSP Status: Bit-Perfect Passthrough (bit-exact transfer without oversampling)"
+                    : "Статус DSP: Bit-Perfect Passthrough (побитовая передача без оверсэмплинга)"
                 dspStatusLabel.textColor = .secondaryLabelColor
             }
         } else if tel.isRunning {
@@ -279,19 +309,25 @@ extension SettingsWindow {
                 let mhz = Double(tel.outputSampleRateHz) / 1_000_000.0
                 let dopKhz = Double(tel.dopCarrierRateHz) / 1_000.0
                 dspStatusLabel.stringValue = String(
-                    format: "🟢 DSD%d (%.2f МГц / DoP %.1f кГц)%@ • %@ • %@ • CPU %@ • Буфер %@",
+                    format: isEn
+                        ? "🟢 DSD%d (%.2f MHz / DoP %.1f kHz)%@ • %@ • %@ • CPU %@ • Buffer %@"
+                        : "🟢 DSD%d (%.2f МГц / DoP %.1f кГц)%@ • %@ • %@ • CPU %@ • Буфер %@",
                     cfg.dsdRate.rawValue, mhz, dopKhz, roomSuffix, hogStr, intStr, cpuStr, bufStr
                 )
             } else {
                 let khz = Double(tel.outputSampleRateHz) / 1_000.0
                 dspStatusLabel.stringValue = String(
-                    format: "🟢 HQ NOS PCM %.1f кГц (%@)%@ • %@ • %@ • CPU %@ • Буфер %@",
+                    format: isEn
+                        ? "🟢 HQ NOS PCM %.1f kHz (%@)%@ • %@ • %@ • CPU %@ • Buffer %@"
+                        : "🟢 HQ NOS PCM %.1f кГц (%@)%@ • %@ • %@ • CPU %@ • Буфер %@",
                     khz, cfg.nosDitherMode.displayName, roomSuffix, hogStr, intStr, cpuStr, bufStr
                 )
             }
             dspStatusLabel.textColor = .systemGreen
         } else {
-            dspStatusLabel.stringValue = "🟠 DSP сконфигурирован\(roomSuffix) (ожидание захвата аудиопотока Music.app)"
+            dspStatusLabel.stringValue = isEn
+                ? "🟠 DSP configured\(roomSuffix) (waiting for Music.app audio stream)"
+                : "🟠 DSP сконфигурирован\(roomSuffix) (ожидание захвата аудиопотока Music.app)"
             dspStatusLabel.textColor = .systemOrange
         }
     }
@@ -429,23 +465,25 @@ extension SettingsWindow {
         let cfg = AudioEngineController.shared.currentConfigurationSnapshot()
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "Сохранить новый пресет DSP"
-        alert.informativeText = "Введите название пресета (\(DSPPresetManager.summarizeConfiguration(cfg))). Он сразу появится в Web PWA и верхнем меню macOS:"
-        alert.addButton(withTitle: "Сохранить")
-        alert.addButton(withTitle: "Отмена")
+        alert.messageText = isEn ? "Save New DSP Preset" : "Сохранить новый пресет DSP"
+        alert.informativeText = isEn
+            ? "Enter a preset name (\(DSPPresetManager.summarizeConfiguration(cfg))). It will immediately appear in the Web PWA and macOS menu bar:"
+            : "Введите название пресета (\(DSPPresetManager.summarizeConfiguration(cfg))). Он сразу появится в Web PWA и верхнем меню macOS:"
+        alert.addButton(withTitle: isEn ? "Save" : "Сохранить")
+        alert.addButton(withTitle: isEn ? "Cancel" : "Отмена")
 
         let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         let defaultName: String
         switch cfg.mode {
         case .bitPerfectPassthrough:
-            defaultName = "Bit-Perfect Польз."
+            defaultName = isEn ? "Custom Bit-Perfect" : "Bit-Perfect Польз."
         case .sdmDoP:
-            defaultName = "Мой DSD\(cfg.dsdRate.rawValue) (\(cfg.profile.displayName))"
+            defaultName = isEn ? "My DSD\(cfg.dsdRate.rawValue) (\(cfg.profile.displayName))" : "Мой DSD\(cfg.dsdRate.rawValue) (\(cfg.profile.displayName))"
         case .hqNOSPCM:
-            defaultName = "Мой HQ NOS (\(cfg.nosDitherMode.displayName))"
+            defaultName = isEn ? "My HQ NOS (\(cfg.nosDitherMode.displayName))" : "Мой HQ NOS (\(cfg.nosDitherMode.displayName))"
         }
         inputField.stringValue = defaultName
-        inputField.placeholderString = "Например: Наушники DSD256 Super"
+        inputField.placeholderString = isEn ? "e.g. Headphones DSD256 Super" : "Например: Наушники DSD256 Super"
         alert.accessoryView = inputField
         alert.window.initialFirstResponder = inputField
 
@@ -480,10 +518,12 @@ extension SettingsWindow {
 
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "Переименовать пресет DSP"
-        alert.informativeText = "Укажите новое имя для пресета «\(existing.name)»:"
-        alert.addButton(withTitle: "Сохранить")
-        alert.addButton(withTitle: "Отмена")
+        alert.messageText = isEn ? "Rename DSP Preset" : "Переименовать пресет DSP"
+        alert.informativeText = isEn
+            ? "Enter a new name for '\(existing.name)':"
+            : "Укажите новое имя для пресета «\(existing.name)»:"
+        alert.addButton(withTitle: isEn ? "Save" : "Сохранить")
+        alert.addButton(withTitle: isEn ? "Cancel" : "Отмена")
 
         let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         inputField.stringValue = existing.name
@@ -507,10 +547,12 @@ extension SettingsWindow {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Удалить пресет «\(existing.name)»?"
-        alert.informativeText = "Пресет будет удалён из списка в macOS и Web PWA (текущие параметры DSP останутся активными)."
-        alert.addButton(withTitle: "Удалить")
-        alert.addButton(withTitle: "Отмена")
+        alert.messageText = isEn ? "Delete preset '\(existing.name)'?" : "Удалить пресет «\(existing.name)»?"
+        alert.informativeText = isEn
+            ? "The preset will be removed from macOS and Web PWA (current DSP parameters will remain active)."
+            : "Пресет будет удалён из списка в macOS и Web PWA (текущие параметры DSP останутся активными)."
+        alert.addButton(withTitle: isEn ? "Delete" : "Удалить")
+        alert.addButton(withTitle: isEn ? "Cancel" : "Отмена")
 
         presentAlert(alert) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }

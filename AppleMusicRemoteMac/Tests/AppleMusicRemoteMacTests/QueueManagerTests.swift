@@ -1104,16 +1104,17 @@ final class QueueManagerTests: XCTestCase {
         XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2, "Legitimate EOF foreign track after full playback must advance 1 -> 2")
     }
 
-    func testSmartTransitionCutoffPreventsVengeanceAutoPlayBleed() {
+    func testCloudQueuePlaysFullTrackEndingWithoutEarlySmartTransitionCutoff() {
         let vengeance = TrackInfo(
-            id: "3183",
-            numericId: 3183,
+            id: "1583000000",
+            numericId: nil,
             name: "Vengeance",
             artist: "coldrain",
             album: "Vengeance - Single",
             duration: 238.534,
-            isLocal: true,
-            index: 1
+            isLocal: false,
+            index: 1,
+            catalogId: "1583000000"
         )
         let likeFlames = TrackInfo(
             id: "1583000001",
@@ -1121,49 +1122,11 @@ final class QueueManagerTests: XCTestCase {
             name: "Like Flames",
             artist: "MindaRyn",
             album: "Like Flames",
-            duration: 245.0,
+            duration: 247.39,
             isLocal: false,
-            index: 2
+            index: 2,
+            catalogId: "1583000001"
         )
-
-        PlaybackStateStore.shared.withLock {
-            PlaybackStateStore.shared.isCustomQueuePlayback = true
-            PlaybackStateStore.shared.activeCustomQueue = [vengeance, likeFlames]
-            PlaybackStateStore.shared.activeCustomQueueIndex = 0
-            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
-            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
-            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
-            PlaybackStateStore.shared.isUserPaused = false
-            PlaybackStateStore.shared.repeatMode = "off"
-            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-235.0)
-            // MediaPlaybackCore scheduled Dead-Air / Smart Transition at 236.0s (2.534s before 238.534s EOF)
-            PlaybackStateStore.shared.scheduledSmartTransitionStart = 236.0
-            PlaybackStateStore.shared.lastKnownPosition = 235.80
-            PlaybackStateStore.shared.lastPlayerStatusCache = (
-                timestamp: Date(),
-                status: PlayerStatus(
-                    playerState: "playing",
-                    position: 235.80,
-                    duration: 238.534,
-                    track: vengeance
-                )
-            )
-        }
-
-        // At 235.80s (>= 236.0 - 0.22 = 235.78s), poller must advance BEFORE Music.app mixes AutoPlay at 236.006s!
-        QueueManager.shared.checkAndAutoAdvanceCloudQueue()
-
-        XCTAssertEqual(
-            PlaybackStateStore.shared.activeCustomQueueIndex,
-            1,
-            "QueueManager must advance at 235.80s before Music.app Smart Transition begins at 236.0s"
-        )
-        XCTAssertNil(
-            PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart },
-            "Advancing to next track must reset scheduledSmartTransitionStart"
-        )
-
-        // Also verify Sonic AutoMix Beat-Matched Filtered Cross-Fade (~22s before EOF, e.g. Like Flames 225.45s / 247.39s)
         let thirdTrack = TrackInfo(
             id: "1600000099",
             numericId: nil,
@@ -1172,33 +1135,249 @@ final class QueueManagerTests: XCTestCase {
             album: "Single",
             duration: 210.0,
             isLocal: false,
-            index: 3
+            index: 3,
+            catalogId: "1600000099"
         )
+
         PlaybackStateStore.shared.withLock {
-            var lf = likeFlames
-            lf.duration = 247.39
-            PlaybackStateStore.shared.activeCustomQueue = [vengeance, lf, thirdTrack]
-            PlaybackStateStore.shared.activeCustomQueueIndex = 1
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [vengeance, likeFlames, thirdTrack]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
             PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
             PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
-            PlaybackStateStore.shared.scheduledSmartTransitionStart = 225.45
-            PlaybackStateStore.shared.lastKnownPosition = 225.25
+            PlaybackStateStore.shared.isUserPaused = false
+            PlaybackStateStore.shared.repeatMode = "off"
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-235.0)
+            // MediaPlaybackCore scheduled Smart Transition / AutoMix 2.5s - 22s before EOF:
+            // QueueManager must NEVER chop off the last 3-22 seconds of the song!
+            PlaybackStateStore.shared.scheduledSmartTransitionStart = 232.5
+            PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds = ["1583000001", "1600000099"]
+            PlaybackStateStore.shared.lastKnownPosition = 234.0
             PlaybackStateStore.shared.lastPlayerStatusCache = (
                 timestamp: Date(),
                 status: PlayerStatus(
                     playerState: "playing",
-                    position: 225.25,
-                    duration: 247.39,
-                    track: lf
+                    position: 234.0,
+                    duration: 238.534,
+                    track: vengeance
+                )
+            )
+        }
+
+        // 1. 4.5s before EOF (past scheduledSmartTransitionStart=232.5s): must NOT cut off the song early!
+        QueueManager.shared.checkAndAutoAdvanceCloudQueue()
+        XCTAssertEqual(
+            PlaybackStateStore.shared.activeCustomQueueIndex,
+            0,
+            "QueueManager must not cut off cloud queue tracks at MediaPlaybackCore's early fade-out timestamp"
+        )
+
+        // 2. Even at 238.45s (< 0.10s before EOF), while next cloud track is natively queued in SystemMusicPlayerBridge,
+        //    must NOT call stop() — let Music.app transition natively into Like Flames!
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastKnownPosition = 238.45
+            PlaybackStateStore.shared.lastPlayerStatusCache = (
+                timestamp: Date(),
+                status: PlayerStatus(
+                    playerState: "playing",
+                    position: 238.45,
+                    duration: 238.534,
+                    track: vengeance
                 )
             )
         }
         QueueManager.shared.checkAndAutoAdvanceCloudQueue()
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+
+        // 3. Music.app naturally advances to Like Flames -> index updates to 1, queued list pops slot 0, position resets
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "playing",
+            "Name": "Like Flames",
+            "Artist": "MindaRyn"
+        ])
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
         XCTAssertEqual(
-            PlaybackStateStore.shared.activeCustomQueueIndex,
-            2,
-            "QueueManager must also catch Sonic AutoMix transitions ~22s before track duration"
+            PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds },
+            ["1600000099"]
         )
+        XCTAssertEqual(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastKnownPosition }, 0.0)
+        XCTAssertNil(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart })
+
+        // 4. On a boundary track where nativeQueuedUpcomingCatalogIds is empty, still plays full tail (no cut at 225s / 244s)
+        //    and only advances inside the final 0.18s EOF window!
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.removeAll()
+            PlaybackStateStore.shared.scheduledSmartTransitionStart = 225.45
+            PlaybackStateStore.shared.lastKnownPosition = 244.0
+            PlaybackStateStore.shared.lastPlayerStatusCache = (
+                timestamp: Date(),
+                status: PlayerStatus(
+                    playerState: "playing",
+                    position: 244.0,
+                    duration: 247.39,
+                    track: likeFlames
+                )
+            )
+        }
+        QueueManager.shared.checkAndAutoAdvanceCloudQueue()
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1, "Must not cut off 3.4s before EOF")
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastKnownPosition = 247.25
+            PlaybackStateStore.shared.lastPlayerStatusCache = (
+                timestamp: Date(),
+                status: PlayerStatus(
+                    playerState: "playing",
+                    position: 247.25,
+                    duration: 247.39,
+                    track: likeFlames
+                )
+            )
+        }
+        QueueManager.shared.checkAndAutoAdvanceCloudQueue()
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 2, "Boundary track advances cleanly within final 0.18s EOF window")
+    }
+
+    func testSmartTransitionImmediateZeroLagUIAdvanceAndOverlapStatusHold() {
+        // 1. Verify MediaPlaybackCore smartTransitionWillBegin log extraction
+        let logLine = "[MediaPlaybackCore] smartTransitionWillBegin - <ITMPAVItem: 0xb4fa1dc00> (8599::8604) Big In Japan [166.51s] -> <ITMPAVItem: 0xb52ca9500> (8599::8605) Lords of the Boards [1.09s]"
+        let range = NSRange(logLine.startIndex..<logLine.endIndex, in: logLine)
+        let match = BitPerfectLogMonitor.smartTransitionItemsPattern.firstMatch(in: logLine, options: [], range: range)
+        XCTAssertNotNil(match)
+        let parsedOutgoing = match.flatMap { Range($0.range(at: 1), in: logLine) }.map { String(logLine[$0]) }
+        let parsedIncoming = match.flatMap { Range($0.range(at: 3), in: logLine) }.map { String(logLine[$0]) }
+        let parsedStartPos = match.flatMap { Range($0.range(at: 4), in: logLine) }.flatMap { Double(logLine[$0]) }
+        XCTAssertEqual(parsedOutgoing, "Big In Japan")
+        XCTAssertEqual(parsedIncoming, "Lords of the Boards")
+        XCTAssertEqual(parsedStartPos ?? -1, 1.09, accuracy: 0.001)
+
+        // 2. Seed a 3-track cloud queue on track 0 ("Big In Japan") with native upcoming tracks queued
+        let bigInJapan = TrackInfo(
+            id: "1440857780",
+            numericId: nil,
+            name: "Big In Japan",
+            artist: "Guano Apes",
+            album: "Don't Give Me Names",
+            duration: 169.2,
+            artworkUrl: "https://example.com/big-in-japan.jpg",
+            isLocal: false,
+            index: 1,
+            catalogId: "1440857780"
+        )
+        let lordsOfTheBoards = TrackInfo(
+            id: "1440857781",
+            numericId: nil,
+            name: "Lords of the Boards",
+            artist: "Guano Apes",
+            album: "Proud Like a God",
+            duration: 218.5,
+            artworkUrl: "https://example.com/lords-of-the-boards.jpg",
+            isLocal: false,
+            index: 2,
+            catalogId: "1440857781"
+        )
+        let youCantStopMe = TrackInfo(
+            id: "1440857782",
+            numericId: nil,
+            name: "You Can't Stop Me",
+            artist: "Guano Apes",
+            album: "Walking on a Thin Line",
+            duration: 193.0,
+            artworkUrl: "https://example.com/you-cant-stop-me.jpg",
+            isLocal: false,
+            index: 3,
+            catalogId: "1440857782"
+        )
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [bigInJapan, lordsOfTheBoards, youCantStopMe]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.activeCustomQueueName = "90s Alt Rock"
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.isUserPaused = false
+            PlaybackStateStore.shared.repeatMode = "off"
+            PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds = ["1440857781", "1440857782"]
+            PlaybackStateStore.shared.lastKnownPosition = 166.51
+        }
+
+        // 3. Fire immediate Smart Transition start -> queue index jumps 0 -> 1 immediately with initialPosition = 1.09s
+        QueueManager.shared.handleImmediateSmartTransitionBegan(
+            outgoingTitle: parsedOutgoing,
+            incomingTitle: parsedIncoming,
+            incomingStartPos: parsedStartPos
+        )
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+        XCTAssertEqual(
+            PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds },
+            ["1440857782"]
+        )
+        let overlap = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.activeOverlapTransition }
+        XCTAssertNotNil(overlap)
+        XCTAssertEqual(overlap?.outgoingName, "Big In Japan")
+        XCTAssertEqual(overlap?.incomingTrack.name, "Lords of the Boards")
+        XCTAssertEqual(overlap?.initialPosition ?? -1, 1.09, accuracy: 0.001)
+
+        // 4. Duplicate `overlappedPlaybackWillBegin` log line for the same transition MUST be idempotent (must NOT advance 1 -> 2!)
+        QueueManager.shared.handleImmediateSmartTransitionBegan(
+            outgoingTitle: "Big In Japan",
+            incomingTitle: "Lords of the Boards",
+            incomingStartPos: 1.09
+        )
+        XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 1)
+
+        // 5. While Music.app is in OverlappedTransitionState before pivotPoint (AppleScript still reports "Big In Japan" at 167.8s),
+        //    PlayerStatusEngine must keep returning "Lords of the Boards" with interpolated position >= 1.09s and incoming cover art!
+        var outgoingDrainSample = RawMusicAppStatusSample()
+        outgoingDrainSample.rawState = "playing"
+        outgoingDrainSample.rawPos = 167.8
+        outgoingDrainSample.dur = 169.2
+        outgoingDrainSample.tName = "Big In Japan"
+        outgoingDrainSample.tArtist = "Guano Apes"
+        outgoingDrainSample.tAlbum = "Don't Give Me Names"
+
+        let statusDuringOverlap = PlayerStatusEngine.shared.assemblePlayerStatusLocked(
+            sample: outgoingDrainSample,
+            isRadio: false,
+            stationName: nil,
+            isCustom: true,
+            customQueue: [bigInJapan, lordsOfTheBoards, youCantStopMe],
+            customIndex: 1,
+            customName: "90s Alt Rock",
+            storeRepMode: "off",
+            origPl: nil
+        )
+        XCTAssertEqual(statusDuringOverlap.track?.name, "Lords of the Boards")
+        XCTAssertEqual(statusDuringOverlap.track?.album, "Proud Like a God")
+        XCTAssertEqual(statusDuringOverlap.track?.artworkUrl, "https://example.com/lords-of-the-boards.jpg")
+        XCTAssertGreaterThanOrEqual(statusDuringOverlap.position, 1.09)
+        XCTAssertLessThan(statusDuringOverlap.position, 5.0)
+
+        // 6. Once Music.app reaches pivotPoint and reports "Lords of the Boards" at 6.65s, activeOverlapTransition clears cleanly
+        var pivotSample = RawMusicAppStatusSample()
+        pivotSample.rawState = "playing"
+        pivotSample.rawPos = 6.65
+        pivotSample.dur = 218.5
+        pivotSample.tName = "Lords of the Boards"
+        pivotSample.tArtist = "Guano Apes"
+        pivotSample.tAlbum = "Proud Like a God"
+
+        let statusAtPivot = PlayerStatusEngine.shared.assemblePlayerStatusLocked(
+            sample: pivotSample,
+            isRadio: false,
+            stationName: nil,
+            isCustom: true,
+            customQueue: [bigInJapan, lordsOfTheBoards, youCantStopMe],
+            customIndex: 1,
+            customName: "90s Alt Rock",
+            storeRepMode: "off",
+            origPl: nil
+        )
+        XCTAssertEqual(statusAtPivot.track?.name, "Lords of the Boards")
+        XCTAssertEqual(statusAtPivot.position, 6.65, accuracy: 0.05)
+        XCTAssertNil(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.activeOverlapTransition })
     }
 
     func testSettingsTabHasDedicatedTVSection() {

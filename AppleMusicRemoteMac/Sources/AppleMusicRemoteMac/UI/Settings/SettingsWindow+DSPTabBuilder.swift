@@ -21,7 +21,9 @@ extension SettingsWindow {
         dspSaveNewPresetButton = NSButton(title: isEn ? "+ Save…" : "+ Сохранить…", target: self, action: #selector(saveNewDSPPresetClicked))
         dspSaveNewPresetButton.bezelStyle = .rounded
         dspSaveNewPresetButton.controlSize = .small
-        dspSaveNewPresetButton.toolTip = "Сохранить текущие параметры DSP как новый пользовательский пресет"
+        dspSaveNewPresetButton.toolTip = isEn
+            ? "Save current DSP parameters as a new custom preset"
+            : "Сохранить текущие параметры DSP как новый пользовательский пресет"
 
         dspUpdatePresetButton = NSButton(title: isEn ? "Update" : "Обновить", target: self, action: #selector(updateSelectedDSPPresetClicked))
         dspUpdatePresetButton.bezelStyle = .rounded
@@ -38,7 +40,9 @@ extension SettingsWindow {
         dspCloudSyncButton = NSButton(title: "☁️ iCloud…", target: self, action: #selector(openCloudSyncTabClicked))
         dspCloudSyncButton.bezelStyle = .rounded
         dspCloudSyncButton.controlSize = .small
-        dspCloudSyncButton.toolTip = "Облачная синхронизация пресетов DSP, профилей АЧХ комнаты и нормализации треков"
+        dspCloudSyncButton.toolTip = isEn
+            ? "Cloud sync for DSP presets, room acoustic profiles, and track loudness data"
+            : "Облачная синхронизация пресетов DSP, профилей АЧХ комнаты и нормализации треков"
 
         let presetActionsStack = NSStackView(views: [
             dspSaveNewPresetButton,
@@ -51,7 +55,11 @@ extension SettingsWindow {
         presetActionsStack.alignment = .centerY
         presetActionsStack.spacing = 6
 
-        dspPresetSubtitleLabel = makeMusicSubcaption("Пресеты доступны для быстрого выбора в Web PWA и верхнем меню macOS")
+        dspPresetSubtitleLabel = makeMusicSubcaption(
+            isEn
+                ? "Presets are available for quick selection in the Web PWA and macOS menu bar"
+                : "Пресеты доступны для быстрого выбора в Web PWA и верхнем меню macOS"
+        )
 
         let presetRightStack = NSStackView(views: [dspPresetPopUp, presetActionsStack, dspPresetSubtitleLabel])
         presetRightStack.orientation = .vertical
@@ -92,7 +100,11 @@ extension SettingsWindow {
         roomControlsRow.alignment = .centerY
         roomControlsRow.spacing = 6
 
-        dspRoomStatusLabel = makeStatusCaption("Замерьте АЧХ микрофоном iPhone / iPad в PWA (окно «Тракт сигнала»)")
+        dspRoomStatusLabel = makeStatusCaption(
+            isEn
+                ? "Measure room response using your iPhone / iPad microphone in the PWA ('Signal Path')"
+                : "Замерьте АЧХ микрофоном iPhone / iPad в PWA (окно «Тракт сигнала»)"
+        )
         dspRoomStatusLabel.lineBreakMode = .byWordWrapping
 
         let roomIndentedDetails = NSStackView(views: [roomControlsRow, dspRoomStatusLabel])
@@ -117,11 +129,17 @@ extension SettingsWindow {
 
         dspModePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
         configurePopUp(dspModePopUp, 325)
-        let modeItems: [(String, DSPEngineMode)] = [
-            ("Bit-Perfect Passthrough (Выкл)", .bitPerfectPassthrough),
-            ("DSD DoP (7-порядковый 7EC SDM)", .sdmDoP),
-            ("HQ NOS PCM (705.6/768 кГц LNS15)", .hqNOSPCM)
-        ]
+        let modeItems: [(String, DSPEngineMode)] = isEn
+            ? [
+                ("Bit-Perfect Passthrough (Off)", .bitPerfectPassthrough),
+                ("DSD DoP (7th-Order 7EC SDM)", .sdmDoP),
+                ("HQ NOS PCM (705.6/768 kHz LNS15)", .hqNOSPCM)
+            ]
+            : [
+                ("Bit-Perfect Passthrough (Выкл)", .bitPerfectPassthrough),
+                ("DSD DoP (7-порядковый 7EC SDM)", .sdmDoP),
+                ("HQ NOS PCM (705.6/768 кГц LNS15)", .hqNOSPCM)
+            ]
         for (title, m) in modeItems {
             dspModePopUp.addItem(withTitle: title)
             dspModePopUp.lastItem?.representedObject = m.rawValue
@@ -129,12 +147,19 @@ extension SettingsWindow {
 
         dspRatePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
         configurePopUp(dspRatePopUp, 325)
-        let rateItems: [(String, Int)] = [
-            ("DSD64 (2.82 МГц / DoP 176.4)", 64),
-            ("DSD128 (5.64 МГц / DoP 352.8)", 128),
-            ("DSD256 (11.29 МГц / DoP 705.6)", 256),
-            ("DSD512 (22.58 МГц / DoP 1411.2)", 512)
-        ]
+        let rateItems: [(String, Int)] = isEn
+            ? [
+                ("DSD64 (2.82 MHz / DoP 176.4)", 64),
+                ("DSD128 (5.64 MHz / DoP 352.8)", 128),
+                ("DSD256 (11.29 MHz / DoP 705.6)", 256),
+                ("DSD512 (22.58 MHz / DoP 1411.2)", 512)
+            ]
+            : [
+                ("DSD64 (2.82 МГц / DoP 176.4)", 64),
+                ("DSD128 (5.64 МГц / DoP 352.8)", 128),
+                ("DSD256 (11.29 МГц / DoP 705.6)", 256),
+                ("DSD512 (22.58 МГц / DoP 1411.2)", 512)
+            ]
         for (title, tag) in rateItems {
             dspRatePopUp.addItem(withTitle: title)
             dspRatePopUp.lastItem?.tag = tag
@@ -142,11 +167,17 @@ extension SettingsWindow {
 
         dspProfilePopUp = NSPopUpButton(frame: .zero, pullsDown: false)
         configurePopUp(dspProfilePopUp, 325)
-        let profItems: [(String, Int)] = [
-            ("7EC-Transient (OBG 1.38 — Панч)", SDM7Profile.transient.rawValue),
-            ("7EC-Balanced (OBG 1.50 — Референс)", SDM7Profile.balanced.rawValue),
-            ("7EC-Super (OBG 1.62 — Макс. глубина)", SDM7Profile.superWide.rawValue)
-        ]
+        let profItems: [(String, Int)] = isEn
+            ? [
+                ("7EC-Transient (OBG 1.38 — Punch)", SDM7Profile.transient.rawValue),
+                ("7EC-Balanced (OBG 1.50 — Reference)", SDM7Profile.balanced.rawValue),
+                ("7EC-Super (OBG 1.62 — Max Stage)", SDM7Profile.superWide.rawValue)
+            ]
+            : [
+                ("7EC-Transient (OBG 1.38 — Панч)", SDM7Profile.transient.rawValue),
+                ("7EC-Balanced (OBG 1.50 — Референс)", SDM7Profile.balanced.rawValue),
+                ("7EC-Super (OBG 1.62 — Макс. глубина)", SDM7Profile.superWide.rawValue)
+            ]
         for (title, tag) in profItems {
             dspProfilePopUp.addItem(withTitle: title)
             dspProfilePopUp.lastItem?.tag = tag
@@ -154,12 +185,19 @@ extension SettingsWindow {
 
         dspTrellisPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
         configurePopUp(dspTrellisPopUp, 325)
-        let trellisItems: [(String, Int)] = [
-            ("Greedy M=1 (2-шаговый Look-Ahead)", 1),
-            ("Trellis M=4 (4 пути Витерби)", 4),
-            ("Trellis M=8 (Оптимум для M1–M4)", 8),
-            ("Trellis M=16 (Макс. удержание)", 16)
-        ]
+        let trellisItems: [(String, Int)] = isEn
+            ? [
+                ("Greedy M=1 (2-Step Look-Ahead)", 1),
+                ("Trellis M=4 (4 Viterbi Paths)", 4),
+                ("Trellis M=8 (Optimal for M1–M4)", 8),
+                ("Trellis M=16 (Max Stability)", 16)
+            ]
+            : [
+                ("Greedy M=1 (2-шаговый Look-Ahead)", 1),
+                ("Trellis M=4 (4 пути Витерби)", 4),
+                ("Trellis M=8 (Оптимум для M1–M4)", 8),
+                ("Trellis M=16 (Макс. удержание)", 16)
+            ]
         for (title, tag) in trellisItems {
             dspTrellisPopUp.addItem(withTitle: title)
             dspTrellisPopUp.lastItem?.tag = tag
@@ -181,7 +219,7 @@ extension SettingsWindow {
         configurePopUp(dspClockPolicyPopUp, 325)
         let clockItems: [(String, ClockGridPolicy)] = [
             ("Adaptive Dual-Grid (44.1k / 48k)", .adaptiveDualGrid),
-            ("Strict SACD 44.1k (ASRC для 48k)", .strictSACD44k1),
+            (isEn ? "Strict SACD 44.1k (ASRC for 48k)" : "Strict SACD 44.1k (ASRC для 48k)", .strictSACD44k1),
             ("Hybrid 48k -> HQ NOS PCM (LNS15)", .hybrid48kPCM)
         ]
         for (title, pol) in clockItems {
@@ -191,13 +229,21 @@ extension SettingsWindow {
 
         dspHeadroomPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
         configurePopUp(dspHeadroomPopUp, 325)
-        let headroomItems: [(String, Double)] = [
-            ("-2.5 дБ (Высокий уровень)", -2.5),
-            ("-3.0 дБ (Стандарт DSD)", -3.0),
-            ("-3.5 дБ (Референс SACD 7EC)", -3.5),
-            ("-4.5 дБ (Макс. запас пиков)", -4.5),
-            ("-6.0 дБ (Студийный мастер)", -6.0)
-        ]
+        let headroomItems: [(String, Double)] = isEn
+            ? [
+                ("-2.5 dB (High Output)", -2.5),
+                ("-3.0 dB (DSD Standard)", -3.0),
+                ("-3.5 dB (SACD 7EC Reference)", -3.5),
+                ("-4.5 dB (Max Peak Headroom)", -4.5),
+                ("-6.0 dB (Studio Master)", -6.0)
+            ]
+            : [
+                ("-2.5 дБ (Высокий уровень)", -2.5),
+                ("-3.0 дБ (Стандарт DSD)", -3.0),
+                ("-3.5 дБ (Референс SACD 7EC)", -3.5),
+                ("-4.5 дБ (Макс. запас пиков)", -4.5),
+                ("-6.0 дБ (Студийный мастер)", -6.0)
+            ]
         for (title, db) in headroomItems {
             dspHeadroomPopUp.addItem(withTitle: title)
             dspHeadroomPopUp.lastItem?.representedObject = db
@@ -205,10 +251,15 @@ extension SettingsWindow {
 
         dspNosDitherPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
         configurePopUp(dspNosDitherPopUp, 325)
-        let ditherItems: [(String, NOSPCMDitherMode)] = [
-            ("LNS15 (Психоакустический 15-го порядка)", .lns15),
-            ("TPDF (Линейный треугольный дизеринг)", .tpdf)
-        ]
+        let ditherItems: [(String, NOSPCMDitherMode)] = isEn
+            ? [
+                ("LNS15 (15th-Order Psychoacoustic)", .lns15),
+                ("TPDF (Linear Triangular Dither)", .tpdf)
+            ]
+            : [
+                ("LNS15 (Психоакустический 15-го порядка)", .lns15),
+                ("TPDF (Линейный треугольный дизеринг)", .tpdf)
+            ]
         for (title, dm) in ditherItems {
             dspNosDitherPopUp.addItem(withTitle: title)
             dspNosDitherPopUp.lastItem?.representedObject = dm.rawValue
@@ -260,7 +311,11 @@ extension SettingsWindow {
             action: #selector(dspSettingsControlChanged(_:))
         )
 
-        dspStatusLabel = makeStatusCaption("DSP: Bit-Perfect Passthrough (без конвертации)")
+        dspStatusLabel = makeStatusCaption(
+            isEn
+                ? "DSP: Bit-Perfect Passthrough (no conversion)"
+                : "DSP: Bit-Perfect Passthrough (без конвертации)"
+        )
         dspStatusLabel.lineBreakMode = .byWordWrapping
         dspStatusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 

@@ -168,7 +168,9 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
         storeIds: [String],
         startStoreId: String,
         storefront: String,
-        isRepeatOne: Bool
+        isRepeatOne: Bool,
+        trackName: String,
+        trackArtist: String
     ) -> Bool {
         guard !storeIds.isEmpty else { return false }
 
@@ -204,6 +206,7 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
               let setDescMethod = class_getInstanceMethod(playerClass, setDescSel) else {
             return false
         }
+        BitPerfectLogMonitor.shared.beginExplicitTrackSwitch()
         let setDescFn = unsafeBitCast(method_getImplementation(setDescMethod), to: SetObjFn.self)
         setDescFn(player, setDescSel, descriptor)
 
@@ -234,6 +237,16 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             }
         }
 
+        let cleanN = trackName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanA = trackArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canonicalKey = !cleanN.isEmpty ? "\(cleanA.lowercased()):\(cleanN.lowercased())" : nil
+        let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: cleanA, title: cleanN, catalogId: startStoreId)
+        BitPerfectLogMonitor.shared.endExplicitTrackSwitch(
+            trackKey: canonicalKey,
+            catalogId: startStoreId,
+            expectedSampleRate: cachedFmt?.sampleRate,
+            expectedBitDepth: cachedFmt?.bitDepth
+        )
         invokeVoid(player, selectorName: "play")
         return true
     }
@@ -405,7 +418,8 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             }
         }
 
-        // 3. Collect up to 2 ALREADY storefront-verified upcoming cloud IDs from RAM (`0 ms`) for gapless pre-buffering
+        // 3. Collect up to 12 upcoming cloud catalog IDs (`0 ms`, zero network I/O) so `Music.app` plays tracks
+        //    to their full natural end without early cutoff or inter-track re-initialization gaps.
         let (upcomingVerifiedIds, isRepeatOne): ([String], Bool) = PlaybackStateStore.shared.withLock {
             let repOne = (PlaybackStateStore.shared.repeatMode == "one")
             guard !repOne else { return ([], true) }
@@ -413,21 +427,22 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             let curIdx = PlaybackStateStore.shared.activeCustomQueueIndex
             var nextIds: [String] = []
             if curIdx >= 0 && curIdx + 1 < q.count {
-                for idx in (curIdx + 1)..<min(q.count, curIdx + 3) {
+                var prevCid = targetCid
+                for idx in (curIdx + 1)..<min(q.count, curIdx + 13) {
                     let ut = q[idx]
                     if ut.isLocal == true { break }
                     guard let rawNextCid = MusicKitManager.extractNumericCatalogId(from: ut) else { break }
                     let effNextCid = MusicKitManager.shared.preferredAlternateCatalogSong(for: rawNextCid)?.id ?? rawNextCid
-                    guard effNextCid != targetCid,
+                    guard effNextCid != prevCid,
                           !MusicKitManager.shared.isUnstageableCatalogId(effNextCid) else { break }
                     let cachedInfo = MusicKitManager.directInspectionCacheLock.withLock {
                         MusicKitManager.directInspectionCache[effNextCid]
                     }
-                    if let ci = cachedInfo, (ci.durationSeconds ?? 0) > 0 {
-                        nextIds.append(effNextCid)
-                    } else {
+                    if let ci = cachedInfo, ci.durationSeconds == nil {
                         break
                     }
+                    nextIds.append(effNextCid)
+                    prevCid = effNextCid
                 }
             }
             return (nextIds, false)
@@ -492,7 +507,9 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
                 storeIds: storeIds,
                 startStoreId: primaryId,
                 storefront: userSf,
-                isRepeatOne: isRepeatOne
+                isRepeatOne: isRepeatOne,
+                trackName: expectedProbe.name,
+                trackArtist: expectedProbe.artist
             ) else {
                 return false
             }
@@ -504,8 +521,13 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
         let t0 = Date()
         let primaryStartedAt = Date()
         if attemptStartAndConfirm(storeIds: primaryQueueIds, primaryId: targetCid, expectedProbe: probe, waitSeconds: 4.2) {
-            NSLog("[SystemMusicPlayerBridge] ⚡️ Playing cloud track '%@ — %@' natively in Music.app (cid=%@, sf=%@, %.2fs, 0 library writes)",
-                  cleanArtist, cleanName, targetCid, userSf, Date().timeIntervalSince(t0))
+            PlaybackStateStore.shared.withLock {
+                if PlaybackStateStore.shared.playbackGeneration == expectedGeneration {
+                    PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds = upcomingVerifiedIds
+                }
+            }
+            NSLog("[SystemMusicPlayerBridge] ⚡️ Playing cloud track '%@ — %@' natively in Music.app (cid=%@, sf=%@, +%d queued, %.2fs, 0 library writes)",
+                  cleanArtist, cleanName, targetCid, userSf, upcomingVerifiedIds.count, Date().timeIntervalSince(t0))
             return true
         }
 
@@ -548,6 +570,7 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
                 MusicKitManager.shared.recordPreferredAlternateCatalogSong(for: originalCid, alternate: alt)
                 PlaybackStateStore.shared.withLock {
                     guard PlaybackStateStore.shared.playbackGeneration == expectedGeneration else { return }
+                    PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds = upcomingVerifiedIds
                     let idx = PlaybackStateStore.shared.activeCustomQueueIndex
                     if idx >= 0 && idx < PlaybackStateStore.shared.activeCustomQueue.count {
                         PlaybackStateStore.shared.activeCustomQueue[idx].catalogId = alt.id
@@ -561,6 +584,11 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
 
         // Give slow CDN streams one extra 2.4s grace check if no alternate existed (`anifi — SPECIALZ`)
         if alternates.isEmpty && waitForTrackConfirmation(since: primaryStartedAt, expectedProbe: probe, waitSeconds: 2.4) {
+            PlaybackStateStore.shared.withLock {
+                if PlaybackStateStore.shared.playbackGeneration == expectedGeneration {
+                    PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds = upcomingVerifiedIds
+                }
+            }
             NSLog("[SystemMusicPlayerBridge] ⚡️ Playing cloud track '%@ — %@' after CDN buffer (cid=%@, %.2fs, 0 library writes)",
                   cleanArtist, cleanName, targetCid, Date().timeIntervalSince(t0))
             return true

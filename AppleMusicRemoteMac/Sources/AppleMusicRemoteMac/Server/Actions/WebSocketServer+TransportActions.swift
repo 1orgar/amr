@@ -140,7 +140,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Управление усилителем отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Amplifier control is disabled for this device in Mac settings",
+                        "Управление усилителем отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let explicitMute = (params["muted"] as? Bool) ?? (params["mute"] as? Bool)
@@ -233,7 +241,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Выбор ЦАП и параметров аудиовыхода отключён для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DAC and audio output configuration is disabled for this device in Mac settings",
+                        "Выбор ЦАП и параметров аудиовыхода отключён для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let enabled = (params["enabled"] as? Bool) ?? (params["lock"] as? Bool) ?? (params["lock_volume_100"] as? Bool) ?? true
@@ -250,7 +266,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Выбор ЦАП и параметров аудиовыхода отключён для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DAC and audio output configuration is disabled for this device in Mac settings",
+                        "Выбор ЦАП и параметров аудиовыхода отключён для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             if let enabled = (params["enabled"] as? Bool) ?? (params["dac_muting_guard_enabled"] as? Bool) {

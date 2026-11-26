@@ -10,6 +10,179 @@ import ScriptingBridge
 
 extension QueueManager {
 
+    internal func resolveForwardMatchIndex(
+        queueTracks: [TrackInfo],
+        activeIdx: Int,
+        isAMRPlaylist: Bool,
+        candidateName: String,
+        candidateArtist: String?
+    ) -> Int? {
+        guard activeIdx + 1 < queueTracks.count else { return nil }
+        if !isAMRPlaylist {
+            return queueTracks[(activeIdx + 1)...].firstIndex {
+                matchesExpectedQueueTrack($0, candidateName: candidateName, candidateArtist: candidateArtist)
+            }
+        }
+        if matchesExpectedQueueTrack(queueTracks[activeIdx + 1], candidateName: candidateName, candidateArtist: candidateArtist) {
+            return activeIdx + 1
+        }
+        // If SystemMusicPlayerBridge queued multiple upcoming catalog IDs and Music.app natively skipped
+        // an unavailable track at activeIdx + 1, allow matching activeIdx + 2 when its catalog ID matches slot [1].
+        let secondNativeCid: String? = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.count >= 2
+                ? PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds[1]
+                : nil
+        }
+        if let secondCid = secondNativeCid,
+           activeIdx + 2 < queueTracks.count {
+            let candidateTrack = queueTracks[activeIdx + 2]
+            if let rawCid = MusicKitManager.extractNumericCatalogId(from: candidateTrack) {
+                let effCid = MusicKitManager.shared.preferredAlternateCatalogSong(for: rawCid)?.id ?? rawCid
+                if (secondCid == effCid || secondCid == rawCid),
+                   matchesExpectedQueueTrack(candidateTrack, candidateName: candidateName, candidateArtist: candidateArtist) {
+                    return activeIdx + 2
+                }
+            }
+        }
+        return nil
+    }
+
+    internal func completeNaturalForwardQueueAdvance(
+        from oldIdx: Int,
+        to relativeIdx: Int,
+        initialPosition: Double = 0.0,
+        outgoingTitleOverride: String? = nil
+    ) {
+        let transitionSnapshot: (track: TrackInfo, immediateStatus: PlayerStatus, gen: UInt64)? = PlaybackStateStore.shared.withLock {
+            let q = PlaybackStateStore.shared.activeCustomQueue
+            guard relativeIdx >= 0 && relativeIdx < q.count else { return nil }
+            let prevTrack: TrackInfo? = (oldIdx >= 0 && oldIdx < q.count) ? q[oldIdx] : nil
+            let outgoingName = (outgoingTitleOverride?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+                ?? prevTrack?.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                ?? ""
+            let steps = max(1, relativeIdx - oldIdx)
+            if steps <= PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.count {
+                PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.removeFirst(steps)
+            } else {
+                PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.removeAll()
+            }
+            let now = Date()
+            let nextTrack = q[relativeIdx]
+            let nextCid = MusicKitManager.extractNumericCatalogId(from: nextTrack)
+            if !outgoingName.isEmpty,
+               outgoingName.localizedCaseInsensitiveCompare(nextTrack.name) != .orderedSame {
+                PlaybackStateStore.shared.transitionPreviousTrackKey = self.canonicalForeignTrackKey(
+                    name: outgoingName,
+                    artist: prevTrack?.artist
+                )
+                PlaybackStateStore.shared.activeOverlapTransition = OverlapTransitionSnapshot(
+                    outgoingName: outgoingName,
+                    incomingTrack: nextTrack,
+                    startedAt: now,
+                    initialPosition: max(0.0, initialPosition)
+                )
+            } else {
+                PlaybackStateStore.shared.activeOverlapTransition = nil
+            }
+            PlaybackStateStore.shared.activeCustomQueueIndex = relativeIdx
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.lastConfirmedTrackTime = now
+            PlaybackStateStore.shared.lastCloudPlayTime = now
+            PlaybackStateStore.shared.lastKnownPosition = max(0.0, initialPosition)
+            PlaybackStateStore.shared.scheduledSmartTransitionStart = nil
+            PlaybackStateStore.shared.lastWasPlayingCloud = true
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.activeTrackTitleVariants = MusicKitManager.shared.cachedTitleVariants(catalogId: nextCid)
+            if relativeIdx + 1 < q.count {
+                PlaybackStateStore.shared.latestUpcomingTracks = Array(q[(relativeIdx + 1)...])
+            } else {
+                PlaybackStateStore.shared.latestUpcomingTracks = []
+            }
+            if relativeIdx > 0 {
+                PlaybackStateStore.shared.latestHistoryTracks = Array(q[0..<relativeIdx].reversed())
+            } else {
+                PlaybackStateStore.shared.latestHistoryTracks = []
+            }
+
+            var resolvedArt = nextTrack.artworkUrl
+            if resolvedArt.isEmpty {
+                if let cached = MusicKitManager.shared.getCachedTrackArtwork(
+                    name: nextTrack.name,
+                    artist: nextTrack.artist,
+                    album: nextTrack.album
+                ), !cached.isEmpty {
+                    resolvedArt = cached
+                } else if !nextTrack.name.isEmpty {
+                    let encN = nextTrack.name.amrQueryValueEncoded
+                    let encA = nextTrack.artist.amrQueryValueEncoded
+                    let encAl = nextTrack.album.amrQueryValueEncoded
+                    resolvedArt = "/api/artwork/search?name=\(encN)&artist=\(encA)&album=\(encAl)"
+                }
+            }
+            var enrichedNext = nextTrack
+            if !resolvedArt.isEmpty {
+                enrichedNext.artworkUrl = resolvedArt
+                enrichedNext.hasArtwork = true
+            }
+            let plLabel = PlaybackStateStore.shared.activeCustomQueueName ?? "Очередь"
+            let immediate = PlayerStatus(
+                playerState: "playing",
+                position: max(0.0, initialPosition),
+                duration: enrichedNext.duration,
+                volume: PlaybackStateStore.shared.simulatedVolume,
+                shuffle: PlaybackStateStore.shared.isShuffleQueueActive,
+                repeatMode: PlaybackStateStore.shared.repeatMode,
+                playlist: plLabel,
+                isRadio: false,
+                audioQuality: PlaybackStateStore.shared.lastPlayerStatusCache?.status.audioQuality ?? "Lossless (ALAC 16-bit/44.1kHz)",
+                track: enrichedNext
+            )
+            return (enrichedNext, immediate, PlaybackStateStore.shared.playbackGeneration)
+        }
+        PlaybackStateStore.shared.invalidateQueueCache()
+        PlaybackStateStore.shared.invalidateStatusCache()
+        if !PlaybackRouter.shared.isTestingEnvironment, let snapshot = transitionSnapshot {
+            let newTrack = snapshot.track
+            var immediateStatus = snapshot.immediateStatus
+            let gen = snapshot.gen
+            PlayerStatusEngine.shared.applyLiveAudioPipelineOverlay(to: &immediateStatus, updateTapFormatIfNeeded: false)
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.lastPlayerStatusCache = (Date(), immediateStatus)
+            }
+            // Push zero-latency optimistic UI & queue update (< 2 ms) before background format/SoundCheck warmup
+            WebSocketServer.shared.broadcastStatus(status: immediateStatus, includeQueue: true)
+
+            let canonicalKey = !newTrack.name.isEmpty
+                ? "\(newTrack.artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()):\(newTrack.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+                : nil
+            let nextCatalogId = MusicKitManager.extractNumericCatalogId(from: newTrack)
+            let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: newTrack.artist, title: newTrack.name, catalogId: nextCatalogId)
+            BitPerfectLogMonitor.shared.resetTrackState(
+                trackKey: canonicalKey,
+                catalogId: nextCatalogId,
+                expectedSampleRate: cachedFmt?.sampleRate,
+                expectedBitDepth: cachedFmt?.bitDepth
+            )
+            if ExternalAmpTCPController.shared.isActive,
+               ExternalAmpTCPController.shared.isSoundCheckEnabled,
+               !newTrack.name.isEmpty {
+                let resolvedCatId = newTrack.catalogId ?? (AppleSoundCheckService.isValidCatalogId(newTrack.id) ? newTrack.id : nil)
+                AppleSoundCheckService.shared.syncCurrentTrack(
+                    trackKey: canonicalKey ?? "\(newTrack.artist):\(newTrack.name)",
+                    trackId: resolvedCatId ?? newTrack.persistentId ?? newTrack.id,
+                    catalogId: resolvedCatId,
+                    name: newTrack.name,
+                    artist: newTrack.artist,
+                    album: newTrack.album,
+                    isLocal: false,
+                    isExplicitTransition: true
+                )
+            }
+            PlaybackRouter.shared.prestageUpcomingCloudTracks(fromIndex: relativeIdx + 1, count: 4, expectedGeneration: gen)
+            _ = newTrack
+        }
+    }
+
     public func handleTrackNotification(userInfo: [AnyHashable: Any]?) {
         monitorLock.lock()
         defer { monitorLock.unlock() }
@@ -94,6 +267,7 @@ extension QueueManager {
                 PlaybackStateStore.shared.activeLoadingStage = nil
                 PlaybackStateStore.shared.activeLoadingStartedAt = nil
                 PlaybackStateStore.shared.transitionPreviousTrackKey = nil
+                PlaybackStateStore.shared.activeOverlapTransition = nil
                 PlaybackStateStore.shared.lastWasPlayingCloud = true
                 PlaybackStateStore.shared.lastSkipTime = .distantPast
                 return !wasConfirmed
@@ -144,32 +318,15 @@ extension QueueManager {
         }
 
         // 5. Forward tracks in custom queue
-        if activeIdx + 1 < queueTracks.count {
-            let forwardSlice = isAMRPlaylist ? queueTracks[(activeIdx + 1)...(activeIdx + 1)] : queueTracks[(activeIdx + 1)...]
-            if let relativeIdx = forwardSlice.firstIndex(where: { matchesExpectedQueueTrack($0, candidateName: trackName, candidateArtist: artistName) }) {
-                PlaybackStateStore.shared.withLock {
-                    PlaybackStateStore.shared.activeCustomQueueIndex = relativeIdx
-                    PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
-                    PlaybackStateStore.shared.lastConfirmedTrackTime = Date()
-                    PlaybackStateStore.shared.lastWasPlayingCloud = true
-                    PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
-                    let q = PlaybackStateStore.shared.activeCustomQueue
-                    if relativeIdx + 1 < q.count {
-                        PlaybackStateStore.shared.latestUpcomingTracks = Array(q[(relativeIdx + 1)...])
-                    } else {
-                        PlaybackStateStore.shared.latestUpcomingTracks = []
-                    }
-                    if relativeIdx > 0 {
-                        PlaybackStateStore.shared.latestHistoryTracks = Array(q[0..<relativeIdx].reversed())
-                    }
-                }
-                PlaybackStateStore.shared.invalidateQueueCache()
-                PlaybackStateStore.shared.invalidateStatusCache()
-                if !PlaybackRouter.shared.isTestingEnvironment {
-                    WebSocketServer.shared.broadcastStatus(includeQueue: true)
-                }
-                return
-            }
+        if let relativeIdx = resolveForwardMatchIndex(
+            queueTracks: queueTracks,
+            activeIdx: activeIdx,
+            isAMRPlaylist: isAMRPlaylist,
+            candidateName: trackName,
+            candidateArtist: artistName
+        ) {
+            completeNaturalForwardQueueAdvance(from: activeIdx, to: relativeIdx)
+            return
         }
 
         // 6. Localized AMR queue start confirmation vs foreign track interception
@@ -409,30 +566,14 @@ extension QueueManager {
                         return
                     }
                     return
-                } else if activeIdx + 1 < queueTracks.count,
-                          let relativeIdx = (isAMR ? queueTracks[(activeIdx + 1)...(activeIdx + 1)] : queueTracks[(activeIdx + 1)...]).firstIndex(where: { matchesExpectedQueueTrack($0, candidateName: curTrackName, candidateArtist: curArtist) }) {
-                    PlaybackStateStore.shared.withLock {
-                        PlaybackStateStore.shared.activeCustomQueueIndex = relativeIdx
-                        PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
-                        PlaybackStateStore.shared.lastConfirmedTrackTime = Date()
-                        PlaybackStateStore.shared.lastWasPlayingCloud = true
-                        PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
-                        PlaybackStateStore.shared.scheduledSmartTransitionStart = nil
-                        let q = PlaybackStateStore.shared.activeCustomQueue
-                        if relativeIdx + 1 < q.count {
-                            PlaybackStateStore.shared.latestUpcomingTracks = Array(q[(relativeIdx + 1)...])
-                        } else {
-                            PlaybackStateStore.shared.latestUpcomingTracks = []
-                        }
-                        if relativeIdx > 0 {
-                            PlaybackStateStore.shared.latestHistoryTracks = Array(q[0..<relativeIdx].reversed())
-                        }
-                    }
-                    PlaybackStateStore.shared.invalidateQueueCache()
-                    PlaybackStateStore.shared.invalidateStatusCache()
-                    if !PlaybackRouter.shared.isTestingEnvironment {
-                        WebSocketServer.shared.broadcastStatus(includeQueue: true)
-                    }
+                } else if let relativeIdx = resolveForwardMatchIndex(
+                    queueTracks: queueTracks,
+                    activeIdx: activeIdx,
+                    isAMRPlaylist: isAMR,
+                    candidateName: curTrackName,
+                    candidateArtist: curArtist
+                ) {
+                    completeNaturalForwardQueueAdvance(from: activeIdx, to: relativeIdx)
                     return
                 } else if isAMR && !confirmed && timeSincePlay < 15.0,
                           shouldConfirmLocalizedAMRTrackStart(
@@ -496,24 +637,15 @@ extension QueueManager {
                 }
             }
 
-            // Smooth advance before song finishes (and before MediaPlaybackCore Smart Transition / Dead-Air Removal overlap)
-            let (alreadyTriggered, lastKnownPos, scheduledSmartStart) = PlaybackStateStore.shared.withLock {
+            // Near-EOF advance (never pre-cut at MediaPlaybackCore's 3-38s fade-out `scheduledSmartTransitionStart`!)
+            let (alreadyTriggered, lastKnownPos, currentRepeatMode, firstNativeQueuedCid) = PlaybackStateStore.shared.withLock {
                 (
                     PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack,
                     PlaybackStateStore.shared.lastKnownPosition,
-                    PlaybackStateStore.shared.scheduledSmartTransitionStart
+                    PlaybackStateStore.shared.repeatMode,
+                    PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.first
                 )
             }
-            let validSmartStart: Double? = {
-                guard let s = scheduledSmartStart,
-                      dur > 8.0,
-                      s >= max(4.0, max(dur * 0.55, dur - 38.0)),
-                      s <= dur + 0.5 else {
-                    return nil
-                }
-                return s
-            }()
-            let smartLeadMargin: Double = 0.22
             let cachedPlName = PlayerStatusEngine.shared.cachedCurrentPlaylistName
             let isIsolatedAMRPlaylist = (cachedPlName == "Очередь AMR")
             let isNativePlayingPlaylist: Bool = {
@@ -528,9 +660,23 @@ extension QueueManager {
                 }
                 return true
             }()
-            let currentRepeatMode = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.repeatMode }
+            let hasMatchingNativeNextTrack: Bool = {
+                guard currentRepeatMode != "one",
+                      let queuedCid = firstNativeQueuedCid,
+                      !queuedCid.isEmpty,
+                      activeIdx + 1 < queueTracks.count else {
+                    return false
+                }
+                let nextTrack = queueTracks[activeIdx + 1]
+                guard nextTrack.isLocal != true,
+                      let rawNextCid = MusicKitManager.extractNumericCatalogId(from: nextTrack) else {
+                    return false
+                }
+                let effNextCid = MusicKitManager.shared.preferredAlternateCatalogSong(for: rawNextCid)?.id ?? rawNextCid
+                return queuedCid == effNextCid || queuedCid == rawNextCid
+            }()
             var effectivePos = pos
-            if confirmed && !alreadyTriggered && dur > 5.0 && pos > 0.0 && (dur - pos) <= 40.0,
+            if confirmed && !alreadyTriggered && dur > 5.0 && pos > 0.0 && (dur - pos) <= 5.0,
                !PlaybackRouter.shared.isTestingEnvironment,
                let app = MusicAppProvider.shared.getMusicApp() {
                 let directPos = app.playerPosition
@@ -542,13 +688,8 @@ extension QueueManager {
                 }
             }
 
-            let repeatOneCutoffPos: Double = {
-                let baseRepeatOne = max(1.0, dur - 0.85)
-                if let smart = validSmartStart {
-                    return max(1.0, min(baseRepeatOne, smart - 0.25))
-                }
-                return baseRepeatOne
-            }()
+            let repeatOneCutoffPos: Double = max(1.0, dur - 0.30)
+            let eofLeadWindow: Double = 0.18
 
             if isIsolatedAMRPlaylist {
                 if currentRepeatMode == "one" && confirmed && !PlaybackRouter.shared.isTestingEnvironment && dur > 5.0 && effectivePos >= repeatOneCutoffPos {
@@ -560,28 +701,20 @@ extension QueueManager {
                         _ = PlaybackTransportController.shared.seek(to: 0.0)
                         WebSocketServer.shared.broadcastStatus(includeQueue: false)
                     }
-                } else if currentRepeatMode != "one" && confirmed && !alreadyTriggered && dur > 5.0 && effectivePos > 1.0 {
-                    let hasNextInQueue = (activeIdx + 1 < queueTracks.count) || (currentRepeatMode == "all")
-                    let amrIsolatedLeadWindow: Double = hasNextInQueue ? 0.35 : 0.25
-                    let baseCutoff = dur - amrIsolatedLeadWindow
-                    let cutoffPos = validSmartStart.map { min(baseCutoff, $0 - smartLeadMargin) } ?? baseCutoff
+                } else if currentRepeatMode != "one" && !hasMatchingNativeNextTrack && confirmed && !alreadyTriggered && dur > 5.0 && effectivePos > 1.0 {
+                    let cutoffPos = dur - eofLeadWindow
                     let remainingToCutoff = cutoffPos - effectivePos
                     if remainingToCutoff <= 0.0 {
                         self.stopMusicAppImmediatelyForQueueCutoff()
-                        self.advanceOrEndCustomQueueUnlocked(reason: validSmartStart != nil ? "smooth-advance-smart-cutoff" : "smooth-advance-amr")
-                    } else if !PlaybackRouter.shared.isTestingEnvironment && remainingToCutoff <= 0.55 {
+                        self.advanceOrEndCustomQueueUnlocked(reason: "smooth-advance-amr")
+                    } else if !PlaybackRouter.shared.isTestingEnvironment && remainingToCutoff <= 0.45 {
                         let wakeDelay = max(0.015, min(remainingToCutoff + 0.008, remainingToCutoff * 0.65))
                         self.schedulePrecisionCutoffWakeup(delay: wakeDelay)
                     }
                 }
             } else {
-                let isCurrentLocal = (activeIdx >= 0 && activeIdx < queueTracks.count && queueTracks[activeIdx].isLocal == true)
-                let smoothLeadWindow: Double = PlaybackRouter.shared.isTestingEnvironment ? 2.4 : (isCurrentLocal ? 0.22 : 0.65)
                 let isSingleTrackOff = (queueTracks.count <= 1 && currentRepeatMode == "off")
-                let baseCutoff: Double = (!PlaybackRouter.shared.isTestingEnvironment && isSingleTrackOff)
-                    ? (dur - 0.40)
-                    : (dur - smoothLeadWindow)
-                let cutoffPos: Double = validSmartStart.map { min(baseCutoff, $0 - smartLeadMargin) } ?? baseCutoff
+                let cutoffPos: Double = dur - eofLeadWindow
                 let timeBasedSmoothEnd = (lastKnownPos <= 1.0 || lastKnownPos >= dur - 10.0) && (effectivePos <= 0.0 && timeSincePlay >= cutoffPos)
                 if currentRepeatMode == "one" && confirmed && !PlaybackRouter.shared.isTestingEnvironment && dur > 5.0 && effectivePos >= repeatOneCutoffPos {
                     let lastRewind = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastRepeatOneRewindTime }
@@ -592,7 +725,7 @@ extension QueueManager {
                         _ = PlaybackTransportController.shared.seek(to: 0.0)
                         WebSocketServer.shared.broadcastStatus(includeQueue: false)
                     }
-                } else if confirmed && !alreadyTriggered && dur > 5.0 && ((effectivePos > 1.0 && effectivePos >= cutoffPos) || timeBasedSmoothEnd) {
+                } else if !hasMatchingNativeNextTrack && confirmed && !alreadyTriggered && dur > 5.0 && ((effectivePos > 1.0 && effectivePos >= cutoffPos) || timeBasedSmoothEnd) {
                     if isNativePlayingPlaylist {
                         // Native named playlist gapless playback
                     } else if currentRepeatMode == "one" {
@@ -600,15 +733,15 @@ extension QueueManager {
                     } else if isSingleTrackOff {
                         if !PlaybackRouter.shared.isTestingEnvironment && effectivePos > 1.0 && effectivePos >= cutoffPos {
                             self.stopMusicAppImmediatelyForQueueCutoff()
-                            self.advanceOrEndCustomQueueUnlocked(reason: validSmartStart != nil ? "smooth-advance-smart-cutoff" : "smooth-advance-amr")
+                            self.advanceOrEndCustomQueueUnlocked(reason: "smooth-advance-amr")
                         }
                     } else {
                         self.stopMusicAppImmediatelyForQueueCutoff()
-                        self.advanceOrEndCustomQueueUnlocked(reason: validSmartStart != nil ? "smooth-advance-smart-cutoff" : "smooth-advance")
+                        self.advanceOrEndCustomQueueUnlocked(reason: "smooth-advance")
                     }
-                } else if !PlaybackRouter.shared.isTestingEnvironment && !isNativePlayingPlaylist && confirmed && !alreadyTriggered && dur > 5.0 && effectivePos > 1.0 {
+                } else if !PlaybackRouter.shared.isTestingEnvironment && !isNativePlayingPlaylist && !hasMatchingNativeNextTrack && confirmed && !alreadyTriggered && dur > 5.0 && effectivePos > 1.0 {
                     let remainingToCutoff = cutoffPos - effectivePos
-                    if remainingToCutoff > 0.0 && remainingToCutoff <= 0.55 {
+                    if remainingToCutoff > 0.0 && remainingToCutoff <= 0.45 {
                         let wakeDelay = max(0.015, min(remainingToCutoff + 0.008, remainingToCutoff * 0.65))
                         self.schedulePrecisionCutoffWakeup(delay: wakeDelay)
                     }

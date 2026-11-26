@@ -21,14 +21,26 @@ extension ExternalAmpTCPController {
         let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedHost.isEmpty else {
             DispatchQueue.main.async {
-                completion(false, "🟠 Укажите IP-адрес усилителя для проверки соединения")
+                completion(
+                    false,
+                    AMRLocalization.tr(
+                        "🟠 Enter the amplifier IP address to test connection",
+                        "🟠 Укажите IP-адрес усилителя для проверки соединения"
+                    )
+                )
             }
             return
         }
         let validPort = port > 0 ? port : profile.defaultPort
         guard let nwPort = NWEndpoint.Port(rawValue: validPort) else {
             DispatchQueue.main.async {
-                completion(false, "❌ Некорректный TCP-порт: \(validPort)")
+                completion(
+                    false,
+                    AMRLocalization.tr(
+                        "❌ Invalid TCP port: \(validPort)",
+                        "❌ Некорректный TCP-порт: \(validPort)"
+                    )
+                )
             }
             return
         }
@@ -117,9 +129,21 @@ extension ExternalAmpTCPController {
                 }
                 if let vol = state.detectedVolume {
                     let muteStr = (state.detectedMute == true) ? " • MUTE" : ""
-                    finish(true, "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) ответил • Громкость: \(vol)%\(muteStr)")
+                    finish(
+                        true,
+                        AMRLocalization.tr(
+                            "✅ Connected: \(profile.displayName) (\(trimmedHost):\(validPort)) replied • Volume: \(vol)%\(muteStr)",
+                            "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) ответил • Громкость: \(vol)%\(muteStr)"
+                        )
+                    )
                 } else if isComplete || error != nil {
-                    finish(true, "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) доступен по TCP")
+                    finish(
+                        true,
+                        AMRLocalization.tr(
+                            "✅ Connected: \(profile.displayName) (\(trimmedHost):\(validPort)) reachable via TCP",
+                            "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) доступен по TCP"
+                        )
+                    )
                 } else {
                     receiveNextProbeChunk()
                 }
@@ -129,9 +153,21 @@ extension ExternalAmpTCPController {
         probeQueue.asyncAfter(deadline: .now() + 3.2) {
             guard !state.completed else { return }
             if state.tcpConnected {
-                finish(true, "✅ TCP-сокет доступен: \(profile.displayName) (\(trimmedHost):\(validPort)) подключен")
+                finish(
+                    true,
+                    AMRLocalization.tr(
+                        "✅ TCP socket reachable: \(profile.displayName) (\(trimmedHost):\(validPort)) connected",
+                        "✅ TCP-сокет доступен: \(profile.displayName) (\(trimmedHost):\(validPort)) подключен"
+                    )
+                )
             } else {
-                finish(false, "❌ Таймаут подключения к \(profile.displayName) (\(trimmedHost):\(validPort)) — проверьте IP, порт и сеть")
+                finish(
+                    false,
+                    AMRLocalization.tr(
+                        "❌ Connection timeout to \(profile.displayName) (\(trimmedHost):\(validPort)) — check IP, port, and network",
+                        "❌ Таймаут подключения к \(profile.displayName) (\(trimmedHost):\(validPort)) — проверьте IP, порт и сеть"
+                    )
+                )
             }
         }
 
@@ -148,14 +184,32 @@ extension ExternalAmpTCPController {
                     guard !state.completed else { return }
                     if let vol = state.detectedVolume {
                         let muteStr = (state.detectedMute == true) ? " • MUTE" : ""
-                        finish(true, "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) ответил • Громкость: \(vol)%\(muteStr)")
+                        finish(
+                            true,
+                            AMRLocalization.tr(
+                                "✅ Connected: \(profile.displayName) (\(trimmedHost):\(validPort)) replied • Volume: \(vol)%\(muteStr)",
+                                "✅ Соединение установлено: \(profile.displayName) (\(trimmedHost):\(validPort)) ответил • Громкость: \(vol)%\(muteStr)"
+                            )
+                        )
                     } else {
-                        finish(true, "✅ TCP-сокет доступен: \(profile.displayName) (\(trimmedHost):\(validPort)) подключен")
+                        finish(
+                            true,
+                            AMRLocalization.tr(
+                                "✅ TCP socket reachable: \(profile.displayName) (\(trimmedHost):\(validPort)) connected",
+                                "✅ TCP-сокет доступен: \(profile.displayName) (\(trimmedHost):\(validPort)) подключен"
+                            )
+                        )
                     }
                 }
 
             case .failed(let error):
-                finish(false, "❌ Ошибка подключения к \(trimmedHost):\(validPort): \(error.localizedDescription)")
+                finish(
+                    false,
+                    AMRLocalization.tr(
+                        "❌ Connection error to \(trimmedHost):\(validPort): \(error.localizedDescription)",
+                        "❌ Ошибка подключения к \(trimmedHost):\(validPort): \(error.localizedDescription)"
+                    )
+                )
 
             default:
                 break
@@ -210,7 +264,7 @@ extension ExternalAmpTCPController {
 
     internal func connectOnQueue(host: String, port: UInt16) {
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
-            lock.withLock { _lastError = "Некорректный порт \(port)" }
+            lock.withLock { _lastError = AMRLocalization.tr("Invalid port \(port)", "Некорректный порт \(port)") }
             notifyStateChanged()
             return
         }

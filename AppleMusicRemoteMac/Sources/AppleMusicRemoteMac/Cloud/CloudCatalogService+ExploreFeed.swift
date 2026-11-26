@@ -70,13 +70,13 @@ extension CloudCatalogService {
         var stations = getCuratedStations(country: c)
 
         let genres: [[String: String]] = [
-            ["name": "🔥 Поп-музыка", "query": "Pop Hits", "color": "linear-gradient(135deg, #fa2d48, #ff6b8b)"],
-            ["name": "🎸 Рок & Альтернатива", "query": "Rock Classics", "color": "linear-gradient(135deg, #e65100, #ff9800)"],
-            ["name": "🎤 Хип-хоп & Рэп", "query": "Hip Hop", "color": "linear-gradient(135deg, #4a148c, #7b1fa2)"],
-            ["name": "⚡ Электроника & Dance", "query": "Dance Electronic", "color": "linear-gradient(135deg, #00695c, #00bfa5)"],
+            ["name": isRu ? "🔥 Поп-музыка" : "🔥 Pop Music", "query": "Pop Hits", "color": "linear-gradient(135deg, #fa2d48, #ff6b8b)"],
+            ["name": isRu ? "🎸 Рок & Альтернатива" : "🎸 Rock & Alternative", "query": "Rock Classics", "color": "linear-gradient(135deg, #e65100, #ff9800)"],
+            ["name": isRu ? "🎤 Хип-хоп & Рэп" : "🎤 Hip-Hop & Rap", "query": "Hip Hop", "color": "linear-gradient(135deg, #4a148c, #7b1fa2)"],
+            ["name": isRu ? "⚡ Электроника & Dance" : "⚡ Electronic & Dance", "query": "Dance Electronic", "color": "linear-gradient(135deg, #00695c, #00bfa5)"],
             ["name": "☕ Chill & Lo-Fi", "query": "Chill Beats", "color": "linear-gradient(135deg, #1565c0, #42a5f5)"],
-            ["name": "🎻 Неоклассика", "query": "Neoclassical", "color": "linear-gradient(135deg, #37474f, #78909c)"],
-            ["name": "🎬 Саундтреки", "query": "Soundtrack Movie", "color": "linear-gradient(135deg, #880e4f, #d81b60)"]
+            ["name": isRu ? "🎻 Неоклассика" : "🎻 Neoclassical", "query": "Neoclassical", "color": "linear-gradient(135deg, #37474f, #78909c)"],
+            ["name": isRu ? "🎬 Саундтреки" : "🎬 Soundtracks", "query": "Soundtrack Movie", "color": "linear-gradient(135deg, #880e4f, #d81b60)"]
         ]
 
         let charts: (songs: [[String: Any]], albums: [[String: Any]]) = await withTaskGroup(of: (songs: [[String: Any]], albums: [[String: Any]]).self) { group in
@@ -455,14 +455,16 @@ extension CloudCatalogService {
             for pl in libraryPlaylists.prefix(2) {
                 let enc = pl.name.amrQueryValueEncoded
                 let art = pl.artworkUrl ?? "/api/artwork/playlist?name=\(enc)"
-                let countStr = "\(pl.trackCount) треков"
+                let countStr = isRu
+                    ? "\(pl.trackCount) треков"
+                    : "\(pl.trackCount) \(pl.trackCount == 1 ? "track" : "tracks")"
                 heroCards.append([
                     "index": heroCards.count + 1,
                     "title": pl.name,
                     "name": pl.name,
                     "subtitle": countStr,
                     "sub": countStr,
-                    "tag": "Плейлист медиатеки",
+                    "tag": isRu ? "Плейлист медиатеки" : "Library Playlist",
                     "id": pl.name,
                     "type": "playlist",
                     "url": "",
@@ -485,7 +487,7 @@ extension CloudCatalogService {
                     "name": aName,
                     "subtitle": aArtist,
                     "sub": aArtist,
-                    "tag": "Топ-альбом",
+                    "tag": isRu ? "Топ-альбом" : "Top Album",
                     "id": aId,
                     "type": "album",
                     "url": aUrl,

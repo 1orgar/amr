@@ -23,7 +23,7 @@
 
     const isGenericPl = !playlistName || playlistName === 'Музыка' || playlistName === 'Music' || playlistName === 'Apple Music' || playlistName === 'Очередь';
     const plPrefix = (!isGenericPl && playlistName !== 'Очередь AMR')
-      ? `${playlistName} · `
+      ? `${translateTextToEn(playlistName)} · `
       : (playlistName === 'Очередь AMR' ? (IS_EN ? 'AMR Queue · ' : 'Очередь AMR · ') : '');
     if (IS_EN) {
       dom.queueSubtitle.textContent = history.length > 0

@@ -246,7 +246,10 @@ public final class AccountHealthService: @unchecked Sendable {
                 isTokenValid: false,
                 isTokenExpired: true,
                 isAccountsMatched: false,
-                message: "Срок действия встроенного MusicKit Developer JWT истек. Обновите приложение или поместите актуальный ключ AuthKey_MJHWRCSZHH.p8 в ~/Library/Application Support/AppleMusicRemoteMac/Keys/.",
+                message: AMRLocalization.tr(
+                    "Built-in MusicKit Developer JWT has expired. Update the app or place a valid AuthKey_MJHWRCSZHH.p8 in ~/Library/Application Support/AppleMusicRemoteMac/Keys/.",
+                    "Срок действия встроенного MusicKit Developer JWT истек. Обновите приложение или поместите актуальный ключ AuthKey_MJHWRCSZHH.p8 в ~/Library/Application Support/AppleMusicRemoteMac/Keys/."
+                ),
                 checkedAt: Date()
             )
             updateCache(status)
@@ -266,7 +269,10 @@ public final class AccountHealthService: @unchecked Sendable {
                 isTokenValid: false,
                 isTokenExpired: false,
                 isAccountsMatched: false,
-                message: "Web UI не авторизован в Apple ID. Выполните вход через карточку на главной странице.",
+                message: AMRLocalization.tr(
+                    "Web UI is not signed in to Apple ID. Sign in using the card on the Home screen.",
+                    "Web UI не авторизован в Apple ID. Выполните вход через карточку на главной странице."
+                ),
                 checkedAt: Date()
             )
             updateCache(status)
@@ -287,7 +293,10 @@ public final class AccountHealthService: @unchecked Sendable {
                 isTokenValid: false,
                 isTokenExpired: true,
                 isAccountsMatched: false,
-                message: "Срок действия сессии Apple ID в браузере истек.",
+                message: AMRLocalization.tr(
+                    "Apple ID browser session has expired.",
+                    "Срок действия сессии Apple ID в браузере истек."
+                ),
                 checkedAt: Date()
             )
             updateCache(status)
@@ -307,7 +316,10 @@ public final class AccountHealthService: @unchecked Sendable {
                 isTokenValid: true,
                 isTokenExpired: false,
                 isAccountsMatched: true,
-                message: "Учетная запись Apple ID активна (онлайн-проверка отложена).",
+                message: AMRLocalization.tr(
+                    "Apple ID account is active (online check deferred).",
+                    "Учетная запись Apple ID активна (онлайн-проверка отложена)."
+                ),
                 checkedAt: Date()
             )
             updateCache(status)
@@ -326,7 +338,10 @@ public final class AccountHealthService: @unchecked Sendable {
                 isTokenValid: false,
                 isTokenExpired: false,
                 isAccountsMatched: false,
-                message: "Не удалось верифицировать токен Apple ID.",
+                message: AMRLocalization.tr(
+                    "Failed to verify Apple ID token.",
+                    "Не удалось верифицировать токен Apple ID."
+                ),
                 checkedAt: Date()
             )
             updateCache(status)
@@ -348,7 +363,10 @@ public final class AccountHealthService: @unchecked Sendable {
                     isTokenValid: true,
                     isTokenExpired: false,
                     isAccountsMatched: false,
-                    message: "Несовпадение регионов: Mac (\(macCountry.uppercased())) и Web (\(webSf.uppercased())).",
+                    message: AMRLocalization.tr(
+                        "Storefront mismatch: Mac (\(macCountry.uppercased())) vs Web (\(webSf.uppercased())).",
+                        "Несовпадение регионов: Mac (\(macCountry.uppercased())) и Web (\(webSf.uppercased()))."
+                    ),
                     checkedAt: Date()
                 )
                 updateCache(status)
@@ -361,8 +379,14 @@ public final class AccountHealthService: @unchecked Sendable {
 
         let overallStatus = fingerprintMatched ? "synchronized" : "mismatch"
         let msg = fingerprintMatched
-            ? "Учетная запись Apple ID полностью синхронизирована с Mac."
-            : "Медиатека в браузере отличается от медиатеки Music.app на Mac."
+            ? AMRLocalization.tr(
+                "Apple ID account is fully synchronized with Mac.",
+                "Учетная запись Apple ID полностью синхронизирована с Mac."
+            )
+            : AMRLocalization.tr(
+                "Browser library differs from Music.app library on Mac.",
+                "Медиатека в браузере отличается от медиатеки Music.app на Mac."
+            )
 
         let status = AccountHealthStatus(
             status: overallStatus,

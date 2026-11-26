@@ -328,4 +328,140 @@ final class BitPerfectLogMonitorFullTests: XCTestCase {
         monitor.resetTrackStateSyncForTesting(trackKey: "mindaryn:like flames")
         XCTAssertNil(PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.scheduledSmartTransitionStart })
     }
+
+    func testBitPerfectAutomaticallyDisablesAndRestoresMusicAppSmartTransitions() {
+        let monitor = BitPerfectLogMonitor.shared
+        let prevEnabled = monitor.isEnabled
+        var simulatedMusicTransitionsEnabled: Bool? = true
+        var writeHistory: [Bool] = []
+
+        AppStorageProvider.shared.removeObject(forKey: "BitPerfectSavedMusicTransitionsEnabled")
+        monitor.musicTransitionsPrefAccessorForTesting = (
+            read: { simulatedMusicTransitionsEnabled },
+            write: { newVal in
+                simulatedMusicTransitionsEnabled = newVal
+                writeHistory.append(newVal)
+            }
+        )
+        defer {
+            monitor.musicTransitionsPrefAccessorForTesting = nil
+            AppStorageProvider.shared.removeObject(forKey: "BitPerfectSavedMusicTransitionsEnabled")
+            monitor.isEnabled = prevEnabled
+        }
+
+        // 1. Turning Bit-Perfect ON when Music.app has Smart Transition ON -> disables it and remembers previous state
+        monitor.isEnabled = true
+        XCTAssertEqual(simulatedMusicTransitionsEnabled, false)
+        XCTAssertEqual(writeHistory, [false])
+        XCTAssertTrue(AppStorageProvider.shared.bool(forKey: "BitPerfectSavedMusicTransitionsEnabled"))
+
+        // 2. Turning Bit-Perfect OFF -> restores Music.app Smart Transition back to ON
+        monitor.isEnabled = false
+        XCTAssertEqual(simulatedMusicTransitionsEnabled, true)
+        XCTAssertEqual(writeHistory, [false, true])
+        XCTAssertFalse(AppStorageProvider.shared.bool(forKey: "BitPerfectSavedMusicTransitionsEnabled"))
+
+        // 3. When user ALREADY had Smart Transition OFF before enabling Bit-Perfect, turning Bit-Perfect OFF leaves it OFF
+        simulatedMusicTransitionsEnabled = false
+        writeHistory.removeAll()
+        monitor.isEnabled = true
+        XCTAssertEqual(simulatedMusicTransitionsEnabled, false)
+        XCTAssertEqual(writeHistory, [])
+        monitor.isEnabled = false
+        XCTAssertEqual(simulatedMusicTransitionsEnabled, false)
+        XCTAssertEqual(writeHistory, [])
+
+        // 4. While Bit-Perfect is ON, if Music.app manually re-enables Smart Transition and logs overlapStartSourceTime,
+        //    BitPerfectLogMonitor immediately forces TransitionsEnabled back to false!
+        monitor.isEnabled = true
+        simulatedMusicTransitionsEnabled = true
+        writeHistory.removeAll()
+        monitor.processLogMessageForTesting("[MediaPlaybackCore] overlapStartSourceTime: 166.51")
+        XCTAssertEqual(simulatedMusicTransitionsEnabled, false)
+        XCTAssertEqual(writeHistory, [false])
+    }
+
+    func testSameFormatGaplessPrebufferPreservesLosslessLockAcrossTrackTransition() {
+        let monitor = BitPerfectLogMonitor.shared
+        monitor.resetTrackStateSyncForTesting()
+
+        // 1. Track 1 locks at 44.1 kHz / 16-bit ALAC
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:251   Input format:  2 ch,  44100 Hz, alac (0x00000001) from 16-bit source, 4096 frames/packet")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 44100.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 16)
+        XCTAssertTrue(monitor.currentIsLossless)
+
+        // 2. Simulate 20s before EOF (elapsed > 5.0s): Music.app gaplessly pre-buffers Track 2, ALSO 44.1 kHz / 16-bit ALAC
+        monitor.queue.sync {
+            monitor.lockTimestamp = Date().addingTimeInterval(-140.0)
+        }
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:251   Input format:  2 ch,  44100 Hz, alac (0x00000001) from 16-bit source, 4096 frames/packet")
+        XCTAssertNotNil(monitor.pendingNextTrackFormat, "Same-format gapless pre-buffer after 5s must be buffered for Track 2")
+
+        // 3. At 0:00 of Track 2, resetTrackState applies the pre-buffered 44.1 kHz / 16-bit ALAC lock immediately (never drops to AAC!)
+        monitor.resetTrackStateSyncForTesting(trackKey: "artist:track two")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 44100.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 16)
+        XCTAssertTrue(monitor.currentIsLossless)
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+    }
+
+    func testMetallicaSearchEditionsAndPrevNextTeardownDoNotCrossPoisonRates() {
+        let monitor = BitPerfectLogMonitor.shared
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isUserPaused = false
+            PlaybackStateStore.shared.lastSeekCommandTime = .distantPast
+        }
+        defer {
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.isUserPaused = false
+                PlaybackStateStore.shared.lastSeekCommandTime = .distantPast
+            }
+        }
+
+        // 1. Enter Sandman (Black Album Remastered, cid=1572046436) -> 44.1 kHz / 24-bit
+        monitor.resetTrackStateSyncForTesting(trackKey: "metallica:enter sandman", catalogId: "1572046436")
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   Input format:  2 ch,  44100 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 44100.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+        XCTAssertEqual(monitor.getCachedFormat(artist: "Metallica", title: "Enter Sandman", catalogId: "1572046436")?.sampleRate, 44100.0)
+
+        // 2. Different search edition of "Enter Sandman" (e.g. cid=1999999999) must NOT collide with cid=1572046436!
+        XCTAssertNil(monitor.getCachedFormat(artist: "Metallica", title: "Enter Sandman", catalogId: "1999999999"))
+
+        // 3. User presses Next -> Fade to Black (cid=579149037, real 96.0 kHz / 24-bit):
+        //    Dying Enter Sandman teardown log (44.1 kHz) BEFORE endExplicitTrackSwitch MUST be ignored!
+        monitor.beginExplicitTrackSwitch()
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   Input format:  2 ch,  44100 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertFalse(monitor.isFormatLockedForCurrentTrack, "Teardown log during queue staging must never lock")
+
+        monitor.endExplicitTrackSwitch(trackKey: "metallica:fade to black", catalogId: "579149037")
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   Input format:  2 ch,  96000 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 96000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+        XCTAssertEqual(monitor.getCachedFormat(artist: "Metallica", title: "Fade to Black", catalogId: "579149037")?.sampleRate, 96000.0)
+
+        // 4. Self-healing PreInspectedTrackFormat: even if Nothing Else Matters (cid=1572046444) started with a stale 96.0 kHz prediction,
+        //    live ACAppleLosslessDecoder (44.1 kHz / 24-bit) within 12s MUST override to 44.1 kHz and NEVER pollute pendingNextTrackFormat!
+        monitor.resetTrackStateSyncForTesting(
+            trackKey: "metallica:nothing else matters",
+            catalogId: "1572046444",
+            expectedSampleRate: 96000.0,
+            expectedBitDepth: 24
+        )
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 96000.0)
+        XCTAssertFalse(monitor.isAuthoritativelyLocked)
+
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   Input format:  2 ch,  44100 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 44100.0, "Live ACAppleLosslessDecoder must self-heal stale pre-inspected sample rate")
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+        XCTAssertNil(monitor.pendingNextTrackFormat, "Live current-track decoder must never be mistaken for next-track prebuffer")
+        XCTAssertEqual(monitor.getCachedFormat(artist: "Metallica", title: "Nothing Else Matters", catalogId: "1572046444")?.sampleRate, 44100.0)
+
+        // 5. Seeking within a track must NOT store post-seek decoder recreation as pendingNextTrackFormat
+        PlaybackStateStore.shared.setSeekTarget(position: 45.0)
+        PlaybackStateStore.shared.clearSeekTarget()
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   Input format:  2 ch,  44100 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertNil(monitor.pendingNextTrackFormat, "Post-seek decoder flush must never pollute pendingNextTrackFormat")
+    }
 }

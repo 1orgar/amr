@@ -85,125 +85,140 @@ public final class DSPPresetManager: @unchecked Sendable {
     }()
 
     /// Заводские эталонные пресеты для основных сценариев и типов ЦАП/DDC.
-    public static let builtInPresets: [DSPPreset] = [
-        DSPPreset(
-            id: "builtin_passthrough",
-            name: "Bit-Perfect Passthrough (Выкл)",
-            subtitle: "Прямая побитовая передача PCM без оверсэмплинга и модуляции",
-            isBuiltIn: true,
-            configuration: EngineConfiguration(mode: .bitPerfectPassthrough)
-        ),
-        DSPPreset(
-            id: "builtin_dsd256_sacd",
-            name: "SACD Эталон (DSD256 • 7EC-Balanced)",
-            subtitle: "DoP 705.6 кГц • Trellis M=8 • AMX Min-Phase • ISI • Референсный баланс",
-            isBuiltIn: true,
-            configuration: EngineConfiguration(
-                mode: .sdmDoP,
-                profile: .balanced,
-                dsdRate: .dsd256,
-                maxNOSPCMRateHz: 768_000,
-                clockPolicy: .strictSACD44k1,
-                oversamplerBackend: .accelerateAMX,
-                phaseMode: .minimumPhase,
-                trellisOrder: .m8,
-                isiRegularizerEnabled: true,
-                headroomDB: -3.5,
-                ispProtectionEnabled: true,
-                nosDitherMode: .lns15,
-                chunkDurationMs: 40,
-                hogModeEnabled: true
+    public static var builtInPresets: [DSPPreset] {
+        let isEn = AMRLocalization.isEnglish
+        return [
+            DSPPreset(
+                id: "builtin_passthrough",
+                name: isEn ? "Bit-Perfect Passthrough (Off)" : "Bit-Perfect Passthrough (Выкл)",
+                subtitle: isEn
+                    ? "Direct bit-exact PCM transfer without oversampling or modulation"
+                    : "Прямая побитовая передача PCM без оверсэмплинга и модуляции",
+                isBuiltIn: true,
+                configuration: EngineConfiguration(mode: .bitPerfectPassthrough)
+            ),
+            DSPPreset(
+                id: "builtin_dsd256_sacd",
+                name: isEn ? "SACD Reference (DSD256 • 7EC-Balanced)" : "SACD Эталон (DSD256 • 7EC-Balanced)",
+                subtitle: isEn
+                    ? "DoP 705.6 kHz • Trellis M=8 • AMX Min-Phase • ISI • Reference balance"
+                    : "DoP 705.6 кГц • Trellis M=8 • AMX Min-Phase • ISI • Референсный баланс",
+                isBuiltIn: true,
+                configuration: EngineConfiguration(
+                    mode: .sdmDoP,
+                    profile: .balanced,
+                    dsdRate: .dsd256,
+                    maxNOSPCMRateHz: 768_000,
+                    clockPolicy: .strictSACD44k1,
+                    oversamplerBackend: .accelerateAMX,
+                    phaseMode: .minimumPhase,
+                    trellisOrder: .m8,
+                    isiRegularizerEnabled: true,
+                    headroomDB: -3.5,
+                    ispProtectionEnabled: true,
+                    nosDitherMode: .lns15,
+                    chunkDurationMs: 40,
+                    hogModeEnabled: true
+                )
+            ),
+            DSPPreset(
+                id: "builtin_dsd256_super_metal",
+                name: isEn ? "Max Stage & Air (DSD256 • 7EC-Super • Metal)" : "Макс. сцена и воздух (DSD256 • 7EC-Super • Metal)",
+                subtitle: isEn
+                    ? "DoP 705.6 kHz • Trellis M=16 • Metal GPU Sinc-M (262k) • Deep soundstage"
+                    : "DoP 705.6 кГц • Trellis M=16 • Metal GPU Sinc-M (262k) • Глубокая сцена",
+                isBuiltIn: true,
+                configuration: EngineConfiguration(
+                    mode: .sdmDoP,
+                    profile: .superWide,
+                    dsdRate: .dsd256,
+                    maxNOSPCMRateHz: 768_000,
+                    clockPolicy: .strictSACD44k1,
+                    oversamplerBackend: .metalOverlapSave,
+                    phaseMode: .linearPhase,
+                    trellisOrder: .m16,
+                    isiRegularizerEnabled: true,
+                    headroomDB: -3.5,
+                    ispProtectionEnabled: true,
+                    nosDitherMode: .lns15,
+                    chunkDurationMs: 40,
+                    hogModeEnabled: true
+                )
+            ),
+            DSPPreset(
+                id: "builtin_dsd128_transient",
+                name: isEn ? "Attack & Drive (DSD128 • 7EC-Transient)" : "Атака и драйв (DSD128 • 7EC-Transient)",
+                subtitle: isEn
+                    ? "DoP 352.8 kHz • OBG 1.38 • Pre-ring-free Min-Phase • Rock & metal punch"
+                    : "DoP 352.8 кГц • OBG 1.38 • Min-Phase без предзвона • Панч для рока и метала",
+                isBuiltIn: true,
+                configuration: EngineConfiguration(
+                    mode: .sdmDoP,
+                    profile: .transient,
+                    dsdRate: .dsd128,
+                    maxNOSPCMRateHz: 768_000,
+                    clockPolicy: .strictSACD44k1,
+                    oversamplerBackend: .accelerateAMX,
+                    phaseMode: .minimumPhase,
+                    trellisOrder: .m8,
+                    isiRegularizerEnabled: true,
+                    headroomDB: -3.0,
+                    ispProtectionEnabled: true,
+                    nosDitherMode: .lns15,
+                    chunkDurationMs: 40,
+                    hogModeEnabled: true
+                )
+            ),
+            DSPPreset(
+                id: "builtin_dsd64_spdif",
+                name: isEn ? "Optical / Coaxial S/PDIF (DSD64 DoP)" : "Оптика / Коаксиал S/PDIF (DSD64 DoP)",
+                subtitle: isEn
+                    ? "DoP 176.4 kHz / 24-bit • Compatible with S/PDIF & classic DACs"
+                    : "DoP 176.4 кГц / 24-bit • Совместимость с S/PDIF и классическими ЦАП",
+                isBuiltIn: true,
+                configuration: EngineConfiguration(
+                    mode: .sdmDoP,
+                    profile: .balanced,
+                    dsdRate: .dsd64,
+                    maxNOSPCMRateHz: 768_000,
+                    clockPolicy: .strictSACD44k1,
+                    oversamplerBackend: .accelerateAMX,
+                    phaseMode: .minimumPhase,
+                    trellisOrder: .m8,
+                    isiRegularizerEnabled: true,
+                    headroomDB: -3.5,
+                    ispProtectionEnabled: true,
+                    nosDitherMode: .lns15,
+                    chunkDurationMs: 40,
+                    hogModeEnabled: true
+                )
+            ),
+            DSPPreset(
+                id: "builtin_hq_nos_r2r",
+                name: isEn ? "Multibit / R2R (HQ PCM NOS • LNS15)" : "Мультибит / R2R (HQ PCM NOS • LNS15)",
+                subtitle: isEn
+                    ? "PCM 705.6/768 kHz bypassing DAC digital filter • Metal Linear-Phase • 15th-order shaper"
+                    : "PCM 705.6/768 кГц в обход ЦФ ЦАП • Metal Linear-Phase • Шейпер 15-го порядка",
+                isBuiltIn: true,
+                configuration: EngineConfiguration(
+                    mode: .hqNOSPCM,
+                    profile: .balanced,
+                    dsdRate: .dsd256,
+                    maxNOSPCMRateHz: 768_000,
+                    clockPolicy: .adaptiveDualGrid,
+                    oversamplerBackend: .metalOverlapSave,
+                    phaseMode: .linearPhase,
+                    trellisOrder: .m8,
+                    isiRegularizerEnabled: true,
+                    headroomDB: -3.0,
+                    ispProtectionEnabled: true,
+                    nosDitherMode: .lns15,
+                    chunkDurationMs: 40,
+                    hogModeEnabled: true
+                )
             )
-        ),
-        DSPPreset(
-            id: "builtin_dsd256_super_metal",
-            name: "Макс. сцена и воздух (DSD256 • 7EC-Super • Metal)",
-            subtitle: "DoP 705.6 кГц • Trellis M=16 • Metal GPU Sinc-M (262k) • Глубокая сцена",
-            isBuiltIn: true,
-            configuration: EngineConfiguration(
-                mode: .sdmDoP,
-                profile: .superWide,
-                dsdRate: .dsd256,
-                maxNOSPCMRateHz: 768_000,
-                clockPolicy: .strictSACD44k1,
-                oversamplerBackend: .metalOverlapSave,
-                phaseMode: .linearPhase,
-                trellisOrder: .m16,
-                isiRegularizerEnabled: true,
-                headroomDB: -3.5,
-                ispProtectionEnabled: true,
-                nosDitherMode: .lns15,
-                chunkDurationMs: 40,
-                hogModeEnabled: true
-            )
-        ),
-        DSPPreset(
-            id: "builtin_dsd128_transient",
-            name: "Атака и драйв (DSD128 • 7EC-Transient)",
-            subtitle: "DoP 352.8 кГц • OBG 1.38 • Min-Phase без предзвона • Панч для рока и метала",
-            isBuiltIn: true,
-            configuration: EngineConfiguration(
-                mode: .sdmDoP,
-                profile: .transient,
-                dsdRate: .dsd128,
-                maxNOSPCMRateHz: 768_000,
-                clockPolicy: .strictSACD44k1,
-                oversamplerBackend: .accelerateAMX,
-                phaseMode: .minimumPhase,
-                trellisOrder: .m8,
-                isiRegularizerEnabled: true,
-                headroomDB: -3.0,
-                ispProtectionEnabled: true,
-                nosDitherMode: .lns15,
-                chunkDurationMs: 40,
-                hogModeEnabled: true
-            )
-        ),
-        DSPPreset(
-            id: "builtin_dsd64_spdif",
-            name: "Оптика / Коаксиал S/PDIF (DSD64 DoP)",
-            subtitle: "DoP 176.4 кГц / 24-bit • Совместимость с S/PDIF и классическими ЦАП",
-            isBuiltIn: true,
-            configuration: EngineConfiguration(
-                mode: .sdmDoP,
-                profile: .balanced,
-                dsdRate: .dsd64,
-                maxNOSPCMRateHz: 768_000,
-                clockPolicy: .strictSACD44k1,
-                oversamplerBackend: .accelerateAMX,
-                phaseMode: .minimumPhase,
-                trellisOrder: .m8,
-                isiRegularizerEnabled: true,
-                headroomDB: -3.5,
-                ispProtectionEnabled: true,
-                nosDitherMode: .lns15,
-                chunkDurationMs: 40,
-                hogModeEnabled: true
-            )
-        ),
-        DSPPreset(
-            id: "builtin_hq_nos_r2r",
-            name: "Мультибит / R2R (HQ PCM NOS • LNS15)",
-            subtitle: "PCM 705.6/768 кГц в обход ЦФ ЦАП • Metal Linear-Phase • Шейпер 15-го порядка",
-            isBuiltIn: true,
-            configuration: EngineConfiguration(
-                mode: .hqNOSPCM,
-                profile: .balanced,
-                dsdRate: .dsd256,
-                maxNOSPCMRateHz: 768_000,
-                clockPolicy: .adaptiveDualGrid,
-                oversamplerBackend: .metalOverlapSave,
-                phaseMode: .linearPhase,
-                trellisOrder: .m8,
-                isiRegularizerEnabled: true,
-                headroomDB: -3.0,
-                ispProtectionEnabled: true,
-                nosDitherMode: .lns15,
-                chunkDurationMs: 40,
-                hogModeEnabled: true
-            )
-        )
-    ]
+        ]
+    }
 
     private let lock = NSLock()
     private var _customPresets: [DSPPreset]
@@ -319,6 +334,7 @@ public final class DSPPresetManager: @unchecked Sendable {
 
     /// Формирует краткое описание параметров для автоподзаголовка пользовательского пресета.
     public static func summarizeConfiguration(_ cfg: EngineConfiguration) -> String {
+        let isEn = AMRLocalization.isEnglish
         switch cfg.mode {
         case .bitPerfectPassthrough:
             return "Bit-Perfect PCM Passthrough"
@@ -327,7 +343,7 @@ public final class DSPPresetManager: @unchecked Sendable {
                 ? "Metal Sinc-M"
                 : (cfg.phaseMode == .minimumPhase ? "AMX Min-Phase" : "AMX Lin-Phase")
             return String(
-                format: "DSD%d • %@ • M=%d • %@ • %.1f дБ",
+                format: isEn ? "DSD%d • %@ • M=%d • %@ • %.1f dB" : "DSD%d • %@ • M=%d • %@ • %.1f дБ",
                 cfg.dsdRate.rawValue,
                 cfg.profile.displayName,
                 cfg.trellisOrder.rawValue,
@@ -337,7 +353,9 @@ public final class DSPPresetManager: @unchecked Sendable {
         case .hqNOSPCM:
             let khz = cfg.maxNOSPCMRateHz / 1000
             let osStr = (cfg.oversamplerBackend == .metalOverlapSave) ? "Metal Sinc-M" : "AMX FP64"
-            return "HQ NOS PCM \(khz) кГц • \(cfg.nosDitherMode.displayName) • \(osStr)"
+            return isEn
+                ? "HQ NOS PCM \(khz) kHz • \(cfg.nosDitherMode.displayName) • \(osStr)"
+                : "HQ NOS PCM \(khz) кГц • \(cfg.nosDitherMode.displayName) • \(osStr)"
         }
     }
 
@@ -367,7 +385,8 @@ public final class DSPPresetManager: @unchecked Sendable {
         updatingPresetID: String? = nil
     ) -> DSPPreset {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let safeName = trimmedName.isEmpty ? "Мой пресет DSP" : String(trimmedName.prefix(64))
+        let defaultPresetName = AMRLocalization.tr("My DSP Preset", "Мой пресет DSP")
+        let safeName = trimmedName.isEmpty ? defaultPresetName : String(trimmedName.prefix(64))
         var cleanCfg = configuration
         cleanCfg.targetDeviceUID = nil
         let resolvedSubtitle = {
@@ -567,7 +586,7 @@ public final class DSPPresetManager: @unchecked Sendable {
         } else {
             return (
                 Self.unsavedCustomPresetID,
-                "Пользовательский режим",
+                AMRLocalization.tr("Custom Mode", "Пользовательский режим"),
                 Self.summarizeConfiguration(config),
                 list
             )

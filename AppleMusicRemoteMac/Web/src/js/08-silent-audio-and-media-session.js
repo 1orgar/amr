@@ -29,10 +29,22 @@
   };
 
   const keepSilentAudioAliveForTrackSkip = () => {
-    if (silentAudioEl && silentAudioEl.paused && state.lockScreenControls && state.deviceAuthorized && state.playerState === 'playing') {
+    if (!isLockScreenAllowedNow()) return;
+    const el = initSilentAudio();
+    if (el && el.paused) {
       try {
-        const p = silentAudioEl.play();
-        if (p !== undefined) p.catch(() => {});
+        const p = el.play();
+        if (p !== undefined) {
+          p.then(() => {
+            silentAudioUnlocked = true;
+            setTimeout(() => {
+              const shouldPlay = state.playerState === 'playing' || Date.now() < (state.pendingPlayUntil || 0);
+              if (!shouldPlay && !el.paused) {
+                el.pause();
+              }
+            }, 1200);
+          }).catch(() => {});
+        }
       } catch (_) {}
     }
   };
@@ -85,32 +97,22 @@
     } catch (_) {}
   }
 
-  function setupMediaSession(forceFlush = true) {
-    if (!('mediaSession' in navigator)) return;
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
-      teardownMediaSessionAndSilentAudio();
-      return;
-    }
+  let mediaSessionCommandFlushTimer = null;
+  let mediaSessionFlushStopToggle = false;
 
-    ensureMediaSessionPlatformActive(state.playerState === 'playing');
-
+  function applyCoreMediaSessionActionHandlers(includeStopHandler) {
     allowAmrMediaSessionMutation = true;
     try {
       // Ensure WebKit RemoteCommandListenerCocoa registers ONLY Play, Pause, PreviousTrack,
-      // NextTrack, and SeekToPlaybackPosition — never defaultCommands() (±15s Skip/Rewind).
+      // NextTrack, and SeekToPlaybackPosition — never defaultCommands() (±15s SkipForward/SkipBackward).
       try { navigator.mediaSession.setActionHandler('seekbackward', null); } catch (e) {}
       try { navigator.mediaSession.setActionHandler('seekforward', null); } catch (e) {}
-      try { navigator.mediaSession.setActionHandler('stop', null); } catch (e) {}
-      if (forceFlush) {
-        try { navigator.mediaSession.setActionHandler('previoustrack', null); } catch (e) {}
-        try { navigator.mediaSession.setActionHandler('nexttrack', null); } catch (e) {}
-      }
       navigator.mediaSession.setActionHandler('play', msPlayHandler);
       navigator.mediaSession.setActionHandler('pause', msPauseHandler);
       navigator.mediaSession.setActionHandler('previoustrack', msPrevHandler);
       navigator.mediaSession.setActionHandler('nexttrack', msNextHandler);
       navigator.mediaSession.setActionHandler('seekto', msSeekToHandler);
-
+      try { navigator.mediaSession.setActionHandler('stop', includeStopHandler ? msStopHandler : null); } catch (e) {}
       mediaSessionHandlersBound = true;
     } catch (err) {
       console.warn('[MediaSession] Handler setup:', err);
@@ -119,9 +121,40 @@
     }
   }
 
+  function setupMediaSession(forceFlush = true) {
+    if (!('mediaSession' in navigator)) return;
+    if (!isLockScreenAllowedNow()) {
+      teardownMediaSessionAndSilentAudio();
+      return;
+    }
+
+    initSilentAudio();
+    ensureMediaSessionPlatformActive(state.playerState === 'playing');
+
+    if (forceFlush) {
+      // WebKit RemoteCommandListener.cpp:81 + RemoteRemoteCommandListener.cpp:92 coalesces synchronous
+      // remove+add within the same JS turn and early-returns if m_currentCommands == supportedCommands.
+      // Toggling StopCommand across two separate RunLoop turns forces UpdateSupportedCommands IPC to GPUProcess
+      // without ever dropping PreviousTrackCommand or NextTrackCommand for even a single frame.
+      mediaSessionFlushStopToggle = !mediaSessionFlushStopToggle;
+      applyCoreMediaSessionActionHandlers(mediaSessionFlushStopToggle);
+      if (mediaSessionCommandFlushTimer) {
+        clearTimeout(mediaSessionCommandFlushTimer);
+      }
+      mediaSessionCommandFlushTimer = setTimeout(() => {
+        mediaSessionCommandFlushTimer = null;
+        if (!('mediaSession' in navigator) || !isLockScreenAllowedNow()) return;
+        mediaSessionFlushStopToggle = false;
+        applyCoreMediaSessionActionHandlers(false);
+      }, 45);
+    } else {
+      applyCoreMediaSessionActionHandlers(false);
+    }
+  }
+
   function updateMediaSession() {
     if (!('mediaSession' in navigator)) return;
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
+    if (!isLockScreenAllowedNow()) {
       teardownMediaSessionAndSilentAudio();
       return;
     }
@@ -629,7 +662,9 @@
     state.lastSyncPerf = state.lastSyncTime;
     state.playerState = 'playing';
     state.playbackState = 'playing';
+    syncSilentAudio(true);
     renderNowPlaying();
+    updateMediaSession();
   }
 
   function togglePlayPause(e) {
@@ -639,8 +674,8 @@
     }
     triggerHaptic('medium');
     const isPlaying = state.playerState === 'playing';
-    syncSilentAudio(!isPlaying);
     if (isPlaying) {
+      syncSilentAudio(false);
       state.pendingPlayUntil = 0;
       state.isBuffering = false;
       state.isStagingBuffer = false;
@@ -654,6 +689,7 @@
       state.playerState = 'paused';
       state.playbackState = 'paused';
       renderNowPlaying();
+      updateMediaSession();
     } else {
       optimisticPlay();
     }

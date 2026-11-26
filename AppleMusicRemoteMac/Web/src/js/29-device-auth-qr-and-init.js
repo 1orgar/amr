@@ -57,11 +57,11 @@
       lockCheckbox.checked = boolVal;
     }
 
-    if (!boolVal || !state.deviceAuthorized) {
+    if (!boolVal || (state.deviceAuthChecked && !state.deviceAuthorized)) {
       teardownMediaSessionAndSilentAudio();
     } else {
       initSilentAudio();
-      setupMediaSession();
+      setupMediaSession(true);
       updateMediaSession();
       if (state.playerState === 'playing') {
         syncSilentAudio(true);
@@ -200,8 +200,10 @@
 
     if (typeof data.authorized === 'boolean') {
       state.deviceAuthorized = data.authorized;
+      state.deviceAuthChecked = true;
     } else if (typeof data.is_authorized === 'boolean') {
       state.deviceAuthorized = data.is_authorized;
+      state.deviceAuthChecked = true;
     }
 
     if (state.deviceAuthorized) {
@@ -231,7 +233,13 @@
 
     if (typeof data.lock_screen_controls === 'boolean') {
       applyLockScreenControlsSetting(data.lock_screen_controls, { syncServer: false, showFeedback: false });
-    } else if (!state.deviceAuthorized) {
+    } else if (state.deviceAuthorized) {
+      if (state.lockScreenControls) {
+        initSilentAudio();
+        setupMediaSession(true);
+        updateMediaSession();
+      }
+    } else {
       teardownMediaSessionAndSilentAudio();
     }
 
@@ -257,6 +265,14 @@
       send({ action: 'get_playlists' });
       send({ action: 'get_library_albums' });
       send({ action: 'get_account_status' });
+      state.librarySongsLoaded = false;
+      state.libraryArtistsLoaded = false;
+      if (state.libraryRecent) {
+        state.libraryRecent.loaded = false;
+      }
+      if (state.activeTab === 'library' && typeof switchLibrarySubtab === 'function') {
+        switchLibrarySubtab(state.libraryTab || 'recent', false);
+      }
 
       setTimeout(() => {
         if (state.connected && state.deviceAuthorized) {
@@ -500,80 +516,22 @@
     }
   }
 
-  // iOS Standalone WebClip Cold-Launch Viewport Repair (WKWebViewIOS.mm _setViewportFitEdges:)
-  // On cold Home Screen launch, WKWebView processes <meta name="viewport" viewport-fit=cover> while
-  // _shouldDeferGeometryUpdates is YES during SpringBoard's zoom animation, leaving fixed bottom: 0
-  // inset by 34pt until rotated. Re-committing viewport-fit=contain -> cover after launch settles
-  // invokes _dispatchSetViewLayoutSize & _scheduleVisibleContentRectUpdate without rotating.
-  const VIEWPORT_META_COVER = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-  const VIEWPORT_META_CONTAIN = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=contain';
-  let viewportRepairInFlight = false;
+  // Keep standalone shell geometry synchronized across BFCache restores and software keyboard dismissal
+  // without ever mutating <meta name="viewport"> (which causes startup screen jerks and touch-offset bugs).
+  syncStandaloneShellGeometry();
 
-  function isStandalonePwaMode() {
-    return Boolean(
-      window.navigator.standalone === true ||
-      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
-    );
-  }
-
-  function hasStandaloneColdPortraitGap() {
-    if (!isStandalonePwaMode()) return false;
-    if (document.body && document.body.classList.contains('keyboard-open')) return false;
-    const iw = window.innerWidth || 0;
-    const ih = window.innerHeight || 0;
-    if (ih <= iw) return false;
-    const sh = (window.screen && window.screen.height) ? window.screen.height : 0;
-    const sw = (window.screen && window.screen.width) ? window.screen.width : 0;
-    const portraitScreenH = Math.max(sh, sw);
-    if (!portraitScreenH) return false;
-    const gap = portraitScreenH - ih;
-    return gap >= 16 && gap <= 120;
-  }
-
-  function repairStandaloneColdLaunchViewport(forceToggle = false) {
-    if (!isStandalonePwaMode() || viewportRepairInFlight) return;
-    if (document.body && document.body.classList.contains('keyboard-open')) return;
-    const isPortrait = (window.innerHeight || 0) > (window.innerWidth || 0);
-    if (!isPortrait) return;
-    if (!forceToggle && !hasStandaloneColdPortraitGap()) return;
-
-    const meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) return;
-
-    viewportRepairInFlight = true;
-    meta.setAttribute('content', VIEWPORT_META_CONTAIN);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          meta.setAttribute('content', VIEWPORT_META_COVER);
-          try { window.scrollTo(0, 0); } catch (_) {}
-          viewportRepairInFlight = false;
-          lastViewportWidth = -1;
-          handleResize({ force: true });
-        }, 28);
-      });
-    });
-  }
-
-  function scheduleStandaloneColdLaunchRepairs() {
-    if (!isStandalonePwaMode()) return;
-    repairStandaloneColdLaunchViewport(false);
-    setTimeout(() => repairStandaloneColdLaunchViewport(true), 120);
-    setTimeout(() => repairStandaloneColdLaunchViewport(true), 380);
-    setTimeout(() => repairStandaloneColdLaunchViewport(false), 800);
-  }
-
-  window.addEventListener('load', () => {
-    if (isStandalonePwaMode()) {
-      setTimeout(() => repairStandaloneColdLaunchViewport(true), 60);
-      setTimeout(() => repairStandaloneColdLaunchViewport(false), 420);
-    }
+  window.addEventListener('pageshow', () => {
+    syncStandaloneShellGeometry();
   }, { passive: true });
 
-  window.addEventListener('pageshow', (e) => {
-    if (isStandalonePwaMode()) {
-      setTimeout(() => repairStandaloneColdLaunchViewport(Boolean(e && e.persisted)), 80);
-    }
+  document.addEventListener('focusout', () => {
+    if (!isStandalonePwaMode()) return;
+    setTimeout(() => {
+      syncStandaloneShellGeometry();
+      if (document.body && !document.body.classList.contains('keyboard-open') && window.scrollY !== 0) {
+        try { window.scrollTo(0, 0); } catch (_) {}
+      }
+    }, 80);
   }, { passive: true });
 
   // Initialize
@@ -589,8 +547,25 @@
   renderHomeStations(DEFAULT_STATIONS);
   renderHomeGenres(DEFAULT_GENRES);
   bindGenreCards();
+  renderVolumeUI();
+  if (!isDesktopLayout()) {
+    let cachedWasPlaying = true;
+    try {
+      const rawPlaying = localStorage.getItem('amr_last_was_playing');
+      if (rawPlaying !== null) {
+        cachedWasPlaying = (rawPlaying === 'true');
+      }
+    } catch (_) {}
+    if (!cachedWasPlaying) {
+      switchMobileView('view-home', true);
+    }
+  }
   handleResize({ force: true });
-  scheduleStandaloneColdLaunchRepairs();
+  requestAnimationFrame(() => {
+    if (document.body) {
+      document.body.classList.add('app-ready');
+    }
+  });
   recoverOrPersistDeviceUidBeforeConnect().finally(() => {
     connectWebSocket();
   });

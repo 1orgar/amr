@@ -18,8 +18,7 @@ public enum SettingsTab: Int, CaseIterable {
     case advanced = 6
 
     internal static var isEn: Bool {
-        let lang = Locale.preferredLanguages.first?.lowercased() ?? "ru"
-        return !lang.hasPrefix("ru")
+        AMRLocalization.isEnglish
     }
 
     private var isEn: Bool {

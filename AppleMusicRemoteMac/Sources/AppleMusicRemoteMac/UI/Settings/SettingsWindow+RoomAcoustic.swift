@@ -76,7 +76,10 @@ internal final class RoomAcousticChartView: NSView {
             plot.minX + (CGFloat(idx) / CGFloat(count - 1)) * plot.width
         }
 
-        let tickIndices: [(Int, String)] = [(0, "20 Гц"), (7, "100 Гц"), (17, "1 кГц"), (27, "10 кГц"), (min(count - 1, 30), "20 кГц")]
+        let chartIsEn = SettingsTab.isEn
+        let tickIndices: [(Int, String)] = chartIsEn
+            ? [(0, "20 Hz"), (7, "100 Hz"), (17, "1 kHz"), (27, "10 kHz"), (min(count - 1, 30), "20 kHz")]
+            : [(0, "20 Гц"), (7, "100 Гц"), (17, "1 кГц"), (27, "10 кГц"), (min(count - 1, 30), "20 кГц")]
         for (idx, title) in tickIndices where idx < count {
             let x = xForIndex(idx)
             let vPath = NSBezierPath()
@@ -113,11 +116,17 @@ internal final class RoomAcousticChartView: NSView {
             strokeCurve(prof.correctedResponseDB, NSColor.systemGreen, 2.2, false)
         }
 
-        let legendItems: [(String, NSColor)] = [
-            ("Целевая Harman", NSColor(calibratedRed: 0.62, green: 0.68, blue: 0.78, alpha: 0.95)),
-            ("Замер микрофона", NSColor.systemOrange),
-            ("С коррекцией Auto-PEQ", NSColor.systemGreen)
-        ]
+        let legendItems: [(String, NSColor)] = chartIsEn
+            ? [
+                ("Harman Target", NSColor(calibratedRed: 0.62, green: 0.68, blue: 0.78, alpha: 0.95)),
+                ("Mic Measurement", NSColor.systemOrange),
+                ("Auto-PEQ Corrected", NSColor.systemGreen)
+            ]
+            : [
+                ("Целевая Harman", NSColor(calibratedRed: 0.62, green: 0.68, blue: 0.78, alpha: 0.95)),
+                ("Замер микрофона", NSColor.systemOrange),
+                ("С коррекцией Auto-PEQ", NSColor.systemGreen)
+            ]
         var cursorX = plot.minX
         let legendY = boundsRect.maxY - 17
         for (title, color) in legendItems {
@@ -167,14 +176,16 @@ extension SettingsWindow {
         let profileID = active.id
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "Переименовать профиль АЧХ комнаты"
-        alert.informativeText = "Укажите новое название для профиля «\(active.name)» (изменения синхронизируются с iCloud Drive и PWA):"
-        alert.addButton(withTitle: "Сохранить")
-        alert.addButton(withTitle: "Отмена")
+        alert.messageText = isEn ? "Rename Room Acoustic Profile" : "Переименовать профиль АЧХ комнаты"
+        alert.informativeText = isEn
+            ? "Enter a new name for '\(active.name)' (changes sync with iCloud Drive and PWA):"
+            : "Укажите новое название для профиля «\(active.name)» (изменения синхронизируются с iCloud Drive и PWA):"
+        alert.addButton(withTitle: isEn ? "Save" : "Сохранить")
+        alert.addButton(withTitle: isEn ? "Cancel" : "Отмена")
 
         let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         inputField.stringValue = active.name
-        inputField.placeholderString = "Например: Гостиная (Rotel + KEF)"
+        inputField.placeholderString = isEn ? "e.g. Living Room (Rotel + KEF)" : "Например: Гостиная (Rotel + KEF)"
         alert.accessoryView = inputField
         alert.window.initialFirstResponder = inputField
 
@@ -190,10 +201,12 @@ extension SettingsWindow {
         let profileID = active.id
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Удалить профиль АЧХ «\(active.name)»?"
-        alert.informativeText = "Профиль замера комнаты будет удалён на этом Mac и в облаке iCloud Drive."
-        alert.addButton(withTitle: "Удалить")
-        alert.addButton(withTitle: "Отмена")
+        alert.messageText = isEn ? "Delete room profile '\(active.name)'?" : "Удалить профиль АЧХ «\(active.name)»?"
+        alert.informativeText = isEn
+            ? "This room measurement profile will be removed from this Mac and iCloud Drive."
+            : "Профиль замера комнаты будет удалён на этом Mac и в облаке iCloud Drive."
+        alert.addButton(withTitle: isEn ? "Delete" : "Удалить")
+        alert.addButton(withTitle: isEn ? "Cancel" : "Отмена")
 
         presentAlert(alert) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
@@ -228,13 +241,19 @@ extension SettingsWindow {
             timeStyle: .short
         )
         let isEnabled = RoomAcousticService.shared.isCorrectionEnabled
-        let statusPill = isEnabled ? "🟢 64-bit Auto-PEQ активна" : "⚪ Auto-PEQ выключена (Bypass)"
+        let statusPill = isEnabled
+            ? (isEn ? "🟢 64-bit Auto-PEQ Active" : "🟢 64-bit Auto-PEQ активна")
+            : (isEn ? "⚪ Auto-PEQ Disabled (Bypass)" : "⚪ Auto-PEQ выключена (Bypass)")
 
-        let titleLabel = NSTextField(labelWithString: "Акустический профиль «\(prof.name)»")
+        let titleLabel = NSTextField(
+            labelWithString: isEn ? "Room Acoustic Profile '\(prof.name)'" : "Акустический профиль «\(prof.name)»"
+        )
         titleLabel.font = NSFont.systemFont(ofSize: 15, weight: .bold)
 
         let metaText = String(
-            format: "%@ • Микрофон: %@ • Замер: %@ • Отклонение АЧХ: ±%.1f дБ • Preamp Headroom: %.1f дБ",
+            format: isEn
+                ? "%@ • Mic: %@ • Measured: %@ • Deviation: ±%.1f dB • Preamp Headroom: %.1f dB"
+                : "%@ • Микрофон: %@ • Замер: %@ • Отклонение АЧХ: ±%.1f дБ • Preamp Headroom: %.1f дБ",
             statusPill, prof.measuredOnDevice, dateStr, prof.maxPeakDeviationDB, prof.preampGainDB
         )
         let metaLabel = NSTextField(wrappingLabelWithString: metaText)
@@ -249,7 +268,11 @@ extension SettingsWindow {
             chartView.heightAnchor.constraint(equalToConstant: 190)
         ])
 
-        let bandsHeader = NSTextField(labelWithString: "Синтезированные 64-bit биквадратные фильтры RBJ (\(prof.eqBands.count) из \(RoomEQProcessor.maxStages)):")
+        let bandsHeader = NSTextField(
+            labelWithString: isEn
+                ? "Synthesized 64-bit RBJ Biquad Filters (\(prof.eqBands.count) of \(RoomEQProcessor.maxStages)):"
+                : "Синтезированные 64-bit биквадратные фильтры RBJ (\(prof.eqBands.count) из \(RoomEQProcessor.maxStages)):"
+        )
         bandsHeader.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
 
         let bandsCard = SettingsCardView()
@@ -262,20 +285,31 @@ extension SettingsWindow {
         bandsStack.translatesAutoresizingMaskIntoConstraints = false
 
         if prof.eqBands.isEmpty {
-            let flatLabel = NSTextField(labelWithString: "АЧХ комнаты уже близка к целевой кривой Harman (отклонения < 1.4 дБ, коррекция не требуется).")
+            let flatLabel = NSTextField(
+                labelWithString: isEn
+                    ? "Room response already closely matches the Harman target curve (deviations < 1.4 dB, no correction needed)."
+                    : "АЧХ комнаты уже близка к целевой кривой Harman (отклонения < 1.4 дБ, коррекция не требуется)."
+            )
             flatLabel.font = NSFont.systemFont(ofSize: 11.5)
             flatLabel.textColor = .secondaryLabelColor
             bandsStack.addArrangedSubview(flatLabel)
         } else {
             for (idx, band) in prof.eqBands.enumerated() {
                 let freqStr = band.frequencyHz >= 1000
-                    ? String(format: "%.2f кГц", band.frequencyHz / 1000.0)
-                    : String(format: "%.0f Гц", band.frequencyHz)
+                    ? String(format: isEn ? "%.2f kHz" : "%.2f кГц", band.frequencyHz / 1000.0)
+                    : String(format: isEn ? "%.0f Hz" : "%.0f Гц", band.frequencyHz)
                 let sign = band.gainDB >= 0 ? "+" : ""
                 let roleStr = band.gainDB < 0
-                    ? (band.frequencyHz <= 300 ? "срез комнатной стоячей моды / гула" : "смягчение резонансного пика")
-                    : "деликатная компенсация акустического провала"
-                let line = String(format: "%d. %@   •   %@%.1f дБ   •   Q = %.2f   (%@)", idx + 1, freqStr, sign, band.gainDB, band.q, roleStr)
+                    ? (band.frequencyHz <= 300
+                        ? (isEn ? "room standing-mode / boom cut" : "срез комнатной стоячей моды / гула")
+                        : (isEn ? "resonance peak taming" : "смягчение резонансного пика"))
+                    : (isEn ? "gentle acoustic dip fill" : "деликатная компенсация акустического провала")
+                let line = String(
+                    format: isEn
+                        ? "%d. %@   •   %@%.1f dB   •   Q = %.2f   (%@)"
+                        : "%d. %@   •   %@%.1f дБ   •   Q = %.2f   (%@)",
+                    idx + 1, freqStr, sign, band.gainDB, band.q, roleStr
+                )
                 let lbl = NSTextField(labelWithString: line)
                 lbl.font = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .regular)
                 lbl.textColor = band.gainDB < 0 ? .labelColor : .secondaryLabelColor
@@ -293,20 +327,24 @@ extension SettingsWindow {
         ])
 
         let soundHint = NSTextField(
-            wrappingLabelWithString: "Как влияет на звук: узкие отрицательные фильтры (до -9 дБ) убирают гудящие стоячие волны комнаты в басу, очищая разборчивость мидбаса и вокала, а широкие плавные подъёмы (не более +3.5 дБ) бережно заполняют провалы с автоматическим запасом Preamp Headroom без клиппинга."
+            wrappingLabelWithString: isEn
+                ? "Sonic impact: narrow negative filters (down to -9 dB) remove boomy bass standing waves to clear up midbass and vocal definition, while wide gentle shelves (up to +3.5 dB) fill acoustic dips with automatic Preamp Headroom to prevent clipping."
+                : "Как влияет на звук: узкие отрицательные фильтры (до -9 дБ) убирают гудящие стоячие волны комнаты в басу, очищая разборчивость мидбаса и вокала, а широкие плавные подъёмы (не более +3.5 дБ) бережно заполняют провалы с автоматическим запасом Preamp Headroom без клиппинга."
         )
         soundHint.font = NSFont.systemFont(ofSize: 11)
         soundHint.textColor = .secondaryLabelColor
         soundHint.preferredMaxLayoutWidth = sheetWidth - 40
 
         let toggleBtn = NSButton(
-            title: isEnabled ? "Выключить Auto-PEQ" : "Включить Auto-PEQ",
+            title: isEnabled
+                ? (isEn ? "Disable Auto-PEQ" : "Выключить Auto-PEQ")
+                : (isEn ? "Enable Auto-PEQ" : "Включить Auto-PEQ"),
             target: self,
             action: #selector(toggleRoomEQFromInspectorSheetClicked)
         )
         toggleBtn.bezelStyle = .rounded
 
-        let closeBtn = NSButton(title: "Закрыть", target: self, action: #selector(closeRoomProfileInspectorSheet))
+        let closeBtn = NSButton(title: isEn ? "Close" : "Закрыть", target: self, action: #selector(closeRoomProfileInspectorSheet))
         closeBtn.bezelStyle = .rounded
         closeBtn.keyEquivalent = "\r"
 

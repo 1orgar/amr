@@ -19,6 +19,15 @@ DMG_NAME="AppleMusicRemoteMac-Universal.dmg"
 DMG_OUTPUT="$ROOT_DIR/$DMG_NAME"
 ENTITLEMENTS_PLIST="$MAC_DIR/Entitlements.plist"
 
+REQUIRE_NOTARIZATION="${REQUIRE_NOTARIZATION:-0}"
+for arg in "$@"; do
+    case "$arg" in
+        --notarize|--require-notarization)
+            REQUIRE_NOTARIZATION=1
+            ;;
+    esac
+done
+
 echo "=========================================================="
 echo "🚀 Building Universal macOS Application & DMG for AMR"
 echo "   Architectures: arm64 (Apple Silicon) + x86_64 (Intel)"
@@ -200,16 +209,35 @@ cat << PLIST > "$CONTENTS_DIR/Info.plist"
 </plist>
 PLIST
 
+chmod +x "$MACOS_DIR/$APP_NAME"
+
+echo "🧹 Stripping Finder .DS_Store and extended attributes before signing..."
+find "$APP_BUNDLE" -name ".DS_Store" -delete 2>/dev/null || true
+xattr -cr "$APP_BUNDLE" 2>/dev/null || true
+
 SIGN_IDENTITY="${APPLE_SIGN_IDENTITY:-}"
 if [ -z "$SIGN_IDENTITY" ]; then
     SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -n 1 | awk -F'"' '{print $2}' || true)"
 fi
-if [ -z "$SIGN_IDENTITY" ]; then
+if [ -z "$SIGN_IDENTITY" ] && [ "$REQUIRE_NOTARIZATION" != "1" ]; then
     SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -n 1 | awk -F'"' '{print $2}' || true)"
 fi
 
-if [ -n "$SIGN_IDENTITY" ]; then
-    echo "🔏 Signing with identity: $SIGN_IDENTITY"
+if [ "$REQUIRE_NOTARIZATION" = "1" ] && [[ "$SIGN_IDENTITY" != *"Developer ID Application"* ]]; then
+    echo "❌ ERROR: Сертификат 'Developer ID Application' не найден в Связке ключей!"
+    echo "   Apple Notary Service принимает только сборки, подписанные 'Developer ID Application'."
+    echo "   Откройте Xcode → Settings (⌘,) → Accounts → Manage Certificates… → '+' → Developer ID Application."
+    exit 1
+fi
+
+if [[ "$SIGN_IDENTITY" == *"Developer ID Application"* ]]; then
+    echo "🔏 Signing Universal .app with Developer ID Application (Hardened Runtime + Secure Timestamp):"
+    echo "   Identity: $SIGN_IDENTITY"
+    codesign --force --deep --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+    echo "🔍 Verifying strict code signature of .app bundle..."
+    codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+elif [ -n "$SIGN_IDENTITY" ]; then
+    echo "🔏 Signing with development identity: $SIGN_IDENTITY"
     codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "$SIGN_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
         || codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign "$SIGN_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
         || codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" --sign - "$APP_BUNDLE"
@@ -221,6 +249,7 @@ fi
 echo "📦 Staging DMG layout..."
 cp -R "$APP_BUNDLE" "$DMG_STAGING/"
 ln -s /Applications "$DMG_STAGING/Applications"
+find "$DMG_STAGING" -name ".DS_Store" -delete 2>/dev/null || true
 
 echo "💿 Creating compressed UDZO disk image ($DMG_OUTPUT)..."
 hdiutil create \
@@ -232,27 +261,86 @@ hdiutil create \
 
 rm -rf "$DMG_STAGING"
 
-# Optional Apple Notarization & Stapling when Developer ID credentials are configured
+# Sign the DMG container itself when Developer ID Application is available
 if [[ "$SIGN_IDENTITY" == *"Developer ID Application"* ]]; then
-    if [ -n "${APPLE_NOTARIZE_KEYCHAIN_PROFILE:-}" ]; then
-        echo "🛡️ Submitting DMG to Apple Notary Service (profile: $APPLE_NOTARIZE_KEYCHAIN_PROFILE)..."
-        xcrun notarytool submit "$DMG_OUTPUT" --keychain-profile "$APPLE_NOTARIZE_KEYCHAIN_PROFILE" --wait
-        xcrun stapler staple "$DMG_OUTPUT"
+    echo "🔏 Signing DMG container with Developer ID Application..."
+    codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG_OUTPUT"
+    codesign --verify --verbose=2 "$DMG_OUTPUT"
+fi
+
+# Apple Notarization & Stapling when Developer ID credentials are configured
+NOTARIZED_OK=0
+if [[ "$SIGN_IDENTITY" == *"Developer ID Application"* ]]; then
+    NOTARY_PROFILE="${APPLE_NOTARIZE_KEYCHAIN_PROFILE:-}"
+    if [ -z "$NOTARY_PROFILE" ] && [ "$REQUIRE_NOTARIZATION" = "1" ]; then
+        if [ -z "${APPLE_NOTARIZE_API_KEY_PATH:-}" ] && [ -z "${APPLE_NOTARIZE_APPLE_ID:-}" ]; then
+            NOTARY_PROFILE="AMR-Notary"
+        fi
+    fi
+
+    NOTARY_AUTH_ARGS=()
+    if [ -n "$NOTARY_PROFILE" ]; then
+        echo "🛡️ Submitting DMG to Apple Notary Service (Keychain profile: $NOTARY_PROFILE)..."
+        NOTARY_AUTH_ARGS=(--keychain-profile "$NOTARY_PROFILE")
+    elif [ -n "${APPLE_NOTARIZE_API_KEY_PATH:-}" ] && [ -n "${APPLE_NOTARIZE_API_KEY_ID:-}" ] && [ -n "${APPLE_NOTARIZE_API_ISSUER_ID:-}" ]; then
+        echo "🛡️ Submitting DMG to Apple Notary Service (App Store Connect API Key: $APPLE_NOTARIZE_API_KEY_ID)..."
+        NOTARY_AUTH_ARGS=(
+            --key "$APPLE_NOTARIZE_API_KEY_PATH"
+            --key-id "$APPLE_NOTARIZE_API_KEY_ID"
+            --issuer "$APPLE_NOTARIZE_API_ISSUER_ID"
+        )
     elif [ -n "${APPLE_NOTARIZE_APPLE_ID:-}" ] && [ -n "${APPLE_NOTARIZE_TEAM_ID:-}" ] && [ -n "${APPLE_NOTARIZE_APP_PASSWORD:-}" ]; then
-        echo "🛡️ Submitting DMG to Apple Notary Service (Apple ID: $APPLE_NOTARIZE_APPLE_ID)..."
-        xcrun notarytool submit "$DMG_OUTPUT" \
-            --apple-id "$APPLE_NOTARIZE_APPLE_ID" \
-            --team-id "$APPLE_NOTARIZE_TEAM_ID" \
-            --password "$APPLE_NOTARIZE_APP_PASSWORD" \
-            --wait
+        echo "🛡️ Submitting DMG to Apple Notary Service (Apple ID: $APPLE_NOTARIZE_APPLE_ID, Team: $APPLE_NOTARIZE_TEAM_ID)..."
+        NOTARY_AUTH_ARGS=(
+            --apple-id "$APPLE_NOTARIZE_APPLE_ID"
+            --team-id "$APPLE_NOTARIZE_TEAM_ID"
+            --password "$APPLE_NOTARIZE_APP_PASSWORD"
+        )
+    elif [ "$REQUIRE_NOTARIZATION" = "1" ]; then
+        echo "❌ ERROR: Не заданы учётные данные для xcrun notarytool!"
+        echo "   Запустите ./notarize_release.sh для сохранения профиля 'AMR-Notary' в Связку ключей."
+        exit 1
+    fi
+
+    if [ "${#NOTARY_AUTH_ARGS[@]}" -gt 0 ]; then
+        NOTARY_TXT_OUT="$BUILD_DIR/notary_result.txt"
+        set +e
+        xcrun notarytool submit "$DMG_OUTPUT" "${NOTARY_AUTH_ARGS[@]}" --wait 2>&1 | tee "$NOTARY_TXT_OUT"
+        SUBMIT_EXIT=${PIPESTATUS[0]}
+        set -e
+
+        NOTARY_ID="$(grep -E "^[[:space:]]*id:[[:space:]]*" "$NOTARY_TXT_OUT" | tail -n 1 | awk '{print $2}' || true)"
+        NOTARY_STATUS="$(grep -E "^[[:space:]]*status:[[:space:]]*" "$NOTARY_TXT_OUT" | tail -n 1 | awk '{print $2}' || true)"
+
+        if [ "$SUBMIT_EXIT" -ne 0 ] || [ "$NOTARY_STATUS" != "Accepted" ]; then
+            echo "❌ Apple Notarization failed (status: $NOTARY_STATUS, id: $NOTARY_ID)"
+            if [ -n "$NOTARY_ID" ]; then
+                echo "📄 Fetching detailed Apple Notary diagnostic log..."
+                xcrun notarytool log "$NOTARY_ID" "${NOTARY_AUTH_ARGS[@]}" || true
+            fi
+            exit 1
+        fi
+
+        echo "📎 Stapling Apple Notarization ticket to DMG and .app..."
         xcrun stapler staple "$DMG_OUTPUT"
+        xcrun stapler validate "$DMG_OUTPUT"
+        xcrun stapler staple "$APP_BUNDLE" >/dev/null 2>&1 || true
+
+        echo "🛡️ Verifying macOS Gatekeeper acceptance (spctl)..."
+        spctl -a -t open --context context:primary-signature -v "$DMG_OUTPUT" || true
+        NOTARIZED_OK=1
     fi
 fi
 
 echo ""
 echo "=========================================================="
-echo "✅ Universal DMG Created Successfully!"
-echo "   Output: $DMG_OUTPUT"
-echo "   Size:   $(du -h "$DMG_OUTPUT" | cut -f1)"
-echo "   SHA256: $(shasum -a 256 "$DMG_OUTPUT" | cut -d' ' -f1)"
+if [ "$NOTARIZED_OK" = "1" ]; then
+    echo "✅ Notarized & Stapled Universal DMG Created Successfully!"
+else
+    echo "✅ Universal DMG Created Successfully!"
+fi
+echo "   Output:    $DMG_OUTPUT"
+echo "   Notarized: $([ "$NOTARIZED_OK" = "1" ] && echo "YES (Developer ID + Stapled Ticket)" || echo "NO")"
+echo "   Size:      $(du -h "$DMG_OUTPUT" | cut -f1)"
+echo "   SHA256:    $(shasum -a 256 "$DMG_OUTPUT" | cut -d' ' -f1)"
 echo "=========================================================="

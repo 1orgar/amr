@@ -99,98 +99,148 @@ extension QueueManager {
     }
 
     public func handleSmartTransitionScheduleDetected(startSeconds: Double) {
-        guard startSeconds > 4.0 else { return }
-        queueTimerQueue.async { [weak self] in
-            self?.checkAndAutoAdvanceCloudQueue()
-        }
+        // Intentionally do NOT pre-cut custom/cloud queue tracks at MediaPlaybackCore's fade-out timestamp
+        // (which occurs 3-25s before EOF and would chop off the song's ending).
     }
 
-    public func handleImmediateSmartTransitionBegan() {
-        queueTimerQueue.async { [weak self] in
-            guard let self = self else { return }
-
-            // Radio Repeat-One: immediately seek to 0:00 when Music.app begins an early station crossfade / Smart Transition,
-            // preserving the active Apple Music Radio session without ever resetting or leaving radio!
-            let shouldRewindRadio: Bool = PlaybackStateStore.shared.withLock {
-                let store = PlaybackStateStore.shared
-                guard !store.isCustomQueuePlayback,
-                      store.isRadioPlayback,
-                      store.repeatMode == "one",
-                      !store.isUserPaused,
-                      Date().timeIntervalSince(store.lastRepeatOneRewindTime) >= 2.0 else {
-                    return false
-                }
-                let cachedPos = store.lastPlayerStatusCache?.status.position ?? 0.0
-                let livePos = PlaybackRouter.shared.isTestingEnvironment ? cachedPos : (MusicAppProvider.shared.getMusicApp()?.playerPosition ?? cachedPos)
-                guard livePos > 2.5 else { return false }
-                store.lastRepeatOneRewindTime = Date()
-                return true
-            }
-            if shouldRewindRadio {
-                NSLog("[QueueManager] 🔂 Radio Repeat ONE: Immediate Smart Transition intercept — seeking radio track to 0:00!")
-                _ = PlaybackTransportController.shared.seek(to: 0.0)
-                if !PlaybackRouter.shared.isTestingEnvironment {
-                    WebSocketServer.shared.broadcastStatus(includeQueue: false)
-                }
-                return
-            }
-
-            let snapshot: (
-                shouldIntercept: Bool,
-                repeatMode: String,
-                origPlName: String?
-            ) = PlaybackStateStore.shared.withLock {
-                let store = PlaybackStateStore.shared
-                guard store.isCustomQueuePlayback,
-                      !store.activeCustomQueue.isEmpty,
-                      !store.isUserPaused,
-                      !store.isTransitioningTrack,
-                      store.currentTrackPlaybackConfirmed,
-                      !store.hasTriggeredAdvanceForCurrentTrack else {
-                    return (false, "off", nil)
-                }
-                let activeIdx = store.activeCustomQueueIndex
-                let dur = (activeIdx >= 0 && activeIdx < store.activeCustomQueue.count)
-                    ? store.activeCustomQueue[activeIdx].duration
-                    : (store.lastPlayerStatusCache?.status.duration ?? 0.0)
-                let timeSincePlay = store.lastCloudPlayTime.map { Date().timeIntervalSince($0) } ?? 0.0
-                let nearEnd: Bool
-                if dur > 8.0 {
-                    nearEnd = (store.lastKnownPosition >= max(3.0, dur - 40.0)) || (timeSincePlay >= max(3.0, dur - 40.0))
-                } else {
-                    nearEnd = store.lastKnownPosition > 2.0 || timeSincePlay > 2.0
-                }
-                guard nearEnd else {
-                    return (false, "off", nil)
-                }
-                return (true, store.repeatMode, store.currentOriginalPlaylistName)
-            }
-            guard snapshot.shouldIntercept else { return }
-
-            let cachedPlName = PlayerStatusEngine.shared.cachedCurrentPlaylistName
-            if let curPl = cachedPlName, !curPl.isEmpty, curPl != "Очередь AMR",
-               let origPl = snapshot.origPlName, !origPl.isEmpty, origPl != "Очередь AMR",
-               curPl == origPl {
-                return
-            }
-
-            if snapshot.repeatMode == "one" {
-                let lastRewind = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastRepeatOneRewindTime }
-                if Date().timeIntervalSince(lastRewind) >= 2.0 {
-                    PlaybackStateStore.shared.withLock {
-                        PlaybackStateStore.shared.lastRepeatOneRewindTime = Date()
+    public func handleImmediateSmartTransitionBegan(
+        outgoingTitle: String? = nil,
+        incomingTitle: String? = nil,
+        incomingStartPos: Double? = nil
+    ) {
+        // Radio Repeat-One: immediately seek to 0:00 when Music.app begins an early station crossfade / Smart Transition,
+        // preserving the active Apple Music Radio session without ever resetting or leaving radio!
+        let isRadioRepeatOneCandidate: Bool = PlaybackStateStore.shared.withLock {
+            let store = PlaybackStateStore.shared
+            return !store.isCustomQueuePlayback
+                && store.isRadioPlayback
+                && store.repeatMode == "one"
+                && !store.isUserPaused
+                && Date().timeIntervalSince(store.lastRepeatOneRewindTime) >= 2.0
+        }
+        if isRadioRepeatOneCandidate {
+            queueTimerQueue.async {
+                let shouldRewindRadio: Bool = PlaybackStateStore.shared.withLock {
+                    let store = PlaybackStateStore.shared
+                    guard !store.isCustomQueuePlayback,
+                          store.isRadioPlayback,
+                          store.repeatMode == "one",
+                          !store.isUserPaused,
+                          Date().timeIntervalSince(store.lastRepeatOneRewindTime) >= 2.0 else {
+                        return false
                     }
+                    let cachedPos = store.lastPlayerStatusCache?.status.position ?? 0.0
+                    let livePos = PlaybackRouter.shared.isTestingEnvironment ? cachedPos : (MusicAppProvider.shared.getMusicApp()?.playerPosition ?? cachedPos)
+                    guard livePos > 2.5 else { return false }
+                    store.lastRepeatOneRewindTime = Date()
+                    return true
+                }
+                if shouldRewindRadio {
+                    NSLog("[QueueManager] 🔂 Radio Repeat ONE: Immediate Smart Transition intercept — seeking radio track to 0:00!")
                     _ = PlaybackTransportController.shared.seek(to: 0.0)
                     if !PlaybackRouter.shared.isTestingEnvironment {
                         WebSocketServer.shared.broadcastStatus(includeQueue: false)
                     }
                 }
-                return
             }
+            return
+        }
 
-            NSLog("[QueueManager] ⚡️ Immediate Smart Transition intercept fired — stopping Music.app before AutoPlay overlap!")
-            self.stopMusicAppImmediatelyForQueueCutoff()
-            self.advanceOrEndCustomQueueUnlocked(reason: "smart-transition-intercept")
+        // Instant Zero-Lag UI Transition when MediaPlaybackCore begins overlapped playback (`smartTransitionWillBegin` /
+        // `overlappedPlaybackWillBegin`), which occurs 1-6s BEFORE Music.app reaches `pivotPoint` and emits `playerInfo`.
+        // Runs synchronously in RAM (< 1 ms, zero AppleScript) so neither log parsing nor UI broadcast ever stalls!
+        guard let outName = outgoingTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !outName.isEmpty,
+              let inName = incomingTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !inName.isEmpty,
+              outName.localizedCaseInsensitiveCompare(inName) != .orderedSame else {
+            return
+        }
+        let startPos = max(0.0, incomingStartPos ?? 0.0)
+
+        let customAdvanceTarget: (oldIdx: Int, newIdx: Int)? = PlaybackStateStore.shared.withLock {
+            let store = PlaybackStateStore.shared
+            guard store.isCustomQueuePlayback,
+                  !store.activeCustomQueue.isEmpty,
+                  !store.isUserPaused,
+                  store.repeatMode != "one" else {
+                return nil
+            }
+            let idx = store.activeCustomQueueIndex
+            guard idx >= 0 && idx < store.activeCustomQueue.count else { return nil }
+            let curExpected = store.activeCustomQueue[idx]
+            // Single-shot idempotency: once activeIdx advances to `inName`, duplicate log lines with `outName` no longer match `curExpected`
+            guard self.matchesExpectedQueueTrack(curExpected, candidateName: outName, candidateArtist: nil) else {
+                return nil
+            }
+            let isAMR = (store.currentOriginalPlaylistName == "Очередь AMR")
+            guard let nextIdx = self.resolveForwardMatchIndex(
+                queueTracks: store.activeCustomQueue,
+                activeIdx: idx,
+                isAMRPlaylist: isAMR,
+                candidateName: inName,
+                candidateArtist: nil
+            ) else {
+                return nil
+            }
+            return (idx, nextIdx)
+        }
+
+        if let target = customAdvanceTarget {
+            self.completeNaturalForwardQueueAdvance(
+                from: target.oldIdx,
+                to: target.newIdx,
+                initialPosition: startPos,
+                outgoingTitleOverride: outName
+            )
+            return
+        }
+
+        // Path B: Native Music.app playlist playing sequentially (`isCustomQueuePlayback == false`)
+        let nativePlName: String? = PlaybackStateStore.shared.withLock {
+            let store = PlaybackStateStore.shared
+            guard !store.isCustomQueuePlayback,
+                  !store.isRadioPlayback,
+                  !store.isUserPaused,
+                  store.repeatMode != "one" else {
+                return nil
+            }
+            if let existing = store.activeOverlapTransition,
+               existing.incomingTrack.name.localizedCaseInsensitiveCompare(inName) == .orderedSame,
+               Date().timeIntervalSince(existing.startedAt) < 12.0 {
+                return nil
+            }
+            return store.currentOriginalPlaylistName ?? PlayerStatusEngine.shared.cachedCurrentPlaylistName
+        }
+        guard let plName = nativePlName?.trimmingCharacters(in: .whitespacesAndNewlines), !plName.isEmpty else {
+            return
+        }
+
+        let cachedTracks = LibraryService.shared.peekCachedPlaylistTracks(name: plName)
+        let matchedIncoming: TrackInfo = {
+            if let outIdx = cachedTracks.firstIndex(where: { $0.name.localizedCaseInsensitiveCompare(outName) == .orderedSame }),
+               outIdx + 1 < cachedTracks.count,
+               cachedTracks[outIdx + 1].name.localizedCaseInsensitiveCompare(inName) == .orderedSame {
+                return cachedTracks[outIdx + 1]
+            }
+            if let anyMatch = cachedTracks.first(where: { $0.name.localizedCaseInsensitiveCompare(inName) == .orderedSame }) {
+                return anyMatch
+            }
+            return TrackInfo(id: "overlap", name: inName, artist: "")
+        }()
+
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.activeOverlapTransition = OverlapTransitionSnapshot(
+                outgoingName: outName,
+                incomingTrack: matchedIncoming,
+                startedAt: Date(),
+                initialPosition: startPos
+            )
+        }
+        PlaybackStateStore.shared.invalidateQueueCache()
+        PlaybackStateStore.shared.invalidateStatusCache()
+        if !PlaybackRouter.shared.isTestingEnvironment {
+            DispatchQueue.global(qos: .userInitiated).async {
+                WebSocketServer.shared.broadcastStatus(includeQueue: true)
+            }
         }
     }
 

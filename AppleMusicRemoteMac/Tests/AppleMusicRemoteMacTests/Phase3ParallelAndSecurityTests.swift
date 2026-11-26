@@ -87,4 +87,15 @@ final class Phase3ParallelAndSecurityTests: XCTestCase {
         XCTAssertTrue(health.isTokenExpired)
         XCTAssertTrue(health.message.contains("MusicKit Developer JWT"))
     }
+
+    func testAES256GCMTokenVaultRoundTripWithoutKeychainAPIs() throws {
+        let sampleToken = "eyJhbGciOiJFUzI1NiIsImtpZCI6Ik1KSFdSQ1NaSEgifQ.sample_music_user_token_payload"
+        let encrypted = try XCTUnwrap(MusicKitManager.encryptUserTokenForDefaults(sampleToken))
+        XCTAssertTrue(encrypted.hasPrefix(MusicKitManager.encryptedUserTokenPrefix))
+        XCTAssertFalse(encrypted.contains(sampleToken))
+
+        let decoded = try XCTUnwrap(MusicKitManager.decodeStoredUserTokenFromDefaults(encrypted))
+        XCTAssertEqual(decoded.plaintext, sampleToken)
+        XCTAssertFalse(decoded.wasPlaintext)
+    }
 }

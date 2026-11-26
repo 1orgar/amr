@@ -31,12 +31,28 @@ extension WebSocketServer {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
                 sendEvent(name: "dsp_settings", data: Self.buildDSPSettingsDictionary(), to: connection)
-                sendError(action: action, error: "Выбор пресета DSP отключён для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DSP preset selection is disabled for this device in Mac settings",
+                        "Выбор пресета DSP отключён для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             guard !DLNADiscoveryManager.shared.hasActiveRenderer else {
                 sendEvent(name: "dsp_settings", data: Self.buildDSPSettingsDictionary(), to: connection)
-                sendError(action: action, error: "Выбор пресета DSP отключён при выводе на внешний сетевой плеер BluOS / DLNA", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DSP preset selection is disabled when streaming to an external BluOS / DLNA network player",
+                        "Выбор пресета DSP отключён при выводе на внешний сетевой плеер BluOS / DLNA"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let presetID = ((params["preset_id"] as? String) ?? (params["id"] as? String) ?? "")
@@ -51,7 +67,15 @@ extension WebSocketServer {
                 let usbAvail = AudioEngineController.shared.currentUSBDACAvailability(targetDeviceUID: curCfg.targetDeviceUID)
                 guard usbAvail.isModeSupported(targetPreset.configuration.mode, dsdRate: targetPreset.configuration.dsdRate) else {
                     sendEvent(name: "dsp_settings", data: Self.buildDSPSettingsDictionary(), to: connection)
-                    sendError(action: action, error: "Режимы DSD и HQ NOS доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)", id: id, to: connection)
+                    sendError(
+                        action: action,
+                        error: AMRLocalization.tr(
+                            "DSD and HQ NOS modes require an external USB DAC (≥ 24-bit / 176.4 kHz)",
+                            "Режимы DSD и HQ NOS доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)"
+                        ),
+                        id: id,
+                        to: connection
+                    )
                     return true
                 }
             }
@@ -86,7 +110,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Измерение АЧХ комнаты отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Room acoustic measurement is disabled for this device in Mac settings",
+                        "Измерение АЧХ комнаты отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let duration = (params["duration"] as? Double) ?? (params["duration"] as? NSNumber)?.doubleValue ?? 35.0
@@ -101,7 +133,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Измерение АЧХ комнаты отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Room acoustic measurement is disabled for this device in Mac settings",
+                        "Измерение АЧХ комнаты отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             RoomAcousticService.shared.stopTestSignal()
@@ -115,7 +155,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Измерение АЧХ комнаты отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Room acoustic measurement is disabled for this device in Mac settings",
+                        "Измерение АЧХ комнаты отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             RoomAcousticService.shared.stopTestSignal()
@@ -141,7 +189,15 @@ extension WebSocketServer {
                 applyMEMSMicCompensation: memsComp,
                 autoSaveAndEnable: true
             ) else {
-                sendError(action: action, error: "Некорректные данные спектра (ожидается 31 полоса 1/3 октавы)", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Invalid spectrum data (expected 31 1/3-octave bands)",
+                        "Некорректные данные спектра (ожидается 31 полоса 1/3 октавы)"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
 
@@ -160,7 +216,15 @@ extension WebSocketServer {
         case "set_room_correction_enabled":
             guard ClientDeviceManager.shared.canConnectionMeasureRoom(connectionId: clientId)
                     || ClientDeviceManager.shared.canConnectionSelectDSPPreset(connectionId: clientId) else {
-                sendError(action: action, error: "Управление коррекцией АЧХ отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Room EQ control is disabled for this device in Mac settings",
+                        "Управление коррекцией АЧХ отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let enabled = (params["enabled"] as? Bool) ?? ((params["enabled"] as? NSNumber)?.boolValue ?? false)
@@ -171,7 +235,15 @@ extension WebSocketServer {
         case "select_room_profile":
             guard ClientDeviceManager.shared.canConnectionMeasureRoom(connectionId: clientId)
                     || ClientDeviceManager.shared.canConnectionSelectDSPPreset(connectionId: clientId) else {
-                sendError(action: action, error: "Выбор профиля АЧХ отключён для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Room profile selection is disabled for this device in Mac settings",
+                        "Выбор профиля АЧХ отключён для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let profID = ((params["profile_id"] as? String) ?? (params["id"] as? String))?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -181,13 +253,26 @@ extension WebSocketServer {
 
         case "rename_room_profile":
             guard ClientDeviceManager.shared.canConnectionMeasureRoom(connectionId: clientId) else {
-                sendError(action: action, error: "Редактирование профилей АЧХ отключено для этого устройства", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Editing room profiles is disabled for this device",
+                        "Редактирование профилей АЧХ отключено для этого устройства"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let profID = ((params["profile_id"] as? String) ?? (params["id"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let newName = ((params["name"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard RoomAcousticService.shared.renameProfile(id: profID, newName: newName) != nil else {
-                sendError(action: action, error: "Не удалось переименовать профиль АЧХ", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr("Failed to rename room profile", "Не удалось переименовать профиль АЧХ"),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             broadcastRoomAndDSPStatus(action: action, id: id, connection: connection)
@@ -195,12 +280,25 @@ extension WebSocketServer {
 
         case "delete_room_profile":
             guard ClientDeviceManager.shared.canConnectionMeasureRoom(connectionId: clientId) else {
-                sendError(action: action, error: "Удаление профилей АЧХ отключено для этого устройства", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Deleting room profiles is disabled for this device",
+                        "Удаление профилей АЧХ отключено для этого устройства"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let profID = ((params["profile_id"] as? String) ?? (params["id"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard RoomAcousticService.shared.deleteProfile(id: profID) else {
-                sendError(action: action, error: "Профиль АЧХ не найден", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr("Room profile not found", "Профиль АЧХ не найден"),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             broadcastRoomAndDSPStatus(action: action, id: id, connection: connection)
@@ -212,7 +310,15 @@ extension WebSocketServer {
 
         case "set_late_night_drc", "set_late_night_drc_mode", "set_late_night_drc_enabled", "set_late_night_drc_profile":
             guard ClientDeviceManager.shared.canConnectionControlLateNight(connectionId: clientId) else {
-                sendError(action: action, error: "Доступ к ночному режиму (Late-Night DRC) отключён для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Late-Night DRC access is disabled for this device in Mac settings",
+                        "Доступ к ночному режиму (Late-Night DRC) отключён для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
 
@@ -222,7 +328,15 @@ extension WebSocketServer {
 
             if let rawMode, !rawMode.isEmpty {
                 guard let targetMode = LateNightDRCMode(rawValue: rawMode) else {
-                    sendError(action: action, error: "Неизвестный режим Late-Night DRC: \(rawMode)", id: id, to: connection)
+                    sendError(
+                        action: action,
+                        error: AMRLocalization.tr(
+                            "Unknown Late-Night DRC mode: \(rawMode)",
+                            "Неизвестный режим Late-Night DRC: \(rawMode)"
+                        ),
+                        id: id,
+                        to: connection
+                    )
                     return true
                 }
                 LateNightDRCService.shared.setMode(targetMode)
@@ -232,7 +346,15 @@ extension WebSocketServer {
                         LateNightDRCService.shared.setMode(.off)
                     } else {
                         guard let p = LateNightDRCMode(rawValue: rawProfile), p != .off else {
-                            sendError(action: action, error: "Неизвестный профиль Late-Night DRC: \(rawProfile)", id: id, to: connection)
+                            sendError(
+                                action: action,
+                                error: AMRLocalization.tr(
+                                    "Unknown Late-Night DRC profile: \(rawProfile)",
+                                    "Неизвестный профиль Late-Night DRC: \(rawProfile)"
+                                ),
+                                id: id,
+                                to: connection
+                            )
                             return true
                         }
                         LateNightDRCService.shared.updateState(enabled: explicitEnabled, profile: p)
@@ -261,7 +383,15 @@ extension WebSocketServer {
 
         case "set_mastering_restoration", "set_mastering_declip_mode", "set_mastering_deesser_mode":
             guard ClientDeviceManager.shared.canConnectionSelectDSPPreset(connectionId: clientId) else {
-                sendError(action: action, error: "Управление параметрами DSP отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DSP parameter control is disabled for this device in Mac settings",
+                        "Управление параметрами DSP отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
 
@@ -272,14 +402,30 @@ extension WebSocketServer {
 
             if let rawDeClip, !rawDeClip.isEmpty {
                 guard let m = MasteringDeClipMode(rawValue: rawDeClip) else {
-                    sendError(action: action, error: "Неизвестный режим De-Clipper: \(rawDeClip)", id: id, to: connection)
+                    sendError(
+                        action: action,
+                        error: AMRLocalization.tr(
+                            "Unknown De-Clipper mode: \(rawDeClip)",
+                            "Неизвестный режим De-Clipper: \(rawDeClip)"
+                        ),
+                        id: id,
+                        to: connection
+                    )
                     return true
                 }
                 parsedDeClip = m
             }
             if let rawDeEsser, !rawDeEsser.isEmpty {
                 guard let m = MasteringDeEsserMode(rawValue: rawDeEsser) else {
-                    sendError(action: action, error: "Неизвестный режим Weiss De-Esser: \(rawDeEsser)", id: id, to: connection)
+                    sendError(
+                        action: action,
+                        error: AMRLocalization.tr(
+                            "Unknown Weiss De-Esser mode: \(rawDeEsser)",
+                            "Неизвестный режим Weiss De-Esser: \(rawDeEsser)"
+                        ),
+                        id: id,
+                        to: connection
+                    )
                     return true
                 }
                 parsedDeEsser = m
@@ -317,11 +463,27 @@ extension WebSocketServer {
 
         case "trigger_cloud_sync":
             guard ClientDeviceManager.shared.canConnectionSelectDSPPreset(connectionId: clientId) else {
-                sendError(action: action, error: "Управление параметрами DSP отключено для этого устройства", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DSP parameter control is disabled for this device",
+                        "Управление параметрами DSP отключено для этого устройства"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             guard CloudSettingsSyncService.shared.isEnabled else {
-                sendError(action: action, error: "Облачная синхронизация выключена в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Cloud sync is disabled in Mac settings",
+                        "Облачная синхронизация выключена в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             CloudSettingsSyncService.shared.syncNow(reason: "ws_client_trigger") { [weak self] result in
@@ -368,12 +530,28 @@ extension WebSocketServer {
                 sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
             }
             sendEvent(name: "dsp_settings", data: Self.buildDSPSettingsDictionary(), to: connection)
-            sendError(action: action, error: "Выбор пресета DSP отключён для этого устройства в настройках Mac", id: id, to: connection)
+            sendError(
+                action: action,
+                error: AMRLocalization.tr(
+                    "DSP preset selection is disabled for this device in Mac settings",
+                    "Выбор пресета DSP отключён для этого устройства в настройках Mac"
+                ),
+                id: id,
+                to: connection
+            )
             return
         }
         guard !DLNADiscoveryManager.shared.hasActiveRenderer else {
             sendEvent(name: "dsp_settings", data: Self.buildDSPSettingsDictionary(), to: connection)
-            sendError(action: action, error: "Настройки пресетов DSP недоступны при выводе на внешний сетевой плеер BluOS / DLNA", id: id, to: connection)
+            sendError(
+                action: action,
+                error: AMRLocalization.tr(
+                    "DSP preset settings are unavailable when streaming to an external BluOS / DLNA network player",
+                    "Настройки пресетов DSP недоступны при выводе на внешний сетевой плеер BluOS / DLNA"
+                ),
+                id: id,
+                to: connection
+            )
             return
         }
         if let presetID = ((params["preset_id"] as? String) ?? (params["presetId"] as? String))?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -388,7 +566,15 @@ extension WebSocketServer {
                 let usbAvail = AudioEngineController.shared.currentUSBDACAvailability(targetDeviceUID: curCfg.targetDeviceUID)
                 guard usbAvail.isModeSupported(targetPreset.configuration.mode, dsdRate: targetPreset.configuration.dsdRate) else {
                     sendEvent(name: "dsp_settings", data: Self.buildDSPSettingsDictionary(), to: connection)
-                    sendError(action: action, error: "Режимы DSD и HQ NOS доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)", id: id, to: connection)
+                    sendError(
+                        action: action,
+                        error: AMRLocalization.tr(
+                            "DSD and HQ NOS modes require an external USB DAC (≥ 24-bit / 176.4 kHz)",
+                            "Режимы DSD и HQ NOS доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)"
+                        ),
+                        id: id,
+                        to: connection
+                    )
                     return
                 }
             }
@@ -497,7 +683,15 @@ extension WebSocketServer {
             let usbAvail = AudioEngineController.shared.currentUSBDACAvailability(targetDeviceUID: cfg.targetDeviceUID)
             guard usbAvail.isModeSupported(cfg.mode, dsdRate: cfg.dsdRate) else {
                 sendEvent(name: "dsp_settings", data: Self.buildDSPSettingsDictionary(), to: connection)
-                sendError(action: action, error: "Режимы DSD и HQ NOS доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DSD and HQ NOS modes require an external USB DAC (≥ 24-bit / 176.4 kHz)",
+                        "Режимы DSD и HQ NOS доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return
             }
         }

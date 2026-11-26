@@ -11,7 +11,20 @@
   <meta name="format-detection" content="telephone=no">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#000000">
-  <meta name="description" content="Apple Music Remote Mac - Bit-Perfect High-Fidelity Controller">
+  <meta name="description" content="AMR 3.0 — Apple Music Bit-Perfect CoreAudio Server, 64-Bit Studio DSP & Pure OLED Remote for macOS.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Apple Music Remote (AMR)">
+  <meta property="og:title" content="AMR 3.0 — Apple Music Bit-Perfect &amp; 64-Bit Studio DSP">
+  <meta property="og:description" content="Pure OLED Remote, CoreAudio Exclusive Hog Mode, DSD512 DoP (7EC), HQ NOS 768 kHz &amp; 64-Bit Room Auto-PEQ for macOS.">
+  <meta property="og:image" content="/assets/og-preview.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="AMR 3.0 — Apple Music Bit-Perfect &amp; DSP on Pure Black OLED">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AMR 3.0 — Apple Music Bit-Perfect &amp; 64-Bit Studio DSP">
+  <meta name="twitter:description" content="Pure OLED Remote, CoreAudio Exclusive Hog Mode, DSD512 DoP (7EC), HQ NOS 768 kHz &amp; 64-Bit Room Auto-PEQ for macOS.">
+  <meta name="twitter:image" content="/assets/og-preview.png">
   <title>Apple Music Remote</title>
 
   <link rel="icon" type="image/svg+xml" href="/apple-touch-icon.svg">
@@ -26,7 +39,7 @@
 </head>
 <body>
   <!-- iOS Lock Screen & Background Media Keep-Alive -->
-  <audio id="bg-silent-audio" preload="none" playsinline webkit-playsinline x-webkit-airplay="deny" loop src="/assets/silence.m4a?v=4" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;"></audio>
+  <audio id="bg-silent-audio" preload="auto" playsinline webkit-playsinline x-webkit-airplay="deny" loop src="/assets/silence.m4a?v=4" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;"></audio>
 
   <!-- Connection Lost Overlay -->
   <div id="connection-overlay" class="overlay-modal hidden" aria-hidden="true">

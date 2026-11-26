@@ -182,7 +182,7 @@
       {
         key: 'my-station',
         visible: cfg.show_my_station !== false,
-        title: 'Моя станция',
+        title: IS_EN ? 'My Station' : 'Моя станция',
         type: 'station',
         onClick: () => {
           state.activeStandbyTileKey = 'my-station';
@@ -207,7 +207,7 @@
       {
         key: 'discovery-station',
         visible: cfg.show_discovery_station !== false,
-        title: 'Станция открытий',
+        title: IS_EN ? 'Discovery Station' : 'Станция открытий',
         type: 'station',
         onClick: () => {
           state.activeStandbyTileKey = 'discovery-station';
@@ -232,7 +232,7 @@
       {
         key: 'favorites-mix',
         visible: cfg.show_favorites_mix !== false,
-        title: 'В моём вкусе',
+        title: IS_EN ? 'Favorites Mix' : 'В моём вкусе',
         type: 'playlist',
         onClick: () => {
           state.activeStandbyTileKey = 'favorites-mix';
@@ -260,7 +260,7 @@
       {
         key: 'heavy-rotation',
         visible: cfg.show_heavy_rotation !== false,
-        title: 'Сейчас на повторе',
+        title: IS_EN ? 'Heavy Rotation' : 'Сейчас на повторе',
         type: 'playlist',
         onClick: () => {
           state.activeStandbyTileKey = 'heavy-rotation';

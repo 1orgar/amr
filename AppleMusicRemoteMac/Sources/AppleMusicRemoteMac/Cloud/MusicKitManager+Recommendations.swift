@@ -187,7 +187,7 @@ extension MusicKitManager {
         let rawId = first["id"] as? String ?? "station_personal"
         let id = isValidResourceIdentifier(rawId) ? rawId : "station_personal"
         let attrs = first["attributes"] as? [String: Any] ?? [:]
-        let name = attrs["name"] as? String ?? "Моя станция"
+        let name = attrs["name"] as? String ?? AMRLocalization.tr("My Station", "Моя станция")
         let url = attrs["url"] as? String ?? "https://music.apple.com/station/my-station/\(id)"
         let isLive = attrs["isLive"] as? Bool ?? false
         let artObj = attrs["artwork"] as? [String: Any]
@@ -196,7 +196,7 @@ extension MusicKitManager {
         return StationInfo(
             id: id,
             name: name,
-            subtitle: "Любимые треки и персональные рекомендации",
+            subtitle: AMRLocalization.tr("Favorite tracks & personal recommendations", "Любимые треки и персональные рекомендации"),
             artwork: artUrl,
             url: url,
             isLive: isLive,
@@ -217,7 +217,7 @@ extension MusicKitManager {
         for item in dataArr {
             let id = item["id"] as? String ?? UUID().uuidString
             let attrs = item["attributes"] as? [String: Any] ?? [:]
-            var groupTitle = "Для вас"
+            var groupTitle = AMRLocalization.tr("Made for You", "Для вас")
             if let titleObj = attrs["title"] as? [String: Any] {
                 groupTitle = titleObj["stringForDisplay"] as? String ?? titleObj["text"] as? String ?? groupTitle
             } else if let tStr = attrs["title"] as? String, !tStr.isEmpty {
@@ -344,8 +344,8 @@ extension MusicKitManager {
                     let safeId = isValidResourceIdentifier(res.id) ? res.id : "ra.q-discovery"
                     discovery = StationInfo(
                         id: res.id,
-                        name: res.name.isEmpty ? "Станция открытий" : res.name,
-                        subtitle: res.subtitle ?? "Новая музыка на основе ваших вкусов",
+                        name: res.name.isEmpty ? AMRLocalization.tr("Discovery Station", "Станция открытий") : res.name,
+                        subtitle: res.subtitle ?? AMRLocalization.tr("New music based on your taste", "Новая музыка на основе ваших вкусов"),
                         artwork: res.artworkUrl ?? "/assets/stations/CoverDiscovery.png",
                         url: res.url ?? "https://music.apple.com/station/item/\(safeId)",
                         isLive: false,
@@ -357,8 +357,8 @@ extension MusicKitManager {
                     let safeId = isValidResourceIdentifier(res.id) ? res.id : "station_personal"
                     personal = StationInfo(
                         id: res.id,
-                        name: res.name.isEmpty ? "Моя станция" : res.name,
-                        subtitle: res.subtitle ?? "Любимые треки и персональные рекомендации",
+                        name: res.name.isEmpty ? AMRLocalization.tr("My Station", "Моя станция") : res.name,
+                        subtitle: res.subtitle ?? AMRLocalization.tr("Favorite tracks & personal recommendations", "Любимые треки и персональные рекомендации"),
                         artwork: res.artworkUrl ?? defaultPersonalStationArtwork,
                         url: res.url ?? "https://music.apple.com/station/my-station/\(safeId)",
                         isLive: false,

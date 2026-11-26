@@ -56,7 +56,7 @@ extension UPnPMediaRendererServer {
             let curTimeStr = formatSecondsToTime(curSec)
             let durTimeStr = formatSecondsToTime(durSec)
 
-            let title = status.track?.name ?? "Без названия"
+            let title = status.track?.name ?? AMRLocalization.tr("Untitled", "Без названия")
             let artist = status.track?.artist ?? "Apple Music"
             let album = status.track?.album ?? ""
             let artUri = resolveArtworkURI(for: status.track, lanIP: lanIP)
@@ -111,7 +111,7 @@ extension UPnPMediaRendererServer {
             let status = getStatus()
             let durSec = resolveEffectiveTrackDuration(for: status)
             let durTimeStr = formatSecondsToTime(durSec)
-            let title = status.track?.name ?? "Без названия"
+            let title = status.track?.name ?? AMRLocalization.tr("Untitled", "Без названия")
             let artist = status.track?.artist ?? "Apple Music"
             let album = status.track?.album ?? ""
             let artUri = resolveArtworkURI(for: status.track, lanIP: lanIP)
@@ -624,7 +624,9 @@ extension UPnPMediaRendererServer {
         let bitDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth ?? (rate >= 48000.0 ? 24 : 16)
         let khz = rate / 1000.0
         let khzStr = (khz.truncatingRemainder(dividingBy: 1) == 0) ? String(format: "%.0f", khz) : String(format: "%.1f", khz)
-        let qualityBadge = "\(khzStr) кГц / \(bitDepth)-бит"
+        let qualityBadge = AMRLocalization.isEnglish
+            ? "\(khzStr) kHz / \(bitDepth)-bit"
+            : "\(khzStr) кГц / \(bitDepth)-бит"
 
         let displayAlbum = album.isEmpty ? qualityBadge : "\(album) • \(qualityBadge)"
         let alb = escapeXMLText(displayAlbum)

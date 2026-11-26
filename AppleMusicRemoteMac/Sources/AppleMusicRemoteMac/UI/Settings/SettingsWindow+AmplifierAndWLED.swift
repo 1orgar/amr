@@ -111,7 +111,11 @@ extension SettingsWindow {
         extAmpNetStack.alignment = .centerY
         extAmpNetStack.spacing = 6
 
-        extAmpStatusLabel = makeStatusCaption("Статус: Управление громкостью внешнего усилителя отключено")
+        extAmpStatusLabel = makeStatusCaption(
+            isEn
+                ? "Status: External amplifier volume control disabled"
+                : "Статус: Управление громкостью внешнего усилителя отключено"
+        )
         extAmpStatusLabel.lineBreakMode = .byWordWrapping
 
         return makeMusicPreferencePage(sections: [
@@ -233,7 +237,7 @@ extension SettingsWindow {
             wledModePopUp.lastItem?.representedObject = m.value
         }
 
-        wledStatusLabel = makeStatusCaption("Статус WLED: Отключено")
+        wledStatusLabel = makeStatusCaption(isEn ? "WLED Status: Disabled" : "Статус WLED: Отключено")
         wledStatusLabel.lineBreakMode = .byWordWrapping
 
         return makeMusicPreferencePage(sections: [

@@ -73,10 +73,12 @@
           const f = Number(b.frequency_hz || b.frequencyHz || 0);
           const g = Number(b.gain_db || b.gainDB || 0);
           const q = Number(b.q || 1);
-          const freqStr = f >= 1000 ? `${(f / 1000).toFixed(f % 1000 === 0 ? 0 : 1)}к` : `${Math.round(f)}`;
+          const freqStr = f >= 1000 ? `${(f / 1000).toFixed(f % 1000 === 0 ? 0 : 1)}${IS_EN ? 'k' : 'к'}` : `${Math.round(f)}`;
           const pill = document.createElement('span');
           pill.className = 'room-eq-band-pill';
-          pill.textContent = `${freqStr}Гц ${g >= 0 ? '+' : ''}${g.toFixed(1)}дБ Q${q.toFixed(1)}`;
+          pill.textContent = IS_EN
+            ? `${freqStr}Hz ${g >= 0 ? '+' : ''}${g.toFixed(1)}dB Q${q.toFixed(1)}`
+            : `${freqStr}Гц ${g >= 0 ? '+' : ''}${g.toFixed(1)}дБ Q${q.toFixed(1)}`;
           bandsListEl.appendChild(pill);
         });
         bandsListEl.classList.remove('hidden');
@@ -183,7 +185,7 @@
           const opt = document.createElement('option');
           opt.value = String(p.id);
           const bandsCnt = Array.isArray(p.eq_bands) ? p.eq_bands.length : 0;
-          opt.textContent = `${p.name || 'Комната'} (${bandsCnt} PEQ)`;
+          opt.textContent = `${p.name || (IS_EN ? 'Room' : 'Комната')} (${bandsCnt} PEQ)`;
           selectEl.appendChild(opt);
         });
         selectEl.value = state.roomActiveProfileId || '';
@@ -419,7 +421,7 @@
           stopRoomMeasurementSession(true);
 
           const dateLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const outLabel = state.audioDeviceName || 'Комната';
+          const outLabel = state.audioDeviceName || (IS_EN ? 'Room' : 'Комната');
           const profName = `${outLabel} (${dateLabel})`;
           const sent = send({
             action: 'submit_room_measurement',

@@ -115,12 +115,16 @@ extension WebSocketServer {
                 ?? nonEmpty(bodyTopDeviceId)
                 ?? nonEmpty(bodyParamDeviceId)
 
+            let dacDisabledErr = AMRLocalization.tr(
+                "DAC and audio output selection is disabled for this device in Mac settings",
+                "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac"
+            )
             if let devId = resolvedDeviceId {
                 guard canDeviceSelectDAC(deviceId: devId) else {
                     sendHTTPResponse(
                         status: "403 Forbidden",
                         contentType: "application/json; charset=utf-8",
-                        body: Data("{\"status\":\"error\",\"error\":\"Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac\"}".utf8),
+                        body: Data("{\"status\":\"error\",\"error\":\"\(dacDisabledErr)\"}".utf8),
                         connection: connection
                     )
                     return
@@ -130,7 +134,7 @@ extension WebSocketServer {
                     sendHTTPResponse(
                         status: "403 Forbidden",
                         contentType: "application/json; charset=utf-8",
-                        body: Data("{\"status\":\"error\",\"error\":\"Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac\"}".utf8),
+                        body: Data("{\"status\":\"error\",\"error\":\"\(dacDisabledErr)\"}".utf8),
                         connection: connection
                     )
                     return

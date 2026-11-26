@@ -289,7 +289,8 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         return deviceIDs
             .filter { hasOutputStreams(deviceID: $0) }
             .compactMap { deviceID in
-                let name = stringProperty(objectID: deviceID, selector: kAudioObjectPropertyName) ?? "Аудиоустройство"
+                let name = stringProperty(objectID: deviceID, selector: kAudioObjectPropertyName)
+                    ?? AMRLocalization.tr("Audio Device", "Аудиоустройство")
                 let uid = stringProperty(objectID: deviceID, selector: kAudioDevicePropertyDeviceUID) ?? "\(deviceID)"
                 let sampleRate = doubleProperty(objectID: deviceID, selector: kAudioDevicePropertyNominalSampleRate) ?? 44100.0
                 let availableRates = availableSampleRates(deviceID: deviceID)
@@ -517,7 +518,7 @@ public final class CoreAudioDeviceManager: @unchecked Sendable {
         }
 
         if rateChanged || bitsChanged {
-            let bitDepthStr = bitDepth != nil ? ", \(bitDepth!) бит" : ""
+            let bitDepthStr = bitDepth != nil ? ", \(bitDepth!)-bit" : ""
             let guardTag = useMutingGuard ? " [🔇 DAC Muting Guard \(guardMs)ms]" : ""
             NSLog("[CoreAudioDeviceManager] ✅ Switched device %u format: %.1f kHz%@ (was %.1f kHz)%@",
                   targetID, effectiveAppliedRate / 1000.0, bitDepthStr, currentRate / 1000.0, guardTag)

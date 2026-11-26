@@ -21,21 +21,21 @@ extension PlayerStatusEngine {
         origPl: String?
     ) -> PlayerStatus {
         let rawState = sample.rawState
-        let rawPos = sample.rawPos
+        var rawPos = sample.rawPos
         let vol = sample.vol
         var dur = sample.dur
         var tName = sample.tName
         var tArtist = sample.tArtist
         var tAlbum = sample.tAlbum
-        let dbId = sample.dbId
-        let persistentId = sample.persistentId
+        var dbId = sample.dbId
+        var persistentId = sample.persistentId
         let shuf = sample.shuf
         let repMode = sample.repMode
-        let hasLoc = sample.hasLoc
+        var hasLoc = sample.hasLoc
         let curPlNameRaw = sample.curPlNameRaw
-        let knd = sample.knd
-        let bRate = sample.bRate
-        let sRate = sample.sRate
+        var knd = sample.knd
+        var bRate = sample.bRate
+        var sRate = sample.sRate
         var isFavorited = sample.isFavorited
 
         let isUserPaused = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused }
@@ -46,6 +46,56 @@ extension PlayerStatusEngine {
                 PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.isUserPaused = false }
             } else {
                 stateStr = "paused"
+            }
+        }
+
+        // Honor active AutoMix / Smart Cross-Fade overlap (`OverlappedTransitionState` before `pivotPoint`):
+        // while `Music.app` already plays the incoming track in speakers (`smartTransitionWillBegin`)
+        // yet AppleScript `current track` still reports the fading-out outgoing track, keep AMR's UI
+        // locked onto the incoming track with live interpolated position (`initialPosition + elapsed`).
+        var activeOverlapIncomingTrack: TrackInfo? = nil
+        if let ov = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.activeOverlapTransition }) {
+            let elapsed = Date().timeIntervalSince(ov.startedAt)
+            if stateStr != "playing" || elapsed >= 15.0 {
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.activeOverlapTransition = nil
+                }
+            } else if !tName.isEmpty {
+                let normSample = QueueManager.shared.normalizeTrackTitle(tName)
+                let normOutgoing = QueueManager.shared.normalizeTrackTitle(ov.outgoingName)
+                let matchesIncoming = QueueManager.shared.isTrackMatching(
+                    expected: ov.incomingTrack,
+                    candidateName: tName,
+                    candidateArtist: tArtist,
+                    candidateDbId: dbId > 0 ? dbId : nil
+                )
+                let isStillOutgoing = !normOutgoing.isEmpty && (
+                    tName.localizedCaseInsensitiveCompare(ov.outgoingName) == .orderedSame
+                    || normSample == normOutgoing
+                )
+                if matchesIncoming && (!isStillOutgoing || ov.incomingTrack.name.localizedCaseInsensitiveCompare(ov.outgoingName) == .orderedSame) {
+                    PlaybackStateStore.shared.withLock {
+                        PlaybackStateStore.shared.activeOverlapTransition = nil
+                    }
+                } else if isStillOutgoing {
+                    let inc = ov.incomingTrack
+                    activeOverlapIncomingTrack = inc
+                    tName = inc.name
+                    if !inc.artist.isEmpty { tArtist = inc.artist }
+                    if !inc.album.isEmpty { tAlbum = inc.album }
+                    if inc.duration > 0 { dur = inc.duration }
+                    dbId = max(0, inc.numericId ?? 0)
+                    persistentId = inc.persistentId ?? ""
+                    hasLoc = inc.isLocal ?? false
+                    knd = ""
+                    bRate = 0
+                    sRate = inc.sampleRate ?? 0
+                    isFavorited = inc.favorited
+                    rawPos = ov.initialPosition + max(0.0, elapsed)
+                    if dur > 0 {
+                        rawPos = min(rawPos, dur)
+                    }
+                }
             }
         }
 
@@ -72,12 +122,14 @@ extension PlayerStatusEngine {
                 isFavorited = favOverride
             }
         }
+        let matchedCatalogId: String? = matchedQueueTrackForKey.flatMap { MusicKitManager.extractNumericCatalogId(from: $0) }
+            ?? activeOverlapIncomingTrack.flatMap { MusicKitManager.extractNumericCatalogId(from: $0) }
         if !canonicalKey.isEmpty && stateStr == "playing" {
             if lastCanonicalTrackKey != canonicalKey {
                 var preRate: Double? = nil
                 var preDepth: Int? = nil
-                if let cached = BitPerfectLogMonitor.shared.getCachedFormat(artist: canonicalArtistForKey, title: canonicalTitleForKey)
-                    ?? BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName) {
+                if let cached = BitPerfectLogMonitor.shared.getCachedFormat(artist: canonicalArtistForKey, title: canonicalTitleForKey, catalogId: matchedCatalogId)
+                    ?? (matchedCatalogId == nil ? BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName) : nil) {
                     preRate = cached.sampleRate
                     preDepth = cached.bitDepth
                 } else if hasLoc && sRate > 0 {
@@ -87,7 +139,7 @@ extension PlayerStatusEngine {
                     preDepth = !locIsLossless ? 16 : ((sRate >= 48000) ? 24 : (bRate > 1000 ? 24 : 16))
                 }
                 NSLog("[PlayerStatusEngine] 🎵 Track changed to '%@' (pre-inspected format: %@)", canonicalKey, preRate != nil ? "\(preRate! / 1000.0) kHz" : "awaiting ALAC decoder")
-                BitPerfectLogMonitor.shared.resetTrackState(trackKey: canonicalKey, expectedSampleRate: preRate, expectedBitDepth: preDepth)
+                BitPerfectLogMonitor.shared.resetTrackState(trackKey: canonicalKey, catalogId: matchedCatalogId, expectedSampleRate: preRate, expectedBitDepth: preDepth)
                 lastCanonicalTrackKey = canonicalKey
             }
         } else if stateStr == "stopped" && lastCanonicalTrackKey != nil {
@@ -240,6 +292,9 @@ extension PlayerStatusEngine {
                 artUrl = "/api/artwork/track?id=\(dbId)&name=\(encName)&artist=\(encArtist)&album=\(encAlbum)"
             }
 
+            if artUrl.isEmpty, let ovArt = activeOverlapIncomingTrack?.artworkUrl, !ovArt.isEmpty {
+                artUrl = ovArt
+            }
             if artUrl.isEmpty && isCustom && customIndex < customQueue.count {
                 let customArt = customQueue[customIndex].artworkUrl
                 if !customArt.isEmpty {
@@ -263,28 +318,6 @@ extension PlayerStatusEngine {
                     }
                 }
             }
-            let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName)
-            let detectedRate = BitPerfectLogMonitor.shared.currentDetectedSampleRate.map { Int($0) }
-            let detectedDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth
-            let isStreamLossless = (cachedFmt != nil) || (BitPerfectLogMonitor.shared.currentIsLossless && detectedRate != nil)
-            let effectiveTrackRate: Int?
-            let effectiveTrackDepth: Int?
-            if hasLoc && sRate > 0 {
-                effectiveTrackRate = sRate
-                effectiveTrackDepth = !isLocalLossless ? 16 : ((sRate >= 48000) ? 24 : (bRate > 1000 ? 24 : (detectedDepth ?? 16)))
-            } else if isStreamLossless {
-                effectiveTrackRate = cachedFmt.map { Int($0.sampleRate) } ?? detectedRate
-                if let d = cachedFmt?.bitDepth ?? detectedDepth {
-                    effectiveTrackDepth = d
-                } else if let r = effectiveTrackRate {
-                    effectiveTrackDepth = r >= 48000 ? 24 : 16
-                } else {
-                    effectiveTrackDepth = nil
-                }
-            } else {
-                effectiveTrackRate = 44100
-                effectiveTrackDepth = 16
-            }
             var resolvedCatalogId: String? = nil
             if isCustom && customIndex < customQueue.count {
                 let curQueueTrack = customQueue[customIndex]
@@ -306,10 +339,41 @@ extension PlayerStatusEngine {
                     MusicKitManager.shared.cacheTrackCatalogId(cid, name: tName, artist: tArtist, album: tAlbum)
                 }
             }
+            if resolvedCatalogId == nil, let ovTrack = activeOverlapIncomingTrack {
+                let cid = ovTrack.catalogId ?? ovTrack.id
+                if AppleSoundCheckService.isValidCatalogId(cid) {
+                    resolvedCatalogId = cid
+                    MusicKitManager.shared.cacheTrackCatalogId(cid, name: tName, artist: tArtist, album: tAlbum)
+                }
+            }
             if resolvedCatalogId == nil,
                let cachedCid = MusicKitManager.shared.getCachedTrackCatalogId(name: tName, artist: tArtist, album: tAlbum),
                AppleSoundCheckService.isValidCatalogId(cachedCid) {
                 resolvedCatalogId = cachedCid
+            }
+
+            let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName, catalogId: resolvedCatalogId)
+            let isLiveFormatLocked = BitPerfectLogMonitor.shared.isFormatLockedForCurrentTrack && BitPerfectLogMonitor.shared.currentIsLossless
+            let detectedRate = BitPerfectLogMonitor.shared.currentDetectedSampleRate.map { Int($0) }
+            let detectedDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth
+            let isStreamLossless = (cachedFmt != nil) || (BitPerfectLogMonitor.shared.currentIsLossless && detectedRate != nil)
+            let effectiveTrackRate: Int?
+            let effectiveTrackDepth: Int?
+            if hasLoc && sRate > 0 {
+                effectiveTrackRate = sRate
+                effectiveTrackDepth = !isLocalLossless ? 16 : ((sRate >= 48000) ? 24 : (bRate > 1000 ? 24 : (detectedDepth ?? 16)))
+            } else if isStreamLossless {
+                effectiveTrackRate = isLiveFormatLocked ? (detectedRate ?? cachedFmt.map { Int($0.sampleRate) }) : (cachedFmt.map { Int($0.sampleRate) } ?? detectedRate)
+                if let d = isLiveFormatLocked ? (detectedDepth ?? cachedFmt?.bitDepth) : (cachedFmt?.bitDepth ?? detectedDepth) {
+                    effectiveTrackDepth = d
+                } else if let r = effectiveTrackRate {
+                    effectiveTrackDepth = r >= 48000 ? 24 : 16
+                } else {
+                    effectiveTrackDepth = nil
+                }
+            } else {
+                effectiveTrackRate = 44100
+                effectiveTrackDepth = 16
             }
 
             trackObj = TrackInfo(
@@ -335,7 +399,7 @@ extension PlayerStatusEngine {
             BitPerfectLogMonitor.shared.reportLocalTrackFormat(sampleRate: Double(sRate), bitDepth: depth, isLossless: isLocalLossless)
         }
 
-        let isLosslessTrack = hasLoc ? isLocalLossless : ((BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName) != nil) || (BitPerfectLogMonitor.shared.currentIsLossless && BitPerfectLogMonitor.shared.currentDetectedSampleRate != nil))
+        let isLosslessTrack = hasLoc ? isLocalLossless : ((BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName, catalogId: trackObj?.catalogId) != nil) || (BitPerfectLogMonitor.shared.currentIsLossless && BitPerfectLogMonitor.shared.currentDetectedSampleRate != nil))
         let activeSourceRate = trackObj?.sampleRate.map { Double($0) } ?? (isLosslessTrack ? BitPerfectLogMonitor.shared.currentDetectedSampleRate : 44100.0)
         let activeSourceDepth = !isLosslessTrack ? 16 : (trackObj?.bitDepth ?? BitPerfectLogMonitor.shared.currentDetectedBitDepth)
         if BitPerfectLogMonitor.shared.isEnabled {
@@ -364,7 +428,7 @@ extension PlayerStatusEngine {
             isRadio: false,
             audioQuality: curQuality,
             track: trackObj,
-            audioDeviceName: "Аудиоустройство",
+            audioDeviceName: AMRLocalization.tr("Audio Device", "Аудиоустройство"),
             audioDeviceSampleRate: 44100.0,
             audioDeviceBitDepth: activeSourceDepth ?? 16,
             isBitPerfect: false
@@ -508,7 +572,7 @@ extension PlayerStatusEngine {
             isRadio: true,
             audioQuality: radQuality,
             track: track,
-            audioDeviceName: "Аудиоустройство",
+            audioDeviceName: AMRLocalization.tr("Audio Device", "Аудиоустройство"),
             audioDeviceSampleRate: 44100.0,
             audioDeviceBitDepth: isRadLossless ? radDepth : 16,
             isBitPerfect: false

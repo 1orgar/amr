@@ -292,7 +292,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Генерация QR-приглашений доступна только устройствам с правами администратора ЦАП/аудиовыхода", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "QR invite generation is restricted to devices with DAC / audio output permissions",
+                        "Генерация QR-приглашений доступна только устройствам с правами администратора ЦАП/аудиовыхода"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return
             }
             let payload = ClientDeviceManager.shared.generateShareAccessPayload()
@@ -422,12 +430,17 @@ extension WebSocketServer {
         let effectiveMode: DSPEngineMode = isModeAllowedOnHardware ? cfg.mode : .bitPerfectPassthrough
         let presetInfo = DSPPresetManager.shared.buildTelemetryPresetInfo(for: cfg)
         let effectivePresetID = isModeAllowedOnHardware ? presetInfo.activeID : "builtin_passthrough"
-        let effectivePresetName = isModeAllowedOnHardware ? presetInfo.activeName : "Чистый оригинал (Bit-Perfect Passthrough)"
+        let effectivePresetName = isModeAllowedOnHardware
+            ? presetInfo.activeName
+            : AMRLocalization.tr("Pure Original (Bit-Perfect Passthrough)", "Чистый оригинал (Bit-Perfect Passthrough)")
         let effectivePresetSubtitle = isModeAllowedOnHardware
             ? presetInfo.activeSubtitle
             : (usbAvail.hasEligibleUSBDAC
                 ? presetInfo.activeSubtitle
-                : "Внешний USB / Thunderbolt ЦАП не подключён: DSD и HQ NOS доступны только для внешних USB / Thunderbolt ЦАП (≥ 24-бит / 176.4 кГц)")
+                : AMRLocalization.tr(
+                    "No external USB / Thunderbolt DAC connected: DSD and HQ NOS require an external USB / Thunderbolt DAC (≥ 24-bit / 176.4 kHz)",
+                    "Внешний USB / Thunderbolt ЦАП не подключён: DSD и HQ NOS доступны только для внешних USB / Thunderbolt ЦАП (≥ 24-бит / 176.4 кГц)"
+                ))
         let profileKey: String = {
             switch cfg.profile {
             case .transient: return "transient"

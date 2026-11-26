@@ -74,6 +74,9 @@
       state.playerState = incomingState;
     }
     state.playbackState = state.playerState;
+    try {
+      localStorage.setItem('amr_last_was_playing', String(state.playbackState === 'playing'));
+    } catch (_) {}
 
     // Dynamic initial view: on first player state / status message after initial page load
     if (!state.initialViewSelected) {
@@ -84,10 +87,13 @@
           (dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden'))
         );
         switchDesktopTab(state.desktopActiveTab || 'home', detailOpen);
-      } else if (state.playbackState === 'playing') {
-        switchMobileView('view-now-playing');
       } else {
-        switchMobileView('view-home');
+        const desiredMobileView = state.playbackState === 'playing' ? 'view-now-playing' : 'view-home';
+        if (state.activeView !== desiredMobileView) {
+          switchMobileView(desiredMobileView);
+        } else if (desiredMobileView === 'view-home') {
+          loadTrends();
+        }
       }
     }
 
@@ -225,6 +231,7 @@
     const prevDlnaActive = Boolean(state.isDlnaActive);
     if (data.is_dlna_active !== undefined || data.isDlnaActive !== undefined) {
       state.isDlnaActive = Boolean(data.is_dlna_active !== undefined ? data.is_dlna_active : data.isDlnaActive);
+      try { localStorage.setItem('amr_is_dlna_active', String(state.isDlnaActive)); } catch (_) {}
     }
     const dlnaActiveChanged = (Boolean(state.isDlnaActive) !== prevDlnaActive);
     if (data.room_correction_active !== undefined || data.roomCorrectionActive !== undefined) {
@@ -330,19 +337,24 @@
 
     if (data.amp_volume_control !== undefined) {
       state.ampVolumeControlEnabled = Boolean(data.amp_volume_control) && state.lockVolume100;
+      try { localStorage.setItem('amr_amp_volume_control', String(state.ampVolumeControlEnabled)); } catch (_) {}
     } else if (!state.lockVolume100) {
       state.ampVolumeControlEnabled = false;
+      try { localStorage.setItem('amr_amp_volume_control', 'false'); } catch (_) {}
     }
     if (data.amp_brand_name !== undefined && data.amp_brand_name) {
       state.ampBrandName = String(data.amp_brand_name);
+      try { localStorage.setItem('amr_amp_brand_name', state.ampBrandName); } catch (_) {}
     }
     if (data.amp_max_volume !== undefined && Number(data.amp_max_volume) > 0) {
       state.ampMaxVolume = Number(data.amp_max_volume);
+      try { localStorage.setItem('amr_amp_max_volume', String(state.ampMaxVolume)); } catch (_) {}
     }
     const prevVol = state.volume;
     const prevMute = state.ampMuted;
     if (data.amp_muted !== undefined) {
       state.ampMuted = Boolean(data.amp_muted);
+      try { localStorage.setItem('amr_amp_muted', String(state.ampMuted)); } catch (_) {}
     }
     if (data.amp_connected !== undefined) {
       state.ampConnected = Boolean(data.amp_connected);
@@ -366,6 +378,7 @@
     const maxVol = (state.lockVolume100 && state.ampVolumeControlEnabled) ? (state.ampMaxVolume || 80) : 100;
     if (data.volume !== undefined && !state.isDraggingVolume) {
       state.volume = Math.max(0, Math.min(maxVol, Number(data.volume)));
+      try { localStorage.setItem('amr_last_volume', String(state.volume)); } catch (_) {}
       if (state.volume >= 5) {
         state.previousVolume = state.volume;
       }

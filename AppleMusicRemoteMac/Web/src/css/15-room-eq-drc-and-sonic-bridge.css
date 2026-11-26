@@ -471,14 +471,19 @@
 }
 
 .sonic-bridge-use-current-btn {
-  font-size: 10.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 4px 11px;
   border-radius: 999px;
   border: 1px solid rgba(100, 210, 255, 0.34);
   background: rgba(100, 210, 255, 0.12);
   color: #9be4ff;
   cursor: pointer;
+  touch-action: manipulation;
   transition: all 0.16s ease;
 }
 

@@ -171,7 +171,6 @@ public final class PlaybackTransportController: @unchecked Sendable {
                 QueueManager.shared.handleEndOfQueueManualNext()
                 return true
             }
-            BitPerfectLogMonitor.shared.resetTrackState()
             PlaybackStateStore.shared.withLock {
                 PlaybackStateStore.shared.isUserPaused = false
                 PlaybackStateStore.shared.lastSkipTime = now
@@ -193,7 +192,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
             return true
         }
 
-        BitPerfectLogMonitor.shared.resetTrackState()
+        BitPerfectLogMonitor.shared.beginExplicitTrackSwitch()
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isUserPaused = false
             PlaybackStateStore.shared.lastSkipTime = now
@@ -206,14 +205,17 @@ public final class PlaybackTransportController: @unchecked Sendable {
         }
 
         if PlaybackRouter.shared.isTestingEnvironment {
+            BitPerfectLogMonitor.shared.endExplicitTrackSwitch(trackKey: nil)
             return true
         }
 
         if let app = MusicAppProvider.shared.getMusicApp() {
             app.nextTrack()
+            BitPerfectLogMonitor.shared.endExplicitTrackSwitch(trackKey: nil)
             return true
         }
         let (ok, _) = AppleScriptExecutor.shared.run("tell application \"Music\" to next track")
+        BitPerfectLogMonitor.shared.endExplicitTrackSwitch(trackKey: nil)
         return ok
     }
 
@@ -229,7 +231,6 @@ public final class PlaybackTransportController: @unchecked Sendable {
         lastPrevTrackTime = now
         transportLock.unlock()
 
-        BitPerfectLogMonitor.shared.resetTrackState()
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.isUserPaused = false
             PlaybackStateStore.shared.lastSkipTime = now
@@ -250,7 +251,8 @@ public final class PlaybackTransportController: @unchecked Sendable {
         if isCustom {
             let rawPos = MusicAppProvider.shared.getMusicApp()?.playerPosition ?? 0.0
             let appPos = PlayerStatusEngine.shared.computeOptimisticPosition(rawPosition: rawPos, isPlaying: true, duration: 0)
-            // Standard media player behavior: if track played > 3.0 seconds AND this is not a rapid double click (or explicit DMR track change), restart to 0:00
+            // Standard media player behavior: if track played > 3.0 seconds AND this is not a rapid double click,
+            // restart current track to 0:00 WITHOUT resetting Bit-Perfect format lock!
             if !forceTrackChange && appPos > 3.0 && !isRapidRepeat {
                 return seek(to: 0.0)
             }
@@ -276,6 +278,7 @@ public final class PlaybackTransportController: @unchecked Sendable {
 
         // Standard Library Playlists
         if PlaybackRouter.shared.isTestingEnvironment {
+            BitPerfectLogMonitor.shared.resetTrackState(clearPrebuffer: true)
             return true
         }
         guard let app = MusicAppProvider.shared.getMusicApp() else { return false }
@@ -284,11 +287,13 @@ public final class PlaybackTransportController: @unchecked Sendable {
         if !forceTrackChange && effectivePos > 3.0 && !isRapidRepeat {
             return seek(to: 0.0)
         }
+        BitPerfectLogMonitor.shared.beginExplicitTrackSwitch()
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.repeatOnePinnedTrack = nil
         }
         app.playerPosition = 0.0
         app.previousTrack()
+        BitPerfectLogMonitor.shared.endExplicitTrackSwitch(trackKey: nil)
         return true
     }
 

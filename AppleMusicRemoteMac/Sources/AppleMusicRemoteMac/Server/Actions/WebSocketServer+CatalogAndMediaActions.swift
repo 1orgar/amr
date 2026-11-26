@@ -80,7 +80,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Изменение токена Apple Music отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Modifying the Apple Music token is disabled for this device in Mac settings",
+                        "Изменение токена Apple Music отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             if let token = (params["token"] as? String) ?? (params["user_token"] as? String),

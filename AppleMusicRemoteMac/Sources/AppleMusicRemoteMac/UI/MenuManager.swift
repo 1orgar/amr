@@ -197,7 +197,18 @@ public final class MenuManager: NSObject {
         // 2. Update Audio Format Display & DSP Submenu state
         let isEn = isEnglishUI
         let hasActiveDLNA = DLNADiscoveryManager.shared.hasActiveRenderer
-        let qualityDesc = BitPerfectLogMonitor.shared.currentQualityDescription
+        let rawQualityDesc = BitPerfectLogMonitor.shared.currentQualityDescription
+        let qualityDesc: String = {
+            guard isEn else { return rawQualityDesc }
+            return rawQualityDesc
+                .replacingOccurrences(of: "кГц", with: "kHz")
+                .replacingOccurrences(of: "-бит", with: "-bit")
+                .replacingOccurrences(of: " бит", with: " bit")
+                .replacingOccurrences(of: "Остановлен", with: "Stopped")
+                .replacingOccurrences(of: "Буферизация", with: "Buffering")
+                .replacingOccurrences(of: "Ожидание CDN", with: "Waiting for CDN")
+                .replacingOccurrences(of: "Определение", with: "Detecting")
+        }()
         bitrateItem?.title = isEn ? "🎵 Format: \(qualityDesc)" : "🎵 Формат: \(qualityDesc)"
 
         let dspCfg = AudioEngineController.shared.currentConfigurationSnapshot()
@@ -216,9 +227,9 @@ public final class MenuManager: NSObject {
             case .bitPerfectPassthrough:
                 return isEn ? "🎛️ DSP Preset: Bit-Perfect" : "🎛️ Пресет DSP: Bit-Perfect"
             case .sdmDoP:
-                return "🎛️ DSP: DSD\(dspCfg.dsdRate.rawValue) DoP (Польз.)"
+                return isEn ? "🎛️ DSP: DSD\(dspCfg.dsdRate.rawValue) DoP (Custom)" : "🎛️ DSP: DSD\(dspCfg.dsdRate.rawValue) DoP (Польз.)"
             case .hqNOSPCM:
-                return "🎛️ DSP: HQ NOS PCM (Польз.)"
+                return isEn ? "🎛️ DSP: HQ NOS PCM (Custom)" : "🎛️ DSP: HQ NOS PCM (Польз.)"
             }
         }()
         dspMenuItem?.title = dspTitle
@@ -441,7 +452,12 @@ public final class MenuManager: NSObject {
 
             for prof in profiles {
                 let item = NSMenuItem(
-                    title: String(format: "%@ (%d PEQ, %.1f дБ)", prof.name, prof.eqBands.count, prof.preampGainDB),
+                    title: String(
+                        format: isEn ? "%@ (%d PEQ, %.1f dB)" : "%@ (%d PEQ, %.1f дБ)",
+                        prof.name,
+                        prof.eqBands.count,
+                        prof.preampGainDB
+                    ),
                     action: #selector(selectRoomProfileMenuItem(_:)),
                     keyEquivalent: ""
                 )

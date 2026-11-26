@@ -28,6 +28,7 @@ extension QueueManager {
         } else {
             PlaybackStateStore.shared.latestHistoryTracks = []
         }
+        PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.removeAll()
         PlaybackStateStore.shared.playbackQueueCache = nil
     }
 

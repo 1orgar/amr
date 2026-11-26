@@ -65,13 +65,35 @@ extension BitPerfectLogMonitor {
         }
         let fullRange = NSRange(message.startIndex..<message.endIndex, in: message)
 
-        // 0a. MediaPlaybackCore Smart Transition / Overlap immediate start event (fires ~1.4s before DistributedNotification!)
+        // 0a. MediaPlaybackCore Smart Transition / Overlap immediate start event (fires ~1-5s before DistributedNotification!)
         if Self.smartTransitionBeginPattern.firstMatch(in: message, options: [], range: fullRange) != nil {
-            NSLog("[BitPerfectLogMonitor] ⚡️ Music.app transition begin event detected: %@", message)
+            var outgoingTitle: String? = nil
+            var incomingTitle: String? = nil
+            var incomingStartPos: Double? = nil
+            if let itemsMatch = Self.smartTransitionItemsPattern.firstMatch(in: message, options: [], range: fullRange),
+               itemsMatch.numberOfRanges >= 5 {
+                if let outRange = Range(itemsMatch.range(at: 1), in: message) {
+                    let trimmed = message[outRange].trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { outgoingTitle = trimmed }
+                }
+                if let inRange = Range(itemsMatch.range(at: 3), in: message) {
+                    let trimmed = message[inRange].trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { incomingTitle = trimmed }
+                }
+                if let posRange = Range(itemsMatch.range(at: 4), in: message),
+                   let parsedPos = Double(message[posRange]) {
+                    incomingStartPos = parsedPos
+                }
+            }
+            NSLog("[BitPerfectLogMonitor] ⚡️ Music.app transition begin event detected (incoming=%@): %@", incomingTitle ?? "-", message)
             let cb = self.onSmartTransitionBegan
             cb?()
             if !PlaybackRouter.shared.isTestingEnvironment {
-                QueueManager.shared.handleImmediateSmartTransitionBegan()
+                QueueManager.shared.handleImmediateSmartTransitionBegan(
+                    outgoingTitle: outgoingTitle,
+                    incomingTitle: incomingTitle,
+                    incomingStartPos: incomingStartPos
+                )
             }
             return
         }
@@ -92,6 +114,9 @@ extension BitPerfectLogMonitor {
                 }
                 if changed {
                     NSLog("[BitPerfectLogMonitor] 🎯 Music.app scheduled Smart Transition / Dead-Air cutoff at %.3fs", startSec)
+                }
+                if self.isEnabled {
+                    self.syncMusicAppSmartTransitions(forBitPerfectEnabled: true, minimumEnforceInterval: 5.0)
                 }
                 let cb = self.onSmartTransitionScheduleDetected
                 cb?(startSec)
@@ -260,6 +285,12 @@ extension BitPerfectLogMonitor {
     // MediaPlaybackCore immediate Smart Transition / Overlapped playback start signal
     internal static let smartTransitionBeginPattern = try! NSRegularExpression(
         pattern: #"(?:smartTransitionWillBegin|overlappedPlaybackWillBegin)"#,
+        options: []
+    )
+
+    // Extracts `<ITMPAVItem: ...> (id) Outgoing Title [166.51s] -> <ITMPAVItem: ...> (id) Incoming Title [0.01s]`
+    internal static let smartTransitionItemsPattern = try! NSRegularExpression(
+        pattern: #"(?:smartTransitionWillBegin|overlappedPlaybackWillBegin)\s*-\s*<ITMPAVItem:[^>]+>\s*\([^)]+\)\s*(.+?)\s*\[([0-9]+(?:\.[0-9]+)?)s\]\s*->\s*<ITMPAVItem:[^>]+>\s*\([^)]+\)\s*(.+?)\s*\[([0-9]+(?:\.[0-9]+)?)s\]"#,
         options: []
     )
 

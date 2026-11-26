@@ -48,53 +48,19 @@ extension MusicKitManager {
         return cachedHasTeamSignature
     }
 
-    // MARK: - Keychain & AES-GCM Encrypted Fallback Storage
+    // MARK: - Local AES-256-GCM Encrypted Token Storage (Zero Keychain Prompts)
 
     internal func readKeychainString(account: String) -> String? {
-        guard !isTestingProcess else { return nil }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.keychainService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip as String
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess,
-              let data = item as? Data,
-              let str = String(data: data, encoding: .utf8),
-              !str.isEmpty else {
-            return nil
-        }
-        return str
+        return nil
     }
 
     @discardableResult
     internal func writeKeychainString(_ value: String, account: String) -> Bool {
-        guard !isTestingProcess, let data = value.data(using: .utf8) else { return false }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.keychainService,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock as String
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        return addStatus == errSecSuccess
+        return false
     }
 
     internal func deleteKeychainItem(account: String) {
-        guard !isTestingProcess else { return }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.keychainService,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
+        // Intentionally does not touch macOS File-Based Keychain to avoid securityd password dialogs.
     }
 
     internal static func loadOrCreateFallbackTokenKey() -> SymmetricKey {

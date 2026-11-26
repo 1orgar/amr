@@ -110,10 +110,10 @@ extension LibraryService {
         tell application "Music"
             try
                 with timeout of 4 seconds
-                    set p to library playlist 1
-                    if not (exists p) then
-                        set p to playlist 1
+                    if not (exists library playlist 1) then
+                        return {"EMPTY"}
                     end if
+                    set p to library playlist 1
                     if (count of tracks of p) is 0 then
                         return {"EMPTY"}
                     end if
@@ -611,9 +611,12 @@ extension LibraryService {
         tell application "Music"
             try
                 with timeout of 4 seconds
+                    if not (exists library playlist 1) then
+                        return {}
+                    end if
                     set p to library playlist 1
-                    if not (exists p) then
-                        set p to playlist 1
+                    if (count of tracks of p) is 0 then
+                        return {}
                     end if
                     return {database ID of tracks of p, name of tracks of p, artist of tracks of p, album of tracks of p, duration of tracks of p, played count of tracks of p}
                 end timeout

@@ -448,29 +448,97 @@ final class SystemDiagnosticsAuditTests: XCTestCase {
         let html = WebUIContent.indexHTML
 
         // 1. Lock Screen: guards MediaSession.setActionHandler against MusicKit JS v3, activates m_remoteCommandListener
-        // before binding previoustrack/nexttrack, and never passes playbackRate: 0.0 to setPositionState.
+        // before binding previoustrack/nexttrack, flushes supported commands across two RunLoop turns to defeat
+        // RemoteRemoteCommandListener.cpp:92 coalescing, preloads >0.95s silent audio without stripping src,
+        // and never passes playbackRate: 0.0 to setPositionState.
         XCTAssertFalse(js.contains("if (mediaSessionHandlersBound && !forceRebind)"), "setupMediaSession must always re-apply previoustrack/nexttrack handlers on iOS WebKit")
         XCTAssertTrue(js.contains("allowAmrMediaSessionMutation"), "MediaSession.setActionHandler must block third-party MusicKit JS v3 overrides")
         XCTAssertTrue(js.contains("ensureMediaSessionPlatformActive"), "NowPlayingManager m_remoteCommandListener must be activated before setActionHandler")
+        XCTAssertTrue(js.contains("mediaSessionFlushStopToggle"), "Supported commands must flush across two RunLoop turns so GPUProcess never falls back to defaultCommands() ±15s skip")
+        XCTAssertFalse(js.contains("el.removeAttribute('src')"), "Never strip silent audio src (preserves HAVE_ENOUGH_DATA and iOS gesture blessing)")
         XCTAssertFalse(js.contains("playbackRate: 0.0"), "WebKit MediaSession.setPositionState throws TypeError on playbackRate == 0.0")
         XCTAssertFalse(js.contains("playbackRate: isPlaying ? 1.0 : 0.0"), "WebKit MediaSession.setPositionState requires non-zero playbackRate")
         XCTAssertTrue(js.contains("navigator.mediaSession.setActionHandler('previoustrack', msPrevHandler)"))
         XCTAssertTrue(js.contains("navigator.mediaSession.setActionHandler('nexttrack', msNextHandler)"))
+        XCTAssertTrue(html.contains("preload=\"auto\""))
         XCTAssertTrue(html.contains("x-webkit-airplay=\"deny\""))
         let silenceM4a = WebSocketServer.shared.loadWebBinaryAsset(subpath: "assets/silence.m4a")
         XCTAssertGreaterThan(silenceM4a?.count ?? 0, 512)
         XCTAssertLessThan(silenceM4a?.count ?? Int.max, 65_536, "silence.m4a must be a compact silent loop")
+        let silenceWav = WebSocketServer.shared.loadWebBinaryAsset(subpath: "assets/silence.wav")
+        XCTAssertGreaterThan(silenceWav?.count ?? 0, 16_000, "silence.wav fallback must exceed 0.95s YouveGotMailDuration threshold")
+        XCTAssertLessThan(silenceWav?.count ?? Int.max, 65_536)
 
-        // 2. Portrait Bottom Bar: compact corner-safe bottom strip + cold-launch Standalone viewport repair
-        XCTAssertTrue(css.contains("--mobile-bottom-strip: clamp(7px, calc(env(safe-area-inset-bottom, 10px) * 0.3), 10px);"))
+        // 2. Portrait Bottom Bar & Zero-Jerk Cold-Launch Standalone Shell:
+        //    - Compact bottom strip (~12..15px) that lifts tabs comfortably above the Home Indicator
+        //    - Frame-0 synchronous --standalone-shell-h / 100lvh shell sizing (eliminating the 62pt black-translucent
+        //      bottom dead band on iPhone Pro Max without ever toggling viewport-fit=contain or shifting touch hit-testing)
+        //    - Hydrates volume bar visibility synchronously before WebSocket connect to avoid Now Playing layout shift
+        XCTAssertTrue(css.contains("--mobile-bottom-strip: clamp(18px, calc(env(safe-area-inset-bottom, 22px) * 0.65), 23px);"))
         XCTAssertFalse(css.contains("--mobile-bottom-strip: max(14px, env(safe-area-inset-bottom, 14px));"))
-        XCTAssertTrue(js.contains("repairStandaloneColdLaunchViewport"), "Cold-launch iOS Standalone viewport-fit=cover must re-commit after launch settles")
-        XCTAssertFalse(css.contains(".app-layout {\n  position: fixed;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  width: 100%;\n  height: 100vh;"), ".app-layout must not override fixed bottom: 0 with stale cold-launch 100vh/100dvh")
+        XCTAssertTrue(js.contains("syncStandaloneShellGeometry"), "Standalone full-screen shell height must sync on Frame 0")
+        XCTAssertTrue(css.contains("html.ios-standalone .app-layout"), "Standalone .app-layout must span full physical screen height")
+        XCTAssertFalse(js.contains("VIEWPORT_META_CONTAIN"), "Never mutate <meta name=viewport> to contain on launch (causes 62pt jerk & hit-test offset)")
+        XCTAssertTrue(js.contains("amr_amp_volume_control"), "External amp volume bar visibility must persist across cold starts")
 
         // 3. Landscape Volume Control: respects renderVolumeUI() .hidden logic instead of forced CSS display: none
         XCTAssertTrue(css.contains("#standby-tv-overlay .standby-volume-section:not(.hidden)"))
         XCTAssertTrue(css.contains("#standby-tv-overlay .standby-volume-section.hidden"))
         XCTAssertFalse(css.contains("#top-settings-popover,\n  #standby-volume-section {\n    display: none !important;"))
         XCTAssertFalse(css.contains("#player-btn-standby,\n  #standby-volume-section {\n    display: none !important;"))
+    }
+
+    func testEnglishLocalizationCoverageAcrossSwiftAndWebBundle() {
+        let hasCyrillic: (String) -> Bool = { text in
+            text.unicodeScalars.contains { ($0.value >= 0x0400 && $0.value <= 0x04FF) }
+        }
+
+        AMRLocalization.overrideIsEnglishForTesting = true
+        defer { AMRLocalization.overrideIsEnglishForTesting = nil }
+
+        // 1. Settings tabs & DSP built-in presets / configuration summaries
+        for tab in SettingsTab.allCases {
+            XCTAssertFalse(hasCyrillic(tab.tabTitle), "Untranslated SettingsTab.tabTitle: \(tab.tabTitle)")
+            XCTAssertFalse(hasCyrillic(tab.windowTitle), "Untranslated SettingsTab.windowTitle: \(tab.windowTitle)")
+        }
+        for preset in DSPPresetManager.builtInPresets {
+            XCTAssertFalse(hasCyrillic(preset.name), "Untranslated DSP preset name: \(preset.name)")
+            XCTAssertFalse(hasCyrillic(preset.subtitle), "Untranslated DSP preset subtitle: \(preset.subtitle)")
+        }
+        let dsdSummary = DSPPresetManager.summarizeConfiguration(EngineConfiguration(mode: .sdmDoP, dsdRate: .dsd256))
+        let nosSummary = DSPPresetManager.summarizeConfiguration(EngineConfiguration(mode: .hqNOSPCM))
+        XCTAssertFalse(hasCyrillic(dsdSummary), "Untranslated DSD summary: \(dsdSummary)")
+        XCTAssertFalse(hasCyrillic(nosSummary), "Untranslated NOS summary: \(nosSummary)")
+
+        // 2. CloudSyncError, DiagnosticLogger & DigitalBookletService titles/attributes
+        let syncErrors: [CloudSyncError] = [
+            .iCloudDriveUnavailable,
+            .waitingForICloudDownload,
+            .invalidSyncDirectory("test"),
+            .coordinatorFailed("test"),
+            .snapshotTooLarge(32_000_000)
+        ]
+        for err in syncErrors {
+            let desc = err.errorDescription ?? ""
+            XCTAssertFalse(desc.isEmpty)
+            XCTAssertFalse(hasCyrillic(desc), "Untranslated CloudSyncError: \(desc)")
+        }
+        XCTAssertFalse(hasCyrillic(DiagnosticLogger.shared.logFileSizeDescription()))
+        XCTAssertFalse(hasCyrillic(DigitalBookletService.BookletPageKind.cover.title))
+        XCTAssertFalse(hasCyrillic(DigitalBookletService.BookletPageKind.editorial(paragraphs: [], showReleaseSpecsCard: true, partIndex: 1, totalParts: 2).title))
+        XCTAssertFalse(hasCyrillic(DigitalBookletService.translateMusicBrainzAttribute("rhodes piano")))
+
+        // 3. Verify Russian mode still works when explicitly selected
+        AMRLocalization.overrideIsEnglishForTesting = false
+        XCTAssertTrue(hasCyrillic(SettingsTab.general.tabTitle))
+        XCTAssertTrue(hasCyrillic(DSPPresetManager.builtInPresets[1].name))
+        XCTAssertTrue(hasCyrillic(DigitalBookletService.BookletPageKind.cover.title))
+
+        // 4. Verify Web UI i18n dictionary includes Mastering, Room EQ, Signal Path, and Server messages
+        let js = WebUIContent.appJS
+        XCTAssertTrue(js.contains("'Реставратор клиппинга (De-Clipper)': 'Clipping Restorer (De-Clipper)'"))
+        XCTAssertTrue(js.contains("'АЧХ КОМНАТЫ • AUTO-PEQ 64-BIT • CLOUD': 'ROOM EQ • AUTO-PEQ 64-BIT • CLOUD'"))
+        XCTAssertTrue(js.contains("showToast(message"))
+        XCTAssertTrue(js.contains("translateTextToEn(String(message))"))
     }
 }

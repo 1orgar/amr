@@ -306,7 +306,9 @@
       (lowerArt.includes('coverdiscovery') && !lowerTitle.includes('country') && !lowerTitle.includes('подобные') && !lowerTitle.includes('similar'));
 
     if (isDiscovery) {
-      const dispTitle = lowerTitle.includes('в моем вкусе') ? 'СТАНЦИЯ ОТКРЫТИЙ' : (rawTitle.toUpperCase() || 'СТАНЦИЯ ОТКРЫТИЙ');
+      const dispTitle = IS_EN
+        ? 'DISCOVERY STATION'
+        : (lowerTitle.includes('в моем вкусе') ? 'СТАНЦИЯ ОТКРЫТИЙ' : (rawTitle.toUpperCase() || 'СТАНЦИЯ ОТКРЫТИЙ'));
       const discGradId = `discStarG-${++plaqueUidCounter}`;
       return `
         <div class="animated-plaque-wrap" style="background: linear-gradient(135deg, #10042c 0%, #3a0ca3 38%, #7209b7 72%, #f72585 100%);">
@@ -365,7 +367,7 @@
             <g class="plaque-wave-anim">
               <path d="M 142 235 L 210 235 L 226 172 L 242 298 L 258 194 L 272 262 L 286 235 L 358 235" fill="none" stroke="#ffffff" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="29" font-weight="600" fill="#ffffff" text-anchor="middle">МОЯ СТАНЦИЯ</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="29" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'MY STATION' : 'МОЯ СТАНЦИЯ'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.4" fill="#ffffff" fill-opacity="0.82" text-anchor="middle">PERSONAL STATION</text>
           </svg>
         </div>
@@ -393,7 +395,7 @@
               <path d="M 250 288 C 250 288 188 244 188 202 C 188 178 207 162 228 162 C 241 162 250 171 250 179 C 250 171 259 162 272 162 C 293 162 312 178 312 202 C 312 244 250 288 250 288 Z" fill="#ffffff" fill-opacity="0.95" />
               <path d="M 212 216 L 232 216 L 241 194 L 250 238 L 259 204 L 268 216 L 288 216" fill="none" stroke="#d41442" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="28" font-weight="600" fill="#ffffff" text-anchor="middle">В МОЁМ ВКУСЕ</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="28" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'FAVORITES MIX' : 'В МОЁМ ВКУСЕ'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.4" fill="#ffb3c6" text-anchor="middle">FAVORITES MIX</text>
           </svg>
         </div>
@@ -417,7 +419,7 @@
             <g class="plaque-spin-med">
               <path d="M 210 215 C 230 195, 270 195, 290 215 C 310 235, 310 265, 290 285 C 270 305, 230 305, 210 285 M 275 285 L 290 285 L 290 300" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">СЕЙЧАС НА ПОВТОРЕ</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'HEAVY ROTATION' : 'СЕЙЧАС НА ПОВТОРЕ'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.2" fill="#ffffff" fill-opacity="0.82" text-anchor="middle">HEAVY ROTATION MIX</text>
           </svg>
         </div>
@@ -441,7 +443,7 @@
               <polygon points="250,138 268,217 347,235 268,253 250,332 232,253 153,235 232,217" fill="#ffffff" fill-opacity="0.92" />
               <circle cx="250" cy="235" r="24" fill="#00f5d4" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">НОВИНКИ ДЛЯ ВАС</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'NEW MUSIC MIX' : 'НОВИНКИ ДЛЯ ВАС'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.2" fill="#80ffdb" text-anchor="middle">NEW MUSIC MIX</text>
           </svg>
         </div>
@@ -454,7 +456,7 @@
       lowerArt.includes('coverchill');
 
     if (isChill) {
-      const titleText = lowerTitle.includes('lo-fi') ? 'CHILL & LO-FI' : 'ЧИЛЛ-МИКС';
+      const titleText = lowerTitle.includes('lo-fi') ? 'CHILL & LO-FI' : (IS_EN ? 'CHILL MIX' : 'ЧИЛЛ-МИКС');
       const subText = lowerTitle.includes('lo-fi') ? 'AMBIENT & LO-FI BEATS' : 'CHILL MIX';
       return `
         <div class="animated-plaque-wrap" style="background: linear-gradient(135deg, #0b132b 0%, #1c2541 38%, #0077b6 74%, #00b4d8 100%);">
@@ -495,7 +497,7 @@
               <rect x="272" y="168" width="16" height="134" rx="8" fill="#ffffff" />
               <rect x="302" y="200" width="16" height="70" rx="8" fill="#ffffff" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${escapeHtml(rawTitle.toUpperCase() || 'ДРАЙВ-МИКС')}</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${escapeHtml(IS_EN ? 'GET UP! MIX' : (rawTitle.toUpperCase() || 'ДРАЙВ-МИКС'))}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.2" fill="#fff3b0" text-anchor="middle">GET UP! MIX</text>
           </svg>
         </div>
@@ -515,7 +517,7 @@
               <circle cx="278" cy="235" r="88" fill="none" stroke="#ffccd5" stroke-opacity="0.7" stroke-width="3.5" />
             </g>
             <circle class="plaque-breathe" cx="250" cy="235" r="136" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="14 14" />
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">МИКС ДЛЯ ДРУЗЕЙ</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'FRIENDS MIX' : 'МИКС ДЛЯ ДРУЗЕЙ'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.2" fill="#e0aaff" text-anchor="middle">FRIENDS MIX</text>
           </svg>
         </div>
@@ -552,7 +554,7 @@
               <path d="M 125 230 L 190 230 L 212 165 L 236 290 L 256 190 L 278 270 L 298 178 L 318 275 L 334 230 L 375 230" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
             </g>
             <text x="250" y="418" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="${artistFontSize}" font-weight="700" fill="#ffffff" text-anchor="middle">${escapeHtml(cleanArtist.toUpperCase())}</text>
-            <text x="250" y="446" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="11.5" font-weight="600" letter-spacing="2" fill="#e0aaff" text-anchor="middle">РАДИОСТАНЦИЯ ПО АРТИСТУ</text>
+            <text x="250" y="446" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="11.5" font-weight="600" letter-spacing="2" fill="#e0aaff" text-anchor="middle">${IS_EN ? 'ARTIST STATION' : 'РАДИОСТАНЦИЯ ПО АРТИСТУ'}</text>
           </svg>
         </div>
       `;

@@ -72,7 +72,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DAC and audio output selection is disabled for this device in Mac settings",
+                        "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let enabled = (params["enabled"] as? Bool) ?? false
@@ -109,7 +117,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DAC and audio output selection is disabled for this device in Mac settings",
+                        "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let hadActiveDLNA = DLNADiscoveryManager.shared.hasActiveRenderer
@@ -146,7 +162,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "DAC and audio output selection is disabled for this device in Mac settings",
+                        "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let enabled = (params["enabled"] as? Bool) ?? false
@@ -168,7 +192,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Изменение настроек подсветки WLED отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Modifying WLED lighting settings is disabled for this device in Mac settings",
+                        "Изменение настроек подсветки WLED отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let enabled = params["enabled"] as? Bool
@@ -443,7 +475,15 @@ extension WebSocketServer {
             if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                 sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
             }
-            sendError(action: action, error: "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac", id: id, to: connection)
+            sendError(
+                action: action,
+                error: AMRLocalization.tr(
+                    "DAC and audio output selection is disabled for this device in Mac settings",
+                    "Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac"
+                ),
+                id: id,
+                to: connection
+            )
             return
         }
         let uidParam = (params["uid"] as? String) ?? ""

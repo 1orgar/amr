@@ -44,9 +44,9 @@
         },
         {
           index: 2,
-          title: 'Станция открытий',
-          sub: 'Новые треки под ваш вкус',
-          tag: 'Радиостанция',
+          title: IS_EN ? 'Discovery Station' : 'Станция открытий',
+          sub: IS_EN ? 'New music tailored to your taste' : 'Новые треки под ваш вкус',
+          tag: IS_EN ? 'Radio Station' : 'Радиостанция',
           id: '',
           type: 'station',
           url: '',
@@ -54,9 +54,9 @@
         },
         {
           index: 3,
-          title: 'Любимые песни',
-          sub: 'Плейлист медиатеки',
-          tag: 'Медиатека',
+          title: IS_EN ? 'Favorite Songs' : 'Любимые песни',
+          sub: IS_EN ? 'Library Playlist' : 'Плейлист медиатеки',
+          tag: IS_EN ? 'Library' : 'Медиатека',
           id: 'Любимые песни',
           type: 'playlist',
           url: '',
@@ -64,9 +64,9 @@
         },
         {
           index: 4,
-          title: 'Сейчас на повторе',
-          sub: 'Еженедельный микс',
-          tag: 'Для вас',
+          title: IS_EN ? 'Heavy Rotation Mix' : 'Сейчас на повторе',
+          sub: IS_EN ? 'Weekly Mix' : 'Еженедельный микс',
+          tag: IS_EN ? 'Made for You' : 'Для вас',
           id: 'Сейчас на повторе',
           type: 'playlist',
           url: '',
@@ -74,19 +74,21 @@
         },
         {
           index: 5,
-          title: 'Легенда',
-          sub: 'Кино',
-          tag: 'Топ-альбом',
-          id: '1375628135',
+          title: IS_EN ? 'Random Access Memories' : 'Легенда',
+          sub: IS_EN ? 'Daft Punk' : 'Кино',
+          tag: IS_EN ? 'Top Album' : 'Топ-альбом',
+          id: IS_EN ? '617154241' : '1375628135',
           type: 'album',
-          url: 'https://music.apple.com/album/1375628135',
-          artwork: 'https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/c7/99/1e/c7991ed1-bee2-8c46-2e66-81d0b8e7eeb2/cover.jpg/600x600bb.jpg'
+          url: IS_EN ? 'https://music.apple.com/album/617154241' : 'https://music.apple.com/album/1375628135',
+          artwork: IS_EN
+            ? 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/e8/43/5f/e8435f2c-1c7b-58f9-81b8-6f40a21ab8db/886443919266.jpg/600x600bb.jpg'
+            : 'https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/c7/99/1e/c7991ed1-bee2-8c46-2e66-81d0b8e7eeb2/cover.jpg/600x600bb.jpg'
         },
         {
           index: 6,
           title: 'Mutter',
           sub: 'Rammstein',
-          tag: 'Топ-альбом',
+          tag: IS_EN ? 'Top Album' : 'Топ-альбом',
           id: '1440770702',
           type: 'album',
           url: 'https://music.apple.com/album/1440770702',
@@ -94,13 +96,15 @@
         },
         {
           index: 7,
-          title: 'Акустический альбом',
-          sub: 'Король и Шут',
-          tag: 'Топ-альбом',
-          id: '1440751918',
+          title: IS_EN ? 'The Dark Side of the Moon' : 'Акустический альбом',
+          sub: IS_EN ? 'Pink Floyd' : 'Король и Шут',
+          tag: IS_EN ? 'Top Album' : 'Топ-альбом',
+          id: IS_EN ? '1065973699' : '1440751918',
           type: 'album',
-          url: 'https://music.apple.com/album/1440751918',
-          artwork: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/44/9a/c0/449ac06f-40e1-7c59-bf7b-6ae9be2d7b14/4607062440191.jpg/600x600bb.jpg'
+          url: IS_EN ? 'https://music.apple.com/album/1065973699' : 'https://music.apple.com/album/1440751918',
+          artwork: IS_EN
+            ? 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/3c/64/73/3c647362-2f0f-2c26-5f20-ef44780d4094/886445635829.jpg/600x600bb.jpg'
+            : 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/44/9a/c0/449ac06f-40e1-7c59-bf7b-6ae9be2d7b14/4607062440191.jpg/600x600bb.jpg'
         }
       );
     }
@@ -130,11 +134,15 @@
         </div>
       `);
 
+      const heroTagText = translateTextToEn(c.tag || '');
+      const heroTitleText = c.type === 'album' ? (c.title || '') : translateTextToEn(c.title || '');
+      const heroSubText = c.type === 'album' ? (c.sub || '') : translateTextToEn(c.sub || '');
+
       el.innerHTML = `
         <div class="hero-card-header">
-          <span class="hero-tag">${escapeHtml(c.tag)}</span>
-          <span class="hero-title">${escapeHtml(c.title)}</span>
-          <span class="hero-sub">${escapeHtml(c.sub)}</span>
+          <span class="hero-tag">${escapeHtml(heroTagText)}</span>
+          <span class="hero-title">${escapeHtml(heroTitleText)}</span>
+          <span class="hero-sub">${escapeHtml(heroSubText)}</span>
         </div>
         <div class="hero-card-media">
           ${mediaHtml}
@@ -247,9 +255,10 @@
     list.forEach(mix => {
       const card = document.createElement('div');
       card.className = 'media-card';
-      const mName = mix.name || 'Микс';
+      const mName = mix.name || (IS_EN ? 'Mix' : 'Микс');
+      const displayMixName = translateTextToEn(mName);
       const art = appendDeviceIdToUrl(mix.artwork || mix.artwork_url || 'apple-touch-icon.svg');
-      const curator = mix.curator_name || 'Apple Music';
+      const curator = translateTextToEn(mix.curator_name || 'Apple Music');
       const animatedPlaque = getAnimatedPlaqueHtml({ ...mix, title: mName, subtitle: curator });
       const artContent = animatedPlaque
         ? animatedPlaque
@@ -263,7 +272,7 @@
             </div>
           </div>
         </div>
-        <div class="media-card-title">${escapeHtml(mName)}</div>
+        <div class="media-card-title">${escapeHtml(displayMixName)}</div>
         <div class="media-card-sub">${escapeHtml(curator)}</div>
       `;
       card.addEventListener('click', () => {
@@ -519,17 +528,21 @@
       const animatedPlaque = getAnimatedPlaqueHtml({ ...st, type: 'station' });
       const hasImage = Boolean(st.artwork && st.artwork.trim().length > 0 && !st.artwork.includes('apple-touch-icon'));
 
+      const stFallbackTitle = translateTextToEn(st.name || (IS_EN ? 'Radio' : 'Радио'));
+      const stDisplayName = translateTextToEn(st.name || (IS_EN ? 'Radio Station' : 'Радиостанция'));
+      const stDisplaySub = translateTextToEn(st.subtitle || (isLive ? 'Прямой эфир Apple Music' : 'Персональная станция'));
+
       const artHtml = animatedPlaque
         ? animatedPlaque
         : (hasImage
           ? `<img class="media-card-art" src="${escapeHtml(st.artwork)}" alt="" loading="lazy" data-fallback-mode="next-flex">
              <div class="media-card-art-fallback" style="display:none; background: ${gradient};">
                ${iconSvg}
-               <span class="station-art-fallback-title">${escapeHtml(st.name || 'Радио')}</span>
+               <span class="station-art-fallback-title">${escapeHtml(stFallbackTitle)}</span>
              </div>`
           : `<div class="media-card-art-fallback" style="background: ${gradient};">
                ${iconSvg}
-               <span class="station-art-fallback-title">${escapeHtml(st.name || 'Радио')}</span>
+               <span class="station-art-fallback-title">${escapeHtml(stFallbackTitle)}</span>
              </div>`);
 
       card.innerHTML = `
@@ -544,8 +557,8 @@
             </div>
           </div>
         </div>
-        <span class="media-card-title">${escapeHtml(st.name || 'Радиостанция')}</span>
-        <span class="media-card-sub">${escapeHtml(st.subtitle || (isLive ? 'Прямой эфир Apple Music' : 'Персональная станция'))}</span>
+        <span class="media-card-title">${escapeHtml(stDisplayName)}</span>
+        <span class="media-card-sub">${escapeHtml(stDisplaySub)}</span>
       `;
 
       card.addEventListener('click', () => {

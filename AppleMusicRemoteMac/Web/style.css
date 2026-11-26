@@ -36,7 +36,8 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  --mobile-bottom-strip: clamp(7px, calc(env(safe-area-inset-bottom, 10px) * 0.3), 10px);
+  --mobile-bottom-strip: clamp(18px, calc(env(safe-area-inset-bottom, 22px) * 0.65), 23px);
+  --app-shell-h: 100%;
 }
 
 *, *::before, *::after {
@@ -270,6 +271,68 @@ textarea {
   z-index: 1;
 }
 
+/* iOS Standalone WebClip Full-Screen Shell:
+   With apple-mobile-web-app-status-bar-style="black-translucent" + viewport-fit=cover,
+   WebKit's fixed bottom: 0 / innerHeight / 100dvh under-reports physical height by safe-area-inset-top
+   (e.g. 894pt instead of 956pt on iPhone Pro Max), while WKWebView.bounds and 100lvh/100vh span all 956pt.
+   Sizing html/body (without viewport-clipping overflow:hidden) + #app to --app-shell-h expands
+   WKContentView.frame and places .bottom-tab-bar at the true bottom of the screen on Frame 0 with zero jerk. */
+@media all and (display-mode: standalone) {
+  :root {
+    --app-shell-h: var(--standalone-shell-h, 100vh);
+  }
+  @supports (height: 100lvh) {
+    :root {
+      --app-shell-h: var(--standalone-shell-h, 100lvh);
+    }
+  }
+  html,
+  body {
+    position: relative;
+    height: var(--app-shell-h) !important;
+    min-height: var(--app-shell-h) !important;
+    overflow: visible !important;
+  }
+  .app-layout {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    height: var(--app-shell-h);
+  }
+}
+
+html.ios-standalone {
+  --app-shell-h: var(--standalone-shell-h, 100vh);
+  position: relative;
+  height: var(--app-shell-h) !important;
+  min-height: var(--app-shell-h) !important;
+  overflow: visible !important;
+}
+
+@supports (height: 100lvh) {
+  html.ios-standalone {
+    --app-shell-h: var(--standalone-shell-h, 100lvh);
+  }
+}
+
+html.ios-standalone body {
+  position: relative;
+  height: var(--app-shell-h) !important;
+  min-height: var(--app-shell-h) !important;
+  overflow: visible !important;
+}
+
+html.ios-standalone .app-layout {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  height: var(--app-shell-h);
+}
+
 /* Desktop Dual Column: >= 768px and min-height 541px */
 @media (min-width: 768px) and (min-height: 541px) {
   .app-layout {
@@ -434,21 +497,29 @@ textarea {
   .player-panel {
     display: none;
     width: 100%;
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background: transparent;
     flex-direction: column;
+    justify-content: space-between;
     padding-top: calc(var(--safe-top) + 10px);
     padding-left: calc(var(--safe-left) + 20px);
     padding-right: calc(var(--safe-right) + 20px);
-    padding-bottom: calc(62px + var(--mobile-bottom-strip));
-    overflow-y: auto;
+    padding-bottom: calc(74px + var(--mobile-bottom-strip));
+    overflow: hidden;
     z-index: 20;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: none;
     animation: viewFadeIn 0.2s cubic-bezier(0.2, 0.9, 0.4, 1);
+  }
+
+  @media (max-height: 639px) {
+    .player-panel {
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+    }
   }
 
   .player-panel.active {
@@ -492,6 +563,11 @@ textarea {
   .content-view.active {
     display: flex;
   }
+}
+
+body:not(.app-ready) .player-panel,
+body:not(.app-ready) .content-view {
+  animation: none !important;
 }
 
 @keyframes viewFadeIn {
@@ -764,6 +840,8 @@ textarea {
 .track-album {
   font-size: 13px;
   font-weight: 400;
+  line-height: 18px;
+  min-height: 18px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1327,12 +1405,40 @@ textarea {
   display: none !important;
 }
 
-@media (max-width: 767px) and (min-height: 800px) {
-  .player-panel {
-    justify-content: space-evenly;
+@media (max-width: 767px) and (min-height: 541px) {
+  .player-top-header {
+    margin-bottom: 0;
+  }
+  .artwork-container {
+    flex: 0 1 auto;
+    min-height: 0;
+    margin-bottom: 0;
   }
   .artwork-wrapper {
-    max-width: min(400px, 88vw, 45vh);
+    width: min(100%, 360px, 36.5vh);
+    max-width: min(100%, 360px, 36.5vh);
+    max-height: 100%;
+  }
+  .track-meta {
+    margin-bottom: 0;
+  }
+  .scrubber-section {
+    margin-bottom: 0;
+  }
+  .transport-controls {
+    margin-bottom: 0;
+  }
+  .volume-section {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 767px) and (min-height: 800px) {
+  .artwork-wrapper {
+    width: min(100%, 400px, 42vh);
+    max-width: min(100%, 400px, 42vh);
+    max-height: 100%;
   }
 }
 
@@ -1406,7 +1512,7 @@ textarea {
 /* Ensure mobile scroll content has clearance for docked mini-player + bottom tab bar */
 @media (max-width: 767px), (max-height: 540px) {
   .scroll-pane {
-    padding-bottom: calc(var(--safe-bottom) + 140px);
+    padding-bottom: calc(130px + var(--mobile-bottom-strip));
   }
 }
 
@@ -1704,7 +1810,7 @@ textarea {
   display: none !important;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
   .library-section-header {
     flex-direction: column;
     align-items: stretch;
@@ -1760,7 +1866,7 @@ textarea {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
-    padding-bottom: calc(var(--safe-bottom) + 140px);
+    padding-bottom: calc(130px + var(--mobile-bottom-strip));
   }
 
   .playlist-card {
@@ -1890,7 +1996,7 @@ textarea {
     font-size: 19px !important;
   }
   .detail-actions {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .btn-primary-action,
@@ -1945,12 +2051,9 @@ textarea {
 
 .detail-actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
 }
 
 .detail-actions::-webkit-scrollbar {
@@ -2449,6 +2552,28 @@ textarea {
   gap: 10px;
   justify-content: flex-end;
   margin-top: 18px;
+}
+
+.btn-close-modal {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.btn-close-modal:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
 /* === MODULE: 05-home-carousels-and-genres.css === */
@@ -3099,10 +3224,10 @@ textarea {
    ========================================================================== */
 
 .mini-player {
-  position: fixed;
+  position: absolute;
   left: calc(var(--safe-left) + 12px);
   right: calc(var(--safe-right) + 12px);
-  bottom: calc(56px + var(--mobile-bottom-strip));
+  bottom: calc(55px + var(--mobile-bottom-strip));
   height: 58px;
   background: rgba(22, 22, 24, 0.94);
   backdrop-filter: blur(25px);
@@ -3212,14 +3337,15 @@ textarea {
    ========================================================================== */
 
 .bottom-tab-bar {
-  position: fixed;
+  position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(50px + var(--mobile-bottom-strip));
+  height: calc(49px + var(--mobile-bottom-strip));
+  padding-top: 5px;
   padding-bottom: var(--mobile-bottom-strip);
-  padding-left: max(8px, var(--safe-left));
-  padding-right: max(8px, var(--safe-right));
+  padding-left: max(10px, var(--safe-left));
+  padding-right: max(10px, var(--safe-right));
   background: rgba(10, 10, 12, 0.96);
   backdrop-filter: blur(25px);
   -webkit-backdrop-filter: blur(25px);
@@ -3229,6 +3355,7 @@ textarea {
   justify-content: space-between;
   gap: 0;
   z-index: 100;
+  touch-action: manipulation;
 }
 
 .bottom-tab-bar::after {
@@ -3256,7 +3383,7 @@ textarea {
   transition: color var(--transition-fast);
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  padding: 4px 1px;
+  padding: 2px 2px 1px 2px;
 }
 
 .tab-item svg {
@@ -3538,6 +3665,34 @@ textarea {
   transform: scale(0.92);
 }
 
+@media all and (display-mode: standalone) {
+  .overlay-modal,
+  .modal-backdrop,
+  .busy-overlay,
+  .standby-tv-overlay,
+  .booklet-viewer-overlay:not(.inline-right-pane) {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+    height: var(--app-shell-h, 100vh) !important;
+  }
+}
+
+html.ios-standalone .overlay-modal,
+html.ios-standalone .modal-backdrop,
+html.ios-standalone .busy-overlay,
+html.ios-standalone .standby-tv-overlay,
+html.ios-standalone .booklet-viewer-overlay:not(.inline-right-pane) {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  height: var(--app-shell-h, 100vh) !important;
+}
+
 .busy-spinner {
   width: 36px;
   height: 36px;
@@ -3747,9 +3902,11 @@ body.ui-blocked #busy-overlay {
   gap: 12px;
   width: 100%;
   max-width: 360px;
-  margin: 12px auto 0;
-  padding: 0 8px;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  margin: 6px auto 0;
+  padding: 0 6px;
+  min-height: 42px;
+  flex-shrink: 0;
+  transition: opacity 0.2s ease;
 }
 
 .volume-section.hidden {
@@ -3757,18 +3914,21 @@ body.ui-blocked #busy-overlay {
 }
 
 .btn-volume-mute {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
+  touch-action: manipulation;
   transition: color var(--transition-fast), transform var(--transition-fast);
 }
 
@@ -3788,9 +3948,11 @@ body.ui-blocked #busy-overlay {
 .volume-slider-container {
   position: relative;
   flex: 1;
-  height: 32px;
+  height: 42px;
+  min-height: 42px;
   display: flex;
   align-items: center;
+  touch-action: none;
 }
 
 .volume-track {
@@ -3817,8 +3979,8 @@ body.ui-blocked #busy-overlay {
 .volume-thumb {
   position: absolute;
   top: 50%;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background: #ffffff;
   border-radius: 50%;
   transform: translate(-50%, -50%);
@@ -3835,6 +3997,7 @@ body.ui-blocked #busy-overlay {
   opacity: 0;
   cursor: pointer;
   z-index: 2;
+  touch-action: none;
   -webkit-appearance: none;
   appearance: none;
 }
@@ -6116,11 +6279,32 @@ body.standby-landscape-open:not(.keyboard-open) .station-animated-bg {
   color: #ff453a;
 }
 
+#view-queue .section-header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .queue-header-actions {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+@media (max-width: 980px) {
+  .queue-header-actions {
+    width: 100%;
+    display: flex;
+  }
+
+  .queue-header-actions > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    justify-content: center;
+  }
 }
 
 .btn-save-queue {
@@ -6576,9 +6760,17 @@ body.standby-landscape-open:not(.keyboard-open) .station-animated-bg {
     inset: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
-    height: 100dvh !important;
+    height: var(--app-shell-h, 100dvh) !important;
     padding: 14px calc(max(var(--safe-right), 24px)) 14px calc(max(var(--safe-left), 24px)) !important;
     z-index: 9999 !important;
+  }
+
+  html.ios-standalone body:not(.keyboard-open) #standby-tv-overlay {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
   }
 
   #standby-tv-overlay .standby-top-bar,
@@ -6799,7 +6991,7 @@ body.standby-landscape-open:not(.keyboard-open) .station-animated-bg {
   top: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
-  height: 100dvh !important;
+  height: var(--app-shell-h, 100dvh) !important;
   z-index: 10220 !important;
   border-left: none;
 }
@@ -7731,7 +7923,8 @@ body.standby-landscape-open:not(.keyboard-open) .station-animated-bg {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px;
+  min-height: 32px;
+  padding: 6px 12px;
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 600;
@@ -7739,6 +7932,7 @@ body.standby-landscape-open:not(.keyboard-open) .station-animated-bg {
   background: rgba(191, 90, 242, 0.14);
   border: 1px solid rgba(191, 90, 242, 0.35);
   cursor: pointer;
+  touch-action: manipulation;
   transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease, color 0.16s ease;
 }
 
@@ -8811,14 +9005,19 @@ body.standby-landscape-open:not(.keyboard-open) .station-animated-bg {
 }
 
 .sonic-bridge-use-current-btn {
-  font-size: 10.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 4px 11px;
   border-radius: 999px;
   border: 1px solid rgba(100, 210, 255, 0.34);
   background: rgba(100, 210, 255, 0.12);
   color: #9be4ff;
   cursor: pointer;
+  touch-action: manipulation;
   transition: all 0.16s ease;
 }
 

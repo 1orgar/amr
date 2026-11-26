@@ -31,6 +31,25 @@ public struct PendingStagedCatalogTrack: Codable, Sendable, Equatable {
     }
 }
 
+public struct OverlapTransitionSnapshot: Sendable {
+    public let outgoingName: String
+    public let incomingTrack: TrackInfo
+    public let startedAt: Date
+    public let initialPosition: Double
+
+    public init(
+        outgoingName: String,
+        incomingTrack: TrackInfo,
+        startedAt: Date = Date(),
+        initialPosition: Double = 0.0
+    ) {
+        self.outgoingName = outgoingName
+        self.incomingTrack = incomingTrack
+        self.startedAt = startedAt
+        self.initialPosition = initialPosition
+    }
+}
+
 public final class PlaybackStateStore: @unchecked Sendable {
     public static let shared = PlaybackStateStore()
 
@@ -85,6 +104,9 @@ public final class PlaybackStateStore: @unchecked Sendable {
     public var hasTriggeredAdvanceForCurrentTrack: Bool = false
     public var lastKnownPosition: Double = 0.0
     public var scheduledSmartTransitionStart: Double? = nil
+    public var nativeQueuedUpcomingCatalogIds: [String] = []
+    public var activeOverlapTransition: OverlapTransitionSnapshot? = nil
+    public var lastSeekCommandTime: Date = .distantPast
 
     // Temporary Cloud Tracks Staged in Library Playlist 1
     public var stagedTemporaryTrackDbIds: Set<Int> = {
@@ -309,6 +331,9 @@ public final class PlaybackStateStore: @unchecked Sendable {
             lastCloudPlayTime = nil
             lastKnownPosition = 0.0
             scheduledSmartTransitionStart = nil
+            nativeQueuedUpcomingCatalogIds.removeAll()
+            activeOverlapTransition = nil
+            lastSeekCommandTime = .distantPast
             lastSkipTime = .distantPast
             lastConfirmedTrackTime = .distantPast
             lastForeignInterceptTime = .distantPast
@@ -374,6 +399,8 @@ public final class PlaybackStateStore: @unchecked Sendable {
         lastCloudPlayTime = nil
         lastKnownPosition = 0.0
         scheduledSmartTransitionStart = nil
+        nativeQueuedUpcomingCatalogIds.removeAll()
+        activeOverlapTransition = nil
         lastSkipTime = .distantPast
         lastConfirmedTrackTime = .distantPast
         lastForeignInterceptTime = .distantPast
@@ -394,8 +421,11 @@ public final class PlaybackStateStore: @unchecked Sendable {
 
     public func setSeekTarget(position: Double) {
         lock.lock()
+        let now = Date()
         seekTargetPosition = position
-        seekTargetDate = Date()
+        seekTargetDate = now
+        lastSeekCommandTime = now
+        activeOverlapTransition = nil
         if let smartStart = scheduledSmartTransitionStart, position >= smartStart - 0.25 {
             scheduledSmartTransitionStart = nil
         }

@@ -171,9 +171,19 @@ EOF
 
 chmod +x "$MACOS_DIR/$APP_NAME"
 
-# Check for Apple Development certificate
+# Strip Finder .DS_Store and extended attributes so strict codesign / notarization never fails
+find "$APP_BUNDLE" -name ".DS_Store" -delete 2>/dev/null || true
+xattr -cr "$APP_BUNDLE" 2>/dev/null || true
+
+# Prefer Developer ID Application if installed, otherwise Apple Development, otherwise ad-hoc
+DEV_ID_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -n 1 | awk -F'"' '{print $2}')
 DEV_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -n 1 | awk -F'"' '{print $2}')
-if [ -n "$DEV_IDENTITY" ]; then
+if [ -n "$DEV_ID_IDENTITY" ]; then
+    echo "🔏 Signing macOS App with Developer ID Application: $DEV_ID_IDENTITY"
+    codesign --force --deep --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" -s "$DEV_ID_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
+        || codesign --force --deep --options runtime --entitlements "$ENTITLEMENTS_PLIST" -s "$DEV_ID_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
+        || codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" -s - "$APP_BUNDLE"
+elif [ -n "$DEV_IDENTITY" ]; then
     echo "🔏 Signing macOS App with Apple Developer identity: $DEV_IDENTITY"
     codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" -s "$DEV_IDENTITY" "$APP_BUNDLE" 2>/dev/null \
         || codesign --force --options runtime --entitlements "$ENTITLEMENTS_PLIST" -s - "$APP_BUNDLE"

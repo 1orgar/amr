@@ -18,15 +18,30 @@ public enum CloudSyncError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .iCloudDriveUnavailable:
-            return "Папка iCloud Drive недоступна на этом Mac. Войдите в iCloud или выберите собственную папку синхронизации."
+            return AMRLocalization.tr(
+                "iCloud Drive folder is unavailable on this Mac. Sign in to iCloud or select a custom sync folder.",
+                "Папка iCloud Drive недоступна на этом Mac. Войдите в iCloud или выберите собственную папку синхронизации."
+            )
         case .waitingForICloudDownload:
-            return "Облачный файл найден в iCloud Drive и загружается. Синхронизация завершится автоматически после скачивания."
+            return AMRLocalization.tr(
+                "Cloud file found in iCloud Drive and is downloading. Sync will finish automatically once downloaded.",
+                "Облачный файл найден в iCloud Drive и загружается. Синхронизация завершится автоматически после скачивания."
+            )
         case .invalidSyncDirectory(let details):
-            return "Не удалось подготовить папку синхронизации: \(details)"
+            return AMRLocalization.tr(
+                "Failed to prepare sync folder: \(details)",
+                "Не удалось подготовить папку синхронизации: \(details)"
+            )
         case .coordinatorFailed(let details):
-            return "Ошибка координации доступа к облачному файлу: \(details)"
+            return AMRLocalization.tr(
+                "Cloud file coordination failed: \(details)",
+                "Ошибка координации доступа к облачному файлу: \(details)"
+            )
         case .snapshotTooLarge(let bytes):
-            return "Файл синхронизации превышает допустимый лимит 16 МБ (\(bytes) байт)."
+            return AMRLocalization.tr(
+                "Sync snapshot exceeds the 16 MB limit (\(bytes) bytes).",
+                "Файл синхронизации превышает допустимый лимит 16 МБ (\(bytes) байт)."
+            )
         }
     }
 }

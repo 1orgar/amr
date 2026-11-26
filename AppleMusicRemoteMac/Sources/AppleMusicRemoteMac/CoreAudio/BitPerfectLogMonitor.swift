@@ -32,11 +32,16 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             os_unfair_lock_unlock(&fastSpinLock)
             AppStorageProvider.shared.set(newValue, forKey: "BitPerfectAutoSwitchEnabled")
             NSLog("[BitPerfectLogMonitor] Bit-Perfect auto-switch is now: \(newValue ? "ON" : "OFF")")
+            syncMusicAppSmartTransitions(forBitPerfectEnabled: newValue)
             if newValue, let rate = currentDetectedSampleRate {
                 applyFormat(rate: rate, bitDepth: currentDetectedBitDepth ?? (rate >= 48000.0 ? 24 : 16))
             }
         }
     }
+
+    private let transitionsPrefLock = NSLock()
+    private var lastSmartTransitionEnforcementAt: Date = .distantPast
+    internal var musicTransitionsPrefAccessorForTesting: (read: () -> Bool?, write: (Bool) -> Void)? = nil
 
     private let stateLock = NSLock()
     private var _currentDetectedBitDepth: Int?
@@ -46,9 +51,13 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     private var _isFormatLockedForCurrentTrack: Bool = false
     private var _isAuthoritativelyLocked: Bool = false
     private var _currentLockedTrackKey: String?
+    private var _currentLockedCatalogId: String?
     private var _pendingNextTrackFormat: (sampleRate: Double, bitDepth: Int, timestamp: Date)?
     private var _formatSwitchCountForCurrentTrack: Int = 0
     internal var lockTimestamp: Date = .distantPast
+    internal var lastResetTimestamp: Date = .distantPast
+    internal var isSuppressingTeardownLogs: Bool = false
+    internal var teardownSuppressStartedAt: Date = .distantPast
 
     public internal(set) var currentDetectedSampleRate: Double? {
         get {
@@ -90,6 +99,10 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
     public internal(set) var currentLockedTrackKey: String? {
         get { stateLock.withLock { _currentLockedTrackKey } }
         set { stateLock.withLock { _currentLockedTrackKey = newValue } }
+    }
+    public internal(set) var currentLockedCatalogId: String? {
+        get { stateLock.withLock { _currentLockedCatalogId } }
+        set { stateLock.withLock { _currentLockedCatalogId = newValue } }
     }
     public internal(set) var pendingNextTrackFormat: (sampleRate: Double, bitDepth: Int, timestamp: Date)? {
         get { stateLock.withLock { _pendingNextTrackFormat } }
@@ -181,26 +194,54 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
 
     // MARK: - Track Format Cache
 
-    public func getCachedFormat(artist: String, title: String) -> (sampleRate: Double, bitDepth: Int)? {
-        guard !title.isEmpty else { return nil }
-        let key = "\(artist.trimmingCharacters(in: .whitespacesAndNewlines)):\(title.trimmingCharacters(in: .whitespacesAndNewlines))".lowercased()
+    internal static func sanitizedCatalogId(_ raw: String?) -> String? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              let num = Int(trimmed),
+              num >= 1_000_000 else {
+            return nil
+        }
+        return trimmed
+    }
+
+    public func getCachedFormat(artist: String, title: String, catalogId: String? = nil) -> (sampleRate: Double, bitDepth: Int)? {
         cacheLock.lock()
         defer { cacheLock.unlock() }
+        if let cid = Self.sanitizedCatalogId(catalogId) {
+            // Edition-isolated lookup: different catalog IDs of the same song title (e.g. 44.1 kHz standard vs 96 kHz Hi-Res remaster)
+            // never collide when `catalogId` is known!
+            return trackFormatCache["cid:\(cid)"]
+        }
+        guard !title.isEmpty else { return nil }
+        let key = "\(artist.trimmingCharacters(in: .whitespacesAndNewlines)):\(title.trimmingCharacters(in: .whitespacesAndNewlines))".lowercased()
         return trackFormatCache[key]
     }
 
-    public func cacheTrackFormat(artist: String, title: String, sampleRate: Double, bitDepth: Int) {
-        guard !title.isEmpty else { return }
-        let key = "\(artist.trimmingCharacters(in: .whitespacesAndNewlines)):\(title.trimmingCharacters(in: .whitespacesAndNewlines))".lowercased()
+    public func cacheTrackFormat(artist: String, title: String, catalogId: String? = nil, sampleRate: Double, bitDepth: Int) {
+        let cid = Self.sanitizedCatalogId(catalogId)
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cid != nil || !cleanTitle.isEmpty else { return }
         cacheLock.lock()
-        storeTrackFormatLocked(key: key, sampleRate: sampleRate, bitDepth: bitDepth)
+        if let cid {
+            storeTrackFormatLocked(key: "cid:\(cid)", sampleRate: sampleRate, bitDepth: bitDepth)
+        }
+        if !cleanTitle.isEmpty {
+            let key = "\(artist.trimmingCharacters(in: .whitespacesAndNewlines)):\(cleanTitle)".lowercased()
+            storeTrackFormatLocked(key: key, sampleRate: sampleRate, bitDepth: bitDepth)
+        }
         cacheLock.unlock()
     }
 
-    internal func cacheLockedTrackKeyFormat(_ lockedKey: String, sampleRate: Double, bitDepth: Int) {
-        guard !lockedKey.isEmpty else { return }
+    internal func cacheLockedTrackKeyFormat(_ lockedKey: String, catalogId: String? = nil, sampleRate: Double, bitDepth: Int) {
+        let cid = Self.sanitizedCatalogId(catalogId)
+        guard !lockedKey.isEmpty || cid != nil else { return }
         cacheLock.lock()
-        storeTrackFormatLocked(key: lockedKey, sampleRate: sampleRate, bitDepth: bitDepth)
+        if let cid {
+            storeTrackFormatLocked(key: "cid:\(cid)", sampleRate: sampleRate, bitDepth: bitDepth)
+        }
+        if !lockedKey.isEmpty {
+            storeTrackFormatLocked(key: lockedKey, sampleRate: sampleRate, bitDepth: bitDepth)
+        }
         cacheLock.unlock()
     }
 
@@ -235,15 +276,80 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
     }
 
-    public func resetTrackState(trackKey: String? = nil, expectedSampleRate: Double? = nil, expectedBitDepth: Int? = nil) {
+    /// Suppresses trailing decoder teardown logs of the outgoing track while AMR stops/replaces the queue in `Music.app`,
+    /// preventing old-track decoder lines from locking onto the incoming track before `play` executes.
+    public func beginExplicitTrackSwitch() {
         queue.async { [weak self] in
-            self?.resetTrackStateInternal(trackKey: trackKey, expectedSampleRate: expectedSampleRate, expectedBitDepth: expectedBitDepth, clearPrebuffer: false)
+            guard let self = self else { return }
+            self.isSuppressingTeardownLogs = true
+            self.teardownSuppressStartedAt = Date()
+            self.debounceWorkItem?.cancel()
+            self.debounceWorkItem = nil
+            self.lossyFallbackWorkItem?.cancel()
+            self.lossyFallbackWorkItem = nil
+            self.pendingRate = nil
+            self.pendingBitDepth = nil
+            self.pendingNextTrackFormat = nil
+            self.isFormatLockedForCurrentTrack = false
+            self.isAuthoritativelyLocked = false
+            self.currentLockedTrackKey = nil
+            self.currentLockedCatalogId = nil
         }
     }
 
-    public func resetTrackStateSyncForTesting(trackKey: String? = nil, expectedSampleRate: Double? = nil, expectedBitDepth: Int? = nil) {
+    /// Releases the teardown suppression gate right as the new track begins playback in `Music.app`.
+    public func endExplicitTrackSwitch(
+        trackKey: String?,
+        catalogId: String? = nil,
+        expectedSampleRate: Double? = nil,
+        expectedBitDepth: Int? = nil
+    ) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.isSuppressingTeardownLogs = false
+            self.resetTrackStateInternal(
+                trackKey: trackKey,
+                catalogId: catalogId,
+                expectedSampleRate: expectedSampleRate,
+                expectedBitDepth: expectedBitDepth,
+                clearPrebuffer: true
+            )
+        }
+    }
+
+    public func resetTrackState(
+        trackKey: String? = nil,
+        catalogId: String? = nil,
+        expectedSampleRate: Double? = nil,
+        expectedBitDepth: Int? = nil,
+        clearPrebuffer: Bool = false
+    ) {
+        queue.async { [weak self] in
+            self?.resetTrackStateInternal(
+                trackKey: trackKey,
+                catalogId: catalogId,
+                expectedSampleRate: expectedSampleRate,
+                expectedBitDepth: expectedBitDepth,
+                clearPrebuffer: clearPrebuffer
+            )
+        }
+    }
+
+    public func resetTrackStateSyncForTesting(
+        trackKey: String? = nil,
+        catalogId: String? = nil,
+        expectedSampleRate: Double? = nil,
+        expectedBitDepth: Int? = nil
+    ) {
         queue.sync {
-            self.resetTrackStateInternal(trackKey: trackKey, expectedSampleRate: expectedSampleRate, expectedBitDepth: expectedBitDepth, clearPrebuffer: trackKey == nil)
+            self.isSuppressingTeardownLogs = false
+            self.resetTrackStateInternal(
+                trackKey: trackKey,
+                catalogId: catalogId,
+                expectedSampleRate: expectedSampleRate,
+                expectedBitDepth: expectedBitDepth,
+                clearPrebuffer: trackKey == nil
+            )
         }
     }
 
@@ -253,15 +359,37 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
     }
 
-    private func resetTrackStateInternal(trackKey: String?, expectedSampleRate: Double?, expectedBitDepth: Int?, clearPrebuffer: Bool = false) {
+    private func resetTrackStateInternal(
+        trackKey: String?,
+        catalogId: String? = nil,
+        expectedSampleRate: Double?,
+        expectedBitDepth: Int?,
+        clearPrebuffer: Bool = false
+    ) {
         let cleanKey = trackKey?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanCid = Self.sanitizedCatalogId(catalogId)
+
+        // While staging a manual track switch, ignore intermediate unkeyed `stopped` / transport resets until `endExplicitTrackSwitch` runs
+        if self.isSuppressingTeardownLogs && Date().timeIntervalSince(self.teardownSuppressStartedAt) < 2.5 {
+            if cleanKey == nil || cleanKey?.isEmpty == true {
+                return
+            }
+        }
 
         // Guard against false resetTrackState() on intermediate playerInfo notifications for the SAME active track
         if let key = cleanKey, !key.isEmpty,
-           let lockedKey = self.currentLockedTrackKey, key == lockedKey,
-           self.isFormatLockedForCurrentTrack {
-            NSLog("[BitPerfectLogMonitor] 🛡 Ignoring redundant resetTrackState for already-locked track '%@'", key)
-            return
+           let lockedKey = self.currentLockedTrackKey, key == lockedKey {
+            if let cid = cleanCid, self.currentLockedCatalogId == nil {
+                self.currentLockedCatalogId = cid
+            }
+            if self.isFormatLockedForCurrentTrack {
+                NSLog("[BitPerfectLogMonitor] 🛡 Ignoring redundant resetTrackState for already-locked track '%@'", key)
+                return
+            }
+            if cleanCid == nil && self.currentLockedCatalogId != nil && Date().timeIntervalSince(self.lastResetTimestamp) < 2.5 {
+                // Keep the catalog-isolated awaiting-decoder state armed by `endExplicitTrackSwitch`
+                return
+            }
         }
 
         // Guard against unkeyed transport resetTrackState() wiping a format lock that was just established by a keyed track notification < 1.2s ago
@@ -272,16 +400,22 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             return
         }
 
-        // Guard against delayed keyed track notification overwriting a fresh authoritative ALACDecoder lock established moments earlier while currentLockedTrackKey was still nil!
-        if !clearPrebuffer, let key = cleanKey, !key.isEmpty,
+        // Guard against delayed keyed track notification overwriting a fresh authoritative ALACDecoder lock established moments earlier
+        // while `Music.app` started natively (NEVER adopt across AMR-staged cloud/skip transitions!)
+        let isStagingOrTransitioning = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isStagingCloudTrack || PlaybackStateStore.shared.isTransitioningTrack
+        }
+        if !clearPrebuffer, !isStagingOrTransitioning,
+           let key = cleanKey, !key.isEmpty,
            self.currentLockedTrackKey == nil,
            self.isFormatLockedForCurrentTrack, self.isAuthoritativelyLocked,
            Date().timeIntervalSince(self.lockTimestamp) < 3.5,
            let lockedRate = self.currentDetectedSampleRate {
             self.currentLockedTrackKey = key
+            self.currentLockedCatalogId = cleanCid
             let lockedDepth = self.currentDetectedBitDepth ?? (lockedRate >= 48000.0 ? 24 : 16)
             if self.currentIsLossless {
-                self.cacheLockedTrackKeyFormat(key, sampleRate: lockedRate, bitDepth: lockedDepth)
+                self.cacheLockedTrackKeyFormat(key, catalogId: cleanCid, sampleRate: lockedRate, bitDepth: lockedDepth)
             }
             SpectralIntegrityAnalyzer.shared.resetForNewTrack(trackKey: key)
             NSLog("[BitPerfectLogMonitor] 🛡 Adopted track key '%@' onto active authoritative lock (%.1f kHz, %d-bit)", key, lockedRate / 1000.0, lockedDepth)
@@ -289,10 +423,17 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
 
         if let key = cleanKey, !key.isEmpty {
+            if self.currentLockedTrackKey != key {
+                self.currentLockedCatalogId = cleanCid
+            } else if let cleanCid {
+                self.currentLockedCatalogId = cleanCid
+            }
             self.currentLockedTrackKey = key
         } else {
             self.currentLockedTrackKey = nil
+            self.currentLockedCatalogId = nil
         }
+        self.lastResetTimestamp = Date()
 
         self.debounceWorkItem?.cancel()
         self.debounceWorkItem = nil
@@ -303,6 +444,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         self.formatSwitchCountForCurrentTrack = 0
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.scheduledSmartTransitionStart = nil
+            PlaybackStateStore.shared.lastSeekCommandTime = .distantPast
         }
         SpectralIntegrityAnalyzer.shared.resetForNewTrack(trackKey: cleanKey ?? "")
 
@@ -310,12 +452,14 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             let rawDepth = expectedBitDepth ?? (norm >= 48000.0 ? 24 : 16)
             let depth = rawDepth > 0 ? rawDepth : (norm >= 48000.0 ? 24 : 16)
             self.isFormatLockedForCurrentTrack = true
-            self.isAuthoritativelyLocked = (depth >= 24)
+            // Pre-inspected format comes from cache/metadata (not live ACAppleLosslessDecoder), so keep `isAuthoritativelyLocked = false`
+            // allowing live ACAppleLosslessDecoder verification within 12.0s to confirm or self-heal the rate & bit depth!
+            self.isAuthoritativelyLocked = false
             self.lockTimestamp = Date()
             self.pendingNextTrackFormat = nil
             NSLog("[BitPerfectLogMonitor] 🔄 Track state reset with pre-inspected format: %.1f kHz, %d-bit [Format Locked]", norm / 1000.0, depth)
             self.confirmSampleRate(norm, bitDepth: depth, isLossless: true, reason: "PreInspectedTrackFormat")
-        } else if let key = cleanKey, !key.isEmpty, let prebuffered = self.pendingNextTrackFormat, Date().timeIntervalSince(prebuffered.timestamp) < 120.0 {
+        } else if !clearPrebuffer, let key = cleanKey, !key.isEmpty, let prebuffered = self.pendingNextTrackFormat, Date().timeIntervalSince(prebuffered.timestamp) < 120.0 {
             // Apply Gapless Pre-buffered Format strictly at the start of the new track
             self.pendingNextTrackFormat = nil
             self.isFormatLockedForCurrentTrack = true
@@ -400,9 +544,70 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
     }
 
+    public func syncMusicAppSmartTransitions(forBitPerfectEnabled enabled: Bool, minimumEnforceInterval: TimeInterval = 0) {
+        transitionsPrefLock.lock()
+        defer { transitionsPrefLock.unlock() }
+
+        if enabled && minimumEnforceInterval > 0 {
+            let now = Date()
+            if now.timeIntervalSince(lastSmartTransitionEnforcementAt) < minimumEnforceInterval {
+                return
+            }
+            lastSmartTransitionEnforcementAt = now
+        }
+
+        let readTransitionsEnabled: () -> Bool?
+        let writeTransitionsEnabled: (Bool) -> Void
+
+        if let testAccessor = musicTransitionsPrefAccessorForTesting {
+            readTransitionsEnabled = testAccessor.read
+            writeTransitionsEnabled = testAccessor.write
+        } else {
+            guard !PlaybackRouter.shared.isTestingEnvironment else { return }
+            let domain = "com.apple.Music" as CFString
+            let key = "TransitionsEnabled" as CFString
+            readTransitionsEnabled = {
+                CFPreferencesAppSynchronize(domain)
+                guard let raw = CFPreferencesCopyAppValue(key, domain) else { return nil }
+                if let num = raw as? NSNumber {
+                    return num.boolValue
+                }
+                return nil
+            }
+            writeTransitionsEnabled = { newBool in
+                CFPreferencesSetAppValue(key, newBool ? kCFBooleanTrue : kCFBooleanFalse, domain)
+                CFPreferencesAppSynchronize(domain)
+            }
+        }
+
+        let savedRestoreKey = "BitPerfectSavedMusicTransitionsEnabled"
+        if enabled {
+            let current = readTransitionsEnabled()
+            if current == true {
+                AppStorageProvider.shared.set(true, forKey: savedRestoreKey)
+                writeTransitionsEnabled(false)
+                NSLog("[BitPerfectLogMonitor] 🛡 Bit-Perfect ON: Automatically disabled Music.app Smart Transition (AutoMix / Crossfade)")
+            } else if current == nil {
+                writeTransitionsEnabled(false)
+                NSLog("[BitPerfectLogMonitor] 🛡 Bit-Perfect ON: Explicitly set Music.app TransitionsEnabled = false")
+            }
+        } else {
+            let shouldRestore = AppStorageProvider.shared.bool(forKey: savedRestoreKey)
+            AppStorageProvider.shared.removeObject(forKey: savedRestoreKey)
+            if shouldRestore {
+                writeTransitionsEnabled(true)
+                NSLog("[BitPerfectLogMonitor] 🔄 Bit-Perfect OFF: Restored Music.app Smart Transition (TransitionsEnabled = true)")
+            }
+        }
+    }
+
     private func startInternal() {
         if PlaybackRouter.shared.isTestingEnvironment {
             return
+        }
+
+        if self.isEnabled {
+            syncMusicAppSmartTransitions(forBitPerfectEnabled: true)
         }
 
         if let existing = self.process, existing.isRunning {
@@ -513,34 +718,74 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         guard rate >= 44100.0 && rate <= 768000.0 else { return }
         let validDepth = !isLossless ? 16 : (bitDepth > 0 ? bitDepth : (rate >= 48000.0 ? 24 : 16))
 
+        // 0. Explicit Track Switch Teardown Gate:
+        // Ignore trailing ALACDecoder / AudioQueue logs from the dying outgoing track while AMR is replacing the queue in Music.app!
+        if isSuppressingTeardownLogs {
+            if Date().timeIntervalSince(teardownSuppressStartedAt) < 2.5 {
+                NSLog("[BitPerfectLogMonitor] 🛡 Ignored teardown decoder log (%.1f kHz, %d-bit) while staging new track", rate / 1000.0, validDepth)
+                return
+            }
+            isSuppressingTeardownLogs = false
+        }
+
         // 1. Strict Mid-Playback Format Lock & Gapless Pre-buffering Isolation:
         // Once format is locked for the current playing track (isFormatLockedForCurrentTrack == true),
         // NEVER invoke CoreAudioDeviceManager.setFormat again mid-track!
-        // Exception: if a preliminary/fallback lock occurred on a slow network start (!isAuthoritativelyLocked)
-        // and the authoritative ALAC decoder arrives within 12.0s, or bit-depth/lossless upgrades within 3.5s.
+        // Exception: if a preliminary/pre-inspected lock occurred (!isAuthoritativelyLocked) and the live
+        // authoritative ALAC decoder arrives within 12.0s, confirm or self-heal immediately!
         if isFormatLockedForCurrentTrack {
             if isAuthoritative {
+                let elapsed = Date().timeIntervalSince(lockTimestamp)
+                // Within the first 5.0s of locking the current track, duplicate ALACDecoder / FigPlaybackReport
+                // lines belong to the active track itself; after 5.0s, a new authoritative ALACDecoder line is
+                // Music.app gaplessly pre-buffering the NEXT track (even if it shares the same rate & bit depth!).
                 if isAuthoritativelyLocked &&
+                   elapsed < 5.0 &&
                    rate == currentDetectedSampleRate &&
                    validDepth == currentDetectedBitDepth &&
                    isLossless == currentIsLossless {
                     return
                 }
-                let elapsed = Date().timeIntervalSince(lockTimestamp)
                 if (!isAuthoritativelyLocked && elapsed < 12.0) ||
                    (rate == currentDetectedSampleRate && (validDepth != currentDetectedBitDepth || isLossless != currentIsLossless) && elapsed < 3.5) {
                     lossyFallbackWorkItem?.cancel()
                     lossyFallbackWorkItem = nil
+                    let alreadyMatching = (rate == currentDetectedSampleRate && validDepth == currentDetectedBitDepth && isLossless == currentIsLossless)
                     isAuthoritativelyLocked = true
                     currentIsLossless = isLossless
+                    if alreadyMatching {
+                        if isLossless, let lockedKey = currentLockedTrackKey, !lockedKey.isEmpty {
+                            cacheLockedTrackKeyFormat(lockedKey, catalogId: currentLockedCatalogId, sampleRate: rate, bitDepth: validDepth)
+                        }
+                        return
+                    }
                     confirmSampleRate(rate, bitDepth: validDepth, isLossless: isLossless, reason: reason)
                     return
                 }
-                // Gapless Pre-buffering Isolation: store pre-buffered next track format for the upcoming track transition
+                // Gapless Pre-buffering Isolation: store pre-buffered next track format ONLY during genuine pre-buffering
+                // (never on pause, never within 4.5s of a seek, and never far before EOF on long tracks!)
                 if isLossless {
+                    let (isPaused, sinceSeek, estPos, trackDur) = PlaybackStateStore.shared.withLock { () -> (Bool, TimeInterval, Double, Double) in
+                        let now = Date()
+                        let seekAge = now.timeIntervalSince(PlaybackStateStore.shared.lastSeekCommandTime)
+                        var pos = PlaybackStateStore.shared.lastKnownPosition
+                        var dur = 0.0
+                        if let cached = PlaybackStateStore.shared.lastPlayerStatusCache {
+                            dur = cached.status.duration
+                            let cacheAge = max(0.0, now.timeIntervalSince(cached.timestamp))
+                            let interp = cached.status.playerState == "playing" ? cached.status.position + cacheAge : cached.status.position
+                            pos = max(pos, interp)
+                        }
+                        return (PlaybackStateStore.shared.isUserPaused, seekAge, pos, dur)
+                    }
+                    let isNearTrackEnd = PlaybackRouter.shared.isTestingEnvironment || trackDur <= 55.0 || estPos >= trackDur - 55.0
+                    guard !isPaused, sinceSeek >= 4.5, isNearTrackEnd else {
+                        return
+                    }
                     pendingNextTrackFormat = (sampleRate: rate, bitDepth: validDepth, timestamp: Date())
                     if let nextTrack = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.latestUpcomingTracks.first }) {
-                        cacheTrackFormat(artist: nextTrack.artist, title: nextTrack.name, sampleRate: rate, bitDepth: validDepth)
+                        let nextCid = MusicKitManager.extractNumericCatalogId(from: nextTrack)
+                        cacheTrackFormat(artist: nextTrack.artist, title: nextTrack.name, catalogId: nextCid, sampleRate: rate, bitDepth: validDepth)
                     }
                     NSLog("[BitPerfectLogMonitor] 🛡 [Strict Format Lock] Buffered next-track format (%.1f kHz, %d-bit) while locked on %.1f kHz", rate / 1000.0, validDepth, (currentDetectedSampleRate ?? 0) / 1000.0)
                 }
@@ -600,9 +845,10 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
 
         if isLossless {
             if let lockedKey = currentLockedTrackKey, !lockedKey.isEmpty {
-                cacheLockedTrackKeyFormat(lockedKey, sampleRate: rate, bitDepth: validDepth)
+                cacheLockedTrackKeyFormat(lockedKey, catalogId: currentLockedCatalogId, sampleRate: rate, bitDepth: validDepth)
             } else if let curTrack = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache })?.status.track {
-                cacheTrackFormat(artist: curTrack.artist, title: curTrack.name, sampleRate: rate, bitDepth: validDepth)
+                let curCid = MusicKitManager.extractNumericCatalogId(from: curTrack)
+                cacheTrackFormat(artist: curTrack.artist, title: curTrack.name, catalogId: curCid, sampleRate: rate, bitDepth: validDepth)
             }
         }
         // Do NOT call PlaybackStateStore.shared.invalidateStatusCache() here!

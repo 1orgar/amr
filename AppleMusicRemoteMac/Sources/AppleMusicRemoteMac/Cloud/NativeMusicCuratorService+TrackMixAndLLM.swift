@@ -152,11 +152,13 @@ extension NativeMusicCuratorService {
             for (idx, q) in queries.enumerated() {
                 group.addTask { [weak self] in
                     guard let self = self,
-                          let res = await self.searchCatalogWithTimeout(query: q, storefront: sf, limit: 8) else {
+                          let res = await self.searchCatalogWithTimeout(query: q, storefront: sf, limit: 12) else {
                         return (idx, [], [])
                     }
-                    let songs = (res["songs"] as? [[String: Any]]) ?? []
-                    let albums = (res["albums"] as? [[String: Any]]) ?? []
+                    let rawSongs = (res["songs"] as? [[String: Any]]) ?? []
+                    let songs = Self.prioritizeBucketSongsByQuality(rawSongs, shuffleWithinTiers: false)
+                    let rawAlbums = (res["albums"] as? [[String: Any]]) ?? []
+                    let albums = CloudCatalogService.prioritizeSearchAlbums(rawAlbums, query: q)
                     return (idx, songs, albums)
                 }
             }
@@ -197,20 +199,26 @@ extension NativeMusicCuratorService {
         }
 
         var curatedAlbums: [[String: Any]] = []
-        var seenAlbumKeys = Set<String>()
+        var albumKeyToIndex: [String: Int] = [:]
         for (_, _, albums) in queryBuckets {
-            for alb in albums.prefix(2) {
+            for alb in albums.prefix(3) {
                 let aName = (alb["name"] as? String ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                 let aArtist = (alb["artist"] as? String ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !aName.isEmpty else { continue }
                 let key = "\(aArtist)|\(aName)"
-                if seenAlbumKeys.contains(key) { continue }
-                seenAlbumKeys.insert(key)
-                curatedAlbums.append(alb)
-                if curatedAlbums.count >= 8 { break }
+                if let existingIdx = albumKeyToIndex[key] {
+                    if CloudCatalogService.audioQualityScore(for: alb) > CloudCatalogService.audioQualityScore(for: curatedAlbums[existingIdx]) {
+                        curatedAlbums[existingIdx] = alb
+                    }
+                    continue
+                }
+                if curatedAlbums.count < 8 {
+                    albumKeyToIndex[key] = curatedAlbums.count
+                    curatedAlbums.append(alb)
+                }
             }
-            if curatedAlbums.count >= 8 { break }
         }
+        curatedAlbums = CloudCatalogService.prioritizeSearchAlbums(curatedAlbums, query: "")
 
         let elapsedMs = Int(Date().timeIntervalSince(startTs) * 1000)
         NSLog("[AICurator] 🎵 curateSessionFromTrack('%@' - '%@') done in %dms -> %d songs, %d albums",

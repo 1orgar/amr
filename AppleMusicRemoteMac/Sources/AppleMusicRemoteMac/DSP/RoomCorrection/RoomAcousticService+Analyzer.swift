@@ -78,7 +78,11 @@ extension RoomAcousticService {
         autoSaveAndEnable: Bool = true
     ) throws -> RoomAcousticProfile {
         guard audioData.count >= 1024 else {
-            throw NSError(domain: "RoomAcousticService", code: 400, userInfo: [NSLocalizedDescriptionKey: "Аудиозапись слишком короткая"])
+            throw NSError(
+                domain: "RoomAcousticService",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: AMRLocalization.tr("Audio recording is too short", "Аудиозапись слишком короткая")]
+            )
         }
         let safeExt = fileExtensionHint
             .lowercased()
@@ -97,7 +101,10 @@ extension RoomAcousticService {
             throw NSError(
                 domain: "RoomAcousticService",
                 code: Int(openStatus),
-                userInfo: [NSLocalizedDescriptionKey: "Не удалось декодировать аудиофайл микрофона (код \(openStatus)). Используйте запись Voice Memos / Микрофон iOS (M4A/WAV)."]
+                userInfo: [NSLocalizedDescriptionKey: AMRLocalization.tr(
+                    "Failed to decode microphone audio file (code \(openStatus)). Please use an iOS Voice Memos / Microphone recording (M4A/WAV).",
+                    "Не удалось декодировать аудиофайл микрофона (код \(openStatus)). Используйте запись Voice Memos / Микрофон iOS (M4A/WAV)."
+                )]
             )
         }
         defer {
@@ -123,7 +130,11 @@ extension RoomAcousticService {
             &clientFormat
         )
         guard fmtStatus == noErr else {
-            throw NSError(domain: "RoomAcousticService", code: Int(fmtStatus), userInfo: [NSLocalizedDescriptionKey: "Неподдерживаемый аудиоформат записи"])
+            throw NSError(
+                domain: "RoomAcousticService",
+                code: Int(fmtStatus),
+                userInfo: [NSLocalizedDescriptionKey: AMRLocalization.tr("Unsupported recording audio format", "Неподдерживаемый аудиоформат записи")]
+            )
         }
 
         // Read up to 15 seconds at 48 kHz (720,000 samples max)
@@ -151,7 +162,14 @@ extension RoomAcousticService {
         }
 
         guard samples.count >= 24_000 else {
-            throw NSError(domain: "RoomAcousticService", code: 422, userInfo: [NSLocalizedDescriptionKey: "Запись должна длиться не менее 1–2 секунд во время звучания розового шума"])
+            throw NSError(
+                domain: "RoomAcousticService",
+                code: 422,
+                userInfo: [NSLocalizedDescriptionKey: AMRLocalization.tr(
+                    "Recording must last at least 1–2 seconds while pink noise is playing",
+                    "Запись должна длиться не менее 1–2 секунд во время звучания розового шума"
+                )]
+            )
         }
 
         return try analyzePCMMonoSamples(
@@ -177,7 +195,14 @@ extension RoomAcousticService {
         let halfN = fftN / 2
         let log2N: vDSP_Length = 12
         guard samples.count >= fftN else {
-            throw NSError(domain: "RoomAcousticService", code: 422, userInfo: [NSLocalizedDescriptionKey: "Недостаточно аудиосэмплов для спектрального анализа"])
+            throw NSError(
+                domain: "RoomAcousticService",
+                code: 422,
+                userInfo: [NSLocalizedDescriptionKey: AMRLocalization.tr(
+                    "Insufficient audio samples for spectral analysis",
+                    "Недостаточно аудиосэмплов для спектрального анализа"
+                )]
+            )
         }
 
         // Trim leading/trailing quiet sections (keep windows within 18 dB of RMS peak)
@@ -194,14 +219,25 @@ extension RoomAcousticService {
         }
         let maxRMS = windowRMS.map(\.rms).max() ?? 0.0
         guard maxRMS > 1.0e-5 else {
-            throw NSError(domain: "RoomAcousticService", code: 422, userInfo: [NSLocalizedDescriptionKey: "Записана тишина — убедитесь, что доступ к микрофону разрешён и громкость системы достаточна"])
+            throw NSError(
+                domain: "RoomAcousticService",
+                code: 422,
+                userInfo: [NSLocalizedDescriptionKey: AMRLocalization.tr(
+                    "Silence recorded — ensure microphone permission is granted and system volume is audible",
+                    "Записана тишина — убедитесь, что доступ к микрофону разрешён и громкость системы достаточна"
+                )]
+            )
         }
         let activeThreshold = maxRMS * 0.125 // -18 dB relative to peak window
         let activeOffsets = windowRMS.filter { $0.rms >= activeThreshold }.map(\.offset)
         let chosenOffsets = activeOffsets.isEmpty ? windowRMS.map(\.offset) : activeOffsets
 
         guard let fftSetup = vDSP_create_fftsetup(log2N, FFTRadix(kFFTRadix2)) else {
-            throw NSError(domain: "RoomAcousticService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Не удалось инициализировать vDSP FFT"])
+            throw NSError(
+                domain: "RoomAcousticService",
+                code: 500,
+                userInfo: [NSLocalizedDescriptionKey: AMRLocalization.tr("Failed to initialize vDSP FFT", "Не удалось инициализировать vDSP FFT")]
+            )
         }
         defer {
             vDSP_destroy_fftsetup(fftSetup)
@@ -431,7 +467,8 @@ extension RoomAcousticService {
 
         let formatter = DateFormatter()
         formatter.dateFormat = "dd.MM HH:mm"
-        let fallbackName = "АЧХ комнаты (\(formatter.string(from: Date())))"
+        let stamp = formatter.string(from: Date())
+        let fallbackName = AMRLocalization.tr("Room EQ (\(stamp))", "АЧХ комнаты (\(stamp))")
         let trimmedName = profileName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let finalName = trimmedName.isEmpty ? fallbackName : String(trimmedName.prefix(64))
         let now = Date().timeIntervalSince1970

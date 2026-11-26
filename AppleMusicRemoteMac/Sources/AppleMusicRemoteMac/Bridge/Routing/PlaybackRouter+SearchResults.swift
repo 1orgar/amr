@@ -243,12 +243,17 @@ extension PlaybackRouter {
             return (PlaybackStateStore.shared.playbackGeneration, prev)
         }
 
+        if !isTestingEnvironment {
+            BitPerfectLogMonitor.shared.beginExplicitTrackSwitch()
+        }
         if isTestingEnvironment || formattedQueue[curTargetIdx].isLocal != true {
             stopAndClearAMRQueue()
         }
         let curTrack = formattedQueue[curTargetIdx]
 
-        BitPerfectLogMonitor.shared.resetTrackState()
+        if isTestingEnvironment {
+            BitPerfectLogMonitor.shared.resetTrackState(clearPrebuffer: true)
+        }
         let didApplyState: Bool = PlaybackStateStore.shared.withLock {
             guard PlaybackStateStore.shared.playbackGeneration == capturedGen else {
                 return false

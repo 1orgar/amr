@@ -1,118 +1,67 @@
-# Apple Music Remote 2.5.0 — "Liszt"
+<div align="center">
+  <img src="https://raw.githubusercontent.com/1orgar/amr/v3.0.0/docs/images/amr-social-preview.png" alt="Apple Music Remote 3.0 — Wagner" width="100%">
+</div>
 
-Релиз **v2.5.0 ("Liszt")** превращает Apple Music Remote в полноценную студийную и коллекционную систему: **спектральный БПФ-верификатор честности Hi-Res (`vDSP` FFT)** с распознаванием апсемплинга, персистентным кэшем валидации и 32-полосным RTA-анализатором в окне тракта и на экране ТВ, **DAC Muting Guard** для бесщелчкового переключения реле частоты внешнего ЦАП, **многостраничные цифровые буклеты альбомов (`DigitalBookletService` + `PDFKit`)** с историей записи, разбором каждой композиции и полным перечнем сессионных музыкантов, **авторизация клиентских PWA-устройств (`ClientDeviceManager`)** с индивидуальным управлением экраном блокировки (`MediaSession`) и QR-шарингом доступа, **нативные функции ИИ на Apple Neural Engine (`NativeMusicCuratorService`)**, **управление громкостью внешнего усилителя по TCP (`ExternalAmpTCPController`)** с аппаратной нормализацией треков Apple SoundCheck (`iTunNORM` + `ITU-R BS.1770`) и умной нелинейной кривой на низкой громкости (`< 40%`) при сохранении 100% Bit-Perfect потока с Mac, **добавление любых плейлистов и сохранение ИИ-очереди («+ В плейлист») в Медиатеку**, полная **двуязычная локализация интерфейса (`RU / EN`)** и **262 автоматических теста**.
+# Apple Music Remote 3.0.0 — "Wagner"
 
----
-
-## 🔬 1. Спектральный БПФ-верификатор Hi-Res (`SpectralIntegrityAnalyzer`), персистентный кэш и 32-полосный RTA-анализатор
-* **Математическая проверка честности Hi-Res в реальном времени (`Accelerate / vDSP`)**:
-  * Непрерывный 4096-точечный БПФ-анализ с окном Ханна (`vDSP_fft_zrip`) и побитовый контроль младших разрядов (`LSB Bit Depth`) напрямую из PCM-потока `AudioProcessTapService` с нулевой нагрузкой на звуковой тракт.
-  * Автоматическая классификация каждого трека по 5 вердиктам:
-    * **`TRUE HI-RES`** — подтверждённая ультразвуковая энергия выше 22.05 кГц и честная 24-битная глубина;
-    * **`FAKE HI-RES • 22K CUT`** — обнаружен жёсткий кирпичный срез на 22.05 кГц (апсемплинг CD 44.1 кГц в контейнер 88.2 / 96 / 192 кГц);
-    * **`UPSAMPLED 48K`** — обнаружен срез на 24 кГц в потоке 96 / 192 кГц;
-    * **`16-BIT PADDED`** — в 24-битном контейнере младшие 8 бит (`LSB 0..7`) заполнены нулями;
-    * **`CD LOSSLESS`** — честный Red Book поток 16-бит / 44.1 кГц без потерь.
-  * **Двухуровневый персистентный кэш валидации (`spectral_validation_cache_v1.json`)**: треки, успешно прошедшие спектральную проверку (`local_id` / `cloud_id` + `artist:title`), кэшируются на диске — при повторном воспроизведении вердикт выставляется мгновенно, а анализатор переключается в облегчённый режим `visualizationOnly` (только расчёт 32 полос RTA без повторного сканирования младших разрядов LSB).
-* **Карточка Спектрального верификатора в «Тракте сигнала» (*Signal Path Inspector*)**:
-  * Наглядная 28-полосная спектрограмма с маркером среза Найквиста CD (`22.05 кГц`) и тремя диагностическими плашками: **«Полоса ВЧ»**, **«Ультразвук (>22K)»** и **«Разрядность LSB»** (с адаптивной вёрсткой для узких экранов смартфонов).
-* **32-полосный RTA-анализатор спектра в режиме StandBy / TV Mode**:
-  * Новая кнопка **`RTA`** в верхней панели TV-режима включает живой 32-полосный логарифмический анализатор спектра (`20 Гц – 96 кГц`, 60 FPS) с разделением слышимого диапазона и ультразвуковой Hi-Res зоны (`> 22.05 кГц`).
+**v3.0.0 ("Wagner")** is our biggest milestone release yet — introducing a reference **Hybrid 64-Bit Studio DSP Engine** with `CoreAudio Exclusive Hog Mode` (`DSD64–DSD512 DoP` via 7th-order `7EC` + Viterbi Trellis, and `HQ PCM NOS` up to `768 kHz` with `AMX FP64` 65k / `Metal GPU df64` 262k Sinc filters & `LNS15` noise shaping), **64-Bit Room Acoustic `Auto-PEQ`** measured straight from your iPhone / iPad microphone, real-time **Mastering Telemetry (`TT DR`, `EBU R128 LUFS`, `4x ISP`, `Phase`)**, **Pre-DSP Mastering Restoration (`De-Clipper` & `Weiss Dynamic De-Esser`)**, **Audiophile `Late-Night DRC`**, **Apple Neural Engine `Sonic Bridge`** (`512-D SLERP` trajectory routing), **Two-Way iCloud Drive Sync**, a **sub-second Direct Cloud Hi-Res Engine** with zero library pollution, a **Zero-Keychain `AES-256-GCM` Vault**, **Apple Developer ID Signing & Notarization**, **100% English & Russian Localization**, and **410+ automated Swift unit tests**.
 
 ---
 
-## 🛡️ 2. Защита от щелчков реле ЦАП (DAC Muting Guard & Click-Free Switcher)
-* **Трёхфазное бесщелчковое переключение частоты дискретизации (`CoreAudioDeviceManager`)**:
-  * При смене частоты дискретизации внешнего ЦАП (например, `44.1 кГц -> 96 кГц` или `192 кГц`) опциональный механизм **DAC Muting Guard** выполняет мягкое кратковременное приглушение перед переключением аппаратного клока, дожидается стабилизации ФАПЧ (PLL Lock) и плавно снимает Mute — исключая резкие переходные щелчки в акустике и наушниках.
-  * Управляется отдельным переключателем в нативном окне Настроек macOS (вкладка **«ЦАП и Bit-Perfect»**, по умолчанию выключено).
+## 🎛 1. Hybrid 64-Bit Studio DSP Engine & CoreAudio Exclusive `Hog Mode`
+* **Lock-Free Exclusive Hardware Pipeline (`AudioEngineController` + `CoreAudioDeviceManager`)**:
+  * Captures `Music.app` via `AudioProcessTapService` (`.muted`) and drives external USB DACs directly through a dedicated `AudioDeviceIOProcID` under `kAudioDevicePropertyHogMode` + `Non-Mixable Integer (0x4c)`, powered by `SPSCAtomicRingBuffer` and `RealtimeMachWorker` with zero allocations on the real-time audio thread.
+  * Instant 1-click return to **`100% Bit-Perfect Passthrough (Off)`** with native source clock restoration (`44.1 – 192 kHz`).
+* **7th-Order `7EC` Sigma-Delta DSD Modulator (`DSD64 / DSD128 / DSD256 / DSD512 DoP`)**:
+  * Three NTF profiles (`7EC-Transient`, `7EC-Balanced`, `7EC-Super`), parallel **Viterbi Trellis lookahead (`M = 4 / 8 / 16`)**, Inter-Symbol Interference (`ISI`) regularizer, and lossless DoP v1.1 (`0x05 / 0xFA`) framing.
+* **Synchronous `2x–16x` Oversampling & `HQ PCM NOS` up to `705.6 / 768 kHz`**:
+  * **`Accelerate AMX FP64` (`65,536` taps)** and **`Metal GPU Overlap-Save df64` (`262,144` taps)** Linear-Phase and Minimum-Phase Sinc filters.
+  * **`HQ PCM NOS` Mode** for discrete R2R / Multibit ladder and Hi-Res PCM DACs with a **15th-order psychoacoustic `LNS15` noise shaper** (`< -165 dBFS` audible noise floor, 27+ effective bits).
+* **3-Stage USB DAC Hardware Verifier & DSP Presets (`DSPPresetManager`)**:
+  * Automatically validates bus type, bit depth (`≥ 24-bit`), and supported sample rates — preventing `DSD DoP` / `NOS` activation on built-in Mac speakers, AirPlay, Bluetooth, HDMI, or 16-bit headsets, and automatically suspending USB `Hog Mode` when streaming Bit-Perfect `24/192` LPCM to **BluOS / DLNA** network players.
 
 ---
 
-## 📖 3. Цифровые буклеты альбомов и полный гид по композициям (`DigitalBookletService` + `PDFKit`)
-* **Многостраничный интерактивный ридер в стиле виниловых и CD-буклетов**:
-  * На **Desktop и планшетах в горизонтальной ориентации (Landscape)** буклет открывается вместо правой панели с последовательным перелистыванием полноценных страниц и быстрым оглавлением.
-  * На **TV (StandBy Mode)** и **смартфонах в портретной ориентации** буклет открывается в полноэкранном адаптивном ридере.
-* **Максимальная глубина метаданных для каждого альбома**:
-  * **Страница обложки и истории записи**: полные редакционные эссе Apple Music (`editorialNotes.standard`) с автоматическим многоязычным фоллбеком на энциклопедическую справку *Wikipedia (RU / EN)*, лейбл, копирайты, дата релиза и бейдж мастера (*Apple Digital Master / Lossless / Hi-Res*).
-  * **Полноценный гид по каждой композиции (Track-by-Track Guide)**: индивидуальный разбор всех треков альбома с таймингом, композиторами, историей создания и инструментальным составом.
-  * **Полный список создателей и сессионных музыкантов (Studio Credits)**: извлечение расширенных связей Apple Music (`artists`, `composers`, `audio-variants`) и партий музыкантов (вокал, гитары, бас, ударные, синтезаторы, оркестровка, продюсирование, сведение и мастеринг).
-  * **Поддержка оригинальных PDF-буклетов (`PDFKit`)**: автоматическое обнаружение локальных файлов цифровых буклетов (`.pdf`) в папке альбома медиатеки Mac с постраничным рендерингом в высоком разрешении.
-  * **Двухуровневый кэш буклетов**: мгновенное повторное открытие благодаря кэшированию в памяти и на диске (`~/Library/Caches/AppleMusicRemoteMac/Booklets`).
+## 📐 2. 64-Bit Room Acoustic Correction (`Auto-PEQ` via iPhone / iPad Mic)
+* **In-Browser Listening-Spot Calibration (`RoomAcousticService` + `RoomEQProcessor`)**:
+  * Plays calibrated semi-correlated Paul Kellet pink noise (`20 Hz – 20 kHz`) through your speakers (local USB DAC or `BluOS / DLNA`) while recording from your iPhone or iPad directly in the Web PWA (`WebAudio` + native iOS capture fallback over plain LAN HTTP).
+  * Computes a 31-band ISO 1/3-octave Welch–Hann `4096-pt vDSP FFT` spectrum with iOS MEMS microphone compensation, detects standing room modes (`35–220 Hz`), plots **Measured vs. Harman In-Room Target vs. Corrected** curves in the *Signal Path* inspector, and synthesizes up to 8 asymmetric `Float64` minimum-phase RBJ biquad filters with automatic negative `Preamp Headroom`.
 
 ---
 
-## 🔐 4. Авторизация клиентских устройств (PWA Device Auth) и индивидуальный Lock Screen
-* **Персистентный UID клиента и подтверждение доступа на Mac (`ClientDeviceManager`)**:
-  * При первом подключении нового веб-клиента или PWA генерируется уникальный идентификатор устройства с тройным сохранением (`HTTP Cookie` на 10 лет + `localStorage` + `CacheStorage` Secure Store для сохранения авторизации при добавлении PWA на домашний экран iOS).
-  * Новое устройство отображает экран **«Ожидание авторизации на Mac»** (строго до любых проверок Apple ID) и мгновенно появляется в разделе **«Устройства и Авторизация клиентов (PWA)»** в основных настройках приложения на Mac.
-  * Нажатие кнопки **«Авторизовать»** на Mac в реальном времени по WebSocket разблокирует интерфейс на смартфоне/планшете.
-  * Стриминг на **Bluesound NODE NANO / BluOS** (`/stream/live.wav`, `/api/artwork.jpg`) и автоматизации / API (`search_and_play`) работают без ограничений.
-* **Индивидуальное управление Экраном блокировки (`MediaSession`) для каждого устройства**:
-  * Для каждого авторизованного девайса в настройках macOS доступна кнопка **«Настройки...»** с отдельным окном конфигурации устройства (переключатель **«Экран блокировки и Dynamic Island (MediaSession)»**, переименование устройства и отзыв доступа).
-  * По умолчанию системный плеер на экране блокировки включён на смартфонах (`iPhone / Android`) и выключен на планшетах (`iPad`), ТВ и десктопах, чтобы домашний планшет не перехватывал системный медиа-контрол.
-* **Модальное окно `AMR v2.5.0` в стиле анализатора тракта (*Signal Path*) и кнопка «Поделиться доступом (QR)»**:
-  * Нажатие на бейдж **`AMR v2.5.0`** в левом верхнем углу веб-пульта открывает карточку диагностики клиента в фирменном стиле *Signal Path* с тремя узлами:
-    1. **`СБОРКА`** — версия сервера, кодовое имя релиза, **хеш/дата последнего Git-коммита** и кнопка **«Поделиться доступом»**, которая раскрывает **QR-код** (`http://<LAN-IP>:8080/?invite=<token>`) для мгновенного подключения и автоматической авторизации нового смартфона или планшета по камере (без необходимости заходить в настройки на Mac);
-    2. **`УСТРОЙСТВО`** — имя клиента, тип, уникальный `UID` и статус авторизации;
-    3. **`ЭКРАН БЛОКИРОВКИ • MEDIASESSION`** — мгновенный переключатель системного плеера на экране блокировки для текущего устройства, синхронизированный с Mac.
+## 📊 3. Mastering Telemetry, Pre-DSP Restoration & `Late-Night DRC`
+* **Live Mastering Diagnostics (`SpectralIntegrityAnalyzer`)**:
+  * Real-time **TT Dynamic Range (`DR4–DR16+`)**, **EBU R128 (`Integrated & Short-Term LUFS`, `LRA`)**, **4× Oversampled `True Peak (dBTP)` & ISP Clipping Guard**, and **Stereo Phase Correlation (`-1..+1`)**, plus **Psychoacoustic Crest Compensation** and **`[Music.app SC Guard]`** for external TCP amplifier SoundCheck.
+* **Pre-DSP Mastering Restoration (`MasteringRestorationService`)**:
+  * **Loudness-War `MasteringDeClipper`**: Adaptive brickwall ceiling tracker + 256-sample look-ahead Cubic Hermite `C1` peak reconstruction (up to `+4.2 dB`), with **`Auto — Smart Guard`** automatically bypassing dynamic audiophile masters (`DR11+`).
+  * **Weiss-Style Dynamic De-Esser (`WeissDynamicDeEsser`)**: Level-independent sibilance-to-body ratio detector (`6.5–7.0 kHz` vs `> 180 Hz`) with zero-phase symmetric RBJ subtraction (`100% Bit-Exact` between sibilants).
+* **Audiophile `Late-Night DRC` & Seamless `Repeat One`**:
+  * 64-bit dual-envelope `ITU-R BS.1770` dynamic range controller (`Gentle` and `Night Concert` profiles) featuring a `-63 dBFS` tape-hiss gate and a 64-sample `-1.0 dBTP` look-ahead limiter, plus three-state repeat cycling (`Off → Repeat All → Repeat One 🔂`).
 
 ---
 
-## ➕ 5. Добавление любых плейлистов и сохранение ИИ-очереди в Медиатеку
-* **Кнопка «+ В медиатеку» для любых плейлистов и кнопка «+ В плейлист» в Очереди (`MusicKitManager+Playlists`)**:
-  * В окне просмотра любого каталожного или персонального плейлиста Apple Music (рядом с кнопкой «Слушать») добавлена кнопка **«+ В медиатеку»**, а в шапке раздела **«Очередь воспроизведения»** — кнопка **«+ В плейлист»** для сохранения текущей очереди или бесконечной ИИ-волны в новый плейлист Apple Music в один тап.
-  * При нажатии плейлист со всеми треками автоматически сохраняется в локальную медиатеку `Music.app` на Mac и синхронизируется с облаком Apple Music (`POST /v1/me/library`), мгновенно появляясь в разделе **«Медиатека»** со статусом **«✓ В медиатеке»**.
-* **Полноценный просмотр содержимого плейлистов**:
-  * Отображение полного списка композиций, обложек, длительности и описания для любых плейлистов каталога, чартов и медиатеки с возможностью запуска воспроизведения с любого выбранного трека.
+## 🌉 4. AI `Sonic Bridge`, Playlists vs. Library Split & Sub-Second Cloud Engine
+* **🌉 Sonic Bridge (`NativeMusicCuratorService+SonicBridge`)**:
+  * Computes a smooth `10 / 12 / 16`-step geodesic musical route from **Point A** to **Point B** (tracks, artists, or moods) via spherical linear interpolation (`SLERP`) in 512-D `NLEmbedding` space on Apple Neural Engine.
+* **Dedicated `Playlists` & 4-Tab `Library` Architecture**:
+  * Independent **Playlists** view (`+ Save to Playlists` with `0 ms` optimistic insertion) alongside a 4-tab **Library** (**Recent / Artists / Albums / Songs**), full library deletion (`removeTrack`, `removeAlbum`, `removeArtist`, `removePlaylist`), **Album Completeness Detector** (`Saved X of Y` with 1-tap catalog completion), and customizable **TV Mode Library tiles**.
+* **Sub-Second Direct Cloud ALAC/Hi-Res Engine (`0.5–0.9 s`) & Zero Library Pollution**:
+  * Starts Apple Music cloud catalog streams in **`0.5–0.9 s`** in native **ALAC Lossless / Hi-Res up to `192 kHz / 24-bit`** using a single reusable staging buffer (`play once=true`) with vectorized `~1.5 ms` Shuffle/Queue staging, automatic crash-orphan cleanup, and in-memory RFC 1952 `gzip` PWA asset delivery (`907 KB → 149 KB`).
 
 ---
 
-## 🌍 6. Полная двуязычная локализация (`RU / EN`) и мобильная адаптация под iPhone
-* **Автоматическая английская локализация (`en`) для нерусских локалей устройств**:
-  * Веб-интерфейс (PWA) и нативное приложение macOS (меню в строке состояния и окно Настроек со всеми вкладками) автоматически определяют системный язык устройства: для `ru*` отображается русский интерфейс, для всех остальных локалей (`en`, `de`, `fr`, `ja` и др.) — полный перевод на английский язык.
-* **Защита нижней навигации на экранах iPhone и адаптивная мобильная вёрстка**:
-  * Добавлена защитная чёрная зона (`safe-area` bar) под кнопками разделов в нижней панели на мобильных экранах, чтобы иконки и подписи не проваливались в скруглённые углы дисплея iPhone.
-  * Исправлена мобильная сетка плашек в карточке Спектрального верификатора — все показатели («Полоса ВЧ», «Ультразвук», «Разрядность LSB») помещаются в контейнер без горизонтального среза.
+## ☁️ 5. iCloud Drive Sync, Zero-Keychain Vault & Apple Notarized Universal DMG
+* **Two-Way iCloud Drive Sync (`CloudSettingsSyncService`) & Granular Device Permissions**:
+  * Automatically syncs DSP presets, Room `Auto-PEQ` profiles, Late-Night DRC preferences, and `SoundCheck / DR / LUFS` caches across Macs via `NSFileCoordinator` + `NSMetadataQuery`, plus per-device PWA capability toggles (`DAC`, `DSP`, `Room EQ`, `Late-Night DRC`) and `< 50 ms` hardware volume control for `BluOS` and `DLNA`.
+* **Signed, Apple Notarized & Zero-Keychain Security**:
+  * Signed with **Apple Developer ID** and **Notarized & Stapled by Apple** for frictionless installation on macOS Sonoma & Sequoia.
+  * Replaced legacy macOS Keychain calls with a dedicated local `CryptoKit` **`AES-256-GCM`** encrypted vault (`0700`/`0600`) — eliminating intrusive macOS Keychain password dialogs on launch and upgrade.
+* **100% Bilingual Localization (`EN / RU`) & 410+ Automated Tests**:
+  * Full English localization across every native macOS window, menu, diagnostic message, and Web PWA screen, backed by **410+ passing `swift test` unit tests**.
 
 ---
 
-## 🪄 7. Нативные функции ИИ на Apple Neural Engine (`NativeMusicCuratorService` + `ArtworkService`)
-* **Единый переключатель «Нативные функции ИИ (Apple Neural Engine)» и аппаратная проверка Apple Silicon**:
-  * Все функции нейросетевого движка (`FoundationModels`, `NaturalLanguage` 512-D `NLEmbedding` & `NLTagger`, `Vision` Saliency) управляются одним переключателем в основных настройках macOS (**«Нативные функции ИИ (Apple Neural Engine)»**).
-  * На компьютерах Mac с процессорами **Intel (`x86_64`)**, где аппаратный сопроцессор Apple Neural Engine отсутствует, переключатель в настройках автоматически скрывается, а все ИИ-функции отключаются без накладных расходов на CPU.
-* **Умный Промпт-Куратор и семантический поиск (`FoundationModels` + `NaturalLanguage` 512-D `NLEmbedding` & `NLTagger`)**:
-  * В разделе **«Поиск»** добавлена вкладка **`✨ AI Подбор`**, карточка с бесконечным генератором новых аудиофильских промптов (**«Другие варианты»**) и полноэкранное **ИИ-облако тегов** в режиме **StandBy / TV Mode** с автоподгрузкой при вертикальном скролле и мгновенным стартом воспроизведения по клику.
-  * По любому свободному описанию настроения, звуковой сцены, эпохи или инструментов ИИ-куратор формирует тематическую сессию с описанием звучания, семантическими тегами, списком из 20+ треков и рекомендуемых альбомов, которую можно сразу **запустить (`▶ Слушать подборку`)**, **перемешать**, **закрепить (`★ Закрепить вайб`)** или **сохранить как плейлист (`+ В медиатеку`)**.
-* **♾️ Бесконечная ИИ-волна (`curateNextWaveTracks`) и 🌊 Семантический поток очереди (`orderSongsBySemanticFlow`)**:
-  * Внутри каждой ИИ-подборки и новой волны треки автоматически выстраиваются по траектории **«Плавного потока»** (минимальное косинусное расстояние в 512-мерном пространстве `NLEmbedding` от трека к треку с защитой от идущих подряд песен одного артиста).
-  * За 3 трека до конца очереди движок AMR автоматически в фоне генерирует и бесшовно догружает следующую порцию из ~18–20 релевантных композиций в том же вайбе, строго исключая уже отыгравшие треки.
-* **✨ «ИИ-подбор по треку» (`curateSessionFromTrack`) и 📌 «★ Избранные вайбы»**:
-  * В меню действий трека `•••` (**«✨ ИИ-микс по вайбу трека»**) и в нижней панели ТВ-экрана (**StandBy / TV Mode**, рядом с кнопкой Избранного в едином монохромном стиле) доступна кнопка мгновенного запуска семантической ИИ-волны по атмосфере текущей песни.
-  * Любой понравившийся ИИ-промпт можно закрепить звёздочкой `★` с синхронизацией между всеми подключёнными смартфонами, планшетами и ТВ-облаком тегов.
-* **🎨 Нейросетевая палитра обложек `Vision` Saliency для ТВ и WLED (`VNGenerateAttentionBasedSaliencyImageRequest`)**:
-  * При смене обложки фреймворк `Vision` на Apple Neural Engine находит визуальный центр внимания человека на обложке альбома (призма на чёрном фоне, лицо музыканта, инструмент), игнорируя пустые чёрные/белые/серые рамки, и извлекает сочные акцентные цвета для фонового свечения **StandBy / TV Mode**, спектроанализатора RTA и 16-зонной адресной ленты **WLED DDP**.
-
----
-
-## 🔊 8. Управление громкостью внешнего усилителя по TCP (`ExternalAmpTCPController`) и аппаратная нормализация `iTunNORM` + `ITU-R BS.1770`
-* **Управление аппаратной громкостью усилителя при 100% Bit-Perfect потоке с Mac**:
-  * Новая вкладка **«Усилитель»** в настройках macOS (доступна строго при включённой фиксации громкости Mac 100%) поддерживает управление усилителями и ресиверами по текстовым TCP-сокетам: **Rotel (`:9590`)**, **Denon / Marantz (`:23`)**, **Hegel (`:50001`)**, **NAD (`:30000`)** и **Lyngdorf (`:84`)**.
-  * Постоянное TCP-соединение с фоновым опросом текущей громкости и статуса Mute (для мгновенного отображения изменений с физического пульта ДУ усилителя), настраиваемый потолок **«Максимальная громкость (%)»** (`1–100%`), многоуровневая защита от скачков громкости в `0` и `100%` (`Zero-Jump & Max-Volume Guard`), кнопка **«Проверить соединение»** и информационный узел **`УСИЛИТЕЛЬ`** в цепочке «Тракт сигнала» (*Signal Path*).
-* **Аппаратная Bit-Perfect нормализация громкости треков (`AppleSoundCheckService` + `iTunNORM` + Live DSP Loudness Matrix)**:
-  * Опция **«Нормализация громкости треков (Apple SoundCheck)»** во вкладке **«Усилитель»** извлекает официальные метаданные громкости Apple `com.apple.iTunes:iTunNORM` из локальных файлов и потоковых `.m4a`-заголовков каталога Apple Music (`Range: bytes=0-49151`), а для треков без тегов рассчитывает перцептивную матрицу громкости (`AVAudioFile` + `vDSP` и живой K-weighted `ITU-R BS.1770` анализ в `SpectralIntegrityAnalyzer`) с сохранением в персистентный кэш и автоматически компенсирует разницу громкости мастеринга напрямую аттенюатором усилителя по TCP — сохраняя **100% побитовую неприкосновенность цифрового потока в CoreAudio (`0.0 dBFS`)**.
-  * **Умная нелинейная нормализация на низкой громкости (`< 40%`)**: отдельный переключатель в настройках усилителя плавно сжимает отрицательные поправки громких треков (не более `35%` от базовой громкости) с учётом логарифмической характеристики аттенюаторов усилителей (Rotel и др.) и кривых равной громкости слуха на тихих уровнях, исключая провал звука в тишину на ночной громкости.
-* **Минималистичная регулировка громкости в ТВ-режиме (`StandBy Mode`) и защита от сна на iPad**:
-  * Компактный слайдер громкости на одной линии с кнопками транспорта в ТВ-режиме, поддержка вертикального жеста **свайпа вверх / вниз** по экрану ТВ и всплывающее **зум-окошко лупы с процентами** для точной регулировки.
-  * Аппаратный видео-keepalive (`NoSleep` fallback) предотвращает блокировку экрана iPad и iOS-устройств в режиме ТВ даже тогда, когда WebKit гасит стандартный `navigator.wakeLock`.
-
----
-
-## 🧪 9. Тестирование и надёжность
-* Тестовое покрытие расширено с 214 до **262 автоматических тестов** (`swift test` — **100% Pass**), включая модульные тесты `SpectralIntegrityAnalyzerTests` (детекция True Hi-Res, Fake Hi-Res 22kHz brickwall, 16-bit padded LSB, персистентный кэш валидации, 32-band RTA), `DigitalBookletServiceTests`, `ClientDeviceManagerTests`, `QueueManagerTests`, `NativeMusicCuratorServiceTests` и `ExternalAmpTCPTests`.
-
----
-
-## 📦 Установка
-1. Скачайте образ **`AppleMusicRemoteMac-Universal.dmg`** ниже (поддерживаются процессоры **Apple Silicon M1/M2/M3/M4** и **Intel x86_64**, macOS 14.0 Sonoma и новее).
-2. Перетащите **AppleMusicRemoteMac.app** в папку **Applications (Программы)**.
-3. При первом запуске выдайте приложению разрешение на управление `Music.app`.
+## 📦 Installation
+1. Download **`AppleMusicRemoteMac-Universal.dmg`** below (Universal 2 binary for **Apple Silicon M1–M4** and **Intel `x86_64`**, macOS 14.0+).
+2. Open the `.dmg` and drag **`AppleMusicRemoteMac.app`** to **`/Applications`**.
+3. Launch the app from `/Applications` and grant permission to control `Music.app` when prompted.

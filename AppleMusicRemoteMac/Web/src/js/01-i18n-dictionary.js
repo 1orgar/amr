@@ -1,3 +1,56 @@
+  // --- Immediate Frame-0 iOS Standalone Full-Screen Shell Geometry ---
+  // With apple-mobile-web-app-status-bar-style="black-translucent" + viewport-fit=cover,
+  // iOS WebKit under-reports window.innerHeight / fixed bottom:0 by safe-area-inset-top (e.g. 894pt vs 956pt on Pro Max)
+  // while WKWebView.bounds and 100lvh span all 956pt. Setting --standalone-shell-h synchronously before first paint
+  // eliminates both the 62pt bottom black band and any startup viewport jerk or hit-test offset.
+  function isStandalonePwaMode() {
+    return Boolean(
+      window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+    );
+  }
+
+  function syncStandaloneShellGeometry() {
+    const root = document.documentElement;
+    if (!root) return;
+    const standalone = isStandalonePwaMode();
+    root.classList.toggle('ios-standalone', standalone);
+    if (!standalone) {
+      root.style.removeProperty('--standalone-shell-h');
+      return;
+    }
+    const iw = window.innerWidth || 0;
+    const ih = window.innerHeight || 0;
+    const sw = (window.screen && window.screen.width) ? window.screen.width : 0;
+    const sh = (window.screen && window.screen.height) ? window.screen.height : 0;
+    let targetPx = ih;
+    if (sw > 0 && sh > 0) {
+      const minScreen = Math.min(sw, sh);
+      const maxScreen = Math.max(sw, sh);
+      let isPortrait = ih >= iw;
+      if (sw !== sh) {
+        if (iw > 0 && Math.abs(iw - minScreen) <= 24) {
+          isPortrait = true;
+        } else if (iw > 0 && Math.abs(iw - maxScreen) <= 24) {
+          isPortrait = false;
+        }
+      }
+      const physicalH = isPortrait ? maxScreen : minScreen;
+      const gap = physicalH - ih;
+      const isPhoneScreen = minScreen < 768;
+      if (isPhoneScreen || (gap > 0 && gap <= 140)) {
+        targetPx = physicalH;
+      }
+    }
+    if (targetPx > 0) {
+      const nextVal = `${targetPx}px`;
+      if (root.style.getPropertyValue('--standalone-shell-h') !== nextVal) {
+        root.style.setProperty('--standalone-shell-h', nextVal);
+      }
+    }
+  }
+  syncStandaloneShellGeometry();
+
   // --- Automatic English (EN) Localization for Non-Russian Device Locales ---
   function detectIsEnglishLocale() {
     try {
@@ -501,5 +554,168 @@
     'Удаление...': 'Removing...',
     'Показать ещё': 'Show More',
     'Все плашки скрыты в настройках Mac (Основные → ТВ-режим)': 'All tiles are hidden in Mac Settings (General → TV Mode)',
-    '★ Трек добавлен в медиатеку Apple Music': '★ Song added to Apple Music Library'
+    '★ Трек добавлен в медиатеку Apple Music': '★ Song added to Apple Music Library',
+    'Музыка': 'Music',
+    'МЕДИАТЕКА': 'LIBRARY',
+    'Любимые песни': 'Favorite Songs',
+    'Сейчас на повторе': 'Heavy Rotation Mix',
+    'Микс': 'Mix',
+    'Радио': 'Radio',
+    'Комната': 'Room',
+    'АЧХ': 'Room EQ',
+    'Событие': 'Featured',
+    'Трек': 'Track',
+    'Усилитель': 'Amplifier',
+    'Результаты поиска': 'Search Results',
+    'Обложка': 'Artwork',
+    'Обложка трека': 'Track Artwork',
+    'Обложка плейлиста': 'Playlist Artwork',
+    'Буклет альбома': 'Album Booklet',
+    'Регулировка громкости': 'Volume Control',
+    'Без звука (Mute)': 'Mute',
+    'Полноэкранный режим StandBy / TV с живыми обложками': 'Full-screen StandBy / TV Mode with Motion Artwork',
+    'Авторизовано на Mac • Защищённый UID (Cookie + Cache)': 'Authorized on Mac • Protected UID (Cookie + Cache)',
+    'ИИ-подбор по треку': 'AI Mix from Track',
+    'ИИ-подбор по вайбу трека': 'AI Vibe Mix from Track',
+    'ИИ-подбор по вайбу текущего трека': 'AI Vibe Mix from Current Track',
+    '✨ ИИ-подбор по вайбу текущего трека': '✨ AI Vibe Mix from Current Track',
+    'Семантическая волна Apple Neural Engine': 'Semantic wave via Apple Neural Engine',
+    'ИЗБРАННЫЕ ВАЙБЫ': 'PINNED VIBES',
+    'Удалено из избранных вайбов': 'Removed from pinned vibes',
+    '★ Вайб закреплён в избранном': '★ Vibe pinned to favorites',
+    'Нативные функции ИИ отключены в настройках Mac': 'On-device AI features are disabled in Mac Settings',
+    'AI-куратор отключён в настройках Mac': 'AI Curator is disabled in Mac Settings',
+    'Не удалось построить маршрут Sonic Bridge': 'Could not build Sonic Bridge route',
+    'Не удалось построить маршрут: подходящие треки не найдены': 'Could not build route: no matching tracks found',
+    'Автосинхронизация CoreAudio': 'CoreAudio Auto-Sync',
+    'Сетевой вывод BluOS / DLNA (Bit-Perfect PCM • 100%)': 'BluOS / DLNA Network Output (Bit-Perfect PCM • 100%)',
+    'Прямой вывод CoreAudio (Bit-Perfect DAC • 100%)': 'Direct CoreAudio Output (Bit-Perfect DAC • 100%)',
+    'Сетевой вывод BluOS / DLNA (Bit-Perfect PCM 100% • Аппаратная громкость плеера)': 'BluOS / DLNA Network Output (Bit-Perfect PCM 100% • Hardware Player Volume)',
+    'Прямой вывод CoreAudio (Регулируемая громкость)': 'Direct CoreAudio Output (Variable Volume)',
+    'Сетевой Hi-Res стриминг': 'Network Hi-Res Streaming',
+    'Сетевой Lossless стриминг': 'Network Lossless Streaming',
+    'Чистый оригинал (Bit-Perfect Passthrough)': 'Pure Original (Bit-Perfect Passthrough)',
+    'Реставратор клиппинга (De-Clipper)': 'Clipping Restorer (De-Clipper)',
+    '⚡️ Реставратор клиппинга (De-Clipper)': '⚡️ Mastering De-Clipper',
+    'Авто — Умная защита (DR ≤ 10)': 'Auto — Smart Guard (DR ≤ 10)',
+    'Деликатный (до +2.8 дБ пиков)': 'Gentle (up to +2.8 dB peaks)',
+    'Студийная реставрация (до +4.2 дБ)': 'Studio Restoration (up to +4.2 dB)',
+    'Прямой 100% Bit-Perfect тракт без реконструкции срезанных верхушек волны.': '100% Bit-Perfect passthrough without waveform peak reconstruction.',
+    'Де-эссер (Weiss De-Esser)': 'Weiss Dynamic De-Esser',
+    '💎 Де-эссер (Weiss De-Esser)': '💎 Weiss Dynamic De-Esser',
+    'Деликатный — Планары / Яркий ВЧ (до -3.5 дБ)': 'Gentle — Planars / Bright HF (up to -3.5 dB)',
+    'Студийный Weiss — Резкий вокал (до -6.0 дБ)': 'Studio Weiss — Harsh Vocals (up to -6.0 dB)',
+    'Прямой 100% Bit-Perfect тракт без динамического подавления сибилянтов.': '100% Bit-Perfect passthrough without high-frequency dynamic sibilance control.',
+    'Ночной режим (DRC)': 'Late-Night Mode (DRC)',
+    'АЧХ КОМНАТЫ • AUTO-PEQ 64-BIT • CLOUD': 'ROOM EQ • AUTO-PEQ 64-BIT • CLOUD',
+    'Включить или выключить коррекцию комнаты': 'Enable or disable Room Acoustic Correction',
+    'Профиль АЧХ комнаты': 'Room Acoustic Profile',
+    'Удалить выбранный профиль АЧХ': 'Delete selected Room EQ profile',
+    'Удалить профиль АЧХ': 'Delete Room EQ Profile',
+    'График АЧХ комнаты': 'Room Frequency Response Graph',
+    'Нативная запись микрофоном iPhone / iPad (работает по LAN HTTP без HTTPS)': 'Native iPhone / iPad microphone capture (works over LAN HTTP without HTTPS)',
+    'RTA спектр аудиосигнала': 'Real-Time Audio Spectrum (RTA)',
+    'Фазовая корреляция стереосигнала от -1 до +1': 'Stereo Phase Correlation (-1 to +1)',
+    'ВЫКЛ': 'OFF',
+    'Выкл': 'Off',
+    'ВКЛ': 'ON',
+    'Вкл': 'On',
+    'Нет профилей замера': 'No room profiles yet',
+    'Целевая': 'Target',
+    'Целевая Harman': 'Harman Target',
+    'Замер микрофона': 'Mic Measurement',
+    'С коррекцией Auto-PEQ': 'Auto-PEQ Corrected',
+    'Калибровочный розовый шум...': 'Calibration pink noise...',
+    'Быстрый замер микрофоном': 'Measure Room Mic',
+    'Замер микрофоном iPhone / iPad': 'Measure via iPhone / iPad Mic',
+    'Запись iOS': 'iOS Mic Capture',
+    'Стоп': 'Stop',
+    'Быстрое измерение АЧХ комнаты отключено для этого устройства в системных настройках Mac.': 'Quick Room EQ measurement is disabled for this device in Mac Settings.',
+    'Быстрое измерение АЧХ отключено для этого устройства в настройках Mac': 'Quick Room EQ measurement is disabled for this device in Mac Settings',
+    'Сядьте в точку прослушивания с iPhone / iPad: Mac подаст эталонный розовый шум на АС и построит 64-bit Auto-PEQ фильтр с синхронизацией в iCloud.': 'Sit at your listening position with iPhone / iPad: your Mac will play reference pink noise and build a 64-bit Auto-PEQ filter synced with iCloud.',
+    'Розовый шум подан на АС — запишите 5–7 сек на микрофон iPhone/iPad и нажмите «Готово»': 'Pink noise is playing on speakers — record 5–7s on iPhone/iPad mic and tap "Done"',
+    'Прогрев акустики калибровочным розовым шумом...': 'Warming up speakers with calibration pink noise...',
+    'Замер АЧХ завершён — профиль Auto-PEQ сохранён и синхронизирован с iCloud': 'Room EQ measurement complete — Auto-PEQ profile saved & synced with iCloud',
+    'Расчёт 4096-pt vDSP FFT и синтез 64-bit Auto-PEQ на Mac...': 'Computing 4096-pt vDSP FFT & synthesizing 64-bit Auto-PEQ on Mac...',
+    'Не удалось распознать аудиозапись микрофона': 'Could not analyze microphone audio recording',
+    'Профиль АЧХ комнаты создан и синхронизирован с iCloud': 'Room EQ profile created & synced with iCloud',
+    'Ошибка отправки записи микрофона на Mac': 'Failed to upload microphone recording to Mac',
+    'Ширина M/S:': 'M/S Width:',
+    'Баланс L/R:': 'L/R Balance:',
+    'Спектр жестко обрезан ниже 16.5 кГц — низкобитрейтный исходник (MP3/AAC 128 kbps) перекодирован в AAC 256 kbps.': 'Spectrum cuts off sharply below 16.5 kHz — low-bitrate source (MP3/AAC 128 kbps) was re-encoded to AAC 256 kbps.',
+    'Внутри контейнера ALAC Lossless обнаружен жесткий срез ВЧ, характерный для сжатия с потерями.': 'Brickwall HF cutoff typical of lossy compression detected inside ALAC Lossless container.',
+    'Поток передается в Hi-Res контейнере, но спектр ограничен частотой CD (22.05 кГц).': 'Stream is delivered in a Hi-Res container, but spectrum is limited to CD bandwidth (22.05 kHz).',
+    'Младшие 8 бит в 24-битном потоке пустые — реальный динамический диапазон составляет 16 бит.': 'Lower 8 bits in the 24-bit stream are zero — true dynamic resolution is 16-bit.',
+    'Спектральный анализ потока CoreAudio Process Tap через Accelerate vDSP FFT.': 'Real-time CoreAudio Process Tap spectral analysis via Accelerate vDSP FFT.',
+    'Аудиофильский верификатор спектра отключен в настройках приложения.': 'Audiophile spectral verifier is disabled in application settings.',
+    'Спектральный анализ...': 'Analyzing spectrum...',
+    'Накопление PCM-буферов из CoreAudio Process Tap для расчёта БПФ-спектра.': 'Accumulating PCM buffers from CoreAudio Process Tap for FFT spectrum calculation.',
+    'Zero-Padding (16-бит → 24-бит)': 'Zero-Padding (16-bit → 24-bit)',
+    'Verified Studio Master 24-бит': 'Verified Studio Master 24-bit',
+    'Апсемплинг CD (срез 22.05 кГц)': 'Upsampled CD (22.05 kHz cut)',
+    'Не удалось удалить из медиатеки': 'Could not remove from Library',
+    'Недавно добавленные в медиатеку': 'Recently Added to Library',
+    'Медиатека Apple Music': 'Apple Music Library',
+    'Системный плейлист нельзя удалить': 'System playlist cannot be deleted',
+    'Устройство не авторизовано': 'Device is not authorized',
+    'Генерация QR-приглашений доступна только устройствам с правами администратора ЦАП/аудиовыхода': 'QR invite generation is available only to devices with DAC / audio output permissions',
+    'Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac': 'DAC & audio output selection is disabled for this device in Mac Settings',
+    'Выбор ЦАП и параметров аудиовыхода отключён для этого устройства в настройках Mac': 'DAC & audio output settings are disabled for this device in Mac Settings',
+    'Изменение настроек подсветки WLED отключено для этого устройства в настройках Mac': 'WLED lighting settings are disabled for this device in Mac Settings',
+    'Изменение токена Apple Music отключено для этого устройства в настройках Mac': 'Apple Music token modification is disabled for this device in Mac Settings',
+    'Выбор пресета DSP отключён для этого устройства в настройках Mac': 'DSP preset selection is disabled for this device in Mac Settings',
+    'Выбор пресета DSP отключён при выводе на внешний сетевой плеер BluOS / DLNA': 'DSP preset selection is disabled when outputting to BluOS / DLNA network players',
+    'Настройки пресетов DSP недоступны при выводе на внешний сетевой плеер BluOS / DLNA': 'DSP preset settings are unavailable when outputting to BluOS / DLNA network players',
+    'Режимы DSD и HQ NOS доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)': 'DSD & HQ NOS modes require an external USB DAC (≥ 24-bit / 176.4 kHz)',
+    'Внешний USB / Thunderbolt ЦАП не подключён: DSD и HQ NOS доступны только для внешних USB / Thunderbolt ЦАП (≥ 24-бит / 176.4 кГц)': 'No external USB / Thunderbolt DAC connected: DSD & HQ NOS require an external USB / Thunderbolt DAC (≥ 24-bit / 176.4 kHz)',
+    'Измерение АЧХ комнаты отключено для этого устройства в настройках Mac': 'Room EQ measurement is disabled for this device in Mac Settings',
+    'Некорректные данные спектра (ожидается 31 полоса 1/3 октавы)': 'Invalid spectrum data (expected 31 1/3-octave bands)',
+    'Управление коррекцией АЧХ отключено для этого устройства в настройках Mac': 'Room EQ control is disabled for this device in Mac Settings',
+    'Выбор профиля АЧХ отключён для этого устройства в настройках Mac': 'Room EQ profile selection is disabled for this device in Mac Settings',
+    'Редактирование профилей АЧХ отключено для этого устройства': 'Editing Room EQ profiles is disabled for this device',
+    'Не удалось переименовать профиль АЧХ': 'Could not rename Room EQ profile',
+    'Удаление профилей АЧХ отключено для этого устройства': 'Deleting Room EQ profiles is disabled for this device',
+    'Профиль АЧХ не найден': 'Room EQ profile not found',
+    'Доступ к ночному режиму (Late-Night DRC) отключён для этого устройства в настройках Mac': 'Late-Night Mode (DRC) access is disabled for this device in Mac Settings',
+    'Управление параметрами DSP отключено для этого устройства в настройках Mac': 'DSP parameter control is disabled for this device in Mac Settings',
+    'Управление параметрами DSP отключено для этого устройства': 'DSP parameter control is disabled for this device',
+    'Облачная синхронизация выключена в настройках Mac': 'Cloud sync is disabled in Mac Settings',
+    'Изменение и удаление медиатеки отключено для этого устройства в настройках Mac': 'Library modification and deletion are disabled for this device in Mac Settings',
+    'Управление усилителем отключено для этого устройства в настройках Mac': 'Amplifier control is disabled for this device in Mac Settings',
+    'Web UI не авторизован в Apple ID. Выполните вход через карточку на главной странице.': 'Web UI is not signed in to Apple ID. Sign in via the card on the Home tab.',
+    'Срок действия сессии Apple ID в браузере истек.': 'Browser Apple ID session has expired.',
+    'Учетная запись Apple ID активна (онлайн-проверка отложена).': 'Apple ID account is active (online verification deferred).',
+    'Не удалось верифицировать токен Apple ID.': 'Could not verify Apple ID token.',
+    'Учетная запись Apple ID полностью синхронизирована с Mac.': 'Apple ID account is fully synchronized with Mac.',
+    'Медиатека в браузере отличается от медиатеки Music.app на Mac.': 'Browser library differs from Music.app library on Mac.',
+    'Аудиозапись слишком короткая': 'Audio recording is too short',
+    'Неподдерживаемый аудиоформат записи': 'Unsupported audio recording format',
+    'Запись должна длиться не менее 1–2 секунд во время звучания розового шума': 'Recording must be at least 1–2 seconds long while pink noise is playing',
+    'Недостаточно аудиосэмплов для спектрального анализа': 'Insufficient audio samples for spectral analysis',
+    'Записана тишина — убедитесь, что доступ к микрофону разрешён и громкость системы достаточна': 'Silence recorded — check microphone permission and speaker volume',
+    'Не удалось инициализировать vDSP FFT': 'Failed to initialize vDSP FFT',
+    'DoP 705.6 кГц • Trellis M=8 • AMX Min-Phase • ISI • Референсный баланс': 'DoP 705.6 kHz • Trellis M=8 • AMX Min-Phase • ISI • Reference Balance',
+    'DoP 705.6 кГц • Trellis M=16 • Metal GPU Sinc-M (262k) • Глубокая сцена': 'DoP 705.6 kHz • Trellis M=16 • Metal GPU Sinc-M (262k) • Deep Soundstage',
+    'DoP 352.8 кГц • OBG 1.38 • Min-Phase без предзвона • Панч для рока и метала': 'DoP 352.8 kHz • OBG 1.38 • Zero Pre-Ring Min-Phase • Rock & Metal Punch',
+    'DoP 176.4 кГц / 24-bit • Совместимость с S/PDIF и классическими ЦАП': 'DoP 176.4 kHz / 24-bit • S/PDIF & Classic DAC Compatibility',
+    'PCM 705.6/768 кГц в обход ЦФ ЦАП • Metal Linear-Phase • Шейпер 15-го порядка': 'PCM 705.6/768 kHz DAC Filter Bypass • Metal Linear-Phase • 15th-Order Shaper',
+    'Любимые треки и персональные рекомендации': 'Favorite tracks & personal recommendations',
+    'Новая музыка на основе ваших вкусов': 'New music based on what you love',
+    'Главные мировые релизы в прямом эфире': 'The new music that matters, live 24/7',
+    'Культовые хиты 80-х, 90-х и 2000-х': 'The songs you know and love',
+    'Современное и классическое кантри': 'Where country music lives',
+    'Самые популярные поп-треки мира': 'The biggest pop anthems right now',
+    'Культовые рок-гимны и гитарные соло': 'Greatest guitar anthems & classic rock',
+    'Плотные биты и свежие релизы': 'Heavy beats and groundbreaking rap',
+    'Клубный драйв и танцевальная энергия': 'Non-stop club bangers & festival anthems',
+    'Глубокое электронное звучание': 'Deep melodic house & hypnotic rhythms',
+    'Безупречная классика джаза': 'Timeless jazz standards & soothing brass',
+    'ПРЯМОЙ ЭФИР': 'LIVE RADIO',
+    'Прямой эфир': 'Live Radio',
+    'Итоги года Replay': 'Replay Mix',
+    'ИТОГИ ГОДА REPLAY': 'REPLAY MIX',
+    'Главные новинки': 'New Music Daily',
+    'Хиты сегодня': "Today's Hits",
+    'Чистый релакс': 'Pure Chill',
+    'Энергия тренировки': 'Pure Workout'
   };

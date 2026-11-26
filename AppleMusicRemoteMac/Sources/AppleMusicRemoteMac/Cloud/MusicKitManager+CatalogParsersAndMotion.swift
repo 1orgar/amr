@@ -80,6 +80,11 @@ extension MusicKitManager {
             previewUrl = firstPrev
         }
 
+        let audioVariants = (attrs["audioVariants"] as? [String]) ?? []
+        let isHiRes = audioVariants.contains("hi-res-lossless")
+        let isLossless = isHiRes || audioVariants.contains("lossless")
+        let isADM = (attrs["isMasteredForItunes"] as? Bool == true) || (attrs["isAppleDigitalMaster"] as? Bool == true)
+
         return [
             "type": "song",
             "id": id,
@@ -93,7 +98,11 @@ extension MusicKitManager {
             "url": url,
             "preview_url": previewUrl,
             "isrc": isrc,
-            "is_local": false
+            "is_local": false,
+            "audio_variants": audioVariants,
+            "is_hi_res": isHiRes,
+            "is_lossless": isLossless,
+            "is_apple_digital_master": isADM
         ]
     }
 
@@ -106,6 +115,10 @@ extension MusicKitManager {
         let relDate = attrs["releaseDate"] as? String ?? ""
         let trackCount = attrs["trackCount"] as? Int ?? 0
         let url = attrs["url"] as? String ?? ""
+        let audioVariants = (attrs["audioVariants"] as? [String]) ?? []
+        let isHiRes = audioVariants.contains("hi-res-lossless")
+        let isLossless = isHiRes || audioVariants.contains("lossless")
+        let isADM = (attrs["isMasteredForItunes"] as? Bool == true) || (attrs["isAppleDigitalMaster"] as? Bool == true)
 
         var artworkUrl = ""
         if let artObj = attrs["artwork"] as? [String: Any],
@@ -124,7 +137,11 @@ extension MusicKitManager {
             "artwork": artworkUrl,
             "release_date": relDate,
             "track_count": trackCount,
-            "url": url
+            "url": url,
+            "audio_variants": audioVariants,
+            "is_hi_res": isHiRes,
+            "is_lossless": isLossless,
+            "is_apple_digital_master": isADM
         ]
     }
 

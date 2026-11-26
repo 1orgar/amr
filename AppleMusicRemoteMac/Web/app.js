@@ -3,6 +3,59 @@
 "use strict";
 
 // === MODULE: 01-i18n-dictionary.js ===
+  // --- Immediate Frame-0 iOS Standalone Full-Screen Shell Geometry ---
+  // With apple-mobile-web-app-status-bar-style="black-translucent" + viewport-fit=cover,
+  // iOS WebKit under-reports window.innerHeight / fixed bottom:0 by safe-area-inset-top (e.g. 894pt vs 956pt on Pro Max)
+  // while WKWebView.bounds and 100lvh span all 956pt. Setting --standalone-shell-h synchronously before first paint
+  // eliminates both the 62pt bottom black band and any startup viewport jerk or hit-test offset.
+  function isStandalonePwaMode() {
+    return Boolean(
+      window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+    );
+  }
+
+  function syncStandaloneShellGeometry() {
+    const root = document.documentElement;
+    if (!root) return;
+    const standalone = isStandalonePwaMode();
+    root.classList.toggle('ios-standalone', standalone);
+    if (!standalone) {
+      root.style.removeProperty('--standalone-shell-h');
+      return;
+    }
+    const iw = window.innerWidth || 0;
+    const ih = window.innerHeight || 0;
+    const sw = (window.screen && window.screen.width) ? window.screen.width : 0;
+    const sh = (window.screen && window.screen.height) ? window.screen.height : 0;
+    let targetPx = ih;
+    if (sw > 0 && sh > 0) {
+      const minScreen = Math.min(sw, sh);
+      const maxScreen = Math.max(sw, sh);
+      let isPortrait = ih >= iw;
+      if (sw !== sh) {
+        if (iw > 0 && Math.abs(iw - minScreen) <= 24) {
+          isPortrait = true;
+        } else if (iw > 0 && Math.abs(iw - maxScreen) <= 24) {
+          isPortrait = false;
+        }
+      }
+      const physicalH = isPortrait ? maxScreen : minScreen;
+      const gap = physicalH - ih;
+      const isPhoneScreen = minScreen < 768;
+      if (isPhoneScreen || (gap > 0 && gap <= 140)) {
+        targetPx = physicalH;
+      }
+    }
+    if (targetPx > 0) {
+      const nextVal = `${targetPx}px`;
+      if (root.style.getPropertyValue('--standalone-shell-h') !== nextVal) {
+        root.style.setProperty('--standalone-shell-h', nextVal);
+      }
+    }
+  }
+  syncStandaloneShellGeometry();
+
   // --- Automatic English (EN) Localization for Non-Russian Device Locales ---
   function detectIsEnglishLocale() {
     try {
@@ -506,7 +559,170 @@
     'Удаление...': 'Removing...',
     'Показать ещё': 'Show More',
     'Все плашки скрыты в настройках Mac (Основные → ТВ-режим)': 'All tiles are hidden in Mac Settings (General → TV Mode)',
-    '★ Трек добавлен в медиатеку Apple Music': '★ Song added to Apple Music Library'
+    '★ Трек добавлен в медиатеку Apple Music': '★ Song added to Apple Music Library',
+    'Музыка': 'Music',
+    'МЕДИАТЕКА': 'LIBRARY',
+    'Любимые песни': 'Favorite Songs',
+    'Сейчас на повторе': 'Heavy Rotation Mix',
+    'Микс': 'Mix',
+    'Радио': 'Radio',
+    'Комната': 'Room',
+    'АЧХ': 'Room EQ',
+    'Событие': 'Featured',
+    'Трек': 'Track',
+    'Усилитель': 'Amplifier',
+    'Результаты поиска': 'Search Results',
+    'Обложка': 'Artwork',
+    'Обложка трека': 'Track Artwork',
+    'Обложка плейлиста': 'Playlist Artwork',
+    'Буклет альбома': 'Album Booklet',
+    'Регулировка громкости': 'Volume Control',
+    'Без звука (Mute)': 'Mute',
+    'Полноэкранный режим StandBy / TV с живыми обложками': 'Full-screen StandBy / TV Mode with Motion Artwork',
+    'Авторизовано на Mac • Защищённый UID (Cookie + Cache)': 'Authorized on Mac • Protected UID (Cookie + Cache)',
+    'ИИ-подбор по треку': 'AI Mix from Track',
+    'ИИ-подбор по вайбу трека': 'AI Vibe Mix from Track',
+    'ИИ-подбор по вайбу текущего трека': 'AI Vibe Mix from Current Track',
+    '✨ ИИ-подбор по вайбу текущего трека': '✨ AI Vibe Mix from Current Track',
+    'Семантическая волна Apple Neural Engine': 'Semantic wave via Apple Neural Engine',
+    'ИЗБРАННЫЕ ВАЙБЫ': 'PINNED VIBES',
+    'Удалено из избранных вайбов': 'Removed from pinned vibes',
+    '★ Вайб закреплён в избранном': '★ Vibe pinned to favorites',
+    'Нативные функции ИИ отключены в настройках Mac': 'On-device AI features are disabled in Mac Settings',
+    'AI-куратор отключён в настройках Mac': 'AI Curator is disabled in Mac Settings',
+    'Не удалось построить маршрут Sonic Bridge': 'Could not build Sonic Bridge route',
+    'Не удалось построить маршрут: подходящие треки не найдены': 'Could not build route: no matching tracks found',
+    'Автосинхронизация CoreAudio': 'CoreAudio Auto-Sync',
+    'Сетевой вывод BluOS / DLNA (Bit-Perfect PCM • 100%)': 'BluOS / DLNA Network Output (Bit-Perfect PCM • 100%)',
+    'Прямой вывод CoreAudio (Bit-Perfect DAC • 100%)': 'Direct CoreAudio Output (Bit-Perfect DAC • 100%)',
+    'Сетевой вывод BluOS / DLNA (Bit-Perfect PCM 100% • Аппаратная громкость плеера)': 'BluOS / DLNA Network Output (Bit-Perfect PCM 100% • Hardware Player Volume)',
+    'Прямой вывод CoreAudio (Регулируемая громкость)': 'Direct CoreAudio Output (Variable Volume)',
+    'Сетевой Hi-Res стриминг': 'Network Hi-Res Streaming',
+    'Сетевой Lossless стриминг': 'Network Lossless Streaming',
+    'Чистый оригинал (Bit-Perfect Passthrough)': 'Pure Original (Bit-Perfect Passthrough)',
+    'Реставратор клиппинга (De-Clipper)': 'Clipping Restorer (De-Clipper)',
+    '⚡️ Реставратор клиппинга (De-Clipper)': '⚡️ Mastering De-Clipper',
+    'Авто — Умная защита (DR ≤ 10)': 'Auto — Smart Guard (DR ≤ 10)',
+    'Деликатный (до +2.8 дБ пиков)': 'Gentle (up to +2.8 dB peaks)',
+    'Студийная реставрация (до +4.2 дБ)': 'Studio Restoration (up to +4.2 dB)',
+    'Прямой 100% Bit-Perfect тракт без реконструкции срезанных верхушек волны.': '100% Bit-Perfect passthrough without waveform peak reconstruction.',
+    'Де-эссер (Weiss De-Esser)': 'Weiss Dynamic De-Esser',
+    '💎 Де-эссер (Weiss De-Esser)': '💎 Weiss Dynamic De-Esser',
+    'Деликатный — Планары / Яркий ВЧ (до -3.5 дБ)': 'Gentle — Planars / Bright HF (up to -3.5 dB)',
+    'Студийный Weiss — Резкий вокал (до -6.0 дБ)': 'Studio Weiss — Harsh Vocals (up to -6.0 dB)',
+    'Прямой 100% Bit-Perfect тракт без динамического подавления сибилянтов.': '100% Bit-Perfect passthrough without high-frequency dynamic sibilance control.',
+    'Ночной режим (DRC)': 'Late-Night Mode (DRC)',
+    'АЧХ КОМНАТЫ • AUTO-PEQ 64-BIT • CLOUD': 'ROOM EQ • AUTO-PEQ 64-BIT • CLOUD',
+    'Включить или выключить коррекцию комнаты': 'Enable or disable Room Acoustic Correction',
+    'Профиль АЧХ комнаты': 'Room Acoustic Profile',
+    'Удалить выбранный профиль АЧХ': 'Delete selected Room EQ profile',
+    'Удалить профиль АЧХ': 'Delete Room EQ Profile',
+    'График АЧХ комнаты': 'Room Frequency Response Graph',
+    'Нативная запись микрофоном iPhone / iPad (работает по LAN HTTP без HTTPS)': 'Native iPhone / iPad microphone capture (works over LAN HTTP without HTTPS)',
+    'RTA спектр аудиосигнала': 'Real-Time Audio Spectrum (RTA)',
+    'Фазовая корреляция стереосигнала от -1 до +1': 'Stereo Phase Correlation (-1 to +1)',
+    'ВЫКЛ': 'OFF',
+    'Выкл': 'Off',
+    'ВКЛ': 'ON',
+    'Вкл': 'On',
+    'Нет профилей замера': 'No room profiles yet',
+    'Целевая': 'Target',
+    'Целевая Harman': 'Harman Target',
+    'Замер микрофона': 'Mic Measurement',
+    'С коррекцией Auto-PEQ': 'Auto-PEQ Corrected',
+    'Калибровочный розовый шум...': 'Calibration pink noise...',
+    'Быстрый замер микрофоном': 'Measure Room Mic',
+    'Замер микрофоном iPhone / iPad': 'Measure via iPhone / iPad Mic',
+    'Запись iOS': 'iOS Mic Capture',
+    'Стоп': 'Stop',
+    'Быстрое измерение АЧХ комнаты отключено для этого устройства в системных настройках Mac.': 'Quick Room EQ measurement is disabled for this device in Mac Settings.',
+    'Быстрое измерение АЧХ отключено для этого устройства в настройках Mac': 'Quick Room EQ measurement is disabled for this device in Mac Settings',
+    'Сядьте в точку прослушивания с iPhone / iPad: Mac подаст эталонный розовый шум на АС и построит 64-bit Auto-PEQ фильтр с синхронизацией в iCloud.': 'Sit at your listening position with iPhone / iPad: your Mac will play reference pink noise and build a 64-bit Auto-PEQ filter synced with iCloud.',
+    'Розовый шум подан на АС — запишите 5–7 сек на микрофон iPhone/iPad и нажмите «Готово»': 'Pink noise is playing on speakers — record 5–7s on iPhone/iPad mic and tap "Done"',
+    'Прогрев акустики калибровочным розовым шумом...': 'Warming up speakers with calibration pink noise...',
+    'Замер АЧХ завершён — профиль Auto-PEQ сохранён и синхронизирован с iCloud': 'Room EQ measurement complete — Auto-PEQ profile saved & synced with iCloud',
+    'Расчёт 4096-pt vDSP FFT и синтез 64-bit Auto-PEQ на Mac...': 'Computing 4096-pt vDSP FFT & synthesizing 64-bit Auto-PEQ on Mac...',
+    'Не удалось распознать аудиозапись микрофона': 'Could not analyze microphone audio recording',
+    'Профиль АЧХ комнаты создан и синхронизирован с iCloud': 'Room EQ profile created & synced with iCloud',
+    'Ошибка отправки записи микрофона на Mac': 'Failed to upload microphone recording to Mac',
+    'Ширина M/S:': 'M/S Width:',
+    'Баланс L/R:': 'L/R Balance:',
+    'Спектр жестко обрезан ниже 16.5 кГц — низкобитрейтный исходник (MP3/AAC 128 kbps) перекодирован в AAC 256 kbps.': 'Spectrum cuts off sharply below 16.5 kHz — low-bitrate source (MP3/AAC 128 kbps) was re-encoded to AAC 256 kbps.',
+    'Внутри контейнера ALAC Lossless обнаружен жесткий срез ВЧ, характерный для сжатия с потерями.': 'Brickwall HF cutoff typical of lossy compression detected inside ALAC Lossless container.',
+    'Поток передается в Hi-Res контейнере, но спектр ограничен частотой CD (22.05 кГц).': 'Stream is delivered in a Hi-Res container, but spectrum is limited to CD bandwidth (22.05 kHz).',
+    'Младшие 8 бит в 24-битном потоке пустые — реальный динамический диапазон составляет 16 бит.': 'Lower 8 bits in the 24-bit stream are zero — true dynamic resolution is 16-bit.',
+    'Спектральный анализ потока CoreAudio Process Tap через Accelerate vDSP FFT.': 'Real-time CoreAudio Process Tap spectral analysis via Accelerate vDSP FFT.',
+    'Аудиофильский верификатор спектра отключен в настройках приложения.': 'Audiophile spectral verifier is disabled in application settings.',
+    'Спектральный анализ...': 'Analyzing spectrum...',
+    'Накопление PCM-буферов из CoreAudio Process Tap для расчёта БПФ-спектра.': 'Accumulating PCM buffers from CoreAudio Process Tap for FFT spectrum calculation.',
+    'Zero-Padding (16-бит → 24-бит)': 'Zero-Padding (16-bit → 24-bit)',
+    'Verified Studio Master 24-бит': 'Verified Studio Master 24-bit',
+    'Апсемплинг CD (срез 22.05 кГц)': 'Upsampled CD (22.05 kHz cut)',
+    'Не удалось удалить из медиатеки': 'Could not remove from Library',
+    'Недавно добавленные в медиатеку': 'Recently Added to Library',
+    'Медиатека Apple Music': 'Apple Music Library',
+    'Системный плейлист нельзя удалить': 'System playlist cannot be deleted',
+    'Устройство не авторизовано': 'Device is not authorized',
+    'Генерация QR-приглашений доступна только устройствам с правами администратора ЦАП/аудиовыхода': 'QR invite generation is available only to devices with DAC / audio output permissions',
+    'Выбор ЦАП и аудиовыхода отключён для этого устройства в настройках Mac': 'DAC & audio output selection is disabled for this device in Mac Settings',
+    'Выбор ЦАП и параметров аудиовыхода отключён для этого устройства в настройках Mac': 'DAC & audio output settings are disabled for this device in Mac Settings',
+    'Изменение настроек подсветки WLED отключено для этого устройства в настройках Mac': 'WLED lighting settings are disabled for this device in Mac Settings',
+    'Изменение токена Apple Music отключено для этого устройства в настройках Mac': 'Apple Music token modification is disabled for this device in Mac Settings',
+    'Выбор пресета DSP отключён для этого устройства в настройках Mac': 'DSP preset selection is disabled for this device in Mac Settings',
+    'Выбор пресета DSP отключён при выводе на внешний сетевой плеер BluOS / DLNA': 'DSP preset selection is disabled when outputting to BluOS / DLNA network players',
+    'Настройки пресетов DSP недоступны при выводе на внешний сетевой плеер BluOS / DLNA': 'DSP preset settings are unavailable when outputting to BluOS / DLNA network players',
+    'Режимы DSD и HQ NOS доступны только при подключении внешнего USB ЦАП (≥ 24-бит / 176.4 кГц)': 'DSD & HQ NOS modes require an external USB DAC (≥ 24-bit / 176.4 kHz)',
+    'Внешний USB / Thunderbolt ЦАП не подключён: DSD и HQ NOS доступны только для внешних USB / Thunderbolt ЦАП (≥ 24-бит / 176.4 кГц)': 'No external USB / Thunderbolt DAC connected: DSD & HQ NOS require an external USB / Thunderbolt DAC (≥ 24-bit / 176.4 kHz)',
+    'Измерение АЧХ комнаты отключено для этого устройства в настройках Mac': 'Room EQ measurement is disabled for this device in Mac Settings',
+    'Некорректные данные спектра (ожидается 31 полоса 1/3 октавы)': 'Invalid spectrum data (expected 31 1/3-octave bands)',
+    'Управление коррекцией АЧХ отключено для этого устройства в настройках Mac': 'Room EQ control is disabled for this device in Mac Settings',
+    'Выбор профиля АЧХ отключён для этого устройства в настройках Mac': 'Room EQ profile selection is disabled for this device in Mac Settings',
+    'Редактирование профилей АЧХ отключено для этого устройства': 'Editing Room EQ profiles is disabled for this device',
+    'Не удалось переименовать профиль АЧХ': 'Could not rename Room EQ profile',
+    'Удаление профилей АЧХ отключено для этого устройства': 'Deleting Room EQ profiles is disabled for this device',
+    'Профиль АЧХ не найден': 'Room EQ profile not found',
+    'Доступ к ночному режиму (Late-Night DRC) отключён для этого устройства в настройках Mac': 'Late-Night Mode (DRC) access is disabled for this device in Mac Settings',
+    'Управление параметрами DSP отключено для этого устройства в настройках Mac': 'DSP parameter control is disabled for this device in Mac Settings',
+    'Управление параметрами DSP отключено для этого устройства': 'DSP parameter control is disabled for this device',
+    'Облачная синхронизация выключена в настройках Mac': 'Cloud sync is disabled in Mac Settings',
+    'Изменение и удаление медиатеки отключено для этого устройства в настройках Mac': 'Library modification and deletion are disabled for this device in Mac Settings',
+    'Управление усилителем отключено для этого устройства в настройках Mac': 'Amplifier control is disabled for this device in Mac Settings',
+    'Web UI не авторизован в Apple ID. Выполните вход через карточку на главной странице.': 'Web UI is not signed in to Apple ID. Sign in via the card on the Home tab.',
+    'Срок действия сессии Apple ID в браузере истек.': 'Browser Apple ID session has expired.',
+    'Учетная запись Apple ID активна (онлайн-проверка отложена).': 'Apple ID account is active (online verification deferred).',
+    'Не удалось верифицировать токен Apple ID.': 'Could not verify Apple ID token.',
+    'Учетная запись Apple ID полностью синхронизирована с Mac.': 'Apple ID account is fully synchronized with Mac.',
+    'Медиатека в браузере отличается от медиатеки Music.app на Mac.': 'Browser library differs from Music.app library on Mac.',
+    'Аудиозапись слишком короткая': 'Audio recording is too short',
+    'Неподдерживаемый аудиоформат записи': 'Unsupported audio recording format',
+    'Запись должна длиться не менее 1–2 секунд во время звучания розового шума': 'Recording must be at least 1–2 seconds long while pink noise is playing',
+    'Недостаточно аудиосэмплов для спектрального анализа': 'Insufficient audio samples for spectral analysis',
+    'Записана тишина — убедитесь, что доступ к микрофону разрешён и громкость системы достаточна': 'Silence recorded — check microphone permission and speaker volume',
+    'Не удалось инициализировать vDSP FFT': 'Failed to initialize vDSP FFT',
+    'DoP 705.6 кГц • Trellis M=8 • AMX Min-Phase • ISI • Референсный баланс': 'DoP 705.6 kHz • Trellis M=8 • AMX Min-Phase • ISI • Reference Balance',
+    'DoP 705.6 кГц • Trellis M=16 • Metal GPU Sinc-M (262k) • Глубокая сцена': 'DoP 705.6 kHz • Trellis M=16 • Metal GPU Sinc-M (262k) • Deep Soundstage',
+    'DoP 352.8 кГц • OBG 1.38 • Min-Phase без предзвона • Панч для рока и метала': 'DoP 352.8 kHz • OBG 1.38 • Zero Pre-Ring Min-Phase • Rock & Metal Punch',
+    'DoP 176.4 кГц / 24-bit • Совместимость с S/PDIF и классическими ЦАП': 'DoP 176.4 kHz / 24-bit • S/PDIF & Classic DAC Compatibility',
+    'PCM 705.6/768 кГц в обход ЦФ ЦАП • Metal Linear-Phase • Шейпер 15-го порядка': 'PCM 705.6/768 kHz DAC Filter Bypass • Metal Linear-Phase • 15th-Order Shaper',
+    'Любимые треки и персональные рекомендации': 'Favorite tracks & personal recommendations',
+    'Новая музыка на основе ваших вкусов': 'New music based on what you love',
+    'Главные мировые релизы в прямом эфире': 'The new music that matters, live 24/7',
+    'Культовые хиты 80-х, 90-х и 2000-х': 'The songs you know and love',
+    'Современное и классическое кантри': 'Where country music lives',
+    'Самые популярные поп-треки мира': 'The biggest pop anthems right now',
+    'Культовые рок-гимны и гитарные соло': 'Greatest guitar anthems & classic rock',
+    'Плотные биты и свежие релизы': 'Heavy beats and groundbreaking rap',
+    'Клубный драйв и танцевальная энергия': 'Non-stop club bangers & festival anthems',
+    'Глубокое электронное звучание': 'Deep melodic house & hypnotic rhythms',
+    'Безупречная классика джаза': 'Timeless jazz standards & soothing brass',
+    'ПРЯМОЙ ЭФИР': 'LIVE RADIO',
+    'Прямой эфир': 'Live Radio',
+    'Итоги года Replay': 'Replay Mix',
+    'ИТОГИ ГОДА REPLAY': 'REPLAY MIX',
+    'Главные новинки': 'New Music Daily',
+    'Хиты сегодня': "Today's Hits",
+    'Чистый релакс': 'Pure Chill',
+    'Энергия тренировки': 'Pure Workout'
   };
 
 // === MODULE: 02-i18n-identity-and-state.js ===
@@ -520,6 +736,10 @@
     let out = raw;
     out = out
       .replace(/^✨\s*ИИ-подбор по вайбу «(.+)»\.\.\.$/i, '✨ Curating AI vibe from "$1"...')
+      .replace(/^✨\s*ИИ-подбор по вайбу «(.+)»$/i, '✨ AI Vibe Mix from "$1"')
+      .replace(/^ИИ-микс:\s*(.+)$/i, 'AI Mix: $1')
+      .replace(/^Перейти к альбому «(.+)»$/i, 'Go to Album "$1"')
+      .replace(/^Поиск:\s*(.+)$/i, 'Search: $1')
       .replace(/^Запуск «Моей станции»\.\.\.$/i, 'Starting My Station...')
       .replace(/^Запуск «Станции открытий»\.\.\.$/i, 'Starting Discovery Station...')
       .replace(/^Запуск «В моём вкусе»\.\.\.$/i, 'Starting Favorites Mix...')
@@ -542,7 +762,7 @@
       .replace(/Последний коммит:\s*([^\s(]+)\s*\(([^)]+)\)\s*•\s*(.+)/i, 'Latest commit: $1 ($2) • $3')
       .replace(/UID:\s*([^\s•]+)\s*•\s*Авторизовано на Mac/i, 'UID: $1 • Authorized on Mac')
       .replace(/Попытка переподключения через (\d+)с\.\.\. \(попытка (\d+)\)/i, 'Reconnecting in $1s... (attempt $2)')
-      .replace(/Apple Music:\s*подписка активна\s*•\s*Регион\s*([A-Z]+)\s*•\s*Медиатека синхронизирована/i, 'Apple Music: Active • Storefront $1 • Library Synced')
+      .replace(/Apple Music:\s*подписка активна\s*•\s*Регион\s*([^\s•]+)\s*•\s*Медиатека синхронизирована/i, 'Apple Music: Active • Storefront $1 • Library Synced')
       .replace(/Апсемплинг CD \(срез\s*([\d.]+)\s*(?:кГц|kHz)\)/i, 'Upsampled CD ($1 kHz cut)')
       .replace(/Lossy-транскод \(([^•]+)•\s*срез\s*([\d.]+)\s*(?:кГц|kHz)\)/i, 'Lossy Transcode ($1• $2 kHz cut)')
       .replace(/Lossy-апскейл \(([^)]+)\)/i, 'Lossy Upscale ($1)')
@@ -567,13 +787,35 @@
       .replace(/Частота и разрядность совпадают \(([^)]+)\), но поток проходит через микшер macOS CoreAudio\./i, 'Sample rate and bit depth match ($1), routed through macOS CoreAudio mixer.')
       .replace(/Внешний USB ЦАП не подключён:\s*DSD и HQ NOS доступны только для USB ЦАП\s*\(([^)]+)\)/i, 'No external USB DAC connected: DSD and HQ NOS are available only for USB DACs ($1)')
       .replace(/Передискретизация \(([^)]+)\)/i, 'Resampling ($1)')
+      .replace(/Преобразование разрядности \(([^)]+)\)/i, 'Bit-Depth Quantization ($1)')
+      .replace(/Частота дискретизации синхронизирована 1:1 \(([^)]+)\) без передискретизации;\s*выполняется квантование разрядности \(([^)]+)\)\./i, 'Sample rate is synced 1:1 ($1) without resampling; bit-depth quantization applied ($2).')
+      .replace(/Частота дискретизации источника \(([^)]+)\) пересчитывается в режим вывода \(([^)]+)\)\./i, 'Source sample rate ($1) is resampled to output mode ($2).')
+      .replace(/Недостаточная частота (DSD\d+) для источника \(([^)]+)\)/i, 'Insufficient $1 Rate for Source ($2)')
+      .replace(/Поток источника \(([^)]+)\) превышает оптимальную полосу однобитного режима (DSD\d+)\.\s*Выберите ([^д]+) для раскрытия битрейта без потерь\./i, 'Source stream ($1) exceeds optimal bandwidth of 1-bit $2 mode. Select $3 for lossless resolution.')
       .replace(/Частота или разрядность источника \(([^)]+)\) отличается от текущего режима вывода \(([^)]+)\)\./i, 'Source format ($1) differs from current output mode ($2).')
       .replace(/Прямое подключение macOS CoreAudio HAL \(([^)]+)\)/i, 'Direct macOS CoreAudio HAL ($1)')
       .replace(/Прямой вывод CoreAudio \(Bit-Perfect 100% • Громкость: ([^)]+)\)/i, 'Direct CoreAudio Output (Bit-Perfect 100% • Volume: $1)')
       .replace(/Прямой вывод CoreAudio \(Bit-Perfect 100% • Ожидание ([^)]+)\)/i, 'Direct CoreAudio Output (Bit-Perfect 100% • Waiting for $1)')
+      .replace(/Управление громкостью по TCP • Лимит до (\d+)%/gi, 'TCP Volume Control • Cap $1%')
+      .replace(/Ожидание подключения по TCP • Лимит до (\d+)%/gi, 'Waiting for TCP connection • Cap $1%')
+      .replace(/макс\.\s*(\d+)%/gi, 'max $1%')
+      .replace(/Активен профиль «([^»]+)» \(([^•]+)•\s*Headroom\s*([-\d.]+)\s*(?:дБ|dB)\s*•\s*синхронизирован с iCloud Drive\)\./i, 'Active profile "$1" ($2• Headroom $3 dB • synced with iCloud Drive).')
+      .replace(/Профиль «([^»]+)» сохранён в облаке \(([^)]+)\)\.\s*Нажмите «Вкл» для активации 64-bit Auto-PEQ\./i, 'Profile "$1" saved in iCloud ($2). Tap "On" to enable 64-bit Auto-PEQ.')
+      .replace(/Усреднение спектра в точке прослушивания \(([\d.]+)\s*с\)\.\.\./i, 'Averaging spectrum at listening position ($1s)...')
+      .replace(/Профиль «([^»]+)» удалён/i, 'Profile "$1" deleted')
+      .replace(/Несовпадение регионов:\s*Mac \(([^)]+)\) и Web \(([^)]+)\)\./i, 'Storefront mismatch: Mac ($1) vs Web ($2).')
+      .replace(/Не удалось декодировать аудиофайл микрофона \(код ([^)]+)\)\.[^]*/i, 'Could not decode microphone audio file (code $1). Use iOS Voice Memos / Mic capture (M4A/WAV).')
+      .replace(/Срок действия встроенного MusicKit Developer JWT истек\.[^]*/i, 'Built-in MusicKit Developer JWT has expired. Update the app or refresh the developer key.')
+      .replace(/⏭\s*«([^»]+)» недоступен в Apple Music — пропуск/i, '⏭ "$1" is unavailable in Apple Music — skipping')
       .replace(/Сетевой (Hi-Res|Lossless|PCM) стриминг \(([^)]+)\)\s*•\s*(.+)/i, 'Network $1 Streaming ($2) • $3')
       .replace(/Сетевой стример\s*•\s*До 192 кГц Hi-Res\s*•\s*(.+)/i, 'Network Streamer • Up to 192 kHz Hi-Res • $1')
       .replace(/\((\d+)\s*частот\)/i, '($1 rates)')
+      .replace(/Буфер\s*(\d+(?:\.\d+)?)%/gi, 'Buffer $1%')
+      .replace(/Ширина M\/S:/g, 'M/S Width:')
+      .replace(/Баланс L\/R:/g, 'L/R Balance:')
+      .replace(/Lossless\s*\(Остановлен\)/gi, 'Lossless (Stopped)')
+      .replace(/Буферизация/gi, 'Buffering')
+      .replace(/Ожидание CDN/gi, 'Waiting for CDN')
       .replace(/Декодирование в PCM/g, 'Decoded to PCM')
       .replace(/Декодирование AAC → PCM/g, 'AAC → PCM Decode')
       .replace(/Бесконечный PCM поток/g, 'Continuous PCM Stream')
@@ -583,6 +825,10 @@
       .replace(/(\d+)-бит/gi, '$1-bit')
       .replace(/Нет\s*\(<([-\d.]+)\s*dB\)/gi, 'None (<$1 dB)')
       .replace(/Н\/Д\s*\(≤\s*48\s*(?:кГц|kHz)\)/gi, 'N/A (≤ 48 kHz)')
+      .replace(/([\d.]+)кГц/gi, '$1kHz')
+      .replace(/([\d.]+)Гц/gi, '$1Hz')
+      .replace(/([+-]?[\d.]+)\s*дБ/gi, '$1 dB')
+      .replace(/([\d.]+)\s*МГц/gi, '$1 MHz')
       .replace(/до\s*([\d.]+)\s*кГц/gi, 'up to $1 kHz')
       .replace(/([\d.]+)\s*кГц/gi, '$1 kHz')
       .replace(/(\d+)\s*Гц/gi, '$1 Hz')
@@ -971,6 +1217,7 @@
     deviceName: initialDeviceProfile.deviceName,
     deviceType: initialDeviceProfile.deviceType,
     deviceAuthorized: false, // Updated by server on connect (false -> shows auth waiting screen first)
+    deviceAuthChecked: false,
     initialAuthFetched: false,
     inviteToken: initialDeviceProfile.inviteToken || '',
     shareAccessUrl: '',
@@ -1040,15 +1287,64 @@
     initialViewSelected: false,
     position: 0,
     duration: 0,
-    volume: 100,
+    volume: (() => {
+      try {
+        const raw = localStorage.getItem('amr_last_volume');
+        if (raw !== null && !isNaN(Number(raw))) {
+          return Math.max(0, Math.min(100, Number(raw)));
+        }
+      } catch (_) {}
+      return 100;
+    })(),
     previousVolume: 100,
-    lockVolume100: localStorage.getItem('amr_lock_volume_100') !== null ? (localStorage.getItem('amr_lock_volume_100') === 'true') : true,
-    ampVolumeControlEnabled: false,
-    ampBrandName: 'Rotel',
+    lockVolume100: (() => {
+      try {
+        const raw = localStorage.getItem('amr_lock_volume_100');
+        return raw !== null ? (raw === 'true') : true;
+      } catch (_) {
+        return true;
+      }
+    })(),
+    ampVolumeControlEnabled: (() => {
+      try {
+        const lockRaw = localStorage.getItem('amr_lock_volume_100');
+        const locked = lockRaw !== null ? (lockRaw === 'true') : true;
+        return locked && localStorage.getItem('amr_amp_volume_control') === 'true';
+      } catch (_) {
+        return false;
+      }
+    })(),
+    ampBrandName: (() => {
+      try {
+        return localStorage.getItem('amr_amp_brand_name') || 'Rotel';
+      } catch (_) {
+        return 'Rotel';
+      }
+    })(),
     ampVolume: 35,
-    ampMaxVolume: 96,
-    ampMuted: false,
+    ampMaxVolume: (() => {
+      try {
+        const raw = Number(localStorage.getItem('amr_amp_max_volume'));
+        return (raw > 0 && raw <= 100) ? raw : 96;
+      } catch (_) {
+        return 96;
+      }
+    })(),
+    ampMuted: (() => {
+      try {
+        return localStorage.getItem('amr_amp_muted') === 'true';
+      } catch (_) {
+        return false;
+      }
+    })(),
     ampConnected: false,
+    isDlnaActive: (() => {
+      try {
+        return localStorage.getItem('amr_is_dlna_active') === 'true';
+      } catch (_) {
+        return false;
+      }
+    })(),
     isDraggingVolume: false,
     shuffle: false,
     repeatMode: 'off', // 'off', 'one', 'all'
@@ -1622,6 +1918,32 @@
 
   const recentGetRpcSentAt = new Map();
   const pendingPreOpenQueue = [];
+  let disconnectAudioGraceTimer = null;
+
+  function clearDisconnectAudioGraceTimer() {
+    if (disconnectAudioGraceTimer) {
+      clearTimeout(disconnectAudioGraceTimer);
+      disconnectAudioGraceTimer = null;
+    }
+  }
+
+  function pauseSilentAudioAfterDisconnectGrace() {
+    if (document.hidden && state.playerState === 'playing' && isLockScreenAllowedNow()) {
+      // Keep silent audio alive during transient background Wi-Fi/TCP reconnects so iOS does not
+      // immediately suspend the locked WebProcess or tear down Prev/Next Lock Screen controls.
+      if (!disconnectAudioGraceTimer) {
+        disconnectAudioGraceTimer = setTimeout(() => {
+          disconnectAudioGraceTimer = null;
+          if (!state.connected) {
+            syncSilentAudio(false);
+          }
+        }, 15000);
+      }
+      return;
+    }
+    clearDisconnectAudioGraceTimer();
+    syncSilentAudio(false);
+  }
 
   function flushPendingPreOpenQueue() {
     if (!socket || socket.readyState !== WebSocket.OPEN || !state.deviceAuthorized) return;
@@ -1664,6 +1986,7 @@
       trendsInFlightCountry = '';
       trendsInFlightSince = 0;
       reconnectAttempt = 0;
+      clearDisconnectAudioGraceTimer();
       dom.overlay.classList.add('hidden');
       ensureScrubberLoopRunning();
 
@@ -1702,7 +2025,7 @@
         stopRoomMeasurementSession(false);
       }
       dom.overlay.classList.remove('hidden');
-      syncSilentAudio(false);
+      pauseSilentAudioAfterDisconnectGrace();
       syncMotionVideoPlaybackState();
       ScreenWakeLockManager.syncByPlaybackAndConnection();
       scheduleReconnect();
@@ -1712,7 +2035,7 @@
       state.connected = false;
       state.pendingPingSentAt = 0;
       dom.overlay.classList.remove('hidden');
-      syncSilentAudio(false);
+      pauseSilentAudioAfterDisconnectGrace();
       syncMotionVideoPlaybackState();
       ScreenWakeLockManager.syncByPlaybackAndConnection();
     };
@@ -1744,6 +2067,19 @@
         state.isAiCurating = false;
         state.pendingStandbyAiAutoPlay = false;
         state.sonicBridgeAutoPlay = false;
+      } else if (act === 'previous' || act === 'next' || act === 'play' || act === 'pause') {
+        for (let i = pendingPreOpenQueue.length - 1; i >= 0; i--) {
+          const itemAct = pendingPreOpenQueue[i] && pendingPreOpenQueue[i].action
+            ? String(pendingPreOpenQueue[i].action).toLowerCase()
+            : '';
+          if (itemAct === 'previous' || itemAct === 'next' || itemAct === 'play' || itemAct === 'pause') {
+            pendingPreOpenQueue.splice(i, 1);
+          }
+        }
+        pendingPreOpenQueue.push(msgObj);
+        if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+          connectWebSocket();
+        }
       } else if (act.startsWith('get_') && pendingPreOpenQueue.length < 16) {
         if (!pendingPreOpenQueue.some((item) => item && item.action === msgObj.action)) {
           pendingPreOpenQueue.push(msgObj);
@@ -2587,6 +2923,9 @@
       state.playerState = incomingState;
     }
     state.playbackState = state.playerState;
+    try {
+      localStorage.setItem('amr_last_was_playing', String(state.playbackState === 'playing'));
+    } catch (_) {}
 
     // Dynamic initial view: on first player state / status message after initial page load
     if (!state.initialViewSelected) {
@@ -2597,10 +2936,13 @@
           (dom.libraryArtistDetailPane && !dom.libraryArtistDetailPane.classList.contains('hidden'))
         );
         switchDesktopTab(state.desktopActiveTab || 'home', detailOpen);
-      } else if (state.playbackState === 'playing') {
-        switchMobileView('view-now-playing');
       } else {
-        switchMobileView('view-home');
+        const desiredMobileView = state.playbackState === 'playing' ? 'view-now-playing' : 'view-home';
+        if (state.activeView !== desiredMobileView) {
+          switchMobileView(desiredMobileView);
+        } else if (desiredMobileView === 'view-home') {
+          loadTrends();
+        }
       }
     }
 
@@ -2738,6 +3080,7 @@
     const prevDlnaActive = Boolean(state.isDlnaActive);
     if (data.is_dlna_active !== undefined || data.isDlnaActive !== undefined) {
       state.isDlnaActive = Boolean(data.is_dlna_active !== undefined ? data.is_dlna_active : data.isDlnaActive);
+      try { localStorage.setItem('amr_is_dlna_active', String(state.isDlnaActive)); } catch (_) {}
     }
     const dlnaActiveChanged = (Boolean(state.isDlnaActive) !== prevDlnaActive);
     if (data.room_correction_active !== undefined || data.roomCorrectionActive !== undefined) {
@@ -2843,19 +3186,24 @@
 
     if (data.amp_volume_control !== undefined) {
       state.ampVolumeControlEnabled = Boolean(data.amp_volume_control) && state.lockVolume100;
+      try { localStorage.setItem('amr_amp_volume_control', String(state.ampVolumeControlEnabled)); } catch (_) {}
     } else if (!state.lockVolume100) {
       state.ampVolumeControlEnabled = false;
+      try { localStorage.setItem('amr_amp_volume_control', 'false'); } catch (_) {}
     }
     if (data.amp_brand_name !== undefined && data.amp_brand_name) {
       state.ampBrandName = String(data.amp_brand_name);
+      try { localStorage.setItem('amr_amp_brand_name', state.ampBrandName); } catch (_) {}
     }
     if (data.amp_max_volume !== undefined && Number(data.amp_max_volume) > 0) {
       state.ampMaxVolume = Number(data.amp_max_volume);
+      try { localStorage.setItem('amr_amp_max_volume', String(state.ampMaxVolume)); } catch (_) {}
     }
     const prevVol = state.volume;
     const prevMute = state.ampMuted;
     if (data.amp_muted !== undefined) {
       state.ampMuted = Boolean(data.amp_muted);
+      try { localStorage.setItem('amr_amp_muted', String(state.ampMuted)); } catch (_) {}
     }
     if (data.amp_connected !== undefined) {
       state.ampConnected = Boolean(data.amp_connected);
@@ -2879,6 +3227,7 @@
     const maxVol = (state.lockVolume100 && state.ampVolumeControlEnabled) ? (state.ampMaxVolume || 80) : 100;
     if (data.volume !== undefined && !state.isDraggingVolume) {
       state.volume = Math.max(0, Math.min(maxVol, Number(data.volume)));
+      try { localStorage.setItem('amr_last_volume', String(state.volume)); } catch (_) {}
       if (state.volume >= 5) {
         state.previousVolume = state.volume;
       }
@@ -3705,7 +4054,7 @@
     }
     if (!isExtAmpMode) return;
 
-    const brand = state.ampBrandName || 'Усилитель';
+    const brand = state.ampBrandName || (IS_EN ? 'Amplifier' : 'Усилитель');
     const maxVol = Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80));
     const vol = Math.max(0, Math.min(maxVol, Number(state.volume) || 0));
 
@@ -3907,11 +4256,23 @@
     } catch (_) {}
   }
 
+  function isLockScreenAllowedNow() {
+    if (!state.lockScreenControls) return false;
+    if (state.deviceAuthChecked && !state.deviceAuthorized) return false;
+    return true;
+  }
+
   function attachSilentAudioListeners(el) {
     if (!el || el._amrListenersAttached) return;
     el._amrListenersAttached = true;
 
-    const onAudioStateChange = () => {
+    let flushedAfterPlayingAdvance = false;
+
+    const onAudioStateChange = (evt) => {
+      if (evt && evt.type === 'playing') {
+        flushedAfterPlayingAdvance = false;
+      }
+      if (!isLockScreenAllowedNow()) return;
       setupMediaSession(true);
       updateMediaSession();
     };
@@ -3920,13 +4281,25 @@
       el.addEventListener(evt, onAudioStateChange, { passive: true });
     });
 
+    // Once silent audio actually advances past 50ms, WebKit's GPUProcess::recomputeNowPlayingOwner
+    // seats this page via becomeNowPlayingOwner — flush supported commands across RunLoop turns right then.
+    el.addEventListener('timeupdate', () => {
+      if (!flushedAfterPlayingAdvance && !el.paused && el.currentTime >= 0.05) {
+        flushedAfterPlayingAdvance = true;
+        if (isLockScreenAllowedNow()) {
+          setupMediaSession(true);
+          updateMediaSession();
+        }
+      }
+    }, { passive: true });
+
     const handleSilentAudioError = () => {
       const curSrc = el.getAttribute('src') || '';
       if (curSrc.includes('silence.m4a') && !el._amrWavFallbackTried) {
         el._amrWavFallbackTried = true;
-        el.src = '/assets/silence.wav?v=4';
+        el.src = '/assets/silence.wav?v=5';
         try { el.load(); } catch (_) {}
-        if (state.playerState === 'playing' && state.lockScreenControls && state.deviceAuthorized) {
+        if (state.playerState === 'playing' && isLockScreenAllowedNow()) {
           try {
             const p = el.play();
             if (p !== undefined) p.catch(() => {});
@@ -3942,7 +4315,7 @@
   }
 
   function initSilentAudio() {
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
+    if (!isLockScreenAllowedNow()) {
       return null;
     }
     if (!silentAudioEl) {
@@ -3976,19 +4349,16 @@
     const el = silentAudioEl || document.getElementById('bg-silent-audio');
     if (el) {
       try {
-        el.pause();
-        el.currentTime = 0;
-        if (el.hasAttribute('src')) {
-          el.removeAttribute('src');
-          el.load();
+        if (!el.paused) {
+          el.pause();
         }
+        el.currentTime = 0;
+        // Keep src intact so HTMLMediaElement retains HAVE_ENOUGH_DATA and iOS gesture blessing.
       } catch (e) {}
     }
-    silentAudioUnlocked = false;
     mediaSessionHandlersBound = false;
     mediaSessionPlatformActivated = false;
     lastMediaSessionKey = '';
-    bindUnlockAudioGestureListeners();
 
     if ('mediaSession' in navigator) {
       allowAmrMediaSessionMutation = true;
@@ -4006,7 +4376,7 @@
   }
 
   function syncSilentAudio(isPlaying) {
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
+    if (!isLockScreenAllowedNow()) {
       teardownMediaSessionAndSilentAudio();
       return;
     }
@@ -4019,24 +4389,32 @@
         if (p !== undefined) {
           p.then(() => {
             silentAudioUnlocked = true;
+            removeUnlockAudioGestureListeners();
             setupMediaSession(true);
             updateMediaSession();
             setTimeout(() => {
-              if (state.lockScreenControls && state.deviceAuthorized) {
+              if (isLockScreenAllowedNow()) {
                 setupMediaSession(true);
               }
-            }, 150);
+            }, 120);
+            setTimeout(() => {
+              if (isLockScreenAllowedNow()) {
+                setupMediaSession(true);
+              }
+            }, 450);
           }).catch((err) => {
             console.warn('[AudioKeepAlive] play error:', err);
           });
         }
+      } else {
+        setupMediaSession(true);
       }
     } else if (!el.paused) {
       el.pause();
     }
   }
 
-  const UNLOCK_GESTURE_EVENTS = ['pointerdown', 'touchstart', 'touchend', 'click'];
+  const UNLOCK_GESTURE_EVENTS = ['touchend', 'pointerup', 'click'];
   let unlockGestureListenersBound = false;
 
   function removeUnlockAudioGestureListeners() {
@@ -4055,9 +4433,9 @@
     });
   }
 
-  // Synchronously unlock silent keep-alive audio on user gesture until unlocked
+  // Unlock silent keep-alive audio on user activation (even before WebSocket auth finishes)
   function unlockAudioOnUserGesture() {
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
+    if (!isLockScreenAllowedNow()) {
       return;
     }
 
@@ -4073,12 +4451,17 @@
         p.then(() => {
           silentAudioUnlocked = true;
           removeUnlockAudioGestureListeners();
-          if (state.playerState !== 'playing') {
-            el.pause();
-          }
           setupMediaSession(true);
           updateMediaSession();
-          setTimeout(() => { if (state.lockScreenControls && state.deviceAuthorized) setupMediaSession(true); }, 150);
+          setTimeout(() => {
+            const shouldPlay = state.playerState === 'playing' || Date.now() < (state.pendingPlayUntil || 0);
+            if (!shouldPlay && !el.paused) {
+              el.pause();
+            }
+            if (isLockScreenAllowedNow()) {
+              setupMediaSession(true);
+            }
+          }, 160);
         }).catch(() => {});
       }
     }
@@ -4087,9 +4470,9 @@
   bindUnlockAudioGestureListeners();
 
   // Re-bind MediaSession on BOTH screen lock (document.hidden === true, when WebKit enables NowPlaying visibility) and wake/unlock
-  ['visibilitychange', 'pageshow', 'focus'].forEach((evt) => {
+  ['visibilitychange', 'pagehide', 'pageshow', 'focus'].forEach((evt) => {
     window.addEventListener(evt, () => {
-      if (state.lockScreenControls && state.deviceAuthorized) {
+      if (isLockScreenAllowedNow()) {
         setupMediaSession(true);
         updateMediaSession();
       }
@@ -4199,10 +4582,22 @@
   };
 
   const keepSilentAudioAliveForTrackSkip = () => {
-    if (silentAudioEl && silentAudioEl.paused && state.lockScreenControls && state.deviceAuthorized && state.playerState === 'playing') {
+    if (!isLockScreenAllowedNow()) return;
+    const el = initSilentAudio();
+    if (el && el.paused) {
       try {
-        const p = silentAudioEl.play();
-        if (p !== undefined) p.catch(() => {});
+        const p = el.play();
+        if (p !== undefined) {
+          p.then(() => {
+            silentAudioUnlocked = true;
+            setTimeout(() => {
+              const shouldPlay = state.playerState === 'playing' || Date.now() < (state.pendingPlayUntil || 0);
+              if (!shouldPlay && !el.paused) {
+                el.pause();
+              }
+            }, 1200);
+          }).catch(() => {});
+        }
       } catch (_) {}
     }
   };
@@ -4255,32 +4650,22 @@
     } catch (_) {}
   }
 
-  function setupMediaSession(forceFlush = true) {
-    if (!('mediaSession' in navigator)) return;
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
-      teardownMediaSessionAndSilentAudio();
-      return;
-    }
+  let mediaSessionCommandFlushTimer = null;
+  let mediaSessionFlushStopToggle = false;
 
-    ensureMediaSessionPlatformActive(state.playerState === 'playing');
-
+  function applyCoreMediaSessionActionHandlers(includeStopHandler) {
     allowAmrMediaSessionMutation = true;
     try {
       // Ensure WebKit RemoteCommandListenerCocoa registers ONLY Play, Pause, PreviousTrack,
-      // NextTrack, and SeekToPlaybackPosition — never defaultCommands() (±15s Skip/Rewind).
+      // NextTrack, and SeekToPlaybackPosition — never defaultCommands() (±15s SkipForward/SkipBackward).
       try { navigator.mediaSession.setActionHandler('seekbackward', null); } catch (e) {}
       try { navigator.mediaSession.setActionHandler('seekforward', null); } catch (e) {}
-      try { navigator.mediaSession.setActionHandler('stop', null); } catch (e) {}
-      if (forceFlush) {
-        try { navigator.mediaSession.setActionHandler('previoustrack', null); } catch (e) {}
-        try { navigator.mediaSession.setActionHandler('nexttrack', null); } catch (e) {}
-      }
       navigator.mediaSession.setActionHandler('play', msPlayHandler);
       navigator.mediaSession.setActionHandler('pause', msPauseHandler);
       navigator.mediaSession.setActionHandler('previoustrack', msPrevHandler);
       navigator.mediaSession.setActionHandler('nexttrack', msNextHandler);
       navigator.mediaSession.setActionHandler('seekto', msSeekToHandler);
-
+      try { navigator.mediaSession.setActionHandler('stop', includeStopHandler ? msStopHandler : null); } catch (e) {}
       mediaSessionHandlersBound = true;
     } catch (err) {
       console.warn('[MediaSession] Handler setup:', err);
@@ -4289,9 +4674,40 @@
     }
   }
 
+  function setupMediaSession(forceFlush = true) {
+    if (!('mediaSession' in navigator)) return;
+    if (!isLockScreenAllowedNow()) {
+      teardownMediaSessionAndSilentAudio();
+      return;
+    }
+
+    initSilentAudio();
+    ensureMediaSessionPlatformActive(state.playerState === 'playing');
+
+    if (forceFlush) {
+      // WebKit RemoteCommandListener.cpp:81 + RemoteRemoteCommandListener.cpp:92 coalesces synchronous
+      // remove+add within the same JS turn and early-returns if m_currentCommands == supportedCommands.
+      // Toggling StopCommand across two separate RunLoop turns forces UpdateSupportedCommands IPC to GPUProcess
+      // without ever dropping PreviousTrackCommand or NextTrackCommand for even a single frame.
+      mediaSessionFlushStopToggle = !mediaSessionFlushStopToggle;
+      applyCoreMediaSessionActionHandlers(mediaSessionFlushStopToggle);
+      if (mediaSessionCommandFlushTimer) {
+        clearTimeout(mediaSessionCommandFlushTimer);
+      }
+      mediaSessionCommandFlushTimer = setTimeout(() => {
+        mediaSessionCommandFlushTimer = null;
+        if (!('mediaSession' in navigator) || !isLockScreenAllowedNow()) return;
+        mediaSessionFlushStopToggle = false;
+        applyCoreMediaSessionActionHandlers(false);
+      }, 45);
+    } else {
+      applyCoreMediaSessionActionHandlers(false);
+    }
+  }
+
   function updateMediaSession() {
     if (!('mediaSession' in navigator)) return;
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
+    if (!isLockScreenAllowedNow()) {
       teardownMediaSessionAndSilentAudio();
       return;
     }
@@ -4799,7 +5215,9 @@
     state.lastSyncPerf = state.lastSyncTime;
     state.playerState = 'playing';
     state.playbackState = 'playing';
+    syncSilentAudio(true);
     renderNowPlaying();
+    updateMediaSession();
   }
 
   function togglePlayPause(e) {
@@ -4809,8 +5227,8 @@
     }
     triggerHaptic('medium');
     const isPlaying = state.playerState === 'playing';
-    syncSilentAudio(!isPlaying);
     if (isPlaying) {
+      syncSilentAudio(false);
       state.pendingPlayUntil = 0;
       state.isBuffering = false;
       state.isStagingBuffer = false;
@@ -4824,6 +5242,7 @@
       state.playerState = 'paused';
       state.playbackState = 'paused';
       renderNowPlaying();
+      updateMediaSession();
     } else {
       optimisticPlay();
     }
@@ -4972,7 +5391,7 @@
       hud.setAttribute('aria-live', 'polite');
       document.body.appendChild(hud);
     }
-    hud.textContent = message;
+    hud.textContent = translateTextToEn(String(message));
     if (toastTimerId) clearTimeout(toastTimerId);
     requestAnimationFrame(() => {
       hud.classList.add('visible');
@@ -7197,11 +7616,13 @@
     const maxVol = isExtAmpMode ? Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80)) : 100;
     const vol = Math.max(0, Math.min(maxVol, Math.round(Number(val) || 0)));
     state.volume = vol;
+    try { localStorage.setItem('amr_last_volume', String(vol)); } catch (_) {}
     if (vol >= 5) {
       state.previousVolume = vol;
     }
     if (vol > 0 && isExtAmpMode) {
       state.ampMuted = false;
+      try { localStorage.setItem('amr_amp_muted', 'false'); } catch (_) {}
     }
 
     const pct = Math.max(0, Math.min(100, (vol / maxVol) * 100));
@@ -7359,7 +7780,7 @@
 
     const isGenericPl = !playlistName || playlistName === 'Музыка' || playlistName === 'Music' || playlistName === 'Apple Music' || playlistName === 'Очередь';
     const plPrefix = (!isGenericPl && playlistName !== 'Очередь AMR')
-      ? `${playlistName} · `
+      ? `${translateTextToEn(playlistName)} · `
       : (playlistName === 'Очередь AMR' ? (IS_EN ? 'AMR Queue · ' : 'Очередь AMR · ') : '');
     if (IS_EN) {
       dom.queueSubtitle.textContent = history.length > 0
@@ -12132,7 +12553,9 @@
       (lowerArt.includes('coverdiscovery') && !lowerTitle.includes('country') && !lowerTitle.includes('подобные') && !lowerTitle.includes('similar'));
 
     if (isDiscovery) {
-      const dispTitle = lowerTitle.includes('в моем вкусе') ? 'СТАНЦИЯ ОТКРЫТИЙ' : (rawTitle.toUpperCase() || 'СТАНЦИЯ ОТКРЫТИЙ');
+      const dispTitle = IS_EN
+        ? 'DISCOVERY STATION'
+        : (lowerTitle.includes('в моем вкусе') ? 'СТАНЦИЯ ОТКРЫТИЙ' : (rawTitle.toUpperCase() || 'СТАНЦИЯ ОТКРЫТИЙ'));
       const discGradId = `discStarG-${++plaqueUidCounter}`;
       return `
         <div class="animated-plaque-wrap" style="background: linear-gradient(135deg, #10042c 0%, #3a0ca3 38%, #7209b7 72%, #f72585 100%);">
@@ -12191,7 +12614,7 @@
             <g class="plaque-wave-anim">
               <path d="M 142 235 L 210 235 L 226 172 L 242 298 L 258 194 L 272 262 L 286 235 L 358 235" fill="none" stroke="#ffffff" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="29" font-weight="600" fill="#ffffff" text-anchor="middle">МОЯ СТАНЦИЯ</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="29" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'MY STATION' : 'МОЯ СТАНЦИЯ'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.4" fill="#ffffff" fill-opacity="0.82" text-anchor="middle">PERSONAL STATION</text>
           </svg>
         </div>
@@ -12219,7 +12642,7 @@
               <path d="M 250 288 C 250 288 188 244 188 202 C 188 178 207 162 228 162 C 241 162 250 171 250 179 C 250 171 259 162 272 162 C 293 162 312 178 312 202 C 312 244 250 288 250 288 Z" fill="#ffffff" fill-opacity="0.95" />
               <path d="M 212 216 L 232 216 L 241 194 L 250 238 L 259 204 L 268 216 L 288 216" fill="none" stroke="#d41442" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="28" font-weight="600" fill="#ffffff" text-anchor="middle">В МОЁМ ВКУСЕ</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="28" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'FAVORITES MIX' : 'В МОЁМ ВКУСЕ'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.4" fill="#ffb3c6" text-anchor="middle">FAVORITES MIX</text>
           </svg>
         </div>
@@ -12243,7 +12666,7 @@
             <g class="plaque-spin-med">
               <path d="M 210 215 C 230 195, 270 195, 290 215 C 310 235, 310 265, 290 285 C 270 305, 230 305, 210 285 M 275 285 L 290 285 L 290 300" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">СЕЙЧАС НА ПОВТОРЕ</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'HEAVY ROTATION' : 'СЕЙЧАС НА ПОВТОРЕ'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.2" fill="#ffffff" fill-opacity="0.82" text-anchor="middle">HEAVY ROTATION MIX</text>
           </svg>
         </div>
@@ -12267,7 +12690,7 @@
               <polygon points="250,138 268,217 347,235 268,253 250,332 232,253 153,235 232,217" fill="#ffffff" fill-opacity="0.92" />
               <circle cx="250" cy="235" r="24" fill="#00f5d4" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">НОВИНКИ ДЛЯ ВАС</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'NEW MUSIC MIX' : 'НОВИНКИ ДЛЯ ВАС'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.2" fill="#80ffdb" text-anchor="middle">NEW MUSIC MIX</text>
           </svg>
         </div>
@@ -12280,7 +12703,7 @@
       lowerArt.includes('coverchill');
 
     if (isChill) {
-      const titleText = lowerTitle.includes('lo-fi') ? 'CHILL & LO-FI' : 'ЧИЛЛ-МИКС';
+      const titleText = lowerTitle.includes('lo-fi') ? 'CHILL & LO-FI' : (IS_EN ? 'CHILL MIX' : 'ЧИЛЛ-МИКС');
       const subText = lowerTitle.includes('lo-fi') ? 'AMBIENT & LO-FI BEATS' : 'CHILL MIX';
       return `
         <div class="animated-plaque-wrap" style="background: linear-gradient(135deg, #0b132b 0%, #1c2541 38%, #0077b6 74%, #00b4d8 100%);">
@@ -12321,7 +12744,7 @@
               <rect x="272" y="168" width="16" height="134" rx="8" fill="#ffffff" />
               <rect x="302" y="200" width="16" height="70" rx="8" fill="#ffffff" />
             </g>
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${escapeHtml(rawTitle.toUpperCase() || 'ДРАЙВ-МИКС')}</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${escapeHtml(IS_EN ? 'GET UP! MIX' : (rawTitle.toUpperCase() || 'ДРАЙВ-МИКС'))}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.2" fill="#fff3b0" text-anchor="middle">GET UP! MIX</text>
           </svg>
         </div>
@@ -12341,7 +12764,7 @@
               <circle cx="278" cy="235" r="88" fill="none" stroke="#ffccd5" stroke-opacity="0.7" stroke-width="3.5" />
             </g>
             <circle class="plaque-breathe" cx="250" cy="235" r="136" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="14 14" />
-            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">МИКС ДЛЯ ДРУЗЕЙ</text>
+            <text x="250" y="422" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="27" font-weight="600" fill="#ffffff" text-anchor="middle">${IS_EN ? 'FRIENDS MIX' : 'МИКС ДЛЯ ДРУЗЕЙ'}</text>
             <text x="250" y="448" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="12" font-weight="500" letter-spacing="2.2" fill="#e0aaff" text-anchor="middle">FRIENDS MIX</text>
           </svg>
         </div>
@@ -12378,7 +12801,7 @@
               <path d="M 125 230 L 190 230 L 212 165 L 236 290 L 256 190 L 278 270 L 298 178 L 318 275 L 334 230 L 375 230" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
             </g>
             <text x="250" y="418" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="${artistFontSize}" font-weight="700" fill="#ffffff" text-anchor="middle">${escapeHtml(cleanArtist.toUpperCase())}</text>
-            <text x="250" y="446" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="11.5" font-weight="600" letter-spacing="2" fill="#e0aaff" text-anchor="middle">РАДИОСТАНЦИЯ ПО АРТИСТУ</text>
+            <text x="250" y="446" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="11.5" font-weight="600" letter-spacing="2" fill="#e0aaff" text-anchor="middle">${IS_EN ? 'ARTIST STATION' : 'РАДИОСТАНЦИЯ ПО АРТИСТУ'}</text>
           </svg>
         </div>
       `;
@@ -12490,9 +12913,9 @@
         },
         {
           index: 2,
-          title: 'Станция открытий',
-          sub: 'Новые треки под ваш вкус',
-          tag: 'Радиостанция',
+          title: IS_EN ? 'Discovery Station' : 'Станция открытий',
+          sub: IS_EN ? 'New music tailored to your taste' : 'Новые треки под ваш вкус',
+          tag: IS_EN ? 'Radio Station' : 'Радиостанция',
           id: '',
           type: 'station',
           url: '',
@@ -12500,9 +12923,9 @@
         },
         {
           index: 3,
-          title: 'Любимые песни',
-          sub: 'Плейлист медиатеки',
-          tag: 'Медиатека',
+          title: IS_EN ? 'Favorite Songs' : 'Любимые песни',
+          sub: IS_EN ? 'Library Playlist' : 'Плейлист медиатеки',
+          tag: IS_EN ? 'Library' : 'Медиатека',
           id: 'Любимые песни',
           type: 'playlist',
           url: '',
@@ -12510,9 +12933,9 @@
         },
         {
           index: 4,
-          title: 'Сейчас на повторе',
-          sub: 'Еженедельный микс',
-          tag: 'Для вас',
+          title: IS_EN ? 'Heavy Rotation Mix' : 'Сейчас на повторе',
+          sub: IS_EN ? 'Weekly Mix' : 'Еженедельный микс',
+          tag: IS_EN ? 'Made for You' : 'Для вас',
           id: 'Сейчас на повторе',
           type: 'playlist',
           url: '',
@@ -12520,19 +12943,21 @@
         },
         {
           index: 5,
-          title: 'Легенда',
-          sub: 'Кино',
-          tag: 'Топ-альбом',
-          id: '1375628135',
+          title: IS_EN ? 'Random Access Memories' : 'Легенда',
+          sub: IS_EN ? 'Daft Punk' : 'Кино',
+          tag: IS_EN ? 'Top Album' : 'Топ-альбом',
+          id: IS_EN ? '617154241' : '1375628135',
           type: 'album',
-          url: 'https://music.apple.com/album/1375628135',
-          artwork: 'https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/c7/99/1e/c7991ed1-bee2-8c46-2e66-81d0b8e7eeb2/cover.jpg/600x600bb.jpg'
+          url: IS_EN ? 'https://music.apple.com/album/617154241' : 'https://music.apple.com/album/1375628135',
+          artwork: IS_EN
+            ? 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/e8/43/5f/e8435f2c-1c7b-58f9-81b8-6f40a21ab8db/886443919266.jpg/600x600bb.jpg'
+            : 'https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/c7/99/1e/c7991ed1-bee2-8c46-2e66-81d0b8e7eeb2/cover.jpg/600x600bb.jpg'
         },
         {
           index: 6,
           title: 'Mutter',
           sub: 'Rammstein',
-          tag: 'Топ-альбом',
+          tag: IS_EN ? 'Top Album' : 'Топ-альбом',
           id: '1440770702',
           type: 'album',
           url: 'https://music.apple.com/album/1440770702',
@@ -12540,13 +12965,15 @@
         },
         {
           index: 7,
-          title: 'Акустический альбом',
-          sub: 'Король и Шут',
-          tag: 'Топ-альбом',
-          id: '1440751918',
+          title: IS_EN ? 'The Dark Side of the Moon' : 'Акустический альбом',
+          sub: IS_EN ? 'Pink Floyd' : 'Король и Шут',
+          tag: IS_EN ? 'Top Album' : 'Топ-альбом',
+          id: IS_EN ? '1065973699' : '1440751918',
           type: 'album',
-          url: 'https://music.apple.com/album/1440751918',
-          artwork: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/44/9a/c0/449ac06f-40e1-7c59-bf7b-6ae9be2d7b14/4607062440191.jpg/600x600bb.jpg'
+          url: IS_EN ? 'https://music.apple.com/album/1065973699' : 'https://music.apple.com/album/1440751918',
+          artwork: IS_EN
+            ? 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/3c/64/73/3c647362-2f0f-2c26-5f20-ef44780d4094/886445635829.jpg/600x600bb.jpg'
+            : 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/44/9a/c0/449ac06f-40e1-7c59-bf7b-6ae9be2d7b14/4607062440191.jpg/600x600bb.jpg'
         }
       );
     }
@@ -12576,11 +13003,15 @@
         </div>
       `);
 
+      const heroTagText = translateTextToEn(c.tag || '');
+      const heroTitleText = c.type === 'album' ? (c.title || '') : translateTextToEn(c.title || '');
+      const heroSubText = c.type === 'album' ? (c.sub || '') : translateTextToEn(c.sub || '');
+
       el.innerHTML = `
         <div class="hero-card-header">
-          <span class="hero-tag">${escapeHtml(c.tag)}</span>
-          <span class="hero-title">${escapeHtml(c.title)}</span>
-          <span class="hero-sub">${escapeHtml(c.sub)}</span>
+          <span class="hero-tag">${escapeHtml(heroTagText)}</span>
+          <span class="hero-title">${escapeHtml(heroTitleText)}</span>
+          <span class="hero-sub">${escapeHtml(heroSubText)}</span>
         </div>
         <div class="hero-card-media">
           ${mediaHtml}
@@ -12693,9 +13124,10 @@
     list.forEach(mix => {
       const card = document.createElement('div');
       card.className = 'media-card';
-      const mName = mix.name || 'Микс';
+      const mName = mix.name || (IS_EN ? 'Mix' : 'Микс');
+      const displayMixName = translateTextToEn(mName);
       const art = appendDeviceIdToUrl(mix.artwork || mix.artwork_url || 'apple-touch-icon.svg');
-      const curator = mix.curator_name || 'Apple Music';
+      const curator = translateTextToEn(mix.curator_name || 'Apple Music');
       const animatedPlaque = getAnimatedPlaqueHtml({ ...mix, title: mName, subtitle: curator });
       const artContent = animatedPlaque
         ? animatedPlaque
@@ -12709,7 +13141,7 @@
             </div>
           </div>
         </div>
-        <div class="media-card-title">${escapeHtml(mName)}</div>
+        <div class="media-card-title">${escapeHtml(displayMixName)}</div>
         <div class="media-card-sub">${escapeHtml(curator)}</div>
       `;
       card.addEventListener('click', () => {
@@ -12965,17 +13397,21 @@
       const animatedPlaque = getAnimatedPlaqueHtml({ ...st, type: 'station' });
       const hasImage = Boolean(st.artwork && st.artwork.trim().length > 0 && !st.artwork.includes('apple-touch-icon'));
 
+      const stFallbackTitle = translateTextToEn(st.name || (IS_EN ? 'Radio' : 'Радио'));
+      const stDisplayName = translateTextToEn(st.name || (IS_EN ? 'Radio Station' : 'Радиостанция'));
+      const stDisplaySub = translateTextToEn(st.subtitle || (isLive ? 'Прямой эфир Apple Music' : 'Персональная станция'));
+
       const artHtml = animatedPlaque
         ? animatedPlaque
         : (hasImage
           ? `<img class="media-card-art" src="${escapeHtml(st.artwork)}" alt="" loading="lazy" data-fallback-mode="next-flex">
              <div class="media-card-art-fallback" style="display:none; background: ${gradient};">
                ${iconSvg}
-               <span class="station-art-fallback-title">${escapeHtml(st.name || 'Радио')}</span>
+               <span class="station-art-fallback-title">${escapeHtml(stFallbackTitle)}</span>
              </div>`
           : `<div class="media-card-art-fallback" style="background: ${gradient};">
                ${iconSvg}
-               <span class="station-art-fallback-title">${escapeHtml(st.name || 'Радио')}</span>
+               <span class="station-art-fallback-title">${escapeHtml(stFallbackTitle)}</span>
              </div>`);
 
       card.innerHTML = `
@@ -12990,8 +13426,8 @@
             </div>
           </div>
         </div>
-        <span class="media-card-title">${escapeHtml(st.name || 'Радиостанция')}</span>
-        <span class="media-card-sub">${escapeHtml(st.subtitle || (isLive ? 'Прямой эфир Apple Music' : 'Персональная станция'))}</span>
+        <span class="media-card-title">${escapeHtml(stDisplayName)}</span>
+        <span class="media-card-sub">${escapeHtml(stDisplaySub)}</span>
       `;
 
       card.addEventListener('click', () => {
@@ -13782,6 +14218,9 @@
 
   function handleResize(opts = {}) {
     const forceInitial = Boolean(opts && opts.force);
+    if (typeof syncStandaloneShellGeometry === 'function') {
+      syncStandaloneShellGeometry();
+    }
     const curWidth = window.innerWidth;
     if (typeof syncStandbyLandscapeBodyClass === 'function') {
       syncStandbyLandscapeBodyClass();
@@ -13824,6 +14263,9 @@
   }
 
   function scheduleDebouncedResize() {
+    if (typeof syncStandaloneShellGeometry === 'function') {
+      syncStandaloneShellGeometry();
+    }
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
     resizeDebounceTimer = setTimeout(() => {
       resizeDebounceTimer = null;
@@ -13832,6 +14274,9 @@
   }
   window.addEventListener('resize', scheduleDebouncedResize, { passive: true });
   window.addEventListener('orientationchange', () => {
+    if (typeof syncStandaloneShellGeometry === 'function') {
+      syncStandaloneShellGeometry();
+    }
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
     resizeDebounceTimer = setTimeout(() => {
       resizeDebounceTimer = null;
@@ -14453,7 +14898,7 @@
       {
         key: 'my-station',
         visible: cfg.show_my_station !== false,
-        title: 'Моя станция',
+        title: IS_EN ? 'My Station' : 'Моя станция',
         type: 'station',
         onClick: () => {
           state.activeStandbyTileKey = 'my-station';
@@ -14478,7 +14923,7 @@
       {
         key: 'discovery-station',
         visible: cfg.show_discovery_station !== false,
-        title: 'Станция открытий',
+        title: IS_EN ? 'Discovery Station' : 'Станция открытий',
         type: 'station',
         onClick: () => {
           state.activeStandbyTileKey = 'discovery-station';
@@ -14503,7 +14948,7 @@
       {
         key: 'favorites-mix',
         visible: cfg.show_favorites_mix !== false,
-        title: 'В моём вкусе',
+        title: IS_EN ? 'Favorites Mix' : 'В моём вкусе',
         type: 'playlist',
         onClick: () => {
           state.activeStandbyTileKey = 'favorites-mix';
@@ -14531,7 +14976,7 @@
       {
         key: 'heavy-rotation',
         visible: cfg.show_heavy_rotation !== false,
-        title: 'Сейчас на повторе',
+        title: IS_EN ? 'Heavy Rotation' : 'Сейчас на повторе',
         type: 'playlist',
         onClick: () => {
           state.activeStandbyTileKey = 'heavy-rotation';
@@ -15514,10 +15959,12 @@
           const f = Number(b.frequency_hz || b.frequencyHz || 0);
           const g = Number(b.gain_db || b.gainDB || 0);
           const q = Number(b.q || 1);
-          const freqStr = f >= 1000 ? `${(f / 1000).toFixed(f % 1000 === 0 ? 0 : 1)}к` : `${Math.round(f)}`;
+          const freqStr = f >= 1000 ? `${(f / 1000).toFixed(f % 1000 === 0 ? 0 : 1)}${IS_EN ? 'k' : 'к'}` : `${Math.round(f)}`;
           const pill = document.createElement('span');
           pill.className = 'room-eq-band-pill';
-          pill.textContent = `${freqStr}Гц ${g >= 0 ? '+' : ''}${g.toFixed(1)}дБ Q${q.toFixed(1)}`;
+          pill.textContent = IS_EN
+            ? `${freqStr}Hz ${g >= 0 ? '+' : ''}${g.toFixed(1)}dB Q${q.toFixed(1)}`
+            : `${freqStr}Гц ${g >= 0 ? '+' : ''}${g.toFixed(1)}дБ Q${q.toFixed(1)}`;
           bandsListEl.appendChild(pill);
         });
         bandsListEl.classList.remove('hidden');
@@ -15624,7 +16071,7 @@
           const opt = document.createElement('option');
           opt.value = String(p.id);
           const bandsCnt = Array.isArray(p.eq_bands) ? p.eq_bands.length : 0;
-          opt.textContent = `${p.name || 'Комната'} (${bandsCnt} PEQ)`;
+          opt.textContent = `${p.name || (IS_EN ? 'Room' : 'Комната')} (${bandsCnt} PEQ)`;
           selectEl.appendChild(opt);
         });
         selectEl.value = state.roomActiveProfileId || '';
@@ -15860,7 +16307,7 @@
           stopRoomMeasurementSession(true);
 
           const dateLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const outLabel = state.audioDeviceName || 'Комната';
+          const outLabel = state.audioDeviceName || (IS_EN ? 'Room' : 'Комната');
           const profName = `${outLabel} (${dateLabel})`;
           const sent = send({
             action: 'submit_room_measurement',
@@ -17170,11 +17617,11 @@
       lockCheckbox.checked = boolVal;
     }
 
-    if (!boolVal || !state.deviceAuthorized) {
+    if (!boolVal || (state.deviceAuthChecked && !state.deviceAuthorized)) {
       teardownMediaSessionAndSilentAudio();
     } else {
       initSilentAudio();
-      setupMediaSession();
+      setupMediaSession(true);
       updateMediaSession();
       if (state.playerState === 'playing') {
         syncSilentAudio(true);
@@ -17313,8 +17760,10 @@
 
     if (typeof data.authorized === 'boolean') {
       state.deviceAuthorized = data.authorized;
+      state.deviceAuthChecked = true;
     } else if (typeof data.is_authorized === 'boolean') {
       state.deviceAuthorized = data.is_authorized;
+      state.deviceAuthChecked = true;
     }
 
     if (state.deviceAuthorized) {
@@ -17344,7 +17793,13 @@
 
     if (typeof data.lock_screen_controls === 'boolean') {
       applyLockScreenControlsSetting(data.lock_screen_controls, { syncServer: false, showFeedback: false });
-    } else if (!state.deviceAuthorized) {
+    } else if (state.deviceAuthorized) {
+      if (state.lockScreenControls) {
+        initSilentAudio();
+        setupMediaSession(true);
+        updateMediaSession();
+      }
+    } else {
       teardownMediaSessionAndSilentAudio();
     }
 
@@ -17370,6 +17825,14 @@
       send({ action: 'get_playlists' });
       send({ action: 'get_library_albums' });
       send({ action: 'get_account_status' });
+      state.librarySongsLoaded = false;
+      state.libraryArtistsLoaded = false;
+      if (state.libraryRecent) {
+        state.libraryRecent.loaded = false;
+      }
+      if (state.activeTab === 'library' && typeof switchLibrarySubtab === 'function') {
+        switchLibrarySubtab(state.libraryTab || 'recent', false);
+      }
 
       setTimeout(() => {
         if (state.connected && state.deviceAuthorized) {
@@ -17613,80 +18076,22 @@
     }
   }
 
-  // iOS Standalone WebClip Cold-Launch Viewport Repair (WKWebViewIOS.mm _setViewportFitEdges:)
-  // On cold Home Screen launch, WKWebView processes <meta name="viewport" viewport-fit=cover> while
-  // _shouldDeferGeometryUpdates is YES during SpringBoard's zoom animation, leaving fixed bottom: 0
-  // inset by 34pt until rotated. Re-committing viewport-fit=contain -> cover after launch settles
-  // invokes _dispatchSetViewLayoutSize & _scheduleVisibleContentRectUpdate without rotating.
-  const VIEWPORT_META_COVER = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-  const VIEWPORT_META_CONTAIN = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=contain';
-  let viewportRepairInFlight = false;
+  // Keep standalone shell geometry synchronized across BFCache restores and software keyboard dismissal
+  // without ever mutating <meta name="viewport"> (which causes startup screen jerks and touch-offset bugs).
+  syncStandaloneShellGeometry();
 
-  function isStandalonePwaMode() {
-    return Boolean(
-      window.navigator.standalone === true ||
-      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
-    );
-  }
-
-  function hasStandaloneColdPortraitGap() {
-    if (!isStandalonePwaMode()) return false;
-    if (document.body && document.body.classList.contains('keyboard-open')) return false;
-    const iw = window.innerWidth || 0;
-    const ih = window.innerHeight || 0;
-    if (ih <= iw) return false;
-    const sh = (window.screen && window.screen.height) ? window.screen.height : 0;
-    const sw = (window.screen && window.screen.width) ? window.screen.width : 0;
-    const portraitScreenH = Math.max(sh, sw);
-    if (!portraitScreenH) return false;
-    const gap = portraitScreenH - ih;
-    return gap >= 16 && gap <= 120;
-  }
-
-  function repairStandaloneColdLaunchViewport(forceToggle = false) {
-    if (!isStandalonePwaMode() || viewportRepairInFlight) return;
-    if (document.body && document.body.classList.contains('keyboard-open')) return;
-    const isPortrait = (window.innerHeight || 0) > (window.innerWidth || 0);
-    if (!isPortrait) return;
-    if (!forceToggle && !hasStandaloneColdPortraitGap()) return;
-
-    const meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) return;
-
-    viewportRepairInFlight = true;
-    meta.setAttribute('content', VIEWPORT_META_CONTAIN);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          meta.setAttribute('content', VIEWPORT_META_COVER);
-          try { window.scrollTo(0, 0); } catch (_) {}
-          viewportRepairInFlight = false;
-          lastViewportWidth = -1;
-          handleResize({ force: true });
-        }, 28);
-      });
-    });
-  }
-
-  function scheduleStandaloneColdLaunchRepairs() {
-    if (!isStandalonePwaMode()) return;
-    repairStandaloneColdLaunchViewport(false);
-    setTimeout(() => repairStandaloneColdLaunchViewport(true), 120);
-    setTimeout(() => repairStandaloneColdLaunchViewport(true), 380);
-    setTimeout(() => repairStandaloneColdLaunchViewport(false), 800);
-  }
-
-  window.addEventListener('load', () => {
-    if (isStandalonePwaMode()) {
-      setTimeout(() => repairStandaloneColdLaunchViewport(true), 60);
-      setTimeout(() => repairStandaloneColdLaunchViewport(false), 420);
-    }
+  window.addEventListener('pageshow', () => {
+    syncStandaloneShellGeometry();
   }, { passive: true });
 
-  window.addEventListener('pageshow', (e) => {
-    if (isStandalonePwaMode()) {
-      setTimeout(() => repairStandaloneColdLaunchViewport(Boolean(e && e.persisted)), 80);
-    }
+  document.addEventListener('focusout', () => {
+    if (!isStandalonePwaMode()) return;
+    setTimeout(() => {
+      syncStandaloneShellGeometry();
+      if (document.body && !document.body.classList.contains('keyboard-open') && window.scrollY !== 0) {
+        try { window.scrollTo(0, 0); } catch (_) {}
+      }
+    }, 80);
   }, { passive: true });
 
   // Initialize
@@ -17702,8 +18107,25 @@
   renderHomeStations(DEFAULT_STATIONS);
   renderHomeGenres(DEFAULT_GENRES);
   bindGenreCards();
+  renderVolumeUI();
+  if (!isDesktopLayout()) {
+    let cachedWasPlaying = true;
+    try {
+      const rawPlaying = localStorage.getItem('amr_last_was_playing');
+      if (rawPlaying !== null) {
+        cachedWasPlaying = (rawPlaying === 'true');
+      }
+    } catch (_) {}
+    if (!cachedWasPlaying) {
+      switchMobileView('view-home', true);
+    }
+  }
   handleResize({ force: true });
-  scheduleStandaloneColdLaunchRepairs();
+  requestAnimationFrame(() => {
+    if (document.body) {
+      document.body.classList.add('app-ready');
+    }
+  });
   recoverOrPersistDeviceUidBeforeConnect().finally(() => {
     connectWebSocket();
   });

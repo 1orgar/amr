@@ -132,9 +132,9 @@ public final class ClientDeviceManager: @unchecked Sendable {
         var migratedAnyLegacyPlaintextSecret = false
         for var item in list {
             let secAccount = Self.secretAccount(forDeviceId: item.deviceId)
-            if let keychainSecret = AppSecretStore.shared.readSecret(account: secAccount),
-               keychainSecret.count >= 32 {
-                item.deviceSecret = keychainSecret
+            if let storedSecret = AppSecretStore.shared.readSecret(account: secAccount),
+               storedSecret.count >= 32 {
+                item.deviceSecret = storedSecret
                 if item.decodedInlineLegacySecret != nil {
                     migratedAnyLegacyPlaintextSecret = true
                 }
@@ -143,6 +143,9 @@ public final class ClientDeviceManager: @unchecked Sendable {
                 _ = AppSecretStore.shared.writeSecret(legacySecret, account: secAccount)
                 migratedAnyLegacyPlaintextSecret = true
             } else {
+                // Vault did not have a stored secret yet (e.g. migrated away from legacy Keychain);
+                // allow same-IP reconnect to re-confirm or re-bind without forcing manual re-auth.
+                item.hasConfirmedSecret = false
                 _ = AppSecretStore.shared.writeSecret(item.deviceSecret, account: secAccount)
             }
             item.decodedInlineLegacySecret = nil
@@ -228,7 +231,7 @@ public final class ClientDeviceManager: @unchecked Sendable {
                 isSameIP = false
             }
 
-            let allowFirstTimeSameIPUpgrade = cleanSecret.isEmpty && !existing.hasConfirmedSecret && isSameIP
+            let allowFirstTimeSameIPUpgrade = !existing.hasConfirmedSecret && isSameIP && (cleanSecret.isEmpty || cleanSecret.count >= 32)
             let isVerifiedOwner = secretMatches || hasValidInvite || allowFirstTimeSameIPUpgrade
 
             guard isVerifiedOwner else {
@@ -248,6 +251,10 @@ public final class ClientDeviceManager: @unchecked Sendable {
 
             if secretMatches {
                 existing.hasConfirmedSecret = true
+            } else if !existing.hasConfirmedSecret && isSameIP && cleanSecret.count >= 32 {
+                existing.deviceSecret = cleanSecret
+                existing.hasConfirmedSecret = true
+                _ = AppSecretStore.shared.writeSecret(cleanSecret, account: Self.secretAccount(forDeviceId: cleanId))
             }
             if !trimmedName.isEmpty {
                 existing.deviceName = trimmedName

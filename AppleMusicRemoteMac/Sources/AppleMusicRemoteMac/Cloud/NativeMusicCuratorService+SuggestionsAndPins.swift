@@ -374,7 +374,7 @@ extension NativeMusicCuratorService {
 
     private static func buildConciseLabel(from rawText: String) -> String {
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "✨ AI-вайб" }
+        guard !trimmed.isEmpty else { return AMRLocalization.tr("✨ AI Vibe", "✨ AI-вайб") }
         let hasLeadingSymbol = trimmed.unicodeScalars.first.map { !$0.properties.isAlphabetic && !$0.properties.isIdeographic && !CharacterSet.decimalDigits.contains($0) } ?? false
         let maxChars = 42
         let body: String

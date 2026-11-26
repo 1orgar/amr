@@ -74,6 +74,19 @@ public final class ITLibraryReader: @unchecked Sendable {
         id >= syntheticTrackIdBase && id <= syntheticTrackIdMax
     }
 
+    /// Selects the user's Music Library playlist (`Музыка` / `Медиатека`) rather than `library.allMediaItems`,
+    /// because `allMediaItems` also contains playlist-only cloud songs when "Add Playlist Songs to Library" is OFF in Music.app.
+    public static func selectMusicLibraryPlaylist<Playlist>(
+        from playlists: [Playlist],
+        isDistinguishedMusic: (Playlist) -> Bool,
+        isPrimaryLibrary: (Playlist) -> Bool
+    ) -> Playlist? {
+        if let musicPlaylist = playlists.first(where: isDistinguishedMusic) {
+            return musicPlaylist
+        }
+        return playlists.first(where: isPrimaryLibrary)
+    }
+
     private static func metadataLookupKey(title: String, artist: String, album: String) -> String {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let a = artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -138,19 +151,42 @@ public final class ITLibraryReader: @unchecked Sendable {
             }
         }
 
-        let mediaItems = library.allMediaItems
-        if mediaItems.isEmpty && MusicAppProvider.shared.isMusicAppRunning {
-            // Music.app may hold unsaved in-memory/cloud items before first persistence; let AppleScript verify.
-            return nil
-        }
-
+        let allItems = library.allMediaItems
         itemsByPersistentHex.removeAll(keepingCapacity: true)
         itemsByNormalizedMetadataKey.removeAll(keepingCapacity: true)
 
-        var snapshots: [ITLibraryItemSnapshot] = []
-        snapshots.reserveCapacity(mediaItems.count)
+        for item in allItems where item.mediaKind == .kindSong {
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { continue }
+            let artist = (item.artist?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let album = (item.album.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let persistentHex = String(format: "%016llX", item.persistentID.uint64Value)
+            _ = assignOrLookupSyntheticIdLocked(forPersistentHex: persistentHex)
+            itemsByPersistentHex[persistentHex] = item
+            let metaKey = Self.metadataLookupKey(title: title, artist: artist, album: album)
+            if itemsByNormalizedMetadataKey[metaKey] == nil {
+                itemsByNormalizedMetadataKey[metaKey] = item
+            }
+        }
 
-        for item in mediaItems where item.mediaKind == .kindSong {
+        guard let musicPlaylist = Self.selectMusicLibraryPlaylist(
+            from: library.allPlaylists,
+            isDistinguishedMusic: { $0.distinguishedKind == .kindMusic },
+            isPrimaryLibrary: { $0.isPrimary }
+        ) else {
+            return nil
+        }
+
+        let libraryItems = musicPlaylist.items
+        if libraryItems.isEmpty && MusicAppProvider.shared.isMusicAppRunning {
+            // Music.app may hold unsaved in-memory/cloud items before first persistence; let AppleScript verify `library playlist 1`.
+            return nil
+        }
+
+        var snapshots: [ITLibraryItemSnapshot] = []
+        snapshots.reserveCapacity(libraryItems.count)
+
+        for item in libraryItems where item.mediaKind == .kindSong {
             let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { continue }
 
@@ -160,12 +196,6 @@ public final class ITLibraryReader: @unchecked Sendable {
             let persistentHex = String(format: "%016llX", item.persistentID.uint64Value)
             let syntheticId = assignOrLookupSyntheticIdLocked(forPersistentHex: persistentHex)
             let isFile = (item.locationType == .file && item.location != nil)
-
-            itemsByPersistentHex[persistentHex] = item
-            let metaKey = Self.metadataLookupKey(title: title, artist: artist, album: album)
-            if itemsByNormalizedMetadataKey[metaKey] == nil {
-                itemsByNormalizedMetadataKey[metaKey] = item
-            }
 
             let kindLower = (item.kind ?? "").lowercased()
             let isLosslessFile = isFile && (

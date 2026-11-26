@@ -26,6 +26,9 @@ extension PlaybackRouter {
             }
             guard validBeforeStop else { return false }
         }
+        if !isTestingEnvironment && urlOpener == nil {
+            BitPerfectLogMonitor.shared.beginExplicitTrackSwitch()
+        }
         stopAndClearAMRQueue()
         let stateCheck: (inMultiQueue: Bool, gen: UInt64)? = PlaybackStateStore.shared.withLock {
             if let exp = expectedGeneration {
@@ -117,6 +120,15 @@ extension PlaybackRouter {
                     PlaybackStateStore.shared.stagedTemporaryTrackDbIds.contains(existing.dbId)
                 }
                 if !isStagedTemp && playTrackByDatabaseIdViaAMRQueue(existing.dbId, generation: gen) {
+                    let cleanA = (artist ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let key = "\(cleanA.lowercased()):\(n.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+                    let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: cleanA, title: n, catalogId: id)
+                    BitPerfectLogMonitor.shared.endExplicitTrackSwitch(
+                        trackKey: key,
+                        catalogId: id,
+                        expectedSampleRate: cachedFmt?.sampleRate,
+                        expectedBitDepth: cachedFmt?.bitDepth
+                    )
                     let now = Date()
                     PlaybackStateStore.shared.withLock {
                         if PlaybackStateStore.shared.playbackGeneration == gen {
@@ -196,6 +208,8 @@ extension PlaybackRouter {
             directSongId = rawId
         }
         if let sId = directSongId, openMusicUrl("music://music.apple.com/station/item/ra.\(sId)") {
+            let key = !cleanName.isEmpty ? "\(cleanArtist.lowercased()):\(cleanName.lowercased())" : nil
+            BitPerfectLogMonitor.shared.endExplicitTrackSwitch(trackKey: key, catalogId: sId)
             let now = Date()
             PlaybackStateStore.shared.withLock {
                 if PlaybackStateStore.shared.playbackGeneration == gen {

@@ -351,11 +351,13 @@
     const maxVol = isExtAmpMode ? Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80)) : 100;
     const vol = Math.max(0, Math.min(maxVol, Math.round(Number(val) || 0)));
     state.volume = vol;
+    try { localStorage.setItem('amr_last_volume', String(vol)); } catch (_) {}
     if (vol >= 5) {
       state.previousVolume = vol;
     }
     if (vol > 0 && isExtAmpMode) {
       state.ampMuted = false;
+      try { localStorage.setItem('amr_amp_muted', 'false'); } catch (_) {}
     }
 
     const pct = Math.max(0, Math.min(100, (vol / maxVol) * 100));

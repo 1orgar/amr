@@ -3,10 +3,10 @@
    ========================================================================== */
 
 .mini-player {
-  position: fixed;
+  position: absolute;
   left: calc(var(--safe-left) + 12px);
   right: calc(var(--safe-right) + 12px);
-  bottom: calc(56px + var(--mobile-bottom-strip));
+  bottom: calc(55px + var(--mobile-bottom-strip));
   height: 58px;
   background: rgba(22, 22, 24, 0.94);
   backdrop-filter: blur(25px);
@@ -116,14 +116,15 @@
    ========================================================================== */
 
 .bottom-tab-bar {
-  position: fixed;
+  position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(50px + var(--mobile-bottom-strip));
+  height: calc(49px + var(--mobile-bottom-strip));
+  padding-top: 5px;
   padding-bottom: var(--mobile-bottom-strip);
-  padding-left: max(8px, var(--safe-left));
-  padding-right: max(8px, var(--safe-right));
+  padding-left: max(10px, var(--safe-left));
+  padding-right: max(10px, var(--safe-right));
   background: rgba(10, 10, 12, 0.96);
   backdrop-filter: blur(25px);
   -webkit-backdrop-filter: blur(25px);
@@ -133,6 +134,7 @@
   justify-content: space-between;
   gap: 0;
   z-index: 100;
+  touch-action: manipulation;
 }
 
 .bottom-tab-bar::after {
@@ -160,7 +162,7 @@
   transition: color var(--transition-fast);
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  padding: 4px 1px;
+  padding: 2px 2px 1px 2px;
 }
 
 .tab-item svg {
@@ -440,6 +442,34 @@
 
 .busy-overlay.hidden .busy-card {
   transform: scale(0.92);
+}
+
+@media all and (display-mode: standalone) {
+  .overlay-modal,
+  .modal-backdrop,
+  .busy-overlay,
+  .standby-tv-overlay,
+  .booklet-viewer-overlay:not(.inline-right-pane) {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+    height: var(--app-shell-h, 100vh) !important;
+  }
+}
+
+html.ios-standalone .overlay-modal,
+html.ios-standalone .modal-backdrop,
+html.ios-standalone .busy-overlay,
+html.ios-standalone .standby-tv-overlay,
+html.ios-standalone .booklet-viewer-overlay:not(.inline-right-pane) {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  height: var(--app-shell-h, 100vh) !important;
 }
 
 .busy-spinner {

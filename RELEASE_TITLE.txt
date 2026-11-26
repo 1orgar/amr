@@ -1,1 +1,1 @@
-v2.5.0 "Liszt"
+v3.0.0 "Wagner"

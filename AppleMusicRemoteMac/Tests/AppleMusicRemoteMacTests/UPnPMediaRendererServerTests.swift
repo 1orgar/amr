@@ -481,11 +481,13 @@ final class UPnPMediaRendererServerTests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.025)
         dlna.noteDLNALiveStreamConnected(sid: sid)
 
-        let exp = expectation(description: "Wait for async previousTrack dispatch")
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) {
-            exp.fulfill()
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline {
+            if store.withLock({ store.activeCustomQueueIndex }) == 0 {
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
         }
-        wait(for: [exp], timeout: 2.0)
 
         let updatedIdx = store.withLock { store.activeCustomQueueIndex }
         XCTAssertEqual(updatedIdx, 0, "Rapid same-sid BluOS stream restart (/Back) should step back to track index 0")

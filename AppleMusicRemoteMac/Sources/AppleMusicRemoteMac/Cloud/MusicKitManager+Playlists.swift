@@ -77,7 +77,7 @@ extension MusicKitManager {
         let payload: [String: Any] = [
             "attributes": [
                 "name": name,
-                "description": "Очередь воспроизведения Apple Music Remote"
+                "description": AMRLocalization.tr("Apple Music Remote Playback Queue", "Очередь воспроизведения Apple Music Remote")
             ],
             "relationships": [
                 "tracks": [

@@ -50,12 +50,19 @@ extension SettingsWindow {
         dacMutingGuardPopUp.target = self
         dacMutingGuardPopUp.action = #selector(dacMutingGuardDurationChanged(_:))
         dacMutingGuardPopUp.widthAnchor.constraint(equalToConstant: 185).isActive = true
-        let guardOptions: [(title: String, ms: Int)] = [
-            ("50 мс (Быстрый PLL)", 50),
-            ("100 мс (Стандарт ЦАП)", 100),
-            ("150 мс (Реле ЦАП)", 150),
-            ("250 мс (R2R / Лампа)", 250)
-        ]
+        let guardOptions: [(title: String, ms: Int)] = isEn
+            ? [
+                ("50 ms (Fast PLL)", 50),
+                ("100 ms (Standard DAC)", 100),
+                ("150 ms (Relay DAC)", 150),
+                ("250 ms (R2R / Tube)", 250)
+            ]
+            : [
+                ("50 мс (Быстрый PLL)", 50),
+                ("100 мс (Стандарт ЦАП)", 100),
+                ("150 мс (Реле ЦАП)", 150),
+                ("250 мс (R2R / Лампа)", 250)
+            ]
         for opt in guardOptions {
             dacMutingGuardPopUp.addItem(withTitle: opt.title)
             dacMutingGuardPopUp.lastItem?.tag = opt.ms
@@ -111,8 +118,8 @@ extension SettingsWindow {
                     category: "Bit-Perfect:",
                     checkbox: bitPerfectSwitch,
                     subtitle: isEn
-                        ? "Automatically match hardware output sample rate and bit depth to the active Music.app ALAC stream."
-                        : "Автоматически переключать частоту и разрядность ЦАП под активный поток ALAC в Music.app."
+                        ? "Automatically match DAC sample rate & bit depth to ALAC and disable Music.app Smart Transition (AutoMix / Crossfade)."
+                        : "Автоматически переключать частоту и разрядность ЦАП под поток ALAC и отключать умный переход (AutoMix / Crossfade) в Music.app."
                 ),
                 makeMusicCheckboxRow(
                     category: "",

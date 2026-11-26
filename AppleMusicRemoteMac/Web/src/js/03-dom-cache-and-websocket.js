@@ -478,6 +478,32 @@
 
   const recentGetRpcSentAt = new Map();
   const pendingPreOpenQueue = [];
+  let disconnectAudioGraceTimer = null;
+
+  function clearDisconnectAudioGraceTimer() {
+    if (disconnectAudioGraceTimer) {
+      clearTimeout(disconnectAudioGraceTimer);
+      disconnectAudioGraceTimer = null;
+    }
+  }
+
+  function pauseSilentAudioAfterDisconnectGrace() {
+    if (document.hidden && state.playerState === 'playing' && isLockScreenAllowedNow()) {
+      // Keep silent audio alive during transient background Wi-Fi/TCP reconnects so iOS does not
+      // immediately suspend the locked WebProcess or tear down Prev/Next Lock Screen controls.
+      if (!disconnectAudioGraceTimer) {
+        disconnectAudioGraceTimer = setTimeout(() => {
+          disconnectAudioGraceTimer = null;
+          if (!state.connected) {
+            syncSilentAudio(false);
+          }
+        }, 15000);
+      }
+      return;
+    }
+    clearDisconnectAudioGraceTimer();
+    syncSilentAudio(false);
+  }
 
   function flushPendingPreOpenQueue() {
     if (!socket || socket.readyState !== WebSocket.OPEN || !state.deviceAuthorized) return;
@@ -520,6 +546,7 @@
       trendsInFlightCountry = '';
       trendsInFlightSince = 0;
       reconnectAttempt = 0;
+      clearDisconnectAudioGraceTimer();
       dom.overlay.classList.add('hidden');
       ensureScrubberLoopRunning();
 
@@ -558,7 +585,7 @@
         stopRoomMeasurementSession(false);
       }
       dom.overlay.classList.remove('hidden');
-      syncSilentAudio(false);
+      pauseSilentAudioAfterDisconnectGrace();
       syncMotionVideoPlaybackState();
       ScreenWakeLockManager.syncByPlaybackAndConnection();
       scheduleReconnect();
@@ -568,7 +595,7 @@
       state.connected = false;
       state.pendingPingSentAt = 0;
       dom.overlay.classList.remove('hidden');
-      syncSilentAudio(false);
+      pauseSilentAudioAfterDisconnectGrace();
       syncMotionVideoPlaybackState();
       ScreenWakeLockManager.syncByPlaybackAndConnection();
     };
@@ -600,6 +627,19 @@
         state.isAiCurating = false;
         state.pendingStandbyAiAutoPlay = false;
         state.sonicBridgeAutoPlay = false;
+      } else if (act === 'previous' || act === 'next' || act === 'play' || act === 'pause') {
+        for (let i = pendingPreOpenQueue.length - 1; i >= 0; i--) {
+          const itemAct = pendingPreOpenQueue[i] && pendingPreOpenQueue[i].action
+            ? String(pendingPreOpenQueue[i].action).toLowerCase()
+            : '';
+          if (itemAct === 'previous' || itemAct === 'next' || itemAct === 'play' || itemAct === 'pause') {
+            pendingPreOpenQueue.splice(i, 1);
+          }
+        }
+        pendingPreOpenQueue.push(msgObj);
+        if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+          connectWebSocket();
+        }
       } else if (act.startsWith('get_') && pendingPreOpenQueue.length < 16) {
         if (!pendingPreOpenQueue.some((item) => item && item.action === msgObj.action)) {
           pendingPreOpenQueue.push(msgObj);

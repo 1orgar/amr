@@ -137,7 +137,7 @@ public final class WebSocketServer: @unchecked Sendable {
 
         let handler: (Notification) -> Void = { [weak self] notif in
             guard let self = self else { return }
-            PlaybackStateStore.shared.markStaticMetadataNeedsRefresh()
+            PlaybackStateStore.shared.invalidateStatusCache()
             if let info = notif.userInfo {
                 let rawName = (info["Name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let rawArtist = (info["Artist"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -146,9 +146,19 @@ public final class WebSocketServer: @unchecked Sendable {
                     : String(describing: info["PersistentID"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                 if !canonicalKey.isEmpty && canonicalKey != self.lastNotificationTrackKey {
                     self.lastNotificationTrackKey = canonicalKey
-                    let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: rawArtist, title: rawName)
+                    let activeCid: String? = PlaybackStateStore.shared.withLock {
+                        guard PlaybackStateStore.shared.isCustomQueuePlayback else { return nil }
+                        let q = PlaybackStateStore.shared.activeCustomQueue
+                        let idx = PlaybackStateStore.shared.activeCustomQueueIndex
+                        guard idx >= 0 && idx < q.count else { return nil }
+                        let cur = q[idx]
+                        guard QueueManager.shared.isTrackMatching(expected: cur, candidateName: rawName, candidateArtist: rawArtist) else { return nil }
+                        return MusicKitManager.extractNumericCatalogId(from: cur)
+                    }
+                    let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: rawArtist, title: rawName, catalogId: activeCid)
                     BitPerfectLogMonitor.shared.resetTrackState(
                         trackKey: canonicalKey,
+                        catalogId: activeCid,
                         expectedSampleRate: cachedFmt?.sampleRate,
                         expectedBitDepth: cachedFmt?.bitDepth
                     )
@@ -170,7 +180,7 @@ public final class WebSocketServer: @unchecked Sendable {
                 }
             }
             self.notifDebounceItem = work
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.2, execute: work)
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.03, execute: work)
         }
 
         DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.Music.playerInfo"), object: nil, queue: notifQueue, using: handler)
@@ -776,7 +786,7 @@ public final class WebSocketServer: @unchecked Sendable {
         stopPollerTimer()
 
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
-        timer.schedule(deadline: .now() + 3.0, repeating: 3.0)
+        timer.schedule(deadline: .now() + 1.0, repeating: 1.0)
         timer.setEventHandler { [weak self] in
             guard let self = self else { return }
             guard self.clientCount > 0

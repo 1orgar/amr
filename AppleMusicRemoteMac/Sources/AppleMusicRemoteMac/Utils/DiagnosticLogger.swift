@@ -164,18 +164,19 @@ public final class DiagnosticLogger: @unchecked Sendable {
     }
 
     public func logFileSizeDescription() -> String {
+        let isEn = AMRLocalization.isEnglish
         var st = Darwin.stat()
         guard Darwin.lstat(logFileURL.path, &st) == 0,
               (st.st_mode & S_IFMT) == S_IFREG else {
-            return "0 КБ"
+            return isEn ? "0 KB" : "0 КБ"
         }
         let size = UInt64(max(0, st.st_size))
         if size < 1024 {
-            return "\(size) Б"
+            return isEn ? "\(size) B" : "\(size) Б"
         } else if size < 1024 * 1024 {
-            return String(format: "%.1f КБ", Double(size) / 1024.0)
+            return String(format: isEn ? "%.1f KB" : "%.1f КБ", Double(size) / 1024.0)
         } else {
-            return String(format: "%.2f МБ", Double(size) / (1024.0 * 1024.0))
+            return String(format: isEn ? "%.2f MB" : "%.2f МБ", Double(size) / (1024.0 * 1024.0))
         }
     }
 

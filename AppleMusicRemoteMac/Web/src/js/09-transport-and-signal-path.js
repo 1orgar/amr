@@ -127,7 +127,7 @@
       hud.setAttribute('aria-live', 'polite');
       document.body.appendChild(hud);
     }
-    hud.textContent = message;
+    hud.textContent = translateTextToEn(String(message));
     if (toastTimerId) clearTimeout(toastTimerId);
     requestAnimationFrame(() => {
       hud.classList.add('visible');

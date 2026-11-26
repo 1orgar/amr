@@ -46,7 +46,7 @@ extension RoomAcousticService {
                 uri: streamURL,
                 metadata: metadata,
                 imageURL: imageURL,
-                title: "AMR — Тестовый розовый шум (АЧХ)"
+                title: AMRLocalization.tr("AMR — Reference Pink Noise (Room EQ)", "AMR — Тестовый розовый шум (АЧХ)")
             ) { success, _ in
                 if success, DLNADiscoveryManager.shared.getActiveRenderer()?.isBluOS != true {
                     DLNADiscoveryManager.shared.play()

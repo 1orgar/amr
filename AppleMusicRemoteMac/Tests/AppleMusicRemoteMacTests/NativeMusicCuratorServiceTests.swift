@@ -280,4 +280,122 @@ final class NativeMusicCuratorServiceTests: XCTestCase {
             XCTFail("Missing primary ambient RGB color")
         }
     }
+
+    func testAIWavePrioritizesHiResLosslessWithinShuffledBucketsAndUpgradesDuplicates() {
+        let service = NativeMusicCuratorService.shared
+        let prevEnabled = service.isEnabled
+        defer { service.isEnabled = prevEnabled }
+        service.isEnabled = true
+
+        let mixedBucket: [[String: Any]] = [
+            [
+                "id": "101",
+                "name": "Lossy Track",
+                "artist": "Band Alpha",
+                "album": "Old EP",
+                "audio_variants": ["lossy-stereo"],
+                "is_hi_res": false,
+                "is_lossless": false
+            ],
+            [
+                "id": "102",
+                "name": "Standard Lossless Track",
+                "artist": "Band Beta",
+                "album": "Studio LP",
+                "audio_variants": ["lossless", "lossy-stereo"],
+                "is_hi_res": false,
+                "is_lossless": true
+            ],
+            [
+                "id": "103",
+                "name": "Hi-Res Master One",
+                "artist": "Band Gamma",
+                "album": "Audiophile Session",
+                "audio_variants": ["hi-res-lossless", "lossless", "lossy-stereo"],
+                "is_hi_res": true,
+                "is_lossless": true
+            ],
+            [
+                "id": "104",
+                "name": "Hi-Res Master Two",
+                "artist": "Band Delta",
+                "album": "96kHz Tape",
+                "audio_variants": ["hi-res-lossless", "lossless", "lossy-stereo"],
+                "is_hi_res": true,
+                "is_lossless": true
+            ]
+        ]
+
+        // Across 10 randomized wave shuffles, Hi-Res Lossless tracks must ALWAYS stay at indices 0..1 ahead of Lossless (2) and Lossy (3)
+        for _ in 0..<10 {
+            let prioritized = NativeMusicCuratorService.prioritizeBucketSongsByQuality(mixedBucket, shuffleWithinTiers: true)
+            XCTAssertEqual(prioritized.count, 4)
+            XCTAssertEqual(CloudCatalogService.audioQualityTier(for: prioritized[0]), 3)
+            XCTAssertEqual(CloudCatalogService.audioQualityTier(for: prioritized[1]), 3)
+            XCTAssertEqual(CloudCatalogService.audioQualityTier(for: prioritized[2]), 2)
+            XCTAssertEqual(CloudCatalogService.audioQualityTier(for: prioritized[3]), 0)
+        }
+
+        // Cross-bucket interleaving: bucket 0 has a Lossless compilation edition of "Comfortably Numb",
+        // while bucket 1 has the Hi-Res Lossless studio edition + another Hi-Res Jazz/Prog track.
+        let bucket0: [[String: Any]] = [
+            [
+                "id": "1066502146",
+                "name": "Comfortably Numb",
+                "artist": "Pink Floyd",
+                "album": "Echoes: The Best of Pink Floyd",
+                "genre": "Progressive Rock",
+                "audio_variants": ["lossless", "lossy-stereo"],
+                "is_hi_res": false,
+                "is_lossless": true
+            ],
+            [
+                "id": "2001",
+                "name": "Lossy Filler",
+                "artist": "Unknown Band",
+                "album": "Bootleg",
+                "genre": "Rock",
+                "audio_variants": ["lossy-stereo"],
+                "is_hi_res": false,
+                "is_lossless": false
+            ]
+        ]
+        let bucket1: [[String: Any]] = [
+            [
+                "id": "1065976170",
+                "name": "Comfortably Numb",
+                "artist": "Pink Floyd",
+                "album": "The Wall",
+                "genre": "Progressive Rock",
+                "audio_variants": ["hi-res-lossless", "lossless", "lossy-stereo"],
+                "is_hi_res": true,
+                "is_lossless": true,
+                "is_apple_digital_master": true
+            ],
+            [
+                "id": "3001",
+                "name": "Sultans of Swing",
+                "artist": "Dire Straits",
+                "album": "Dire Straits",
+                "genre": "Rock",
+                "audio_variants": ["hi-res-lossless", "lossless", "lossy-stereo"],
+                "is_hi_res": true,
+                "is_lossless": true
+            ]
+        ]
+
+        let wave = service.filterAndInterleaveWaveSongs(
+            queryBuckets: [(0, bucket0, []), (1, bucket1, [])],
+            excluding: [],
+            maxCount: 3
+        )
+        XCTAssertEqual(wave.count, 3)
+        // First two tracks in the AI wave must be the two Hi-Res Lossless masters, and Comfortably Numb must be upgraded to The Wall ("1065976170")!
+        XCTAssertEqual(wave[0]["is_hi_res"] as? Bool, true)
+        XCTAssertEqual(wave[1]["is_hi_res"] as? Bool, true)
+        XCTAssertTrue(wave.contains(where: { ($0["id"] as? String) == "1065976170" }))
+        XCTAssertFalse(wave.contains(where: { ($0["id"] as? String) == "1066502146" }))
+        // Lossy track sits last
+        XCTAssertEqual(wave.last?["id"] as? String, "2001")
+    }
 }

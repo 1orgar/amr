@@ -65,7 +65,11 @@ extension SettingsWindow {
         cloudActionsStack.alignment = .centerY
         cloudActionsStack.spacing = 6
 
-        cloudSyncStatusLabel = makeStatusCaption("Автосинхронизация выключена (iCloud Drive)")
+        cloudSyncStatusLabel = makeStatusCaption(
+            isEn
+                ? "Auto-sync disabled (iCloud Drive)"
+                : "Автосинхронизация выключена (iCloud Drive)"
+        )
         cloudSyncStatusLabel.lineBreakMode = .byWordWrapping
 
         enableLocalDMRSwitch = makeCheckbox(
@@ -96,7 +100,11 @@ extension SettingsWindow {
         upnpUrlControls.alignment = .centerY
         upnpUrlControls.spacing = 6
 
-        upnpStatusLabel = makeStatusCaption("Статус: Отключен в настройках")
+        upnpStatusLabel = makeStatusCaption(
+            isEn
+                ? "Status: Disabled in settings"
+                : "Статус: Отключен в настройках"
+        )
         upnpStatusLabel.lineBreakMode = .byWordWrapping
 
         enableFileLoggingSwitch = makeCheckbox(
@@ -121,7 +129,11 @@ extension SettingsWindow {
         logActionsStack.alignment = .centerY
         logActionsStack.spacing = 6
 
-        fileLoggingStatusLabel = makeStatusCaption("Статус: Журналирование в файл отключено")
+        fileLoggingStatusLabel = makeStatusCaption(
+            isEn
+                ? "Status: File logging disabled"
+                : "Статус: Журналирование в файл отключено"
+        )
         fileLoggingStatusLabel.lineBreakMode = .byWordWrapping
 
         return makeMusicPreferencePage(sections: [

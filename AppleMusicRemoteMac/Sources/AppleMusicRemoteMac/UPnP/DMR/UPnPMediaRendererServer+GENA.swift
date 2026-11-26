@@ -419,7 +419,7 @@ extension UPnPMediaRendererServer {
             }
         }
 
-        let title = currentStatus.track?.name ?? "Без названия"
+        let title = currentStatus.track?.name ?? AMRLocalization.tr("Untitled", "Без названия")
         let artist = currentStatus.track?.artist ?? "Apple Music"
         let album = currentStatus.track?.album ?? ""
         let artUri = resolveArtworkURI(for: currentStatus.track, lanIP: lanIP)

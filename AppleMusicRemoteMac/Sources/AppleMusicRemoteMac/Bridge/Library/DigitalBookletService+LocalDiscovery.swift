@@ -295,14 +295,15 @@ extension DigitalBookletService {
             let h = Double((rotation == 90 || rotation == 270) ? bounds.width : bounds.height)
             let ratio = h > 0 ? (w / h) : 0.75
             let pageTitle: String
+            let isEn = AMRLocalization.isEnglish
             if let custom = customPageTitles, idx < custom.count {
                 pageTitle = custom[idx]
             } else if !isOriginalPdf {
-                if idx == 0 { pageTitle = "Обложка альбома" }
-                else if idx == 1 { pageTitle = "О релизе и история записи" }
-                else { pageTitle = "Описание композиций (стр. \(idx - 1))" }
+                if idx == 0 { pageTitle = isEn ? "Album Cover" : "Обложка альбома" }
+                else if idx == 1 { pageTitle = isEn ? "Release Notes & Recording History" : "О релизе и история записи" }
+                else { pageTitle = isEn ? "Track-by-Track Guide (p. \(idx - 1))" : "Описание композиций (стр. \(idx - 1))" }
             } else {
-                pageTitle = "Страница \(idx + 1)"
+                pageTitle = isEn ? "Page \(idx + 1)" : "Страница \(idx + 1)"
             }
             pages.append(BookletPageInfo(
                 pageIndex: idx,

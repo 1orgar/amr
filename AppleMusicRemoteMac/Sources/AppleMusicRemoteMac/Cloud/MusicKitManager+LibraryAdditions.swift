@@ -130,12 +130,14 @@ extension MusicKitManager {
                 req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 req.setValue(u, forHTTPHeaderField: "Music-User-Token")
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                let plTitle = cleanName.isEmpty ? "Плейлист Apple Music" : cleanName
+                let plTitle = cleanName.isEmpty
+                    ? AMRLocalization.tr("Apple Music Playlist", "Плейлист Apple Music")
+                    : cleanName
                 let trackData = songIds.map { ["id": $0, "type": "songs"] }
                 let payload: [String: Any] = [
                     "attributes": [
                         "name": plTitle,
-                        "description": "Добавлено через Apple Music Remote"
+                        "description": AMRLocalization.tr("Added via Apple Music Remote", "Добавлено через Apple Music Remote")
                     ],
                     "relationships": [
                         "tracks": [

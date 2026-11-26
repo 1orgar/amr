@@ -302,6 +302,10 @@ public final class CloudCatalogService: @unchecked Sendable {
                     if !isPrimaryMatch && !catId.isEmpty {
                         altOnlyLocalCatalogIds.insert(catId.lowercased())
                     }
+                    let libLabel = AMRLocalization.tr("Library", "Медиатека")
+                    let tracksLabel = AMRLocalization.isEnglish
+                        ? "\(pl.trackCount) \(pl.trackCount == 1 ? "track" : "tracks")"
+                        : "\(pl.trackCount) треков"
                     localPlaylistDicts.append([
                         "type": "playlist",
                         "id": pl.id ?? pl.name,
@@ -310,9 +314,9 @@ public final class CloudCatalogService: @unchecked Sendable {
                         "alternate_names": pl.alternateNames ?? [],
                         "name": pl.name,
                         "local_name": pl.name,
-                        "curator": "Медиатека",
-                        "curator_name": "Медиатека",
-                        "subtitle": "\(pl.trackCount) треков",
+                        "curator": libLabel,
+                        "curator_name": libLabel,
+                        "subtitle": tracksLabel,
                         "track_count": pl.trackCount,
                         "artwork": art,
                         "artwork_url": art,
@@ -369,7 +373,8 @@ public final class CloudCatalogService: @unchecked Sendable {
             var res = [String: AnyCodable]()
             let rawCloudSongs = (appleMusicResults["songs"] as? [[String: Any]]) ?? []
             let dedupedCloudSongs = Self.deduplicateSongs(rawCloudSongs)
-            let enrichedCloudSongs = enrichWithLocal(dedupedCloudSongs)
+            let prioritizedCloudSongs = Self.prioritizeSearchSongs(dedupedCloudSongs, query: trimmedQuery)
+            let enrichedCloudSongs = enrichWithLocal(prioritizedCloudSongs)
             let cloudSongKeys = Set(enrichedCloudSongs.compactMap { song -> String? in
                 let n = (song["name"] as? String) ?? ""
                 let a = (song["artist"] as? String) ?? ""
@@ -382,10 +387,13 @@ public final class CloudCatalogService: @unchecked Sendable {
                 let k = Self.normalizeTrackKey(name: n, artist: a)
                 return !cloudSongKeys.contains(k)
             }
-            let mergedSongs = Self.deduplicateSongs(enrichedCloudSongs + uniqueLocalSongs)
+            let mergedSongs = Self.prioritizeSearchSongs(
+                Self.deduplicateSongs(enrichedCloudSongs + uniqueLocalSongs),
+                query: trimmedQuery
+            )
             res["songs"] = AnyCodable(mergedSongs)
             if let albums = appleMusicResults["albums"] as? [[String: Any]] {
-                res["albums"] = AnyCodable(albums)
+                res["albums"] = AnyCodable(Self.prioritizeSearchAlbums(albums, query: trimmedQuery))
             } else {
                 res["albums"] = AnyCodable([])
             }
@@ -471,17 +479,258 @@ public final class CloudCatalogService: @unchecked Sendable {
             let k = Self.normalizeTrackKey(name: n, artist: a)
             return !fallbackCloudKeys.contains(k)
         }
-        let mergedFallbackSongs = Self.deduplicateSongs(enrichedSongs + fallbackUniqueLocal)
+        let mergedFallbackSongs = Self.prioritizeSearchSongs(
+            Self.deduplicateSongs(enrichedSongs + fallbackUniqueLocal),
+            query: trimmedQuery
+        )
 
         return [
             "artists": AnyCodable(artists),
             "songs": AnyCodable(mergedFallbackSongs),
-            "albums": AnyCodable(albums),
+            "albums": AnyCodable(Self.prioritizeSearchAlbums(albums, query: trimmedQuery)),
             "playlists": AnyCodable(localPlaylistDicts),
             "offset": AnyCodable(effectiveOffset),
             "limit": AnyCodable(effectiveLimit),
             "has_more": AnyCodable(rawSongs.count >= effectiveLimit)
         ]
+    }
+
+    // MARK: - Audio Quality Scoring & Search / Wave Prioritization
+
+    /// Coarse audio quality tier:
+    /// - `3`: Hi-Res Lossless (`88.2–192 kHz / 24-bit`)
+    /// - `2`: Lossless (`44.1–48 kHz / 16–24-bit ALAC`)
+    /// - `1`: Unspecified / local item without `audio_variants` metadata
+    /// - `0`: Explicitly lossy-only (`lossy-stereo` without `lossless` / `hi-res-lossless`)
+    public static func audioQualityTier(for item: [String: Any]) -> Int {
+        if item["is_hi_res"] as? Bool == true {
+            return 3
+        }
+        let variants = (item["audio_variants"] as? [String]) ?? []
+        if variants.contains("hi-res-lossless") {
+            return 3
+        }
+
+        let name = (item["name"] as? String) ?? (item["trackName"] as? String) ?? ""
+        let artist = (item["artist"] as? String) ?? (item["artistName"] as? String) ?? ""
+        let rawId = (item["id"] as? String) ?? ((item["trackId"] as? Int).map(String.init))
+        if let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: artist, title: name, catalogId: rawId),
+           cachedFmt.sampleRate >= 88_200 {
+            return 3
+        }
+
+        if item["is_lossless"] as? Bool == true || variants.contains("lossless") {
+            return 2
+        }
+        if !variants.isEmpty {
+            return 0
+        }
+        if let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: artist, title: name, catalogId: rawId),
+           cachedFmt.bitDepth >= 16 {
+            return 2
+        }
+        return 1
+    }
+
+    /// Fine-grained master quality score used to upgrade duplicate editions (e.g. preferring a `Hi-Res Lossless`
+    /// or `Apple Digital Master / Remastered` studio album track over a `Lossless` compilation, soundtrack, or demo).
+    public static func audioQualityScore(for item: [String: Any]) -> Int {
+        let tier = audioQualityTier(for: item)
+        var score: Int
+        switch tier {
+        case 3:
+            score = 500
+        case 2:
+            score = 300
+        case 1:
+            score = (item["is_local"] as? Bool == true) ? 190 : 180
+        default:
+            score = 50
+        }
+
+        let name = (item["name"] as? String) ?? (item["trackName"] as? String) ?? ""
+        let artist = (item["artist"] as? String) ?? (item["artistName"] as? String) ?? ""
+        let album = (item["album"] as? String) ?? (item["collectionName"] as? String) ?? ""
+        let rawId = (item["id"] as? String) ?? ((item["trackId"] as? Int).map(String.init))
+
+        if let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: artist, title: name, catalogId: rawId) {
+            if cachedFmt.sampleRate >= 176_400 {
+                score += 25
+            } else if cachedFmt.sampleRate >= 88_200 {
+                score += 10
+            } else if cachedFmt.bitDepth >= 24 || cachedFmt.sampleRate >= 48_000 {
+                score += 12
+            }
+        }
+
+        if item["is_apple_digital_master"] as? Bool == true {
+            score += 35
+        }
+
+        let nameLower = name.lowercased()
+        let albumLower = album.lowercased()
+        let combined = "\(nameLower) \(albumLower)"
+
+        let isLowFidelityAlt = Self.isDemoOrKaraokeText(combined)
+        if isLowFidelityAlt {
+            score -= 80
+        } else if nameLower.contains("remaster") || albumLower.contains("remaster") {
+            score += 20
+        }
+
+        if albumLower.contains("greatest hits")
+            || albumLower.contains("best of")
+            || albumLower.contains("the essential")
+            || albumLower.contains("anthology")
+            || albumLower.contains("soundtrack")
+            || albumLower.contains("motion picture")
+            || albumLower.contains("various artists")
+            || albumLower.contains("now that's what i call") {
+            score -= 25
+        }
+
+        return score
+    }
+
+    private static func isDemoOrKaraokeText(_ lowerText: String) -> Bool {
+        lowerText.contains("(demo")
+            || lowerText.contains("[demo")
+            || lowerText.contains("demo)")
+            || lowerText.contains(" - demo")
+            || lowerText.contains("rough mix")
+            || lowerText.contains("work in progress")
+            || lowerText.contains("karaoke")
+            || lowerText.contains("8-bit")
+            || lowerText.contains("tribute to")
+    }
+
+    private static func normalizeBaseTitleForMatch(_ raw: String) -> String {
+        var s = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if let regex = bracketQualifierRegex {
+            s = regex.stringByReplacingMatches(in: s, options: [], range: NSRange(location: 0, length: s.utf16.count), withTemplate: "")
+        }
+        if let dashIdx = s.range(of: " - ") {
+            s = String(s[..<dashIdx.lowerBound])
+        }
+        let allowed = CharacterSet.alphanumerics.union(.whitespaces)
+        let clean = s.unicodeScalars.filter { allowed.contains($0) }.map(String.init).joined()
+        return clean.split(separator: " ").joined(separator: " ")
+    }
+
+    private static func isExactTitleQueryMatch(normQuery: String, normTitle: String, normArtist: String) -> Bool {
+        guard !normQuery.isEmpty, !normTitle.isEmpty else { return false }
+        // Pure artist searches (e.g. "metallica", "black sabbath") should rank all tracks by quality tier
+        if !normArtist.isEmpty && normQuery == normArtist {
+            return false
+        }
+        if normQuery == normTitle {
+            return true
+        }
+        if !normArtist.isEmpty && normQuery.contains(normArtist) {
+            let remainder = normQuery
+                .replacingOccurrences(of: normArtist, with: " ")
+                .split(separator: " ")
+                .joined(separator: " ")
+            if !remainder.isEmpty && remainder == normTitle {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Prioritizes `Hi-Res Lossless` (`96–192 kHz / 24-bit`) and `Lossless` tracks at the top of search results
+    /// while preserving exact song-title matches at position #1 when the user explicitly searches for a song title,
+    /// and keeping Apple Music's relevance order stably within each quality tier.
+    public static func prioritizeSearchSongs(_ songs: [[String: Any]], query: String) -> [[String: Any]] {
+        guard songs.count > 1 else { return songs }
+        let normQuery = normalizeBaseTitleForMatch(query)
+
+        struct RankedSong {
+            let originalIndex: Int
+            let exactMatch: Bool
+            let isCleanStudio: Bool
+            let tier: Int
+            let score: Int
+            let song: [String: Any]
+        }
+
+        let ranked: [RankedSong] = songs.enumerated().map { idx, s in
+            let rawName = (s["name"] as? String) ?? (s["trackName"] as? String) ?? ""
+            let rawArtist = (s["artist"] as? String) ?? (s["artistName"] as? String) ?? ""
+            let rawAlbum = (s["album"] as? String) ?? (s["collectionName"] as? String) ?? ""
+            let normTitle = normalizeBaseTitleForMatch(rawName)
+            let normArtist = normalizeBaseTitleForMatch(rawArtist)
+            let exact = isExactTitleQueryMatch(normQuery: normQuery, normTitle: normTitle, normArtist: normArtist)
+            let combinedLower = "\(rawName.lowercased()) \(rawAlbum.lowercased())"
+            let cleanStudio = !isDemoOrKaraokeText(combinedLower) || normQuery.contains("demo") || normQuery.contains("karaoke")
+            return RankedSong(
+                originalIndex: idx,
+                exactMatch: exact,
+                isCleanStudio: cleanStudio,
+                tier: audioQualityTier(for: s),
+                score: audioQualityScore(for: s),
+                song: s
+            )
+        }
+
+        return ranked.sorted { a, b in
+            if a.exactMatch != b.exactMatch {
+                return a.exactMatch && !b.exactMatch
+            }
+            if a.isCleanStudio != b.isCleanStudio {
+                return a.isCleanStudio && !b.isCleanStudio
+            }
+            if a.tier != b.tier {
+                return a.tier > b.tier
+            }
+            if a.exactMatch && a.score != b.score {
+                return a.score > b.score
+            }
+            return a.originalIndex < b.originalIndex
+        }.map(\.song)
+    }
+
+    /// Prioritizes `Hi-Res Lossless` and `Lossless` albums in search results while preserving exact album-title matches
+    /// and maintaining Apple Music's relevance order within each quality tier.
+    public static func prioritizeSearchAlbums(_ albums: [[String: Any]], query: String) -> [[String: Any]] {
+        guard albums.count > 1 else { return albums }
+        let normQuery = normalizeBaseTitleForMatch(query)
+
+        struct RankedAlbum {
+            let originalIndex: Int
+            let exactMatch: Bool
+            let tier: Int
+            let score: Int
+            let album: [String: Any]
+        }
+
+        let ranked: [RankedAlbum] = albums.enumerated().map { idx, alb in
+            let rawName = (alb["name"] as? String) ?? (alb["collectionName"] as? String) ?? ""
+            let rawArtist = (alb["artist"] as? String) ?? (alb["artistName"] as? String) ?? ""
+            let normTitle = normalizeBaseTitleForMatch(rawName)
+            let normArtist = normalizeBaseTitleForMatch(rawArtist)
+            let exact = isExactTitleQueryMatch(normQuery: normQuery, normTitle: normTitle, normArtist: normArtist)
+            return RankedAlbum(
+                originalIndex: idx,
+                exactMatch: exact,
+                tier: audioQualityTier(for: alb),
+                score: audioQualityScore(for: alb),
+                album: alb
+            )
+        }
+
+        return ranked.sorted { a, b in
+            if a.exactMatch != b.exactMatch {
+                return a.exactMatch && !b.exactMatch
+            }
+            if a.tier != b.tier {
+                return a.tier > b.tier
+            }
+            if a.exactMatch && a.score != b.score {
+                return a.score > b.score
+            }
+            return a.originalIndex < b.originalIndex
+        }.map(\.album)
     }
 
     // MARK: - Track Normalization & Deduplication Helpers
@@ -523,15 +772,20 @@ public final class CloudCatalogService: @unchecked Sendable {
     }
 
     public static func deduplicateSongs(_ songs: [[String: Any]]) -> [[String: Any]] {
-        var seen = Set<String>()
+        var keyToIndex = [String: Int]()
         var result = [[String: Any]]()
+        result.reserveCapacity(songs.count)
         for s in songs {
             let n = (s["name"] as? String) ?? (s["trackName"] as? String) ?? ""
             let a = (s["artist"] as? String) ?? (s["artistName"] as? String) ?? ""
             let key = normalizeTrackKey(name: n, artist: a)
             if !key.isEmpty && key != "|" {
-                if !seen.contains(key) {
-                    seen.insert(key)
+                if let existingIdx = keyToIndex[key] {
+                    if audioQualityScore(for: s) > audioQualityScore(for: result[existingIdx]) {
+                        result[existingIdx] = s
+                    }
+                } else {
+                    keyToIndex[key] = result.count
                     result.append(s)
                 }
             } else {

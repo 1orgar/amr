@@ -14,24 +14,25 @@ extension DigitalBookletService {
     // MARK: - Detailed Track-by-Track Liner Notes & Credits Page Renderer
 
     internal func buildTrackCreditRows(track: CatalogTrackCredit) -> [(label: String, value: String)] {
+        let isEn = AMRLocalization.isEnglish
         var rows: [(label: String, value: String)] = []
         if !track.composer.isEmpty {
-            rows.append(("АВТОРЫ И КОМПОЗИТОРЫ", track.composer))
+            rows.append((isEn ? "SONGWRITERS & COMPOSERS" : "АВТОРЫ И КОМПОЗИТОРЫ", track.composer))
         }
         if !track.producers.isEmpty {
-            rows.append(("ПРОДЮСИРОВАНИЕ И АРАНЖИРОВКА", track.producers.joined(separator: " • ")))
+            rows.append((isEn ? "PRODUCTION & ARRANGEMENT" : "ПРОДЮСИРОВАНИЕ И АРАНЖИРОВКА", track.producers.joined(separator: " • ")))
         }
         if !track.vocals.isEmpty {
-            rows.append(("ВОКАЛ", track.vocals.joined(separator: " • ")))
+            rows.append((isEn ? "VOCALS" : "ВОКАЛ", track.vocals.joined(separator: " • ")))
         }
         if !track.instruments.isEmpty {
-            rows.append(("ИНСТРУМЕНТЫ И МУЗЫКАНТЫ", track.instruments.joined(separator: " • ")))
+            rows.append((isEn ? "INSTRUMENTS & MUSICIANS" : "ИНСТРУМЕНТЫ И МУЗЫКАНТЫ", track.instruments.joined(separator: " • ")))
         }
         if !track.samples.isEmpty {
-            rows.append(("СЭМПЛЫ И ЦИТАТЫ", track.samples.joined(separator: " • ")))
+            rows.append((isEn ? "SAMPLES & QUOTATIONS" : "СЭМПЛЫ И ЦИТАТЫ", track.samples.joined(separator: " • ")))
         }
         if !track.studios.isEmpty {
-            rows.append(("СТУДИИ ЗАПИСИ", track.studios.joined(separator: " • ")))
+            rows.append((isEn ? "RECORDING STUDIOS" : "СТУДИИ ЗАПИСИ", track.studios.joined(separator: " • ")))
         }
         return rows
     }
@@ -88,14 +89,19 @@ extension DigitalBookletService {
     ) {
         drawBookletBackground(context: context, width: width, height: height)
 
+        let isEn = AMRLocalization.isEnglish
         let margin: CGFloat = 52
         let contentW = width - margin * 2
         let innerW = contentW - 32
-        let partLabel = totalParts > 1 ? " (ЧАСТЬ \(partIndex) ИЗ \(totalParts))" : ""
+        let partLabel = totalParts > 1
+            ? (isEn ? " (PART \(partIndex) OF \(totalParts))" : " (ЧАСТЬ \(partIndex) ИЗ \(totalParts))")
+            : ""
 
         drawSectionHeader(
             context: context,
-            kicker: "ПОЛНОЕ ОПИСАНИЕ ПО КОМПОЗИЦИЯМ • TRACK-BY-TRACK & CREDITS\(partLabel)",
+            kicker: isEn
+                ? "COMPLETE LINER NOTES • TRACK-BY-TRACK & CREDITS\(partLabel)"
+                : "ПОЛНОЕ ОПИСАНИЕ ПО КОМПОЗИЦИЯМ • TRACK-BY-TRACK & CREDITS\(partLabel)",
             title: meta.albumName,
             subtitle: meta.artistName,
             margin: margin,
@@ -346,7 +352,10 @@ extension DigitalBookletService {
             .foregroundColor: NSColor(calibratedWhite: 0.75, alpha: 1.0),
             .paragraphStyle: rightStyle
         ]
-        ("СТР. \(pageNumber) / \(totalPages)" as NSString).draw(
+        let pageLabel = AMRLocalization.isEnglish
+            ? "PAGE \(pageNumber) / \(totalPages)"
+            : "СТР. \(pageNumber) / \(totalPages)"
+        (pageLabel as NSString).draw(
             in: CGRect(x: width - margin - 95, y: footerY, width: 95, height: 18),
             withAttributes: pageAttrs
         )

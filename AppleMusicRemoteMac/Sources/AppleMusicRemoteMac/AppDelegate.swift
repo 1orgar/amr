@@ -110,6 +110,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, WebSocketServer
         }
         MusicAppProvider.shared.addMusicAppLaunchedObserver {
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
+                if BitPerfectLogMonitor.shared.isEnabled {
+                    BitPerfectLogMonitor.shared.syncMusicAppSmartTransitions(forBitPerfectEnabled: true)
+                }
                 MusicKitManager.shared.reconcilePendingStagedCatalogTracksOnLaunch()
                 PlaybackStateStore.shared.scheduleIdleStagedCleanup(after: 120.0)
             }

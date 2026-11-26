@@ -224,7 +224,7 @@
     }
     if (!isExtAmpMode) return;
 
-    const brand = state.ampBrandName || 'Усилитель';
+    const brand = state.ampBrandName || (IS_EN ? 'Amplifier' : 'Усилитель');
     const maxVol = Math.max(1, Math.min(100, Number(state.ampMaxVolume) || 80));
     const vol = Math.max(0, Math.min(maxVol, Number(state.volume) || 0));
 
@@ -426,11 +426,23 @@
     } catch (_) {}
   }
 
+  function isLockScreenAllowedNow() {
+    if (!state.lockScreenControls) return false;
+    if (state.deviceAuthChecked && !state.deviceAuthorized) return false;
+    return true;
+  }
+
   function attachSilentAudioListeners(el) {
     if (!el || el._amrListenersAttached) return;
     el._amrListenersAttached = true;
 
-    const onAudioStateChange = () => {
+    let flushedAfterPlayingAdvance = false;
+
+    const onAudioStateChange = (evt) => {
+      if (evt && evt.type === 'playing') {
+        flushedAfterPlayingAdvance = false;
+      }
+      if (!isLockScreenAllowedNow()) return;
       setupMediaSession(true);
       updateMediaSession();
     };
@@ -439,13 +451,25 @@
       el.addEventListener(evt, onAudioStateChange, { passive: true });
     });
 
+    // Once silent audio actually advances past 50ms, WebKit's GPUProcess::recomputeNowPlayingOwner
+    // seats this page via becomeNowPlayingOwner — flush supported commands across RunLoop turns right then.
+    el.addEventListener('timeupdate', () => {
+      if (!flushedAfterPlayingAdvance && !el.paused && el.currentTime >= 0.05) {
+        flushedAfterPlayingAdvance = true;
+        if (isLockScreenAllowedNow()) {
+          setupMediaSession(true);
+          updateMediaSession();
+        }
+      }
+    }, { passive: true });
+
     const handleSilentAudioError = () => {
       const curSrc = el.getAttribute('src') || '';
       if (curSrc.includes('silence.m4a') && !el._amrWavFallbackTried) {
         el._amrWavFallbackTried = true;
-        el.src = '/assets/silence.wav?v=4';
+        el.src = '/assets/silence.wav?v=5';
         try { el.load(); } catch (_) {}
-        if (state.playerState === 'playing' && state.lockScreenControls && state.deviceAuthorized) {
+        if (state.playerState === 'playing' && isLockScreenAllowedNow()) {
           try {
             const p = el.play();
             if (p !== undefined) p.catch(() => {});
@@ -461,7 +485,7 @@
   }
 
   function initSilentAudio() {
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
+    if (!isLockScreenAllowedNow()) {
       return null;
     }
     if (!silentAudioEl) {
@@ -495,19 +519,16 @@
     const el = silentAudioEl || document.getElementById('bg-silent-audio');
     if (el) {
       try {
-        el.pause();
-        el.currentTime = 0;
-        if (el.hasAttribute('src')) {
-          el.removeAttribute('src');
-          el.load();
+        if (!el.paused) {
+          el.pause();
         }
+        el.currentTime = 0;
+        // Keep src intact so HTMLMediaElement retains HAVE_ENOUGH_DATA and iOS gesture blessing.
       } catch (e) {}
     }
-    silentAudioUnlocked = false;
     mediaSessionHandlersBound = false;
     mediaSessionPlatformActivated = false;
     lastMediaSessionKey = '';
-    bindUnlockAudioGestureListeners();
 
     if ('mediaSession' in navigator) {
       allowAmrMediaSessionMutation = true;
@@ -525,7 +546,7 @@
   }
 
   function syncSilentAudio(isPlaying) {
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
+    if (!isLockScreenAllowedNow()) {
       teardownMediaSessionAndSilentAudio();
       return;
     }
@@ -538,24 +559,32 @@
         if (p !== undefined) {
           p.then(() => {
             silentAudioUnlocked = true;
+            removeUnlockAudioGestureListeners();
             setupMediaSession(true);
             updateMediaSession();
             setTimeout(() => {
-              if (state.lockScreenControls && state.deviceAuthorized) {
+              if (isLockScreenAllowedNow()) {
                 setupMediaSession(true);
               }
-            }, 150);
+            }, 120);
+            setTimeout(() => {
+              if (isLockScreenAllowedNow()) {
+                setupMediaSession(true);
+              }
+            }, 450);
           }).catch((err) => {
             console.warn('[AudioKeepAlive] play error:', err);
           });
         }
+      } else {
+        setupMediaSession(true);
       }
     } else if (!el.paused) {
       el.pause();
     }
   }
 
-  const UNLOCK_GESTURE_EVENTS = ['pointerdown', 'touchstart', 'touchend', 'click'];
+  const UNLOCK_GESTURE_EVENTS = ['touchend', 'pointerup', 'click'];
   let unlockGestureListenersBound = false;
 
   function removeUnlockAudioGestureListeners() {
@@ -574,9 +603,9 @@
     });
   }
 
-  // Synchronously unlock silent keep-alive audio on user gesture until unlocked
+  // Unlock silent keep-alive audio on user activation (even before WebSocket auth finishes)
   function unlockAudioOnUserGesture() {
-    if (!state.lockScreenControls || !state.deviceAuthorized) {
+    if (!isLockScreenAllowedNow()) {
       return;
     }
 
@@ -592,12 +621,17 @@
         p.then(() => {
           silentAudioUnlocked = true;
           removeUnlockAudioGestureListeners();
-          if (state.playerState !== 'playing') {
-            el.pause();
-          }
           setupMediaSession(true);
           updateMediaSession();
-          setTimeout(() => { if (state.lockScreenControls && state.deviceAuthorized) setupMediaSession(true); }, 150);
+          setTimeout(() => {
+            const shouldPlay = state.playerState === 'playing' || Date.now() < (state.pendingPlayUntil || 0);
+            if (!shouldPlay && !el.paused) {
+              el.pause();
+            }
+            if (isLockScreenAllowedNow()) {
+              setupMediaSession(true);
+            }
+          }, 160);
         }).catch(() => {});
       }
     }
@@ -606,9 +640,9 @@
   bindUnlockAudioGestureListeners();
 
   // Re-bind MediaSession on BOTH screen lock (document.hidden === true, when WebKit enables NowPlaying visibility) and wake/unlock
-  ['visibilitychange', 'pageshow', 'focus'].forEach((evt) => {
+  ['visibilitychange', 'pagehide', 'pageshow', 'focus'].forEach((evt) => {
     window.addEventListener(evt, () => {
-      if (state.lockScreenControls && state.deviceAuthorized) {
+      if (isLockScreenAllowedNow()) {
         setupMediaSession(true);
         updateMediaSession();
       }

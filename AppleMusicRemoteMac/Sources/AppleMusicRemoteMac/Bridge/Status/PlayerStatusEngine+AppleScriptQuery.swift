@@ -72,7 +72,7 @@ extension PlayerStatusEngine {
 
         if let cached = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache }) {
             let age = Date().timeIntervalSince(cached.timestamp)
-            if age < 0.3 {
+            if age < 0.06 {
                 var status = cached.status
                 if status.playerState == "playing" && status.position > 0.05 {
                     let optimisticPos = status.position + age

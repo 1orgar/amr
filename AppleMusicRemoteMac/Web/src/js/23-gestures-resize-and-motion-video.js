@@ -161,6 +161,9 @@
 
   function handleResize(opts = {}) {
     const forceInitial = Boolean(opts && opts.force);
+    if (typeof syncStandaloneShellGeometry === 'function') {
+      syncStandaloneShellGeometry();
+    }
     const curWidth = window.innerWidth;
     if (typeof syncStandbyLandscapeBodyClass === 'function') {
       syncStandbyLandscapeBodyClass();
@@ -203,6 +206,9 @@
   }
 
   function scheduleDebouncedResize() {
+    if (typeof syncStandaloneShellGeometry === 'function') {
+      syncStandaloneShellGeometry();
+    }
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
     resizeDebounceTimer = setTimeout(() => {
       resizeDebounceTimer = null;
@@ -211,6 +217,9 @@
   }
   window.addEventListener('resize', scheduleDebouncedResize, { passive: true });
   window.addEventListener('orientationchange', () => {
+    if (typeof syncStandaloneShellGeometry === 'function') {
+      syncStandaloneShellGeometry();
+    }
     if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
     resizeDebounceTimer = setTimeout(() => {
       resizeDebounceTimer = null;

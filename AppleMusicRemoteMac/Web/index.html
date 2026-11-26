@@ -12,7 +12,20 @@
   <meta name="format-detection" content="telephone=no">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#000000">
-  <meta name="description" content="Apple Music Remote Mac - Bit-Perfect High-Fidelity Controller">
+  <meta name="description" content="AMR 3.0 — Apple Music Bit-Perfect CoreAudio Server, 64-Bit Studio DSP & Pure OLED Remote for macOS.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Apple Music Remote (AMR)">
+  <meta property="og:title" content="AMR 3.0 — Apple Music Bit-Perfect &amp; 64-Bit Studio DSP">
+  <meta property="og:description" content="Pure OLED Remote, CoreAudio Exclusive Hog Mode, DSD512 DoP (7EC), HQ NOS 768 kHz &amp; 64-Bit Room Auto-PEQ for macOS.">
+  <meta property="og:image" content="/assets/og-preview.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="AMR 3.0 — Apple Music Bit-Perfect &amp; DSP on Pure Black OLED">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AMR 3.0 — Apple Music Bit-Perfect &amp; 64-Bit Studio DSP">
+  <meta name="twitter:description" content="Pure OLED Remote, CoreAudio Exclusive Hog Mode, DSD512 DoP (7EC), HQ NOS 768 kHz &amp; 64-Bit Room Auto-PEQ for macOS.">
+  <meta name="twitter:image" content="/assets/og-preview.png">
   <title>Apple Music Remote</title>
 
   <link rel="icon" type="image/svg+xml" href="/apple-touch-icon.svg">
@@ -22,12 +35,12 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon-512.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=085e46b7">
+  <link rel="stylesheet" href="/style.css?v=f58695e5">
   <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" async></script>
 </head>
 <body>
   <!-- iOS Lock Screen & Background Media Keep-Alive -->
-  <audio id="bg-silent-audio" preload="none" playsinline webkit-playsinline x-webkit-airplay="deny" loop src="/assets/silence.m4a?v=4" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;"></audio>
+  <audio id="bg-silent-audio" preload="auto" playsinline webkit-playsinline x-webkit-airplay="deny" loop src="/assets/silence.m4a?v=4" style="position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;"></audio>
 
   <!-- Connection Lost Overlay -->
   <div id="connection-overlay" class="overlay-modal hidden" aria-hidden="true">
@@ -846,7 +859,7 @@
 
     <!-- Mobile Bottom Tab Bar -->
     <nav id="bottom-tab-bar" class="bottom-tab-bar">
-      <button class="tab-item active" data-view="view-now-playing">
+      <button type="button" class="tab-item active" data-view="view-now-playing">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
           <circle cx="12" cy="12" r="10"/>
           <polygon points="10 8 16 12 10 16 10 8" fill="#000000"/>
@@ -854,14 +867,14 @@
         <span>Сейчас</span>
       </button>
 
-      <button class="tab-item" data-view="view-home">
+      <button type="button" class="tab-item" data-view="view-home">
         <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor">
           <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
         </svg>
         <span>Главная</span>
       </button>
 
-      <button class="tab-item" data-view="view-playlists">
+      <button type="button" class="tab-item" data-view="view-playlists">
         <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="6" x2="15" y2="6"/>
           <line x1="3" y1="11" x2="15" y2="11"/>
@@ -872,7 +885,7 @@
         <span>Плейлисты</span>
       </button>
 
-      <button class="tab-item" data-view="view-library">
+      <button type="button" class="tab-item" data-view="view-library">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
@@ -882,7 +895,7 @@
         <span>Медиатека</span>
       </button>
 
-      <button class="tab-item" data-view="view-queue">
+      <button type="button" class="tab-item" data-view="view-queue">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <line x1="8" y1="6" x2="21" y2="6"/>
           <line x1="8" y1="12" x2="21" y2="12"/>
@@ -894,7 +907,7 @@
         <span>Очередь</span>
       </button>
 
-      <button class="tab-item" data-view="view-search">
+      <button type="button" class="tab-item" data-view="view-search">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <circle cx="11" cy="11" r="8"/>
           <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -1925,6 +1938,6 @@
     </div>
   </div>
 
-  <script src="/app.js?v=d1e2ef9a"></script>
+  <script src="/app.js?v=92b26c4d"></script>
 </body>
 </html>

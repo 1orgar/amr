@@ -22,7 +22,8 @@ extension MusicKitManager {
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "term", value: trimmedQuery),
             URLQueryItem(name: "types", value: "songs,albums,artists,playlists"),
-            URLQueryItem(name: "limit", value: "\(effectiveLimit)")
+            URLQueryItem(name: "limit", value: "\(effectiveLimit)"),
+            URLQueryItem(name: "extend", value: "audioVariants")
         ]
         if offset > 0 {
             queryItems.append(URLQueryItem(name: "offset", value: "\(offset)"))
@@ -68,6 +69,7 @@ extension MusicKitManager {
             queryItems: [
                 URLQueryItem(name: "types", value: "songs,albums"),
                 URLQueryItem(name: "limit", value: "\(clampedLimit)"),
+                URLQueryItem(name: "extend", value: "audioVariants"),
                 URLQueryItem(name: "l", value: lang)
             ]
         ) else { return ([], []) }

@@ -448,8 +448,9 @@ extension DigitalBookletService {
 
                     if let artObj = rel["artist"] as? [String: Any],
                        let aName = artObj["name"] as? String, !aName.isEmpty {
+                        let isEn = AMRLocalization.isEnglish
                         if rType == "instrument" {
-                            let roles = translatedAttrs.isEmpty ? ["инструменты"] : translatedAttrs
+                            let roles = translatedAttrs.isEmpty ? [isEn ? "instruments" : "инструменты"] : translatedAttrs
                             for r in roles {
                                 addGrouped(&instByArtist, &instArtistOrder, artist: aName, role: r)
                             }
@@ -459,21 +460,21 @@ extension DigitalBookletService {
                                 addGrouped(&vocalByArtist, &vocalArtistOrder, artist: aName, role: r)
                             }
                         } else if rType == "producer" || rType == "co-producer" {
-                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: "продюсер")
+                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: isEn ? "producer" : "продюсер")
                         } else if rType == "conductor" {
-                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: "дирижёр")
+                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: isEn ? "conductor" : "дирижёр")
                         } else if rType == "arranger" || rType == "instrument arranger" || rType == "orchestrator" {
-                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: "аранжировка")
+                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: isEn ? "arranger" : "аранжировка")
                         } else if rType == "vocal arranger" {
-                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: "аранжировка вокала")
+                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: isEn ? "vocal arranger" : "аранжировка вокала")
                         } else if rType == "recording" || rType == "engineer" || rType == "audio" {
-                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: "инженер записи")
+                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: isEn ? "recording engineer" : "инженер записи")
                         } else if rType == "mix" {
-                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: "сведение")
+                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: isEn ? "mixing" : "сведение")
                         } else if rType == "mastering" {
-                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: "мастеринг")
+                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: isEn ? "mastering" : "мастеринг")
                         } else if rType == "programming" {
-                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: "программирование")
+                            addGrouped(&prodByArtist, &prodArtistOrder, artist: aName, role: isEn ? "programming" : "программирование")
                         }
                     } else if let placeObj = rel["place"] as? [String: Any],
                               let pName = placeObj["name"] as? String, !pName.isEmpty {
@@ -482,6 +483,7 @@ extension DigitalBookletService {
                         }
                     } else if let workObj = rel["work"] as? [String: Any],
                               let workRels = workObj["relations"] as? [[String: Any]] {
+                        let isEn = AMRLocalization.isEnglish
                         for wr in workRels {
                             let wType = (wr["type"] as? String ?? "").lowercased()
                             let wDir = (wr["direction"] as? String ?? "").lowercased()
@@ -493,9 +495,9 @@ extension DigitalBookletService {
                                         tc.writers.append(wName)
                                     }
                                 } else if wType == "vocal arranger" {
-                                    addGrouped(&prodByArtist, &prodArtistOrder, artist: wName, role: "аранжировка вокала")
+                                    addGrouped(&prodByArtist, &prodArtistOrder, artist: wName, role: isEn ? "vocal arranger" : "аранжировка вокала")
                                 } else if wType == "arranger" || wType == "instrument arranger" {
-                                    addGrouped(&prodByArtist, &prodArtistOrder, artist: wName, role: "аранжировка")
+                                    addGrouped(&prodByArtist, &prodArtistOrder, artist: wName, role: isEn ? "arranger" : "аранжировка")
                                 }
                             } else if let quotedWork = wr["work"] as? [String: Any],
                                       let qTitle = quotedWork["title"] as? String, !qTitle.isEmpty,
@@ -534,6 +536,18 @@ extension DigitalBookletService {
     }
 
     internal static func translateMusicBrainzAttribute(_ attr: String) -> String {
+        if AMRLocalization.isEnglish {
+            let enMap: [String: String] = [
+                "drums (drum set)": "drums",
+                "rhodes piano": "Fender Rhodes electric piano",
+                "wurlitzer electric piano": "Wurlitzer electric piano",
+                "hammond organ": "Hammond organ",
+                "ondes martenot": "Ondes Martenot",
+                "horncello": "French horn",
+                "french horn": "French horn"
+            ]
+            return enMap[attr.lowercased()] ?? attr
+        }
         let map: [String: String] = [
             "guitar": "гитара",
             "electric guitar": "электрогитара",

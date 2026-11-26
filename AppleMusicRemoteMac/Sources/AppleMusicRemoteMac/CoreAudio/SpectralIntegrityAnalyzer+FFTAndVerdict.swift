@@ -288,8 +288,11 @@ extension SpectralIntegrityAnalyzer {
                 isEnabled: false,
                 isCached: false,
                 verdict: "disabled",
-                verdictTitle: "Спектральный анализ отключен",
-                verdictDescription: "Аудиофильский верификатор спектра отключен в настройках приложения.",
+                verdictTitle: AMRLocalization.tr("Spectral Analysis Disabled", "Спектральный анализ отключен"),
+                verdictDescription: AMRLocalization.tr(
+                    "Audiophile spectral integrity verifier is disabled in app settings.",
+                    "Аудиофильский верификатор спектра отключен в настройках приложения."
+                ),
                 isAuthentic: true,
                 sampleRate: currentSampleRate,
                 claimedBitDepth: claimedBitDepth,
@@ -403,10 +406,16 @@ extension SpectralIntegrityAnalyzer {
                     isEnabled: true,
                     isCached: false,
                     verdict: "analyzing",
-                    verdictTitle: "Спектральный анализ потока...",
+                    verdictTitle: AMRLocalization.tr("Analyzing Audio Stream...", "Спектральный анализ потока..."),
                     verdictDescription: activeMusicalFrames < minMusicalFrames
-                        ? "Сбор PCM-фреймов из CoreAudio Process Tap (\(claimedBitDepth)-бит / \(khzStr) кГц) для верификации спектра vDSP FFT."
-                        : "Накопление пиковой ВЧ-огибающей трека (ожидание высокочастотных транзиентов выше 16 кГц)...",
+                        ? AMRLocalization.tr(
+                            "Capturing PCM frames from CoreAudio Process Tap (\(claimedBitDepth)-bit / \(khzStr) kHz) for vDSP FFT verification.",
+                            "Сбор PCM-фреймов из CoreAudio Process Tap (\(claimedBitDepth)-бит / \(khzStr) кГц) для верификации спектра vDSP FFT."
+                        )
+                        : AMRLocalization.tr(
+                            "Accumulating peak HF envelope (awaiting high-frequency transients above 16 kHz)...",
+                            "Накопление пиковой ВЧ-огибающей трека (ожидание высокочастотных транзиентов выше 16 кГц)..."
+                        ),
                     isAuthentic: true,
                     sampleRate: currentSampleRate,
                     claimedBitDepth: claimedBitDepth,
@@ -436,8 +445,11 @@ extension SpectralIntegrityAnalyzer {
                     isEnabled: true,
                     isCached: false,
                     verdict: "aac_lossy",
-                    verdictTitle: "Сжатый поток AAC 256 kbps",
-                    verdictDescription: "Воспроизводится сжатый поток AAC (16-бит / 44.1 кГц). Включите воспроизведение для проверки спектра.",
+                    verdictTitle: AMRLocalization.tr("Compressed AAC 256 kbps Stream", "Сжатый поток AAC 256 kbps"),
+                    verdictDescription: AMRLocalization.tr(
+                        "Playing compressed AAC stream (16-bit / 44.1 kHz). Start playback to inspect spectrum.",
+                        "Воспроизводится сжатый поток AAC (16-бит / 44.1 кГц). Включите воспроизведение для проверки спектра."
+                    ),
                     isAuthentic: true,
                     sampleRate: currentSampleRate,
                     claimedBitDepth: 16,
@@ -467,8 +479,11 @@ extension SpectralIntegrityAnalyzer {
                     isEnabled: true,
                     isCached: false,
                     verdict: "analyzing",
-                    verdictTitle: "Ожидание воспроизведения...",
-                    verdictDescription: "Формат контейнера ALAC \(claimedBitDepth)-бит / \(khzStr) кГц. Включите воспроизведение для живого БПФ-анализа спектра.",
+                    verdictTitle: AMRLocalization.tr("Waiting for Playback...", "Ожидание воспроизведения..."),
+                    verdictDescription: AMRLocalization.tr(
+                        "Container format ALAC \(claimedBitDepth)-bit / \(khzStr) kHz. Start playback for live FFT spectrum analysis.",
+                        "Формат контейнера ALAC \(claimedBitDepth)-бит / \(khzStr) кГц. Включите воспроизведение для живого БПФ-анализа спектра."
+                    ),
                     isAuthentic: true,
                     sampleRate: currentSampleRate,
                     claimedBitDepth: claimedBitDepth,
@@ -509,45 +524,76 @@ extension SpectralIntegrityAnalyzer {
             // Check for lossy-to-lossy upscale (e.g. 96/128 kbps MP3/AAC upscaled into 256 kbps AAC stream)
             if lowPresenceEnergyDb > -56.0 && aacHighBandDb < -78.0 && (lowPresenceEnergyDb - aacHighBandDb) > 25.0 && rawCutoffHz < 16800.0 {
                 verdict = "lossy_upscaled"
-                title = "Lossy-апскейл (~128 → 256 kbps)"
-                desc = "Несмотря на битрейт потока 256 kbps, спектр резко обрывается на \(cutoffKhzStr) кГц (вместо 18.5–20 кГц у честного AAC 256). Запись пережата из низкого битрейта (96–128 kbps)."
+                title = AMRLocalization.tr("Lossy Upscale (~128 → 256 kbps)", "Lossy-апскейл (~128 → 256 kbps)")
+                desc = AMRLocalization.tr(
+                    "Despite the 256 kbps stream bitrate, the spectrum cuts off sharply at \(cutoffKhzStr) kHz (instead of 18.5–20 kHz for genuine AAC 256). Re-encoded from a lower bitrate (96–128 kbps).",
+                    "Несмотря на битрейт потока 256 kbps, спектр резко обрывается на \(cutoffKhzStr) кГц (вместо 18.5–20 кГц у честного AAC 256). Запись пережата из низкого битрейта (96–128 kbps)."
+                )
                 authentic = false
             } else {
                 verdict = "aac_lossy"
-                title = "Честный AAC 256 kbps"
-                desc = "Поток AAC 256 kbps соответствует эталонному профилю: верхняя граница спектра простирается до \(cutoffKhzStr) кГц без признаков апскейла из 128 kbps."
+                title = AMRLocalization.tr("Genuine AAC 256 kbps", "Честный AAC 256 kbps")
+                desc = AMRLocalization.tr(
+                    "AAC 256 kbps stream matches the reference profile: upper spectrum extends to \(cutoffKhzStr) kHz with no signs of 128 kbps upscaling.",
+                    "Поток AAC 256 kbps соответствует эталонному профилю: верхняя граница спектра простирается до \(cutoffKhzStr) кГц без признаков апскейла из 128 kbps."
+                )
                 authentic = true
             }
         } else if presenceEnergyDb > -56.0 && cdTopEnergyDb < -78.0 && (presenceEnergyDb - cdTopEnergyDb) > 28.0 && rawCutoffHz < 19000.0 {
             verdict = "lossy_transcode"
             let approxBitrate = rawCutoffHz < 16500.0 ? "~128 kbps" : "~256 kbps"
-            title = "Lossy-транскод (\(approxBitrate) • срез \(cutoffKhzStr) кГц)"
-            desc = "Обнаружен резкий кирпичный срез ВЧ на \(cutoffKhzStr) кГц при контейнере ALAC. Вероятно, исходник был сжат в MP3/AAC (\(approxBitrate))."
+            title = AMRLocalization.tr(
+                "Lossy Transcode (\(approxBitrate) • \(cutoffKhzStr) kHz cutoff)",
+                "Lossy-транскод (\(approxBitrate) • срез \(cutoffKhzStr) кГц)"
+            )
+            desc = AMRLocalization.tr(
+                "Detected a brickwall HF cutoff at \(cutoffKhzStr) kHz inside an ALAC container. Source was likely compressed as MP3/AAC (\(approxBitrate)).",
+                "Обнаружен резкий кирпичный срез ВЧ на \(cutoffKhzStr) кГц при контейнере ALAC. Вероятно, исходник был сжат в MP3/AAC (\(approxBitrate))."
+            )
             authentic = false
         } else if currentSampleRate >= 88200 && cdTopEnergyDb > -66.0 && ultrasonicEnergyDb < -81.0 && (cdTopEnergyDb - ultrasonicEnergyDb) > 22.0 && rawCutoffHz <= 22800.0 {
             verdict = "upsampled"
-            title = "Апсемплинг CD (срез 22.05 кГц)"
-            desc = "В потоке \(formatKhz(Double(currentSampleRate))) кГц отсутствует ультразвуковая энергия выше 22.05 кГц (\(String(format: "%.0f", ultrasonicEnergyDb)) dBFS). Трек получен апсемплингом из 44.1 кГц."
+            let srKhz = formatKhz(Double(currentSampleRate))
+            let usDb = String(format: "%.0f", ultrasonicEnergyDb)
+            title = AMRLocalization.tr("CD Upsample (22.05 kHz cutoff)", "Апсемплинг CD (срез 22.05 кГц)")
+            desc = AMRLocalization.tr(
+                "\(srKhz) kHz stream lacks ultrasonic energy above 22.05 kHz (\(usDb) dBFS). Track was upsampled from 44.1 kHz.",
+                "В потоке \(srKhz) кГц отсутствует ультразвуковая энергия выше 22.05 кГц (\(usDb) dBFS). Трек получен апсемплингом из 44.1 кГц."
+            )
             authentic = false
         } else if isZeroPadded {
             verdict = "zero_padded"
-            title = "Zero-Padding (16-бит → 24-бит)"
-            desc = "Спектр чистый (до \(cutoffKhzStr) кГц), но младшие 8 бит (17–24) всех сэмплов равны нулю. Реальная разрядность мастера — 16 бит."
+            title = AMRLocalization.tr("Zero-Padding (16-bit → 24-bit)", "Zero-Padding (16-бит → 24-бит)")
+            desc = AMRLocalization.tr(
+                "Clean spectrum (up to \(cutoffKhzStr) kHz), but the lower 8 bits (17–24) of all samples are zero. True master bit depth is 16-bit.",
+                "Спектр чистый (до \(cutoffKhzStr) кГц), но младшие 8 бит (17–24) всех сэмплов равны нулю. Реальная разрядность мастера — 16 бит."
+            )
             authentic = false
         } else if currentSampleRate >= 88200 {
             verdict = "verified_hires"
             title = "Verified True Hi-Res"
-            desc = "Подлинный студийный Hi-Res мастер: зафиксирована живая ультразвуковая составляющая до \(cutoffKhzStr) кГц (\(String(format: "%.0f", ultrasonicEnergyDb)) dBFS) и честные \(effectiveDepth) бит."
+            let usDb = String(format: "%.0f", ultrasonicEnergyDb)
+            desc = AMRLocalization.tr(
+                "Authentic studio Hi-Res master: live ultrasonic content verified up to \(cutoffKhzStr) kHz (\(usDb) dBFS) with true \(effectiveDepth)-bit depth.",
+                "Подлинный студийный Hi-Res мастер: зафиксирована живая ультразвуковая составляющая до \(cutoffKhzStr) кГц (\(usDb) dBFS) и честные \(effectiveDepth) бит."
+            )
             authentic = true
         } else if currentSampleRate == 48000 && effectiveDepth == 24 {
             verdict = "verified_hires"
-            title = "Verified Studio Master 24-бит"
-            desc = "Подлинный 24-битный студийный мастер 48 кГц: полный спектр до \(cutoffKhzStr) кГц и активные младшие разряды (LSB 24-bit)."
+            title = AMRLocalization.tr("Verified Studio Master 24-bit", "Verified Studio Master 24-бит")
+            desc = AMRLocalization.tr(
+                "Authentic 24-bit / 48 kHz studio master: full spectrum up to \(cutoffKhzStr) kHz with active 24-bit LSBs.",
+                "Подлинный 24-битный студийный мастер 48 кГц: полный спектр до \(cutoffKhzStr) кГц и активные младшие разряды (LSB 24-bit)."
+            )
             authentic = true
         } else {
             verdict = "verified_lossless"
             title = "Verified True Lossless"
-            desc = "Честный Lossless-спектр до \(cutoffKhzStr) кГц без признаков психоакустической фильтрации MP3/AAC (\(effectiveDepth)-бит / \(formatKhz(Double(currentSampleRate))) кГц)."
+            let srKhz = formatKhz(Double(currentSampleRate))
+            desc = AMRLocalization.tr(
+                "Genuine Lossless spectrum up to \(cutoffKhzStr) kHz with no MP3/AAC psychoacoustic filtering (\(effectiveDepth)-bit / \(srKhz) kHz).",
+                "Честный Lossless-спектр до \(cutoffKhzStr) кГц без признаков психоакустической фильтрации MP3/AAC (\(effectiveDepth)-бит / \(srKhz) кГц)."
+            )
             authentic = true
         }
 

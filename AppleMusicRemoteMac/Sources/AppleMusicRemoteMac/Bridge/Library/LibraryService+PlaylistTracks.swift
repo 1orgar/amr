@@ -11,6 +11,20 @@ extension LibraryService {
 
     // MARK: - Playlist Tracks
 
+    internal func peekCachedPlaylistTracks(name: String) -> [TrackInfo] {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        lock.lock()
+        defer { lock.unlock() }
+        if let entry = playlistTracksCache[trimmed] {
+            return entry.tracks
+        }
+        if let ciMatch = playlistTracksCache.first(where: { $0.key.localizedCaseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return ciMatch.value.tracks
+        }
+        return []
+    }
+
     public func getPlaylistTracks(name: String, limit: Int? = nil) -> [TrackInfo] {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return [] }

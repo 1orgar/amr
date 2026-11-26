@@ -169,7 +169,15 @@ extension WebSocketServer {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
                     sendEvent(name: "device_auth_status", data: record.dictionary, to: connection)
                 }
-                sendError(action: action, error: "Изменение и удаление медиатеки отключено для этого устройства в настройках Mac", id: id, to: connection)
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Modifying or deleting library items is disabled for this device in Mac settings",
+                        "Изменение и удаление медиатеки отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
                 return true
             }
             let targetType: String
@@ -208,7 +216,7 @@ extension WebSocketServer {
                         data: [
                             "status": "error",
                             "type": "playlist",
-                            "message": "Системный плейлист нельзя удалить"
+                            "message": AMRLocalization.tr("System playlist cannot be deleted", "Системный плейлист нельзя удалить")
                         ],
                         id: id,
                         to: connection

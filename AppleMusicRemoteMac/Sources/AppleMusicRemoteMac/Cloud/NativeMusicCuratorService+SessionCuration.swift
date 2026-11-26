@@ -92,11 +92,13 @@ extension NativeMusicCuratorService {
                 group.addTask { [weak self] in
                     guard let self = self,
                           !Task.isCancelled,
-                          let res = await self.searchCatalogWithTimeout(query: q, storefront: sf, limit: 8) else {
+                          let res = await self.searchCatalogWithTimeout(query: q, storefront: sf, limit: 12) else {
                         return (idx, [], [])
                     }
-                    let songs = (res["songs"] as? [[String: Any]]) ?? []
-                    let albums = (res["albums"] as? [[String: Any]]) ?? []
+                    let rawSongs = (res["songs"] as? [[String: Any]]) ?? []
+                    let songs = Self.prioritizeBucketSongsByQuality(rawSongs, shuffleWithinTiers: false)
+                    let rawAlbums = (res["albums"] as? [[String: Any]]) ?? []
+                    let albums = CloudCatalogService.prioritizeSearchAlbums(rawAlbums, query: q)
                     return (idx, songs, albums)
                 }
             }
@@ -123,15 +125,29 @@ extension NativeMusicCuratorService {
         queryBuckets.sort { $0.0 < $1.0 }
 
         func interleaveBuckets(_ buckets: [(Int, [[String: Any]], [[String: Any]])]) -> [[String: Any]] {
+            let prioritizedBuckets: [(Int, [[String: Any]])] = buckets.map { idx, songs, _ in
+                (idx, Self.prioritizeBucketSongsByQuality(songs, shuffleWithinTiers: false))
+            }
             var list: [[String: Any]] = []
             var seenTrackKeys = Set<String>()
+            var keyToListIndex: [String: Int] = [:]
             var artistCounts: [String: Int] = [:]
-            let maxRounds = 8
+            let maxRounds = 12
             for passCap in [1, 2] {
                 for round in 0..<maxRounds {
-                    for (_, songs, _) in buckets {
+                    var roundCandidates: [(bucketOrder: Int, tier: Int, song: [String: Any])] = []
+                    for (bPos, (_, songs)) in prioritizedBuckets.enumerated() {
                         guard round < songs.count else { continue }
-                        let song = songs[round]
+                        let s = songs[round]
+                        roundCandidates.append((bPos, CloudCatalogService.audioQualityTier(for: s), s))
+                    }
+                    roundCandidates.sort { a, b in
+                        if a.tier != b.tier { return a.tier > b.tier }
+                        return a.bucketOrder < b.bucketOrder
+                    }
+
+                    for cand in roundCandidates {
+                        let song = cand.song
                         let id = String(describing: song["id"] ?? "")
                         let rawName = (song["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                         let rawArtist = (song["artist"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -143,6 +159,10 @@ extension NativeMusicCuratorService {
                         let titleOnlyKey = "title|\(normName)"
 
                         if seenTrackKeys.contains(dedupKey) || seenTrackKeys.contains(titleOnlyKey) || (!id.isEmpty && seenTrackKeys.contains(id)) {
+                            if let existingIdx = keyToListIndex[dedupKey] ?? (normName.count >= 4 ? keyToListIndex[titleOnlyKey] : nil),
+                               CloudCatalogService.audioQualityScore(for: song) > CloudCatalogService.audioQualityScore(for: list[existingIdx]) {
+                                list[existingIdx] = song
+                            }
                             continue
                         }
                         let currentArtistCount = artistCounts[normArtist] ?? 0
@@ -150,9 +170,12 @@ extension NativeMusicCuratorService {
                             continue
                         }
 
+                        let insertedIdx = list.count
                         seenTrackKeys.insert(dedupKey)
+                        keyToListIndex[dedupKey] = insertedIdx
                         if normName.count >= 4 {
                             seenTrackKeys.insert(titleOnlyKey)
+                            keyToListIndex[titleOnlyKey] = insertedIdx
                         }
                         if !id.isEmpty { seenTrackKeys.insert(id) }
                         artistCounts[normArtist] = currentArtistCount + 1
@@ -180,11 +203,13 @@ extension NativeMusicCuratorService {
                     group.addTask { [weak self] in
                         guard let self = self,
                               !Task.isCancelled,
-                              let res = await self.searchCatalogWithTimeout(query: fq, storefront: fallbackSf, limit: 8) else {
+                              let res = await self.searchCatalogWithTimeout(query: fq, storefront: fallbackSf, limit: 12) else {
                             return (bucketIdx, [], [])
                         }
-                        let songs = (res["songs"] as? [[String: Any]]) ?? []
-                        let albums = (res["albums"] as? [[String: Any]]) ?? []
+                        let rawSongs = (res["songs"] as? [[String: Any]]) ?? []
+                        let songs = Self.prioritizeBucketSongsByQuality(rawSongs, shuffleWithinTiers: false)
+                        let rawAlbums = (res["albums"] as? [[String: Any]]) ?? []
+                        let albums = CloudCatalogService.prioritizeSearchAlbums(rawAlbums, query: fq)
                         return (bucketIdx, songs, albums)
                     }
                 }
@@ -223,22 +248,28 @@ extension NativeMusicCuratorService {
         curatedSongs = orderSongsBySemanticFlow(curatedSongs)
         let flowMs = Int(Date().timeIntervalSince(flowStart) * 1000)
 
-        // Collect deduplicated recommended albums
+        // Collect deduplicated recommended albums, prioritizing Hi-Res Lossless & Apple Digital Master editions
         var curatedAlbums: [[String: Any]] = []
-        var seenAlbumKeys = Set<String>()
+        var albumKeyToIndex: [String: Int] = [:]
         for (_, _, albums) in queryBuckets {
-            for album in albums.prefix(2) {
+            for album in albums.prefix(3) {
                 let name = (album["name"] as? String ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                 let artist = (album["artist"] as? String ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !name.isEmpty else { continue }
                 let key = "\(artist)|\(name)"
-                if seenAlbumKeys.contains(key) { continue }
-                seenAlbumKeys.insert(key)
-                curatedAlbums.append(album)
-                if curatedAlbums.count >= 8 { break }
+                if let existingIdx = albumKeyToIndex[key] {
+                    if CloudCatalogService.audioQualityScore(for: album) > CloudCatalogService.audioQualityScore(for: curatedAlbums[existingIdx]) {
+                        curatedAlbums[existingIdx] = album
+                    }
+                    continue
+                }
+                if curatedAlbums.count < 8 {
+                    albumKeyToIndex[key] = curatedAlbums.count
+                    curatedAlbums.append(album)
+                }
             }
-            if curatedAlbums.count >= 8 { break }
         }
+        curatedAlbums = CloudCatalogService.prioritizeSearchAlbums(curatedAlbums, query: "")
 
         let totalMs = Int(Date().timeIntervalSince(totalStart) * 1000)
         NSLog("[AICurator] ✨ curateMusicSession done in %dms (plan=%dms, search=%dms, flow=%dms) -> %d songs, %d albums | title='%@' | prompt='%@'",
@@ -260,34 +291,90 @@ extension NativeMusicCuratorService {
 
     // MARK: - Infinite AI Wave (Auto-Appending Curated Tracks)
 
+    /// Deduplicates and orders candidate bucket songs so `Hi-Res Lossless` (`96–192 kHz / 24-bit`) tracks
+    /// always precede standard `Lossless`, unspecified, and `Lossy` tracks.
+    /// When `shuffleWithinTiers` is `true` (Infinite AI Wave), songs are shuffled *only within* each quality tier
+    /// so every wave stays varied while preserving strict maximum-quality priority.
+    public static func prioritizeBucketSongsByQuality(
+        _ songs: [[String: Any]],
+        shuffleWithinTiers: Bool = false
+    ) -> [[String: Any]] {
+        let deduped = CloudCatalogService.deduplicateSongs(songs)
+        guard deduped.count > 1 else { return deduped }
+
+        var tier3: [[String: Any]] = []
+        var tier2: [[String: Any]] = []
+        var tier1: [[String: Any]] = []
+        var tier0: [[String: Any]] = []
+
+        for song in deduped {
+            switch CloudCatalogService.audioQualityTier(for: song) {
+            case 3:
+                tier3.append(song)
+            case 2:
+                tier2.append(song)
+            case 1:
+                tier1.append(song)
+            default:
+                tier0.append(song)
+            }
+        }
+
+        if shuffleWithinTiers {
+            if tier3.count > 1 { tier3.shuffle() }
+            if tier2.count > 1 { tier2.shuffle() }
+            if tier1.count > 1 { tier1.shuffle() }
+            if tier0.count > 1 { tier0.shuffle() }
+        }
+
+        return tier3 + tier2 + tier1 + tier0
+    }
+
     public func filterAndInterleaveWaveSongs(
         queryBuckets: [(Int, [[String: Any]], [[String: Any]])],
         excluding: [TrackInfo],
         maxCount: Int = 20
     ) -> [[String: Any]] {
-        var seenTrackKeys = Set<String>()
+        var excludedTrackKeys = Set<String>()
         for ex in excluding {
             let exId = ex.id.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !exId.isEmpty { seenTrackKeys.insert(exId) }
+            if !exId.isEmpty { excludedTrackKeys.insert(exId) }
             let normName = normalizeSongTitleForDedup(ex.name)
             let normArtist = normalizeArtistForDedup(ex.artist)
             if !normName.isEmpty {
-                seenTrackKeys.insert("\(normArtist)|\(normName)")
+                excludedTrackKeys.insert("\(normArtist)|\(normName)")
                 if normName.count >= 4 {
-                    seenTrackKeys.insert("title|\(normName)")
+                    excludedTrackKeys.insert("title|\(normName)")
                 }
             }
         }
 
+        // Preserve caller's intra-tier order (e.g. shuffled within tier) while guaranteeing Hi-Res -> Lossless -> Other -> Lossy
+        let prioritizedBuckets: [(Int, [[String: Any]])] = queryBuckets.map { idx, songs, _ in
+            (idx, Self.prioritizeBucketSongsByQuality(songs, shuffleWithinTiers: false))
+        }
+
         var curatedSongs: [[String: Any]] = []
+        var selectedTrackKeys = Set<String>()
+        var keyToCuratedIndex: [String: Int] = [:]
         var artistCounts: [String: Int] = [:]
         let maxRounds = 12
 
         for passCap in [1, 2] {
             for round in 0..<maxRounds {
-                for (_, songs, _) in queryBuckets {
+                var roundCandidates: [(bucketOrder: Int, tier: Int, song: [String: Any])] = []
+                for (bPos, (_, songs)) in prioritizedBuckets.enumerated() {
                     guard round < songs.count else { continue }
-                    let song = songs[round]
+                    let s = songs[round]
+                    roundCandidates.append((bPos, CloudCatalogService.audioQualityTier(for: s), s))
+                }
+                roundCandidates.sort { a, b in
+                    if a.tier != b.tier { return a.tier > b.tier }
+                    return a.bucketOrder < b.bucketOrder
+                }
+
+                for cand in roundCandidates {
+                    let song = cand.song
                     let id = String(describing: song["id"] ?? "")
                     let rawName = (song["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     let rawArtist = (song["artist"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -298,19 +385,35 @@ extension NativeMusicCuratorService {
                     let dedupKey = "\(normArtist)|\(normName)"
                     let titleOnlyKey = "title|\(normName)"
 
-                    if seenTrackKeys.contains(dedupKey) || seenTrackKeys.contains(titleOnlyKey) || (!id.isEmpty && seenTrackKeys.contains(id)) {
+                    if excludedTrackKeys.contains(dedupKey)
+                        || excludedTrackKeys.contains(titleOnlyKey)
+                        || (!id.isEmpty && excludedTrackKeys.contains(id)) {
                         continue
                     }
+
+                    if selectedTrackKeys.contains(dedupKey)
+                        || selectedTrackKeys.contains(titleOnlyKey)
+                        || (!id.isEmpty && selectedTrackKeys.contains(id)) {
+                        if let existingIdx = keyToCuratedIndex[dedupKey] ?? (normName.count >= 4 ? keyToCuratedIndex[titleOnlyKey] : nil),
+                           CloudCatalogService.audioQualityScore(for: song) > CloudCatalogService.audioQualityScore(for: curatedSongs[existingIdx]) {
+                            curatedSongs[existingIdx] = song
+                        }
+                        continue
+                    }
+
                     let currentArtistCount = artistCounts[normArtist] ?? 0
                     if currentArtistCount >= passCap {
                         continue
                     }
 
-                    seenTrackKeys.insert(dedupKey)
+                    let insertedIdx = curatedSongs.count
+                    selectedTrackKeys.insert(dedupKey)
+                    keyToCuratedIndex[dedupKey] = insertedIdx
                     if normName.count >= 4 {
-                        seenTrackKeys.insert(titleOnlyKey)
+                        selectedTrackKeys.insert(titleOnlyKey)
+                        keyToCuratedIndex[titleOnlyKey] = insertedIdx
                     }
-                    if !id.isEmpty { seenTrackKeys.insert(id) }
+                    if !id.isEmpty { selectedTrackKeys.insert(id) }
                     artistCounts[normArtist] = currentArtistCount + 1
                     curatedSongs.append(song)
 
@@ -334,6 +437,7 @@ extension NativeMusicCuratorService {
 
         struct SongSemanticProfile {
             let normArtist: String
+            let qualityTier: Int
             let descriptorEn: String
             let tokenSet: Set<String>
             let sentenceVector: [Double]?
@@ -410,6 +514,7 @@ extension NativeMusicCuratorService {
 
             return SongSemanticProfile(
                 normArtist: normArtist,
+                qualityTier: CloudCatalogService.audioQualityTier(for: song),
                 descriptorEn: finalDescriptor,
                 tokenSet: tokenSet,
                 sentenceVector: sentVec,
@@ -452,8 +557,15 @@ extension NativeMusicCuratorService {
             return score
         }
 
-        var orderedIndices: [Int] = [0]
-        var remainingIndices: [Int] = Array(1..<songs.count)
+        var startIdx = 0
+        let maxTierInPool = profiles.map(\.qualityTier).max() ?? 1
+        if profiles[0].qualityTier < maxTierInPool,
+           let firstMaxTierIdx = profiles.firstIndex(where: { $0.qualityTier == maxTierInPool }) {
+            startIdx = firstMaxTierIdx
+        }
+
+        var orderedIndices: [Int] = [startIdx]
+        var remainingIndices: [Int] = Array(0..<songs.count).filter { $0 != startIdx }
 
         while !remainingIndices.isEmpty {
             let prevIdx = orderedIndices.last!
@@ -465,6 +577,15 @@ extension NativeMusicCuratorService {
             for (pos, candIdx) in remainingIndices.enumerated() {
                 let candProfile = profiles[candIdx]
                 var sim = semanticSimilarity(prevProfile, candProfile)
+
+                // Favor higher audio quality tiers along the flow (Hi-Res Lossless > Lossless > Lossy)
+                if candProfile.qualityTier >= 3 {
+                    sim += 1.35
+                } else if candProfile.qualityTier == 2 {
+                    sim += 0.35
+                } else if candProfile.qualityTier == 0 {
+                    sim -= 1.50
+                }
 
                 // Penalize consecutive tracks by the same artist so the queue never clusters same-artist back-to-back
                 if !prevProfile.normArtist.isEmpty && prevProfile.normArtist == candProfile.normArtist {
@@ -521,10 +642,8 @@ extension NativeMusicCuratorService {
                           let res = await self.searchCatalogWithTimeout(query: q, storefront: sf, limit: 12) else {
                         return (idx, [], [])
                     }
-                    var songs = (res["songs"] as? [[String: Any]]) ?? []
-                    if songs.count > 2 {
-                        songs.shuffle()
-                    }
+                    let rawSongs = (res["songs"] as? [[String: Any]]) ?? []
+                    let songs = Self.prioritizeBucketSongsByQuality(rawSongs, shuffleWithinTiers: true)
                     let albums = (res["albums"] as? [[String: Any]]) ?? []
                     return (idx, songs, albums)
                 }
@@ -561,7 +680,8 @@ extension NativeMusicCuratorService {
                 favorited: false,
                 isLocal: isLoc,
                 url: tUrl,
-                index: excluding.count + idx + 1
+                index: excluding.count + idx + 1,
+                catalogId: (!isLoc && Int(tid) != nil) ? tid : nil
             ))
         }
         let waveMs = Int(Date().timeIntervalSince(waveStart) * 1000)

@@ -8,6 +8,10 @@
     let out = raw;
     out = out
       .replace(/^✨\s*ИИ-подбор по вайбу «(.+)»\.\.\.$/i, '✨ Curating AI vibe from "$1"...')
+      .replace(/^✨\s*ИИ-подбор по вайбу «(.+)»$/i, '✨ AI Vibe Mix from "$1"')
+      .replace(/^ИИ-микс:\s*(.+)$/i, 'AI Mix: $1')
+      .replace(/^Перейти к альбому «(.+)»$/i, 'Go to Album "$1"')
+      .replace(/^Поиск:\s*(.+)$/i, 'Search: $1')
       .replace(/^Запуск «Моей станции»\.\.\.$/i, 'Starting My Station...')
       .replace(/^Запуск «Станции открытий»\.\.\.$/i, 'Starting Discovery Station...')
       .replace(/^Запуск «В моём вкусе»\.\.\.$/i, 'Starting Favorites Mix...')
@@ -30,7 +34,7 @@
       .replace(/Последний коммит:\s*([^\s(]+)\s*\(([^)]+)\)\s*•\s*(.+)/i, 'Latest commit: $1 ($2) • $3')
       .replace(/UID:\s*([^\s•]+)\s*•\s*Авторизовано на Mac/i, 'UID: $1 • Authorized on Mac')
       .replace(/Попытка переподключения через (\d+)с\.\.\. \(попытка (\d+)\)/i, 'Reconnecting in $1s... (attempt $2)')
-      .replace(/Apple Music:\s*подписка активна\s*•\s*Регион\s*([A-Z]+)\s*•\s*Медиатека синхронизирована/i, 'Apple Music: Active • Storefront $1 • Library Synced')
+      .replace(/Apple Music:\s*подписка активна\s*•\s*Регион\s*([^\s•]+)\s*•\s*Медиатека синхронизирована/i, 'Apple Music: Active • Storefront $1 • Library Synced')
       .replace(/Апсемплинг CD \(срез\s*([\d.]+)\s*(?:кГц|kHz)\)/i, 'Upsampled CD ($1 kHz cut)')
       .replace(/Lossy-транскод \(([^•]+)•\s*срез\s*([\d.]+)\s*(?:кГц|kHz)\)/i, 'Lossy Transcode ($1• $2 kHz cut)')
       .replace(/Lossy-апскейл \(([^)]+)\)/i, 'Lossy Upscale ($1)')
@@ -55,13 +59,35 @@
       .replace(/Частота и разрядность совпадают \(([^)]+)\), но поток проходит через микшер macOS CoreAudio\./i, 'Sample rate and bit depth match ($1), routed through macOS CoreAudio mixer.')
       .replace(/Внешний USB ЦАП не подключён:\s*DSD и HQ NOS доступны только для USB ЦАП\s*\(([^)]+)\)/i, 'No external USB DAC connected: DSD and HQ NOS are available only for USB DACs ($1)')
       .replace(/Передискретизация \(([^)]+)\)/i, 'Resampling ($1)')
+      .replace(/Преобразование разрядности \(([^)]+)\)/i, 'Bit-Depth Quantization ($1)')
+      .replace(/Частота дискретизации синхронизирована 1:1 \(([^)]+)\) без передискретизации;\s*выполняется квантование разрядности \(([^)]+)\)\./i, 'Sample rate is synced 1:1 ($1) without resampling; bit-depth quantization applied ($2).')
+      .replace(/Частота дискретизации источника \(([^)]+)\) пересчитывается в режим вывода \(([^)]+)\)\./i, 'Source sample rate ($1) is resampled to output mode ($2).')
+      .replace(/Недостаточная частота (DSD\d+) для источника \(([^)]+)\)/i, 'Insufficient $1 Rate for Source ($2)')
+      .replace(/Поток источника \(([^)]+)\) превышает оптимальную полосу однобитного режима (DSD\d+)\.\s*Выберите ([^д]+) для раскрытия битрейта без потерь\./i, 'Source stream ($1) exceeds optimal bandwidth of 1-bit $2 mode. Select $3 for lossless resolution.')
       .replace(/Частота или разрядность источника \(([^)]+)\) отличается от текущего режима вывода \(([^)]+)\)\./i, 'Source format ($1) differs from current output mode ($2).')
       .replace(/Прямое подключение macOS CoreAudio HAL \(([^)]+)\)/i, 'Direct macOS CoreAudio HAL ($1)')
       .replace(/Прямой вывод CoreAudio \(Bit-Perfect 100% • Громкость: ([^)]+)\)/i, 'Direct CoreAudio Output (Bit-Perfect 100% • Volume: $1)')
       .replace(/Прямой вывод CoreAudio \(Bit-Perfect 100% • Ожидание ([^)]+)\)/i, 'Direct CoreAudio Output (Bit-Perfect 100% • Waiting for $1)')
+      .replace(/Управление громкостью по TCP • Лимит до (\d+)%/gi, 'TCP Volume Control • Cap $1%')
+      .replace(/Ожидание подключения по TCP • Лимит до (\d+)%/gi, 'Waiting for TCP connection • Cap $1%')
+      .replace(/макс\.\s*(\d+)%/gi, 'max $1%')
+      .replace(/Активен профиль «([^»]+)» \(([^•]+)•\s*Headroom\s*([-\d.]+)\s*(?:дБ|dB)\s*•\s*синхронизирован с iCloud Drive\)\./i, 'Active profile "$1" ($2• Headroom $3 dB • synced with iCloud Drive).')
+      .replace(/Профиль «([^»]+)» сохранён в облаке \(([^)]+)\)\.\s*Нажмите «Вкл» для активации 64-bit Auto-PEQ\./i, 'Profile "$1" saved in iCloud ($2). Tap "On" to enable 64-bit Auto-PEQ.')
+      .replace(/Усреднение спектра в точке прослушивания \(([\d.]+)\s*с\)\.\.\./i, 'Averaging spectrum at listening position ($1s)...')
+      .replace(/Профиль «([^»]+)» удалён/i, 'Profile "$1" deleted')
+      .replace(/Несовпадение регионов:\s*Mac \(([^)]+)\) и Web \(([^)]+)\)\./i, 'Storefront mismatch: Mac ($1) vs Web ($2).')
+      .replace(/Не удалось декодировать аудиофайл микрофона \(код ([^)]+)\)\.[^]*/i, 'Could not decode microphone audio file (code $1). Use iOS Voice Memos / Mic capture (M4A/WAV).')
+      .replace(/Срок действия встроенного MusicKit Developer JWT истек\.[^]*/i, 'Built-in MusicKit Developer JWT has expired. Update the app or refresh the developer key.')
+      .replace(/⏭\s*«([^»]+)» недоступен в Apple Music — пропуск/i, '⏭ "$1" is unavailable in Apple Music — skipping')
       .replace(/Сетевой (Hi-Res|Lossless|PCM) стриминг \(([^)]+)\)\s*•\s*(.+)/i, 'Network $1 Streaming ($2) • $3')
       .replace(/Сетевой стример\s*•\s*До 192 кГц Hi-Res\s*•\s*(.+)/i, 'Network Streamer • Up to 192 kHz Hi-Res • $1')
       .replace(/\((\d+)\s*частот\)/i, '($1 rates)')
+      .replace(/Буфер\s*(\d+(?:\.\d+)?)%/gi, 'Buffer $1%')
+      .replace(/Ширина M\/S:/g, 'M/S Width:')
+      .replace(/Баланс L\/R:/g, 'L/R Balance:')
+      .replace(/Lossless\s*\(Остановлен\)/gi, 'Lossless (Stopped)')
+      .replace(/Буферизация/gi, 'Buffering')
+      .replace(/Ожидание CDN/gi, 'Waiting for CDN')
       .replace(/Декодирование в PCM/g, 'Decoded to PCM')
       .replace(/Декодирование AAC → PCM/g, 'AAC → PCM Decode')
       .replace(/Бесконечный PCM поток/g, 'Continuous PCM Stream')
@@ -71,6 +97,10 @@
       .replace(/(\d+)-бит/gi, '$1-bit')
       .replace(/Нет\s*\(<([-\d.]+)\s*dB\)/gi, 'None (<$1 dB)')
       .replace(/Н\/Д\s*\(≤\s*48\s*(?:кГц|kHz)\)/gi, 'N/A (≤ 48 kHz)')
+      .replace(/([\d.]+)кГц/gi, '$1kHz')
+      .replace(/([\d.]+)Гц/gi, '$1Hz')
+      .replace(/([+-]?[\d.]+)\s*дБ/gi, '$1 dB')
+      .replace(/([\d.]+)\s*МГц/gi, '$1 MHz')
       .replace(/до\s*([\d.]+)\s*кГц/gi, 'up to $1 kHz')
       .replace(/([\d.]+)\s*кГц/gi, '$1 kHz')
       .replace(/(\d+)\s*Гц/gi, '$1 Hz')
@@ -459,6 +489,7 @@
     deviceName: initialDeviceProfile.deviceName,
     deviceType: initialDeviceProfile.deviceType,
     deviceAuthorized: false, // Updated by server on connect (false -> shows auth waiting screen first)
+    deviceAuthChecked: false,
     initialAuthFetched: false,
     inviteToken: initialDeviceProfile.inviteToken || '',
     shareAccessUrl: '',
@@ -528,15 +559,64 @@
     initialViewSelected: false,
     position: 0,
     duration: 0,
-    volume: 100,
+    volume: (() => {
+      try {
+        const raw = localStorage.getItem('amr_last_volume');
+        if (raw !== null && !isNaN(Number(raw))) {
+          return Math.max(0, Math.min(100, Number(raw)));
+        }
+      } catch (_) {}
+      return 100;
+    })(),
     previousVolume: 100,
-    lockVolume100: localStorage.getItem('amr_lock_volume_100') !== null ? (localStorage.getItem('amr_lock_volume_100') === 'true') : true,
-    ampVolumeControlEnabled: false,
-    ampBrandName: 'Rotel',
+    lockVolume100: (() => {
+      try {
+        const raw = localStorage.getItem('amr_lock_volume_100');
+        return raw !== null ? (raw === 'true') : true;
+      } catch (_) {
+        return true;
+      }
+    })(),
+    ampVolumeControlEnabled: (() => {
+      try {
+        const lockRaw = localStorage.getItem('amr_lock_volume_100');
+        const locked = lockRaw !== null ? (lockRaw === 'true') : true;
+        return locked && localStorage.getItem('amr_amp_volume_control') === 'true';
+      } catch (_) {
+        return false;
+      }
+    })(),
+    ampBrandName: (() => {
+      try {
+        return localStorage.getItem('amr_amp_brand_name') || 'Rotel';
+      } catch (_) {
+        return 'Rotel';
+      }
+    })(),
     ampVolume: 35,
-    ampMaxVolume: 96,
-    ampMuted: false,
+    ampMaxVolume: (() => {
+      try {
+        const raw = Number(localStorage.getItem('amr_amp_max_volume'));
+        return (raw > 0 && raw <= 100) ? raw : 96;
+      } catch (_) {
+        return 96;
+      }
+    })(),
+    ampMuted: (() => {
+      try {
+        return localStorage.getItem('amr_amp_muted') === 'true';
+      } catch (_) {
+        return false;
+      }
+    })(),
     ampConnected: false,
+    isDlnaActive: (() => {
+      try {
+        return localStorage.getItem('amr_is_dlna_active') === 'true';
+      } catch (_) {
+        return false;
+      }
+    })(),
     isDraggingVolume: false,
     shuffle: false,
     repeatMode: 'off', // 'off', 'one', 'all'

@@ -1,370 +1,69 @@
-# Apple Music Remote (AMR) — Общий Роадмап проекта
+# Apple Music Remote (AMR) — Project Roadmap
 
-Стратегический план развития высокопроизводительного нативного аудиофильского сервера, 64-битного DSP-процессора и пульта дистанционного управления **Apple Music Remote (AMR)** для macOS.
-
----
-
-## 🧭 Философия архитектуры AMR
-
-1. **Бескомпромиссный Bit-Perfect звук и изолированный 64-bit Studio DSP**:
-   - Прямое управление CoreAudio HAL без промежуточных программных микшеров и ресемплеров по умолчанию (`100% Bit-Perfect Passthrough`).
-   - Жесткая аппаратная синхронизация частоты дискретизации ЦАП (`44.1 – 192 кГц` в Passthrough и до `768 кГц / DSD512 DoP` в монопольном `Exclusive Hog Mode`) с автоматической аппаратной проверкой возможностей USB-ЦАПа и мгновенным байпасом в 1 клик.
-   - Принудительный `100% Volume Lock` в macOS при внешней аппаратной регулировке громкости усилителей и стримеров без математической деградации разрядности.
-2. **Абсолютная автономность (Headless Mac mini)**:
-   - Фоновая работа 24/7 без графического окна и без использования ненадежных Accessibility GUI API.
-   - Полное управление через нативный ScriptingBridge, AppleScript IPC, `AudioProcessTapService` и официальный Apple MusicKit REST API с нулевым загрязнением пользовательской Медиатеки.
-3. **Премиальный OLED UI и минимализм**:
-   - Чистый монохромный веб-пульт с тактильным откликом, мгновенный скраббер 60fps с PLL-синхронизацией и сжатая RAM-раздача ассетов (`gzip`).
-   - Roon-подобная визуальная прозрачность звукового тракта (Signal Path Inspector), живая мастеринг-телеметрия (`DR / LUFS / True Peak / ISP / Phase`) и полноформатные цифровые буклеты с разбором каждой композиции.
+Strategic engineering roadmap for **Apple Music Remote (AMR)** — the native audiophile CoreAudio server, 64-bit Studio DSP engine, and pure OLED remote control for Apple Music on macOS.
 
 ---
 
-## 📊 Сводная таблица релизов
+## 🧭 Architectural Philosophy
 
-| Релиз | Кодовое имя | Статус | Изменения в релизе |
+1. **Uncompromising Bit-Perfect Audio & Isolated 64-Bit Studio DSP**:
+   - Direct CoreAudio HAL control without intermediate OS software mixers or resamplers by default (`100% Bit-Perfect Passthrough`).
+   - Strict hardware sample-rate synchronization (`44.1 – 192 kHz` in Passthrough and up to `768 kHz / DSD512 DoP` in exclusive `Hog Mode`) guarded by automatic 3-stage USB DAC capability verification and 1-click hardware bypass.
+   - Enforced `100% Volume Lock` in macOS paired with external hardware volume attenuation over TCP (`Rotel`, `Denon / Marantz`, `Hegel`, `NAD`, `Lyngdorf`) and lossless streamers (`BluOS / DLNA`) for zero word-length degradation.
+2. **Headless Mac mini Autonomy**:
+   - 24/7 background operation without requiring an open GUI window or brittle Accessibility UI scripting.
+   - Native `ScriptingBridge`, AppleScript IPC, `AudioProcessTapService`, and official Apple MusicKit REST API integration with zero user library pollution.
+3. **Pure OLED Minimalism & Signal Transparency**:
+   - Pitch-black `#000000` Web PWA with optimistic 60 fps PLL-locked scrubbing, tactile controls, and RAM-cached `gzip` delivery.
+   - Roon-inspired Signal Path transparency, live mastering telemetry (`TT DR / EBU R128 LUFS / True Peak / 4x ISP / Phase`), and multi-page digital album booklets.
+
+---
+
+## 📊 Release Summary Matrix
+
+| Release | Codename | Status | Key Deliverables |
 | :--- | :--- | :--- | :--- |
-| **v2.1.0** | **«Beethoven»** | ✅ Завершен | 1. Навигация по очереди (Smart Prev, изоляция переходов)<br>2. Аппаратный 100% Volume Lock с защитой от дрейфа<br>3. Базовый набор модульных тестов и сборка Universal 2 |
-| **v2.2.0** | **«Chopin»** | ✅ Завершен | 1. Автономный контроллер очереди каталога (Smart Auto-Advance)<br>2. Интерактивная авторизация Apple ID (`Music-User-Token`)<br>3. Signal Path Inspector v1 и дистанционный селектор ЦАП в Web UI |
-| **v2.3.0** | **«Bach»** | ✅ Завершен | 1. Bit-Perfect стриминг на BluOS через `AudioProcessTapService`<br>2. Pre-inspection формата и Format Lock (устранение дрейфа битности)<br>3. Сторожевой таймер `MusicAppLifecycleManager` и дисковый кэш обложек |
-| **v2.4.0** | **«Brahms»** | ✅ Завершен | 1. Персонализация: Listen Now, еженедельные миксы и личные станции<br>2. StandBy TV Mode (живые обложки) + аппаратная подсветка WLED DDP<br>3. Anti-Stutter, честная детекция AAC vs ALAC и легкий опрос Zero-Stall |
-| **v2.5.0** | **«Liszt»** | ✅ Завершен | 1. Спектральный детектор апсемплинга (`vDSP`) с персистентным кэшем валидации + 32-полосный RTA в «Тракте сигнала» и на ТВ<br>2. DAC Muting Guard (бесщелчковое переключение реле частоты ЦАП)<br>3. 📖 Цифровые буклеты альбомов + полный гид и кредиты по композициям<br>4. 🔐 Авторизация PWA-устройств, инфо-тракт с QR-шарингом и индивидуальный Lock Screen<br>5. ➕ Управление плейлистами и сохранение ИИ-очереди («+ В плейлист») + локализация `RU / EN`<br>6. 🪄 Нативные функции ИИ (`FoundationModels` + `NaturalLanguage` 512-D + `Vision` Saliency): Промпт-Куратор, бесконечная ИИ-волна (`♾️`), семантический поток очереди, палитра обложек ТВ/WLED и переключатель Apple Silicon<br>7. 🔊 Управление громкостью внешнего усилителя по TCP (`Rotel`, `Denon / Marantz`, `Hegel`, `NAD`, `Lyngdorf`) с аппаратной нормализацией Apple SoundCheck (`iTunNORM` + `ITU-R BS.1770`) |
-| **v3.0.0** | **«Wagner»** | ✅ **В проде** | 1. 🎛 Гибридный 64-bit Studio DSP + монопольный `CoreAudio Exclusive Hog Mode`: модуляция `DSD64–DSD512 DoP (7EC)`, синхронный апсемплинг `2x–16x` до `768 kHz` (`AMX FP64` 65k / `Metal df64` 262k Sinc + `HQ PCM NOS` с `LNS15`), 3-этапный аппаратный верификатор USB-ЦАП и пресеты DSP<br>2. 📐 Замер АЧХ комнаты микрофоном iPhone / iPad прямо из PWA (`RoomAcousticService`) + 64-битная коррекция `Auto-PEQ` (до 8 полос RBJ + `Headroom`)<br>3. 📊 Мастеринг-телеметрия (`TT DR Meter`, `EBU R128 LUFS / True Peak`, `4x ISP Clipping Guard`, `Phase Correlation`) + 64-bit мастеринг-реставрация (`De-Clipper` верхушек волны + `Weiss-style Dynamic De-Esser`) + ночной процессор `Audiophile Late-Night DRC` и повторение 1 трека (`Repeat One`)<br>4. ☁️ Двусторонняя синхронизация с **iCloud Drive** (пресеты DSP, кэш громкости/DR, профили АЧХ комнаты), гранулярные права PWA-устройств и мгновенная громкость стримеров `BluOS / DLNA` (`< 50 мс`)<br>5. 🌉 ИИ-маршрутизатор **«Sonic Bridge»** (`SLERP` в 512-D пространстве между двумя треками/артистами)<br>6. 🗂 Разделение на **Плейлисты** (`+ В плейлисты`) и 4-вкладочную **Медиатеку** (`Недавние / Артисты / Альбомы / Треки`), полное удаление из медиатеки, детектор полноты альбомов и настраиваемая Медиатека ТВ-режима<br>7. ⚡ Гибридный однобуферный облачный движок с нулевым загрязнением Медиатеки: мгновенный старт за `0.5–0.9 с` в нативном Lossless / Hi-Res ALAC до `192 kHz / 24-bit` (`ra.<songId>` + pre-flight защита интро), единый переиспользуемый `«Буфер AMR»` (`play once=true` без дублирующего плейлиста `«Очередь AMR»`), векторизованная предзагрузка при `Shuffle` и RAM `gzip`-кэш статики |
-| **v3.1.0** | **«Schumann»** | 📋 План | 1. 🛡 Гарантия чистого стерео-мастера (`Stereo Master Enforcement` против скрытого Dolby Atmos downmix)<br>2. ⬆️ Управление очередью в стиле Linn Kazoo (`Play Next`, `Add to Queue`, `↑`, `×`), ⏸ «Остановить после текущего трека» (`Stop After Current`) и переход к Артисту в 1 клик<br>3. 👎 Кнопка «Дизлайк» (`DislikedTracksStore` с автоисключением из ИИ-волн, радио и поиска) + шаг громкости усилителя `±1%` и питание `Standby / Wake` по TCP<br>4. 🎤 Синхронизированные тексты песен (`TTML / LRC` Караоке) + 📖 интерактивный Roon-буклет (кликабельные кредиты и запуск треков) |
-| **v3.2.0** | **«Mendelssohn»** | 📋 План | 1. 🎸 Живой ИИ-детектор инструментов и вокала в реальном времени (`SoundAnalysis` ANE)<br>2. 🧠 Облачный профиль вкусов слушателя (`CloudTasteProfileService`: `75% Вкусы / 25% Открытия` — метал, саундтреки, аниме OST, электроника, экспериментал)<br>3. 🕒 «Недавние ИИ-волны» и 🪄 живые нейро-подсказки («✨ Дополнить промпт») в ИИ-поиске<br>4. 📈 Осциллограмма трека в полосе перемотки (`Waveform Seekbar` в стиле Roon), 📺 виджет «Далее в очереди» (`Up Next`) и горячие клавиши пульта ДУ на ТВ<br>5. 🌌 Визуальная стена обложек (`3D Cover Flow & 4K Album Wall`) + 👥 Party Mode (гостевой QR-доступ) |
-| **v3.3.0** | **«Tchaikovsky»** | 📋 План | 1. 🎚 Тюнер радиостанции «От чартов к андерграунду» (`Discovery Slider`) + фильтр «Чистый студийный каталог»<br>2. 🎻 Группировка многочастных произведений и концертных альбомов (`Multi-Part Work Grouping & Gapless Live Guard`) + 🎼 гармоническое сведение очереди (`Camelot BPM`)<br>3. 🌅 Таймер сна и синхронный закатный фейд музыки и освещения гостиной (`Sleep Timer & WLED DDP Sunset Fade`)<br>4. 🎙️ Понимание естественных команд в строке поиска (`NaturalLanguage` Intent Parser) |
-| **v3.4.0** | **«Grieg»** | 📋 План | 1. 🔍 Многоуровневый фильтр-конструктор `Roon Focus` (`+ Включить / − Исключить`) + Живые закладки (`Smart Bookmarks`) и смарт-плейлисты на лету<br>2. 📡 Прямой стриминг аудио на устройства ESPHome (I2S DAC / Speaker)<br>3. 🔀 Расширение Lossless Stream Relay (FLAC / LPCM до 24/192) на **WiiM** и **UPnP AV**<br>4. 🏡 Интеграция с Home Assistant (MQTT / WebSocket + авто-триггер питания усилителя)<br>5. 🖥 Быстрый запуск «★ Избранных вайбов» и «ИИ-подбора по треку» из меню `Menu Bar` macOS |
-| **v3.5.0** | **«Debussy»** | 📋 План | 1. ⚡ Zero-Jitter RAM Buffer (`Memory Play` в стиле Audirvana / Euphony: предзагрузка треков в `mlock` RAM)<br>2. 🎚 Индивидуальная память громкости и профиля под конкретные наушники / выходы (`Per-Device & Per-Headphone Volume Memory`) + 🛡 защита слуха и АС (`Safe Startup Volume & Sudden Jump Guard`)<br>3. 🎛 Профили выходов ЦАП + Инверсия фазы (`0°/180°`) и тонкий баланс (`0.1 dB`)<br>4. 🎧 Студийный бинауральный кроссфид Бауэра / Мейера для наушников (с Bit-Perfect Bypass)<br>5. 🌙 Ночная тонкомпенсация Флетчера–Мэнсона (`ISO 226 / RME Loudness Contour`) |
-| **v3.6.0** | **«Ravel»** | 📋 План | 1. 🧬 Локальный граф аудио-знаний (`Sonic Object Graph` на базе SQLite) и «Музыкальная ДНК» в буклете и на ТВ<br>2. 🎙 «Живое Радио-Шоу / ИИ-Конферансье» (`AI Radio Host & Voice Liner Notes` на нативном синтезе macOS по данным `Sonic Object Graph`)<br>3. 📊 Локальная Hi-Res статистика прослушиваний (AMR Analytics) + 🕰 «Машина времени» (`Musical Time Machine` — юбилеи альбомов и история коллекции)<br>4. 📈 Автономный серверный скробблер в Last.fm / ListenBrainz на Mac mini + 🩺 мониторинг «здоровья» аудиотракта Mac mini |
-| **v3.7.0** | **«Dvořák»** | 📋 План | 1. 💿 Аудиофильский компаратор изданий альбома (`Master Edition Comparator`: инструментальное сравнение `DR`, `True Peak` и спектра версий альбома)<br>2. 📸 Распознавание физических виниловых конвертов и CD камерой телефона (`Vinyl Sleeve & Barcode Scanner → Play in Hi-Res`)<br>3. 🔀 Синхронный мультирум `AMR SyncGroup` (фазовая синхронизация USB-ЦАП + BluOS + WiiM + ESPHome на базе `Memory Play`) |
-| **v3.8.0** | **«Mahler»** | 📋 План | 1. 🎼 «Режим Классики и Джазовых Стандартов» (`Composer / Work / Recording Matrix` в стиле Apple Music Classical & Roon на базе `Sonic Object Graph`)<br>2. 💿 «Виниловый ритуал» и режим прослушивания альбома целиком (`Album-First / Vinyl Side A & Side B Mode`)<br>3. 🎛 Классические стрелочные индикаторы уровня (`McIntosh / Nagra Analog VU Meters + Peak Hold`) на ТВ и планшете<br>4. 🕯 Режим «Полная темнота для критического прослушивания» (`Zero-Photon / Pitch-Black OLED & WLED Blackout Mode`)<br>5. 📡 Внешний API и виджеты для аппаратных мини-дисплеев (`Now Playing Webhook / Matrix / E-Ink / StreamDeck API`) |
-| **v4.0.0** | **«Rachmaninoff»** | 📋 План | 1. 📱 Нативный клиент для iOS / iPadOS / watchOS (SwiftUI, Live Activities, Digital Crown)<br>2. 🎛 Свёрточный движок `Convolution FIR` (`.wav` импульсы REW до 65k тапов) и база наушников `AutoEQ (4000+ моделей)`<br>3. 🔊 Расширение моста громкости на HTTP REST / CoreMIDI (`Yamaha MusicCast`, `KEF`, `Cambridge`, `RME ADI-2 MIDI`) + авто-выбор входа усилителя (`Auto-Source Input Select`)<br>4. 🧬 Персональный профиль частотной чувствительности слуха (`Personal Audiogram EQ / Mimi-style Hearing Profile`)<br>5. 🔬 Слепое A/B-тестирование с выравниванием громкости (`Level-Matched A/B & ABX Comparator до 0.1 LUFS`) + 🔊 генератор тестовых сигналов (`In-Phase/Out-of-Phase`, свип `20–200 Hz`, `RT60`, `Burn-in`) |
+| **v2.1.0** | **"Beethoven"** | ✅ Completed | 1. Queue navigation (`Smart Prev`, transition isolation)<br>2. Hardware `100% Volume Lock` with drift protection<br>3. Core unit test suite & Universal 2 build pipeline |
+| **v2.2.0** | **"Chopin"** | ✅ Completed | 1. Autonomous catalog queue controller (`Smart Auto-Advance`)<br>2. Interactive Apple ID authorization (`Music-User-Token`)<br>3. Signal Path Inspector v1 & remote Web UI DAC switcher |
+| **v2.3.0** | **"Bach"** | ✅ Completed | 1. Bit-Perfect BluOS streaming via `AudioProcessTapService` (`24/192`)<br>2. Stream format pre-inspection & strict `Format Lock`<br>3. `MusicAppLifecycleManager` watchdog & persistent `ArtworkDiskCache` |
+| **v2.4.0** | **"Brahms"** | ✅ Completed | 1. Apple Music personalization: Listen Now, mixes & personal stations<br>2. Fullscreen StandBy / TV Mode (Motion Covers) + 40 FPS WLED DDP Ambilight<br>3. Anti-Stutter, AAC vs. ALAC detection & lightweight Zero-Stall IPC poller |
+| **v2.5.0** | **"Liszt"** | ✅ Completed | 1. `vDSP` FFT Spectral Hi-Res Verifier + persistent cache + 32-band TV RTA<br>2. `DAC Muting Guard` click-free sample-rate relay switcher<br>3. 📖 Multi-page Digital Album Booklets (`PDFKit`) + Studio Credits<br>4. 🔐 PWA Device Authorization, QR Invite sharing & per-device Lock Screen<br>5. ➕ Playlist management & Save AI Queue as Playlist + `EN / RU` localization<br>6. 🪄 On-device Apple Neural Engine AI (`FoundationModels` + 512-D `NLEmbedding` + `Vision` Saliency): Prompt Curator, Infinite AI Wave & semantic queue flow<br>7. 🔊 External Amplifier TCP volume bridge + hardware `iTunNORM` SoundCheck |
+| **v3.0.0** | **"Wagner"** | ✅ **Released** | 1. 🎛 Hybrid 64-Bit Studio DSP + `CoreAudio Exclusive Hog Mode`: `DSD64–DSD512 DoP (7EC + Trellis)`, `2x–16x` synchronous upsampling up to `768 kHz` (`AMX FP64` 65k / `Metal df64` 262k Sinc + `HQ PCM NOS` with `LNS15`), 3-stage USB DAC verifier & DSP presets<br>2. 📐 In-browser iPhone / iPad Room Acoustic Measurement (`RoomAcousticService`) + 64-bit 8-band `Auto-PEQ` toward Harman Target<br>3. 📊 Live Mastering Telemetry (`TT DR`, `EBU R128 LUFS / True Peak`, `4x ISP`, `Phase`) + Pre-DSP Restoration (`MasteringDeClipper` + `Weiss Dynamic De-Esser`) + `Audiophile Late-Night DRC` & `Repeat One`<br>4. ☁️ Two-way **iCloud Drive** sync (DSP presets, DR/SoundCheck caches, Room PEQ), granular PWA device permissions, Zero-Keychain `AES-256-GCM` vault, Apple Notarized Universal DMG & `< 50 ms` `BluOS / DLNA` volume<br>5. 🌉 **`Sonic Bridge`** 512-D `SLERP` geodesic AI trajectory router<br>6. 🗂 Dedicated **Playlists** vs. 4-tab **Library** (`Recent / Artists / Albums / Songs`), full library deletion, Album Completeness Detector & configurable TV Library<br>7. ⚡ Sub-second (`0.5–0.9 s`) Direct Cloud ALAC/Hi-Res engine with single reusable staging buffer, zero library pollution & RAM `gzip` asset cache |
+| **v3.1.0** | **"Schumann"** | 📋 Planned | 1. 🛡 `Stereo Master Enforcement` (prevents hidden 48 kHz Dolby Atmos downmixes on stereo DACs)<br>2. ⬆️ Linn Kazoo-style live queue mutations (`Play Next`, `Add to Queue`, `↑`, `×`), ⏸ `Stop After Current Track` & 1-tap Artist deep-links<br>3. 👎 `DislikedTracksStore` (instant skip + AI/Radio/Search exclusion) + `±1%` micro-step amplifier volume & TCP `Standby / Wake`<br>4. 🎤 Time-synced `TTML / LRC` karaoke lyrics + 📖 clickable Roon-style interactive booklet credits |
+| **v3.2.0** | **"Mendelssohn"** | 📋 Planned | 1. 🎸 Real-time `SoundAnalysis` Neural Engine instrument & vocal detector<br>2. 🧠 `CloudTasteProfileService` (`75% Taste / 25% Discovery` across OST, Metal, Electronic, Jazz & Classical)<br>3. 🕒 Recent AI Waves history & live `NLEmbedding` prompt expansion chips<br>4. 📈 Roon-style `Waveform Seekbar`, TV `Up Next` banner & remote hotkeys<br>5. 🌌 `3D Cover Flow & 4K Album Wall` + 👥 QR Guest `Party Mode` |
+| **v3.3.0** | **"Tchaikovsky"** | 📋 Planned | 1. 🎚 `Discovery Slider` (*Charts ↔ Deep Cuts*) + clean studio edition filter<br>2. 🎻 `Multi-Part Work Grouping & Gapless Live Guard` + Camelot BPM harmonic queue<br>3. 🌅 Synchronized `Sleep Timer & WLED DDP Sunset Fade`<br>4. 🎙️ Natural-language command intent parser in Search |
+| **v3.4.0** | **"Grieg"** | 📋 Planned | 1. 🔍 Multi-faceted `Roon Focus` filter builder (`+ Include / − Exclude` by `DR`, sample rate, decade, genre) + `Smart Bookmarks`<br>2. 📡 Native **ESPHome** I2S DAC HTTP WAV streaming<br>3. 🔀 Lossless Stream Relay (`FLAC / LPCM` up to `24/192`) for **WiiM** & **UPnP AV**<br>4. 🏡 Two-way **Home Assistant** MQTT / WebSocket bridge + Smart Amp power trigger<br>5. 🖥 Quick launch for `★ Favorite Vibes` & `AI Track Mix` in the macOS Menu Bar |
+| **v3.5.0** | **"Debussy"** | 📋 Planned | 1. ⚡ `Zero-Jitter RAM Buffer (Memory Play)` via non-pageable `mlock` RAM<br>2. 🎚 `Per-Device & Per-Headphone Volume Memory` + `Safe Startup Volume & Jump Guard`<br>3. 🎛 Output profiles, `0°/180° Phase Invert` & `0.1 dB` L/R channel balance<br>4. 🎧 Studio `Bauer / Meier Natural Crossfeed` for headphones (with Bit-Perfect bypass)<br>5. 🌙 Equal-loudness `ISO 226 / RME Loudness Contour` |
+| **v3.6.0** | **"Ravel"** | 📋 Planned | 1. 🧬 Local SQLite `Sonic Object Graph` (*Composition ↔ Performance ↔ Credits ↔ Acoustic Passport*)<br>2. 🎙 Optional on-device `AI Radio Host & Voice Liner Notes` between AI Wave tracks<br>3. 📊 Private local Hi-Res listening analytics & `Musical Time Machine` anniversaries<br>4. 📈 Headless **Last.fm / ListenBrainz** scrobbler + Mac mini `Audiophile Health Monitor` |
+| **v3.7.0** | **"Dvořák"** | 📋 Planned | 1. 💿 `Master Edition Comparator` (automated `DR`, `True Peak` & bandwidth comparison across album remasters)<br>2. 📸 `Vinyl Sleeve & Barcode Camera Scanner → Play in Hi-Res` (`Vision`)<br>3. 🔀 Phase-synchronized multi-room `AMR SyncGroup` (USB DAC + BluOS + WiiM + ESPHome) |
+| **v3.8.0** | **"Mahler"** | 📋 Planned | 1. 🎼 Classical & Jazz `Composer / Work / Recording Matrix` (*Compare Performances*)<br>2. 💿 `Album-First / Vinyl Side A & Side B Ritual Mode`<br>3. 🎛 Ballistic `IEC 60268-17` *McIntosh / Nagra* Analog VU Meters (`Peak Hold`)<br>4. 🕯 `Zero-Photon Pitch-Black OLED & WLED Blackout Mode` for critical dark-room listening<br>5. 📡 Rack mini-display & StreamDeck / E-Ink webhook API (`/api/v1/now-playing`) |
+| **v4.0.0** | **"Rachmaninoff"** | 📋 Planned | 1. 📱 Native **SwiftUI** client for iOS, iPadOS (Live Activities) & watchOS (Digital Crown)<br>2. 🎛 64-bit `Convolution FIR Engine` (`.wav` REW impulses up to 65k taps) + `AutoEQ` (4,000+ headphone profiles)<br>3. 🔊 HTTP REST / CoreMIDI preamp control (`Yamaha MusicCast`, `KEF`, `Cambridge`, `RME ADI-2 MIDI`) + `Auto-Source Input Select`<br>4. 🧬 `Personal Audiogram EQ` hearing calibration<br>5. 🔬 `0.1 LUFS` Level-Matched Blind `A/B & ABX Comparator` + `Reference Acoustic Test Suite` |
 
 ---
 
-## 🔗 Архитектурные цепочки зависимостей релизов
+## 🔗 Architectural Dependency Chains
 
-Все функции разложены строго последовательно от базовых примитивов (уже внедрённых в `v2.1–v3.0`) к производным системам:
+Every milestone builds directly on primitives delivered in earlier releases:
 
-1. **Мастеринг-телеметрия $\rightarrow$ Фасетный поиск $\rightarrow$ Компаратор изданий $\rightarrow$ Слепой ABX-тест**:
-   - `v3.0.0` *(✅ в проде)* внедряет потоковый расчёт **`TT DR Meter`**, **`LUFS / True Peak`**, **`4x ISP`**, **`Phase Correlation`** и двухконтурный **`Late-Night DRC`** с синхронизацией кэша через iCloud Drive.
-   - `v3.4.0` использует накопленные индексы `DR` и частот в фасетном конструкторе **`Roon Focus`**.
-   - `v3.7.0` использует `TT DR Meter + SpectralIntegrityAnalyzer` для автоматического сравнения релизов в **`Master Edition Comparator`**.
-   - `v4.0.0` объединяет `Master Edition Comparator` и выравнивание `0.1 LUFS` в лабораторном **`Level-Matched Blind A/B & ABX Comparator`**.
-2. **Акустический замер и `Exclusive Hog Mode` $\rightarrow$ Свёртка `Convolution FIR` $\rightarrow$ Персональная аудиограмма и `Acoustic Suite`**:
-   - `v3.0.0` *(✅ в проде)* внедряет **`Измерение АЧХ комнаты из PWA`**, **64-битный `Auto-PEQ`**, монопольный тракт **`CoreAudio Exclusive Hog Mode`**, апсемплинг **`HQ PCM NOS / AMX / Metal Sinc до 768 kHz`** и модуляцию **`DSD64–DSD512 DoP (7EC)`**.
-   - `v3.5.0` дополняет 64-битный тракт контурами **`Phase Invert`**, **`Bauer / Meier Crossfeed`** и **`ISO 226 Loudness Contour`**.
-   - `v4.0.0` поверх монопольного тракта добавляет фазолинейную свёртку **`Convolution FIR (.wav REW)`**, базу **`AutoEQ`**, **`Personal Audiogram EQ`** и генератор сигналов **`Reference Acoustic Suite`**.
-3. **Очередь Linn Kazoo & Дизлайки $\rightarrow$ Профиль вкусов $\rightarrow$ Граф знаний $\rightarrow$ Матрица Классики**:
-   - `v3.0.0` *(✅ в проде)* закладывает разделение **Плейлистов / Медиатеки**, чистый облачный транспорт `«Буфер AMR»` + `Direct Cloud ALAC` и геодезический маршрутизатор **`Sonic Bridge`**.
-   - `v3.1.0` создаёт мутации очереди **`Linn Kazoo`**, маркер **`Stop After Current`**, **`DislikedTracksStore`** и кликабельные кредиты в **`Интерактивном буклете`**.
-   - `v3.2.0` и `v3.3.0` опираются на `DislikedTracksStore` для построения **`CloudTasteProfileService`**, **`Discovery Slider`**, **`Multi-Part Work Grouping`** и **`Party Mode`**.
-   - `v3.6.0` сводит кредиты буклетов (`v3.1.0`) и акустические паспорта (`v3.0.0–v3.3.0`) в SQLite-граф **`Sonic Object Graph`** и запитывает от него **`Живое Радио-Шоу / ИИ-Конферансье`**.
-   - `v3.7.0` и `v3.8.0` используют `Sonic Object Graph` для **`Сканера виниловых конвертов`** и **`Матрицы исполнений Классики и Джаза (Composer / Work / Recording Matrix)`**.
-4. **Сетевые рендереры $\rightarrow$ Буфер `Memory Play` $\rightarrow$ Фазосинхронный мультирум**:
-   - `v3.4.0` добавляет стриминг на **`ESPHome (I2S)`** и **`WiiM / UPnP AV (FLAC / LPCM)`**.
-   - `v3.5.0` вводит невытесняемый буфер **`Zero-Jitter RAM Buffer (Memory Play)`**, **`Per-Device Volume Memory`** и **`Safe Startup Volume`**.
-   - `v3.7.0` использует `Memory Play` для точной фазовой синхронизации всех рендереров в **`AMR SyncGroup`**.
-
----
-
-## 🎯 Выполненные релизы (v2.1 – v3.0)
-
-### Релиз v2.2.0 — «Chopin» [Завершен]
-- [x] **Автономный фоллбек-контроллер очереди каталога (`activeCustomQueue` & Smart Auto-Advance)**.
-- [x] **Интерактивная авторизация Apple ID и синхронизация медиатеки (`Music-User-Token`)**.
-- [x] **Roon-like Signal Path Inspector v1 и дистанционный селектор ЦАП в Web UI**.
-
-### Релиз v2.3.0 — «Bach» [Завершен]
-- [x] **Нативный перехват процесса Music.app (`AudioProcessTapService`) и стриминг на Bluesound NODE / BluOS (до 192 кГц / 24-бит)**.
-- [x] **Пре-инспекция формата и Format Lock в `BitPerfectLogMonitor`**.
-- [x] **Сторожевой сервис `MusicAppLifecycleManager`, дисковый кэш `ArtworkDiskCache` и тумблер UPnP / DLNA MediaRenderer**.
-
-### Релиз v2.4.0 — «Brahms» [Завершен]
-- [x] **Персонализация Apple Music: Listen Now, Еженедельные миксы и Персональные станции (`Music-User-Token` Engine)**.
-- [x] **Крупный интерфейс StandBy / TV Mode с полноэкранной Медиатекой, живыми обложками и аппаратной подсветкой WLED DDP (40 FPS)**.
-- [x] **Anti-Stutter, честная детекция AAC (16/44.1) vs ALAC (24/192) и двухуровневый легковесный IPC-опрос (Zero-Stall Poller)**.
-
-### Релиз v2.5.0 — «Liszt» [Завершен]
-- [x] **Спектральный БПФ-анализ на апсемплинг (`SpectralIntegrityAnalyzer`) + персистентный кэш валидации + 32-полосный RTA-анализатор на TV-экране**: проверка истинной полосы частот (`vDSP` 4096-point Hann FFT) и разрядности LSB (`16-bit Padded` vs `24-bit True`), двухуровневое кэширование прошедших валидацию локальных (`persistentID`) и облачных (`catalogId`) треков с облегчённым режимом `visualizationOnly` и адаптивной мобильной версткой карточки в Signal Path Inspector.
-- [x] **DAC Muting Guard & Click-Free Switcher (`CoreAudioDeviceManager`)**: трехфазная бесщелчковая микро-пауза при смене частоты ЦАПа (вынесена в конфигурацию приложения, по умолчанию выключена).
-- [x] **Цифровые буклеты альбомов и полный гид по композициям (`DigitalBookletService` + `PDFKit`)**: многостраничный ридер с полной историей записи альбома, разбором каждой композиции и перечнем сессионных музыкантов, инструментов, продюсеров и авторов.
-- [x] **Авторизация клиентских устройств (PWA Device Auth) и индивидуальное управление Lock Screen / MediaSession (`ClientDeviceManager`)**: генерация постоянного UID устройства, подтверждение новых клиентов из настроек macOS, QR-код авто-авторизации и индивидуальный переключатель экрана блокировки / Dynamic Island.
-- [x] **Управление плейлистами + двуязычная локализация (`RU / EN`)**: просмотр треклиста любых плейлистов каталога и медиатеки, автоопределение английской локали (`en`) для нерусских устройств (Web UI + macOS UI) и адаптация Safe Area.
-- [x] **Нативные функции ИИ на Apple Neural Engine (`NativeMusicCuratorService` + `ArtworkService` — `FoundationModels`, `NaturalLanguage` 512-D `NLEmbedding` & `NLTagger`, `Vision` Saliency)**:
-  - Единый переключатель **«Нативные функции ИИ (Apple Neural Engine)»** в настройках macOS (с автоскрытием на Intel `x86_64`).
-  - Создание подборок по свободному описанию, **бесконечная ИИ-волна**, **«✨ ИИ-подбор по треку»**, закрепление **`★ Избранные вайбы`**, семантическое упорядочивание очереди **«Плавный поток» (`orderSongsBySemanticFlow`)** и нейросетевая палитра обложек **`Vision` Saliency** для ТВ и WLED.
-- [x] **Управление громкостью внешнего усилителя по TCP (`ExternalAmpTCPController`), аппаратная нормализация треков Apple SoundCheck (`AppleSoundCheckService`) и сохранение очереди в плейлист**:
-  - Поддержка TCP-протоколов `Rotel`, `Denon / Marantz`, `Hegel`, `NAD`, `Lyngdorf` при `100% Bit-Perfect` уровне Mac с защитой `Zero-Jump & Max-Volume Guard` и узлом `УСИЛИТЕЛЬ` в «Тракте сигнала».
-  - Аппаратная нормализация `iTunNORM` + перцептивная матрица `ITU-R BS.1770` без деградации потока CoreAudio и умная кривая для низкой громкости (`< 40%`).
-
-### Релиз v3.0.0 — «Wagner» [Завершен — Текущий релиз в проде]
-- [x] **Гибридный 64-bit Studio DSP-движок, монопольный тракт `CoreAudio Exclusive Hog Mode`, модуляция `DSD64–DSD512 DoP` и целочисленный апсемплинг до `768 kHz` (`DSP/` + `CoreAudioDeviceManager` + `DSPPresetManager`)**:
-  - Перехват потока `Music.app` (`AudioProcessTapService`, `mutedWhenTapped`) с прямой подачей в физический USB-ЦАП через собственный `AudioDeviceIOProcID` с флагом `kAudioDevicePropertyHogMode` (`SPSCAtomicRingBuffer` + `RealtimeMachWorker` без аллокаций и блокировок), полная изоляция от системного микшера macOS и мгновенный возврат в **`100% Bit-Perfect Direct Bypass`** с восстановлением нативной частоты источника.
-  - **Модулятор 7-го порядка `7EC Sigma-Delta` (`DSD64 / DSD128 / DSD256 / DSD512 DoP`)** с решётчатым поиском Витерби (`TrellisViterbiModulator`, глубина `M=4..16`, `BiquadLatticeState`, упаковка маркеров `0x05/0xFA` в `DoPFramePacker`).
-  - **Синхронный целочисленный оверсэмплинг `2x–16x` (`44.1 → 705.6 kHz`, `48 → 768 kHz`)**: **Accelerate AMX FP64 (`65 536` тапов)** и **Metal GPU `df64` (`262 144` тапа)** Sinc-фильтры (*Linear Phase* и *Minimum Phase*), а также студийный режим **`HQ PCM NOS`** (ZOH-повтор до `768 kHz` с психоакустическим нойз-шейпером 15-го порядка **`LNS15`**, `NS9` и `TPDF`).
-  - **3-этапный аппаратный верификатор совместимости USB-ЦАПа (`evaluateDSPCapabilities`)**: автоматическая проверка шины транспорта, разрядности (`≥ 24-bit`) и сетки нативных частот с блокировкой `NOS / DSD DoP` на встроенных динамиках Mac, HDMI, AirPlay, Bluetooth и 16-битных USB-гарнитурах (полная защита от срыва вывода и белого шума DoP).
-  - Пользовательские пресеты 64-bit DSP (`DSPPresetManager`) в настройках macOS, PWA, Split-View окне «Тракт сигнала» и `Menu Bar` с автоматической блокировкой при выводе на внешние стримеры (`BluOS / DLNA`), честной индикацией 64-bit DSP в Signal Path Inspector (без ложных алертов о системном ресемплинге) и полной документацией (`docs/DSP_AUDIO_ENGINE_RU.md`).
-- [x] **Быстрое измерение АЧХ комнаты микрофоном iPhone / iPad из PWA и 64-битная коррекция `Auto-PEQ` (`RoomAcousticService` + `RoomEQProcessor`)**:
-  - Генерация калиброванного розового шума Пола Келлета (`20 Hz – 20 kHz`) через локальный ЦАП или сетевые стримеры (`BluOS / DLNA`) с записью отклика микрофоном iPhone / iPad прямо из PWA, расчёт 31-полосного ISO 1/3-октавного спектра (`4096-pt vDSP Welch FFT` с компенсацией MEMS-микрофона iOS), поиск комнатных мод (`20–200 Hz`), график АЧХ (`Измерено / Целевая кривая Harman / С коррекцией`) в окне «Тракт сигнала» и автоматический синтез до 8 каскадов 64-битного минимально-фазового `Auto-PEQ` с превентивным контролем `Headroom` на всех выходах (`Hog Mode`, `Passthrough`, `DLNA`).
-- [x] **Мастеринг-телеметрия реального времени (`TT DR Meter`, `EBU R128 LUFS / True Peak`, `4x ISP Clipping Guard`, `Phase Correlation`), 64-bit мастеринг-реставрация (`MasteringDeClipper` + `Weiss Dynamic De-Esser`) и ночной процессор `Audiophile Late-Night DRC` (`SpectralIntegrityAnalyzer` + `MasteringRestorationService` + `LateNightDRCService`)**:
-  - Расчёт динамического индекса **TT Dynamic Range (`DR4–DR16+`)**, интегральной громкости **EBU R128 (`LUFS` + `True Peak dBTP`)**, 4-кратного детектора межсэмпловых пиков (**`4x ISP Clipping Guard` + 64-bit Headroom**) и фазового коррелометра стереопанорамы (**`Phase Correlation -1..+1`**) с компенсацией перцептивной просадки громкости на перекомпрессированных треках «войны громкости».
-  - **64-битный реставратор клиппинга «Войны громкости» (`MasteringDeClipper` в Pre-DSP до эквалайзера комнаты)**: адаптивный трекер потолка кирпичного лимитера + 256-сэмпловая `Look-Ahead` кубическая Эрмитова `C1`-реконструкция срезанных верхушек волны (до `+4.2 дБ` транзиентных пиков) с режимом **`Авто — Умная защита` (`Smart Guard`)**, автоматически обходящим чистые аудиофильские записи (`DR11+`).
-  - **Мастеринговый де-эссер в стиле *Weiss DAC501 / DS1* (`WeissDynamicDeEsser`)**: уровненезависимый детектор отношения энергии сибилянтов (`6.5–7.0 кГц` Mid-weighted) к основному телу сигнала (`> 180 Гц`) с симметричным RBJ-вычитанием без фазового окраса (`100% Bit-Exact` между сибилянтами, одинаковая точность на шёпоте и в тутти).
-  - 64-битный двухконтурный `ITU-R BS.1770` процессор ночного прослушивания **`LateNightDRCProcessor`** с гейтом шумовой полки **`-63 dBFS`** (без накачки шипения ленты в паузах) и 64-сэмпловым `Look-Ahead` лимитером **`-1.0 dBTP`** (`Деликатный` и `Ночной концерт` с `100% Bit-Perfect` байпасом), плюс трёхпозиционный цикл повтора с бесшовным **`Repeat One` (`🔂`)** в PWA и на ТВ.
-- [x] **Двусторонняя синхронизация с iCloud Drive (`CloudSettingsSyncService`), гранулярные права PWA-устройств и мгновенная громкость стримеров (`< 50 мс`)**:
-  - Автоматическая синхронизация через **iCloud Drive** (`NSFileCoordinator` + `NSMetadataQuery` + локальный импорт/экспорт JSON-снапшотов) для пользовательских пресетов DSP, кэша громкости `Apple SoundCheck`, кэша динамики (`TT DR / LUFS / True Peak`), профилей `Auto-PEQ` комнаты и настроек ночного режима.
-  - Индивидуальные разрешения для каждого авторизованного устройства в `ClientDeviceManager` (`Выбор ЦАП`, `Выбор пресета DSP`, `Замер АЧХ комнаты`, `Ночной режим DRC`) и безынерционная (`< 50 мс`) аппаратная громкость **BluOS** (`GET /Volume?level=`) и **UPnP / DLNA DMR** (`SetVolume`).
-- [x] **ИИ-маршрутизатор «Sonic Bridge» (`NativeMusicCuratorService+SonicBridge`)**:
-  - Построение плавного геодезического маршрута из `10 / 12 / 16` шагов (`0% → 100%`) между двумя любыми треками или артистами (**Точка А → Точка Б**) по сферической интерполяции (`SLERP`) в 512-мерном пространстве `NLEmbedding` с исключением дубликатов и смежных треков одного исполнителя.
-- [x] **Архитектурное разделение `Плейлистов` и `Медиатеки`, полное удаление объектов и настраиваемая Медиатека ТВ-режима (`LibraryService` + `TVLibraryConfigurationStore`)**:
-  - Независимый раздел **`Плейлисты`** (кнопка **`+ В плейлисты`** с мгновенной `0 мс` оптимистичной вставкой) и 4-вкладочный раздел **`Медиатека`** (**`Недавние` / `Артисты` / `Альбомы` / `Треки`**).
-  - Полноценное **удаление из Медиатеки** по треку, альбому, артисту и плейлисту (`removeTrackFromLibrary`, `removeAlbumFromLibrary`, `removeArtistFromLibrary`, `removePlaylistFromLibrary`).
-  - **Детектор полноты альбома в Медиатеке** (`is_complete_in_library`: индикация неполного альбома `Сохранено X из Y` с переходом к полному каталожному изданию или догрузкой недостающих треков в 1 клик).
-  - **Конфигурирование раздела «Медиатека» ТВ-режима** в настройках macOS (`TVLibraryConfigurationStore`) для точного выбора отображаемых плашек разделов и плейлистов, а также строгая транспортная логика **Радио** (отключение `Shuffle` и `Repeat All` при сохранении `Repeat One`).
-- [x] **Гибридный однобуферный движок мгновенного облачного старта (`0.5–0.9 с` Direct Cloud ALAC/Hi-Res + единый `«Буфер AMR»`) с нулевым загрязнением Медиатеки и серверным харденингом**:
-  - **Мгновенный запуск облачных треков за `0.5–0.9 с` в нативном ALAC Lossless и Hi-Res до `192 kHz / 24-bit` (`ra.<songId>`)** с быстрой `~100 мс` RAM-кэшируемой предпроверкой `relate=station`: бесшовный обход редких разговорных интро без `station seed` (ноль прерываний звука и ноль ложных просадок в `AAC`).
-  - Абсолютная изоляция временного воспроизведения через **единственный** переиспользуемый контейнер **`«Буфер AMR»`** (полный отказ от дублирующего плейлиста `«Очередь AMR»` и `4.5 с` копирования треков, прямой запуск `play once=true` прямо из `«Буфер AMR»`), векторизованный опрос буфера за `~1.5 мс` при старте очереди, **`Shuffle`** и `Play Next`, плюс гарантированная зачистка сирот после аварийного завершения (`AMRPendingStagedCatalogTracks`).
-  - Полная ликвидация зависаний `OpenScripting` на Apple Silicon, удержание `Format Lock` при `120 с` gapless-предзагрузке `Music.app`, кэширование пустой медиатеки (`< 1 мс`), закрытие HTTP/SSDP/WebSocket векторов авторизации и раздача статики PWA из RAM со сжатием **RFC 1952 `gzip`** (`907 КБ → 149 КБ`).
+1. **Mastering Telemetry → Faceted Focus → Edition Comparator → Blind ABX Lab**:
+   - `v3.0.0` *(Released)* introduces streaming **`TT DR`**, **`EBU R128 LUFS / True Peak`**, **`4x ISP`**, **`Phase Correlation`**, and **`Late-Night DRC`** synced via iCloud Drive.
+   - `v3.4.0` indexes accumulated `DR` and sample-rate metadata inside **`Roon Focus`**.
+   - `v3.7.0` pairs `TT DR + SpectralIntegrityAnalyzer` to rank album pressings in **`Master Edition Comparator`**.
+   - `v4.0.0` combines `Master Edition Comparator` with `0.1 LUFS` gain matching in the **`Blind A/B & ABX Comparator`**.
+2. **Room Measurement & `Exclusive Hog Mode` → Crossfeed/Loudness → `Convolution FIR` & `AutoEQ`**:
+   - `v3.0.0` *(Released)* establishes **`CoreAudio Exclusive Hog Mode`**, **`DSD512 DoP (7EC)`**, **`HQ PCM NOS 768 kHz`**, and 64-bit **`Room Auto-PEQ`** ([`docs/DSP_AUDIO_ENGINE.md`](docs/DSP_AUDIO_ENGINE.md)).
+   - `v3.5.0` adds **`Phase Invert`**, **`Bauer / Meier Crossfeed`**, and **`ISO 226 Loudness Contour`**.
+   - `v4.0.0` layers **`65k-tap Convolution FIR (.wav REW)`**, **`AutoEQ`**, and **`Personal Audiogram EQ`** atop the same exclusive 64-bit engine.
+3. **Queue Primitives & Dislikes → Cloud Taste Profile → `Sonic Object Graph` → Classical Matrix**:
+   - `v3.0.0` *(Released)* delivers the **Playlists / Library** split, zero-pollution cloud staging, and **`Sonic Bridge`**.
+   - `v3.1.0` adds **Linn Kazoo** queue mutations, **`DislikedTracksStore`**, and clickable booklet credits.
+   - `v3.2.0–v3.3.0` leverage `DislikedTracksStore` for **`CloudTasteProfileService`** and **`Discovery Slider`**.
+   - `v3.6.0–v3.8.0` unify booklet credits and acoustic passports into the SQLite **`Sonic Object Graph`**, powering the **`AI Radio Host`**, **`Vinyl Scanner`**, and **`Classical / Jazz Recording Matrix`**.
+4. **Network Renderers → `Memory Play` → Phase-Locked Multi-Room**:
+   - `v3.4.0` adds **`ESPHome`** and **`WiiM / UPnP AV`** lossless streaming.
+   - `v3.5.0` introduces **`Zero-Jitter RAM Buffer (Memory Play)`** (`mlock`).
+   - `v3.7.0` uses `Memory Play` ring offsets to phase-lock USB DACs and network streamers inside **`AMR SyncGroup`**.
 
 ---
 
-## 🎹 Релиз v3.1.0 — «Schumann»
-**Фокус:** Чистота стерео-мастера против скрытого Dolby Atmos даунмикса, фундаментальные операции очереди в стиле Linn Kazoo, фильтр дизлайков, микро-шаг и питание усилителя, а также синхронное караоке и интерактивный буклет. *(Создаёт фундамент данных для `CloudTasteProfile`, `Roon Focus` и `Sonic Object Graph` в следующих релизах).*
-
-### 1. 🛡 Гарантия чистого стерео-мастера (`Stereo Master Enforcement`)
-- [ ] **Защита от скрытого Dolby Atmos / Spatial Audio даунмикса**:
-  - Автоматическая детекция случаев, когда `Music.app` при включенном `Spatial Audio = Automatic` подсовывает на внешний стерео-ЦАП глухой 48 кГц даунмикс из многоканального Dolby Atmos вместо оригинального студийного 2-канального Hi-Res ALAC мастера, с принудительной фиксацией чистого стерео-потока и предупреждением в «Тракте сигнала».
-
-### 2. ⬆️ Управление очередью в стиле Linn Kazoo (`Play Next`, `Add to Queue`, удаление `×`, подъём `↑`), ⏸ «Остановить после текущего трека» (`Stop After Current`) и переход к Артисту в 1 клик
-- [ ] **Продвинутое управление живой очередью и треками в списках (Linn Kazoo UX)**:
-  - Быстрые кнопки **«↑ Играть следующим»** и **«× Удалить из очереди»** на каждом предстоящем треке в списке Очереди без остановки текущего воспроизведения.
-  - Контекстные действия **`Play Next` (Играть следующим)** и **`Add to Queue` (В конец очереди)**, а также кнопки **`☆` (В избранное)** и **`•••`** на строках треков, альбомов и плейлистов в Поиске, ИИ-подборке и Медиатеке.
-- [ ] **Режим «Остановить после текущего трека» (`Stop After Current Track` & Queue Pause Marker)**:
-  - Переключатель **«⏹ Доиграть текущий трек и остановить»** (в плеере, шторке очереди и на ТВ) и возможность поставить **«Маркер авто-паузы»** после любого трека в очереди, чтобы плеер мягко завершил выбранную композицию до последней ноты и встал на паузу без перехода к следующему треку.
-- [ ] **Переход к Исполнителю в 1 клик с любого экрана (`Artist Deep-Link Everywhere`)**:
-  - Кликабельное имя артиста в основном плеере, мини-плеере, шапке альбома и на экране **StandBy / TV Mode** с мгновенным открытием карточки артиста (Топ-треки, Альбомы, Похожие исполнители).
-
-### 3. 👎 Кнопка «Дизлайк» (`DislikedTracksStore`) + пошаговый контроль усилителя (`±1%` & TCP Standby/Wake)
-- [ ] **Мгновенная блокировка непонравившихся композиций**:
-  - Кнопка **«Дизлайк» (`👎` / «Не предлагать трек»)** в плеере, в режиме **StandBy / TV Mode**, в шторке «Очередь» и в меню `•••` списков: при нажатии на текущем играющем треке он сразу помечается в чёрный список, удаляется из очереди и плеер переключается на следующий трек.
-  - Серверное хранилище исключённых треков (`DislikedTracksStore` по `catalogId`, `ISRC` и нормализованной паре `artist + title`), которое жёстко отфильтровывает заблокированные треки из **ИИ-выдачи (`NativeMusicCuratorService`)**, бесконечной ИИ-волны, «ИИ-подбора по треку» и результатов **Поиска**, а также синхронизируется с Apple Music Ratings API.
-- [ ] **Пошаговая микро-регулировка громкости (`−1%` / `+1%`) и управление питанием усилителя (`Standby / Wake`)**:
-  - Тактильные кнопки **`−` и `+` на 1 шаг (`±1%`)** по краям шкалы громкости в основном плеере и ТВ-режиме для точной ювелирной подстройки внешних усилителей (`Rotel`, `Denon / Marantz`, `Hegel`, `NAD`, `Lyngdorf`) и прямое управление питанием по TCP (**`Power On / Standby`**).
-
-### 4. 🎤 Синхронизированные тексты песен (Time-Synced Lyrics & Sing-Along) и 📖 Интерактивный Roon-буклет
-- [ ] **Построчное и пословное караоке в реальном времени**:
-  - Извлечение синхронизированных таймкодов строк (`TTML` / `LRC`) с плавной кинетической прокруткой, подсветкой активной строки и перемоткой к куплету по клику.
-- [ ] **«Живой» интерактивный буклет (`Interactive Liner Notes & Credits` в стиле Roon)**:
-  - Каждое имя продюсера, композитора, сессионного музыканта, студии записи, лейбла или жанра внутри цифрового буклета становится **кликабельным тегом-пилюлей**, открывающим дискографию или поиск по этому участнику в каталоге Apple Music, а нажатие на карточку композиции внутри буклета мгновенно запускает этот трек.
-
----
-
-## 🎻 Релиз v3.2.0 — «Mendelssohn»
-**Фокус:** Нейросетевая персонализация вкусов (`CloudTasteProfileService` на базе `DislikedTracksStore`), живой детектор инструментов `SoundAnalysis`, осциллограмма `Waveform Seekbar` и развитие ТВ-режима (`Cover Flow`, `Up Next`, `Party Mode`).
-
-### 1. 🎸 Живой нейросетевой детектор инструментов и вокала в реальном времени (`SoundAnalysis` Neural Engine)
-- [ ] **Распознавание звучащих партий в реальном времени на Apple Neural Engine (`SNClassifySoundRequest` + `AudioProcessTapService`)**:
-  - Потоковая классификация PCM-сигнала из `Music.app` без нагрузки на CPU (303 встроенных класса macOS `SoundAnalysis`): определение активных в данный момент инструментов (*Рояль / Пианино*, *Электрогитара*, *Акустическая гитара*, *Бас-гитара*, *Ударные*, *Саксофон / Духовые*, *Скрипка / Виолончель*, *Синтезатор*, *Мужской / Женский вокал*, *Хор*, *Концертная запись*) с выводом индикаторов в «Тракте сигнала», Буклете и на ТВ.
-
-### 2. 🧠 Облачный профиль вкусов слушателя (`CloudTasteProfileService`) и Discovery-персонализация ИИ-куратора
-- [ ] **Анализ реальных музыкальных предпочтений из облака Apple Music и локальной медиатеки**:
-  - Автоматическое построение взвешенной карты интересов слушателя (**Cloud Taste Profile**) по полному срезу данных (`Heavy Rotation`, `★ Loved`, плейлисты, `played count`) с глубокой классификацией субжанров: **саундтреки к фильмам и играм (OST / Score)**, **аниме-саундтреки (Anime OST / J-Rock / Touhou / Doujin / Vocaloid / Shibuya-kei)**, **метал и тяжёлая сцена (Progressive / Symphonic / Industrial / Djent / Post-Metal)**, **электроника (IDM / Synthwave / Cyberpunk / Drum & Bass / Dark Electro)** и **экспериментальная музыка**.
-- [ ] **Адаптивное облако ИИ-тегов (`75% Вкусы слушателя / 25% Смежные открытия`) и Discovery-приоритет новых имён**:
-  - Динамическая генерация облака промптов в Поиске и на ТВ строго вокруг реальных жанровых кластеров слушателя (`75%`) и свежих кросс-жанровых пересечений (`25%`), с приоритетом новых исполнителей, которых ещё нет в медиатеке пользователя (с учётом фильтра `DislikedTracksStore` из `v3.1.0`).
-
-### 3. 🕒 «Недавние ИИ-волны» и 🪄 живые нейро-подсказки («✨ Дополнить промпт») в ИИ-поиске
-- [ ] **Быстрый возврат к предыдущим настроениям и интерактивный ассистент промптов**:
-  - Серверное сохранение последних 8–10 запущенных ИИ-сессий с выводом компактного блока **«Недавние волны»** для перезапуска в 1 тап или закрепления в `★ Избранные вайбы`.
-  - Живые семантические подсказки (`NLEmbedding` соседи) и кнопка **«✨ Дополнить промпт»** при вводе в строку ИИ-поиска (*«+ без вокала»*, *«+ Fender Rhodes»*, *«+ широкая сцена»*, *«+ 1970-е»*).
-
-### 4. 📈 Полная осциллограмма трека в полосе перемотки (`Waveform Seekbar`), 📺 виджет «Далее в очереди» (`Up Next`) и пульт ДУ (`StandBy Mode`)
-- [ ] **Амплитудная осциллограмма трека в полосе прогресса (`Roon-style Waveform Seekbar`)**:
-  - Отрисовка реальной RMS-огибающей (`Waveform`) всего трека в полосе перемотки плеера и режима ТВ (`AVAudioFile` + `vDSP` для локальных/кэшированных дорожек и прогрессивный контур для потоков) для мгновенной визуальной оценки динамики, интро, соло и кульминаций.
-- [ ] **Интерактивный баннер следующего трека и горячие клавиши пульта ДУ**:
-  - Виджет **«Далее: *Исполнитель — Трек*»** (на базе очереди `v3.1.0`) с мини-обложкой и переходом в 1 тап на ТВ и в плеере, полноэкранный ТВ-оверлей очереди и поддержка клавиатуры / пультов ДУ (`Пробел`, `←`/`→`, `I`, `M`, `Q`, `F`, `B`).
-
-### 5. 🌌 Визуальная стена обложек (`Tactile Cover Flow`) и 👥 Party Mode
-- [ ] **Визуальная стена обложек для большого ТВ и iPad (`3D Cover Flow / 4K Mosaic Wall`)**:
-  - Полноэкранный браузер обложек альбомов (перелистывание конвертов пластинок в стиле классического *Cover Flow* и 4K-стены *Roon / Kaleidescape*) с мгновенным разворотом альбома в Цифровой буклет по клику.
-- [ ] **Party Mode (Гостевой доступ по QR-коду)**:
-  - Быстрый вход для гостей по QR-коду с экрана ТВ с правами только на поиск и добавление треков в очередь «Далее» (`Add to Queue` из `v3.1.0`) при полной защите 100% Volume Lock и настроек ЦАПа.
-
----
-
-## 📻 Релиз v3.3.0 — «Tchaikovsky»
-**Фокус:** Глубокая настройка открытий в ИИ-волне (`Discovery Slider` поверх `CloudTasteProfileService`), защита целостности многочастных произведений, гармоническое сведение очереди по тональности и синхронный таймер сна с освещением WLED.
-
-### 1. 🎚 Тюнер радиостанции («От чартов к андерграунду») и фильтр «Чистый студийный каталог»
-- [ ] **Интеллектуальный ползунок глубины и защита от мусорных релизов**:
-  - Настройка характера радиостанции и ИИ-волны: от `0%` (*«Только главные хиты»*) через `50%` (*«Баланс»*) до `100%` (*«Глубокие раритеты, B-Sides и андерграунд»*).
-  - Встроенный фильтр анти-мусора в `NativeMusicCuratorService` (автоматический отсев `Karaoke`, `Tribute`, `8-Bit`, `Lullaby`, `Made Famous By`, сборников `Various Artists`) с приоритетом оригинальных номерных, Remastered и Deluxe студийных изданий.
-
-### 2. 🎻 Группировка многочастных произведений (`Multi-Part Work Grouping & Gapless Live Guard`) и 🎼 Гармоническое сведение очереди (`Harmonic Queue`)
-- [ ] **Неделимая связка многочастных произведений и концертных альбомов (`Linked Work Lock`)**:
-  - Автоматическое распознавание связанных частей сюит, симфоний и концептуальных альбомов (*Pt. 1 + Pt. 2*, *I. Allegro — II. Adagio*, *Live*-альбомы) при перемешивании (`Shuffle`) и ИИ-подборе, чтобы части одного произведения всегда воспроизводились слитно и в правильном порядке.
-- [ ] **Диджейская упорядоченность треков по тональности и темпу**:
-  - Анализ темпа (`BPM`) и музыкальной тональности треков очереди по колесу Камелота (*Camelot Wheel*) с авто-сортировкой «Harmonic Flow» для плавных переходов.
-
-### 3. 🌅 Таймер сна и закатный фейд освещения гостиной (`Sleep Timer & WLED DDP Sunset Fade`)
-- [ ] **Синхронное затухание музыки и освещения гостиной**:
-  - Таймер сна (15 / 30 / 45 / 60 мин или «до конца текущего альбома»), который за последние минуты плавно уводит подсветку **WLED DDP** в тёплый закатный спектр, мягко снижает громкость и ставит плеер на паузу.
-
-### 4. 🎙️ Понимание естественных команд в поиске (`NaturalLanguage` Intent Parser)
-- [ ] **Семантический разбор голосовых и текстовых команд управления (`NLTagger` + `NLEmbedding`)**:
-  - Автоматическое распознавание намерений (`intent`) при вводе фраз вроде *«включи радио по Depeche Mode»*, *«поставь альбом Random Access Memories со 2-го трека»* или *«перемешай мою медиатеку»* с мгновенным выполнением действия.
-
----
-
-## 🗂 Релиз v3.4.0 — «Grieg»
-**Фокус:** Многомерная фильтрация коллекции `Roon Focus` (по метрикам `DR`, `Sample Rate`, жанрам и истории из `v3.0.0–v3.3.0`), расширение сетевого Lossless-транспорта на ESPHome и WiiM, интеграция с Home Assistant и управление из `Menu Bar`.
-
-### 1. 🔍 Многоуровневый фильтр-конструктор `Roon Focus` + Живые закладки (`Smart Bookmarks`) и смарт-плейлисты на лету
-- [ ] **Интерактивный фасетный конструктор срезов коллекции (`Roon Focus` с поддержкой `+ Включить / − Исключить`)**:
-  - Сборка сложных многомерных фильтров по тегам-пилюлям в несколько касаний на базе накопленных метрик: `[+ Десятилетие: 1970-е]` + `[+ Формат: Hi-Res 96–192 kHz]` + `[+ Динамика: DR12+]` + `[− Жанр: Pop]` + `[+ Не слушал > 3 месяцев]`.
-  - Сохранение любого среза как **«Живой закладки» (`Smart Bookmark`)** на главном экране и в ТВ-режиме с автоматическим обновлением состава треков, плюс готовые смарт-плейлисты (*«Забытые шедевры»*, *«Deep Cuts»*, *«Чистый Hi-Res & High DR»*).
-
-### 2. 📡 Стриминг аудио на устройства ESPHome (ESPHome Audio Renderer)
-- [ ] **Автообнаружение нод ESPHome по mDNS (`_esphomelib._tcp.`) и HTTP WAV-стриминг**:
-  - Поиск плат ESP32 / ESP32-S3 с I2S ЦАП (`PCM5102A`, `MAX98357A`, `TAS5805M` / Louder-ESP32, Home Assistant Voice PE), отдача потока `/stream/esphome.wav` (`16-bit / 44.1–48 kHz`) и управление через ESPHome Native API (`6053`).
-
-### 3. 🔀 Расширение Lossless Stream Relay на WiiM / UPnP AV
-- [ ] **Трансляция несжатого звука по локальной сети**:
-  - Передача аудиопотока с Mac по протоколам FLAC / LPCM до 24-бит / 192 кГц на стримеры **WiiM** (*Mini, Pro, Pro Plus, Ultra*) и устройства UPnP AV / DLNA MediaRenderer.
-
-### 4. 🏡 Умный дом и автоматизация питания тракта (Home Assistant & MQTT / WebSocket)
-- [ ] **Двусторонняя интеграция с Home Assistant**:
-  - Публикация статуса воспроизведения и параметров потока (`Sample Rate`, `Bit Depth`, `DR`, `LUFS`) в MQTT / WebSocket + триггеры автоматического включения и отключения питания усилителя (**Smart Amp Trigger**).
-
-### 5. 🖥 Быстрый запуск «★ Избранных вайбов» и «ИИ-подбора по треку» из меню `Menu Bar` macOS
-- [ ] **Управление ИИ-волнами прямо из системной строки меню Mac**:
-  - Подменю **«✨ Запустить ИИ-волну»** в иконке приложения в `Menu Bar` macOS со списком всех закрепленных пользователем `★ Избранных вайбов` и пунктом **«✨ ИИ-микс по текущему треку»** без необходимости открывать браузер.
-
----
-
-## 🎛 Релиз v3.5.0 — «Debussy»
-**Фокус:** Бескомпромиссная буферизация в оперативной памяти (`Zero-Jitter Memory Play` — фундамент для синхронного мультирума `v3.7.0`), индивидуальная память и защита громкости под каждый выход/наушники и прецизионные 64-битные контуры ЦАПа.
-
-### 1. ⚡ Zero-Jitter RAM Buffer (`Memory Play` в стиле Audirvana / Euphony)
-- [ ] **Воспроизведение из заблокированной оперативной памяти (`mlock` / Non-Pageable RAM)**:
-  - Полная предзагрузка и декодирование текущего и следующего трека очереди в заблокированные страницы оперативной памяти (`mlock`) до начала звучания при локальном воспроизведении и сетевой трансляции на BluOS / WiiM / UPnP DMR (`v3.4.0`) — полное исключение дисковых обращений к SSD и сетевых микро-задержек во время проигрывания.
-
-### 2. 🎚 Индивидуальная память громкости под выходы/наушники (`Per-Device Volume Memory`) и 🛡 Защита слуха и акустики (`Safe Startup Volume & Sudden Jump Guard`)
-- [ ] **Персональная память безопасного уровня для каждого `AudioDeviceUID` и сетевого рендерера**:
-  - Автоматическое сохранение и мгновенное восстановление индивидуальной громкости, статуса `100% Volume Lock` и потолка `Max Cap` при переключении между чувствительными IEM-наушниками, полноразмерными наушниками, внешним ЦАПом и стримерами BluOS / WiiM.
-- [ ] **Предохранитель стартовой громкости и защита от случайных скачков (`Comfort Startup Limit & Max Step Guard`)**:
-  - Автоматический возврат громкости усилителя к безопасному стартовому уровню (например, `35%`) после длительного простоя (`> 2 ч`), если до этого она была оставлена на высокой отметке, и защита от случайного резкого прыжка громкости (`> +15%` за одно касание слайдера на тачскрине).
-
-### 3. 🎛 Профили выходов ЦАП + Инверсия фазы (`0°/180°`) и тонкий баланс (`0.1 dB`)
-- [ ] **Быстрые пресеты тракта и прецизионная калибровка сцены**:
-  - Профили в один клик (*«Напольная акустика»*, *«Наушники»*, *«Ночной режим»*), кнопка переключения абсолютной полярности сигнала **`0° / 180° Phase Invert`** и калибровка центра стереосцены `L/R Trim` с шагом `0.1 dB` под асимметрию комнаты.
-
-### 4. 🎧 Студийный бинауральный кроссфид Бауэра / Мейера (`Bauer / Meier Natural Crossfeed`)
-- [ ] **Естественная сцена в наушниках с аппаратным байпасом**:
-  - Опциональный фазолинейный 64-битный DSP для наушников, снимающий утомляющий эффект «звука внутри головы» на старых записях с жёстким стерео-разделением (имитация акустики колонок под углом 30° с мгновенным **100% Bit-Perfect Bypass** для АС).
-
-### 5. 🌙 Ночная тонкомпенсация Флетчера–Мэнсона (`ISO 226 / RME Loudness Contour`)
-- [ ] **Полноценный бас и прозрачный верх на малой громкости**:
-  - Адаптивный психоакустический контур по кривым равной громкости **ISO 226** (в стиле ЦАПов *RME ADI-2*), компенсирующий потерю чувствительности слуха к суббасу и ВЧ при тихом вечернем прослушивании.
-
----
-
-## 📊 Релиз v3.6.0 — «Ravel»
-**Фокус:** Построение локальной графовой базы знаний `Sonic Object Graph` (объединяющей кредиты буклетов из `v3.1.0` и акустические паспорта `DR/LUFS/BPM` из `v3.0.0–v3.3.0`), «Живое Радио-Шоу / ИИ-Конферансье» по данным графа, слушательская аналитика, «Машина времени» и мониторинг здоровья сервера.
-
-### 1. 🧬 Локальный граф аудио-знаний (`Sonic Object Graph`) и «Музыкальная ДНК» в буклете и на ТВ
-- [ ] **Локальная графовая база данных музыкальных связей и акустических паспортов (`Sonic Object Graph` на базе SQLite)**:
-  - Переход от плоских тегов к связанному графу сущностей в стиле Roon: `Произведение (Composition)` ↔ `Исполнение (Performance)` ↔ `Участники (Музыканты, Дирижёр, Продюсер, Звукорежиссёр, Мастеринг-инженер)` ↔ `Студия записи` ↔ `Лейбл (ECM, Blue Note, Chesky, Deutsche Grammophon и др.)` ↔ `Акустический паспорт трека (True Lossless спектр, DR-индекс, LUFS, BPM, Тональность)`.
-  - Фоновое обогащение медиатеки связями из Apple MusicKit, цифровых буклетов и открытых энциклопедий (MusicBrainz / Discogs) с мгновенной выборкой перекрёстных пересечений (например: *«Все альбомы, сведённые этим инженером на этом лейбле с DR ≥ 12»*).
-- [ ] **Кликабельные связи по участникам записи + нейро-аннотация буклета**:
-  - Постоянный доступ к кнопке **«Цифровой буклет и участники записи»** из меню `•••` и экрана ТВ для любого играющего трека/альбома, карточка **«✨ ИИ-резюме и фокус прослушивания»** и сборка **«Плейлиста музыканта / продюсера / лейбла»** в один клик.
-
-### 2. 🎙 «Живое Радио-Шоу / ИИ-Конферансье» (`AI Radio Host & Voice Liner Notes` на нативном синтезе macOS)
-- [ ] **Опциональный режим ночного аудиофильского радиоведущего по данным `Sonic Object Graph`**:
-  - При включении тумблера раз в 3–4 трека на стыке композиций в ИИ-волне (пока мягко затухает предыдущий трек и вступает интро следующего) за 6–8 секунд спокойным голосом (`AVSpeechSynthesizer` Personal/Premium Voice без облачных задержек) рассказывает один интересный факт из `Sonic Object Graph` и цифрового буклета — об истории записи следующего трека, сессионных музыкантах, студии или лейбле.
-
-### 3. 📊 Локальная Hi-Res статистика (AMR Analytics) и 🕰 «Машина времени» (`Musical Time Machine`)
-- [ ] **Приватный дашборд слушателя на Mac mini**:
-  - Суммарные часы чистого Lossless / Hi-Res звука, распределение по частотам (44.1 vs 96 vs 192 кГц), средний динамический диапазон (`DR`) коллекции, топ альбомов и артистов.
-- [ ] **«Машина времени» (`Этот день в истории музыки и вашей коллекции`)**:
-  - Еженедельная подборка альбомов-юбиляров из медиатеки и любимых жанров (вышедших ровно 10, 20, 30, 40 или 50 лет назад) и ретроспектива *«Что вы слушали в это время год / 3 года назад»*.
-
-### 4. 📈 Автономный скробблер в Last.fm / ListenBrainz и 🩺 Мониторинг «здоровья» аудиотракта Mac mini
-- [ ] **Серверный учет прослушиваний 24/7**:
-  - Автономная отправка скробблов напрямую с Mac mini в *Last.fm* и *ListenBrainz* с оффлайн-очередью без сторонних приложений.
-- [ ] **Аппаратная диагностика headless-сервера (`Audiophile Health Monitor`)**:
-  - Панель телеметрии: температура SoC Mac mini, задержка буфера CoreAudio (`Roundtrip Latency` в мс), счётчик отсутствия дропаутов (`Zero Buffer Underruns`) и стабильность шины USB-ЦАПа.
-
----
-
-## 📜 Релиз v3.7.0 — «Dvořák»
-**Фокус:** Прикладные инструменты поверх графа `Sonic Object Graph` (`v3.6.0`) и буфера `Memory Play` (`v3.5.0`): компаратор мастерингов альбома, сканер физических пластинок/CD и синхронный мультирум.
-
-### 1. 💿 Аудиофильский компаратор изданий альбома (`Master Edition Comparator & Editions Picker`)
-- [ ] **Автоматическое инструментальное сравнение мастерингов разных лет и переключение изданий**:
-  - Группировка всех версий одного альбома в Apple Music (*Original Release*, *Remastered*, *Deluxe*, *Hi-Res 24/192*) на карточке альбома.
-  - Инструментальное DSP-сопоставление изданий по 15-секундным превью через `SpectralIntegrityAnalyzer + TT DR Meter` (`v3.0.0`): расчёт реального крест-фактора (`DR`), пикового запаса (`True Peak dBTP`) и истинной граничной частоты спектра с автоматическим вердиктом (например: *«🏆 Original 1985: DR14 (честный мастер) vs Remaster 2015: DR6 (компрессия + клиппинг)»*).
-
-### 2. 📸 Распознавание физических виниловых конвертов и CD камерой телефона (`Vinyl Sleeve & Barcode Scanner → Play in Hi-Res`)
-- [ ] **Мгновенный переход от физической пластинки на полке к Hi-Res потоку**:
-  - Кнопка сканера в поиске на телефоне/iPad: наведение камеры на обложку винила или штрихкод издания за 0.3 с распознаёт релиз через нативный `Vision` (`VNRecognizeTextRequest` + `VNDetectBarcodesRequest`) и открывает именно это издание в `Sonic Object Graph` и каталоге Apple Music.
-
-### 3. 🔀 Синхронный мультирум (`AMR SyncGroup`)
-- [ ] **Фазовая синхронизация комнат на базе буфера `Memory Play` (`v3.5.0`)**:
-  - Объединение локального USB-ЦАПа и сетевых рендереров (BluOS, WiiM, ESPHome из `v3.4.0`) в единую группу с индивидуальной компенсацией задержки буфера (`-500...+500 ms`).
-
----
-
-## 🎻 Релиз v3.8.0 — «Mahler»
-**Фокус:** Матрица произведений и интерпретаций классики/джаза (на базе графа `Sonic Object Graph`), вдумчивый виниловый ритуал прослушивания альбомов, баллистические стрелочные индикаторы `VU Meter`, режим полной темноты `Blackout` и API для внешних дисплеев стойки.
-
-### 1. 🎼 «Режим Классики и Джазовых Стандартов» (`Composer / Work / Recording Matrix` в стиле *Apple Music Classical & Roon*)
-- [ ] **Мгновенный поиск и сравнение всех интерпретаций одного произведения (`Compare Performances`)**:
-  - Опираясь на связи `Composition ↔ Performance` в графе `Sonic Object Graph` (`v3.6.0`), кнопка **«🎻 Другие исполнения этого произведения»** на любом треке или в буклете находит все знаковые записи этой же симфонии, сонаты или джазового стандарта в каталоге Apple Music (с сортировкой по году записи, дирижёру/солисту, лейблу и индексу `DR`).
-
-### 2. 💿 «Виниловый ритуал» и режим прослушивания альбома целиком (`Album-First / Vinyl Side A & Side B Mode`)
-- [ ] **Режим вдумчивого прослушивания пластинки без клиповой суеты**:
-  - Разбивка альбома на оригинальные стороны винила и диски (`Side A / Side B / Disc 1 / Disc 2`), опциональная пауза между сторонами пластинки и автоматический разворот полноэкранного Цифрового буклета.
-
-### 3. 🎛 Классические стрелочные индикаторы уровня (`McIntosh / Nagra Analog VU Meters + Peak Hold`) на ТВ и планшете
-- [ ] **Эталонная баллистика стрелочных индикаторов по стандарту IEC 60268-17**:
-  - Переключатель визуализатора в режиме **StandBy / TV Mode** и плеере (`32-Band RTA ↔ Analog VU Meters`): отрисовка пары левого и правого стрелочных индикаторов уровня (`dBVU` / `dBFS`) с истинной физикой инерции стрелки (300 мс интеграция / 300 мс возврат) и пиковыми светодиодами перегрузки (`Peak Hold`) в винтажной/студийной эстетике *Nagra / McIntosh / Technics*.
-
-### 4. 🕯 Режим «Полная темнота для критического прослушивания» (`Zero-Photon / Pitch-Black OLED & WLED Blackout Mode`)
-- [ ] **Отключение паразитной засветки комнаты для максимального фокуса на 3D-сцене**:
-  - Кнопка **«🌑 Тёмный зал (Blackout)»** на ТВ и планшете: гасит подсветку `WLED DDP` в `0` и переводит экран ТВ/OLED-планшета в `99.5%` абсолютный чёрный цвет (`#000000`), оставляя только едва заметную тёмно-янтарную нить прогресса и микро-подпись трека (с мгновенным пробуждением по касанию или пульту).
-
-### 5. 📡 Внешний API и виджеты для аппаратных мини-дисплеев (`Now Playing Webhook / Matrix / E-Ink / StreamDeck API`)
-- [ ] **Открытый JSON/WebSocket интерфейс и ультра-компактный экран для внешних дисплеев стойки**:
-  - Публичный эндпоинт `/api/v1/now-playing` и `/api/v1/signal-path` + специальный высококонтрастный скин для малых 5–7" экранов у аудиостойки (Raspberry Pi / ESP32-S3, *Elgato StreamDeck*, E-Ink рамок) с отображением обложки, частоты ЦАПа, `DR`-индекса и стрелок `VU Meter`.
-
----
-
-## 🏛 Релиз v4.0.0 — «Rachmaninoff» (Native Apple Ecosystem, Convolution FIR, Preamp Bridge & Blind ABX Lab)
-**Фокус:** Нативная мобильная экосистема Apple (iOS / iPadOS / watchOS), фазолинейная свёртка импульсов помещения REW и база наушников `AutoEQ` поверх `Exclusive Hog Mode`, расширение моста предусилителей на HTTP/CoreMIDI, персональная аудиограмма слуха и лабораторное слепое ABX-сравнение.
-
-### 1. 📱 Нативное мобильное приложение для iOS / iPadOS / watchOS
-- [ ] Клиент на **SwiftUI** с мгновенным откликом, поддержкой **Live Activities / Dynamic Island** на iPhone, виджетами и управлением с **Apple Watch** (включая регулировку коронкой *Digital Crown*).
-
-### 2. 🎛 64-битный свёрточный движок (`Convolution FIR Engine`) для импульсов REW и база наушников `AutoEQ`
-- [ ] **Фазолинейная FIR-коррекция помещения и наушников поверх `Exclusive Hog Mode` (`v3.0.0`)**:
-  - Аппаратно-ускоренная 64-bit `vDSP` FFT Overlap-Save свёртка внешних импульсных откликов помещения (импорт `.wav` FIR-фильтров до 65 536 тапов из **Room EQ Wizard / REW**) для одновременной коррекции АЧХ и ФЧХ, а также встроенная база профилей **AutoEQ (4000+ моделей наушников)**.
-
-### 3. 🔊 Расширение моста аппаратной громкости на HTTP REST / CoreMIDI и `Auto-Source Input Select`
-- [ ] **Поддержка HTTP REST и USB CoreMIDI предусилителей / ЦАПов**:
-  - Дополнение текстового TCP-моста (`v2.5.0`) сетевыми HTTP/REST API (**Yamaha MusicCast**, **KEF Wireless**, **Cambridge Audio StreamMagic**) и прямым управлением студийными ЦАПами **RME ADI-2 DAC / Pro** по протоколу **CoreMIDI SysEx** при сохранении эталонного уровня `0 dBFS` на выходе Mac.
-- [ ] **Автоматическое переключение входов усилителя / ЦАПа при старте воспроизведения (`Auto-Source Input Select`)**:
-  - Автоматический выход усилителя из `Standby`, переключение на заданный цифровой/аналоговый вход Mac (`PC-USB`, `COAX1`, `OPT1`) по TCP/HTTP при нажатии `Play` в AMR и возврат к безопасному уровню громкости (`Safe Startup Volume` из `v3.5.0`).
-
-### 4. 🧬 Персональный профиль частотной чувствительности слуха (`Personal Audiogram EQ / Mimi-style Hearing Profile`)
-- [ ] **Индивидуальная калибровка под слух пользователя**:
-  - 3-минутный интерактивный тест левого и правого уха в приложении с построением индивидуальной кривой чувствительности ВЧ (`10–16 kHz`) и деликатной компенсацией возрастной/индивидуальной асимметрии слуха на базе 64-битного DSP (`v3.0.0`).
-
-### 5. 🔬 Слепое A/B-тестирование с выравниванием громкости (`Level-Matched A/B & ABX Comparator`) и 🔊 Генератор тестовых сигналов (`Reference Acoustic Suite`)
-- [ ] **Лабораторное сравнение ремастеров, апсемплеров и профилей ЦАП с точностью до `0.1 LUFS`**:
-  - Выбор двух версий одного трека из `Master Edition Comparator` (`v3.7.0`) или двух настроек фильтра DSP (`v3.0.0` / `v4.0.0`) с синхронизацией таймкода, автоматическим выравниванием громкости до **`0.1 LUFS`** и бесшовным слепым переключением `A ↔ B / ABX` одной кнопкой на лету.
-- [ ] **Встроенный лабораторный инструментарий проверки тракта и помещения**:
-  - Тест абсолютной и поканальной фазировки АС (`In-Phase / Out-of-Phase`), плавный басовый синус-свип (`20 Hz → 200 Hz`) с индикацией частоты на ТВ и расчётом времени затухания реверберации (`RT60`), а также таймер прогрева новых наушников/акустики розовым шумом (`Pink Noise Burn-in`).
-
----
-
-*Примечание: План строго соблюдает принципы Bit-Perfect аудио (100% volume lock, zero DSP by default с мгновенным аппаратным байпасом) и не требует Accessibility GUI API для работы на headless Mac mini.*
+*Note: Every planned feature preserves AMR's core invariant — 100% Bit-Perfect audio by default with instant zero-DSP hardware bypass and headless Mac mini operation without Accessibility GUI scripting.*

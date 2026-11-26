@@ -173,12 +173,40 @@
   display: none !important;
 }
 
-@media (max-width: 767px) and (min-height: 800px) {
-  .player-panel {
-    justify-content: space-evenly;
+@media (max-width: 767px) and (min-height: 541px) {
+  .player-top-header {
+    margin-bottom: 0;
+  }
+  .artwork-container {
+    flex: 0 1 auto;
+    min-height: 0;
+    margin-bottom: 0;
   }
   .artwork-wrapper {
-    max-width: min(400px, 88vw, 45vh);
+    width: min(100%, 360px, 36.5vh);
+    max-width: min(100%, 360px, 36.5vh);
+    max-height: 100%;
+  }
+  .track-meta {
+    margin-bottom: 0;
+  }
+  .scrubber-section {
+    margin-bottom: 0;
+  }
+  .transport-controls {
+    margin-bottom: 0;
+  }
+  .volume-section {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 767px) and (min-height: 800px) {
+  .artwork-wrapper {
+    width: min(100%, 400px, 42vh);
+    max-width: min(100%, 400px, 42vh);
+    max-height: 100%;
   }
 }
 
@@ -252,7 +280,7 @@
 /* Ensure mobile scroll content has clearance for docked mini-player + bottom tab bar */
 @media (max-width: 767px), (max-height: 540px) {
   .scroll-pane {
-    padding-bottom: calc(var(--safe-bottom) + 140px);
+    padding-bottom: calc(130px + var(--mobile-bottom-strip));
   }
 }
 
@@ -550,7 +578,7 @@
   display: none !important;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
   .library-section-header {
     flex-direction: column;
     align-items: stretch;
@@ -606,7 +634,7 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
-    padding-bottom: calc(var(--safe-bottom) + 140px);
+    padding-bottom: calc(130px + var(--mobile-bottom-strip));
   }
 
   .playlist-card {

@@ -34,10 +34,10 @@ extension NativeMusicCuratorService {
         var extraQueries: [String] = []
 
         if !PlaybackRouter.shared.isTestingEnvironment,
-           let catalogRes = await searchCatalogWithTimeout(query: trimmed, storefront: storefront, limit: 8) {
-            let songs = (catalogRes["songs"] as? [[String: Any]]) ?? []
+           let catalogRes = await searchCatalogWithTimeout(query: trimmed, storefront: storefront, limit: 12) {
+            let songs = Self.prioritizeBucketSongsByQuality((catalogRes["songs"] as? [[String: Any]]) ?? [], shuffleWithinTiers: false)
             let artists = (catalogRes["artists"] as? [[String: Any]]) ?? []
-            let albums = (catalogRes["albums"] as? [[String: Any]]) ?? []
+            let albums = CloudCatalogService.prioritizeSearchAlbums((catalogRes["albums"] as? [[String: Any]]) ?? [], query: trimmed)
 
             if let firstArtist = artists.first {
                 resolvedArtist = (firstArtist["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -150,7 +150,7 @@ extension NativeMusicCuratorService {
         guard isEnabled else {
             return [
                 "status": "disabled",
-                "message": "AI-куратор отключён в настройках Mac",
+                "message": AMRLocalization.tr("AI Curator is disabled in Mac settings", "AI-куратор отключён в настройках Mac"),
                 "songs": []
             ]
         }
@@ -236,10 +236,11 @@ extension NativeMusicCuratorService {
                         guard let self = self, !Task.isCancelled else {
                             return BridgeSearchBucket(index: qIdx, songs: [])
                         }
-                        guard let res = await self.searchCatalogWithTimeout(query: q, storefront: effectiveSf, limit: 6) else {
+                        guard let res = await self.searchCatalogWithTimeout(query: q, storefront: effectiveSf, limit: 8) else {
                             return BridgeSearchBucket(index: qIdx, songs: [])
                         }
-                        let songs = (res["songs"] as? [[String: Any]]) ?? []
+                        let rawSongs = (res["songs"] as? [[String: Any]]) ?? []
+                        let songs = Self.prioritizeBucketSongsByQuality(rawSongs, shuffleWithinTiers: false)
                         return BridgeSearchBucket(index: qIdx, songs: songs)
                     }
                 }
@@ -292,7 +293,9 @@ extension NativeMusicCuratorService {
         guard !solvedSongs.isEmpty else {
             return [
                 "status": "error",
-                "message": "Не удалось построить маршрут: подходящие треки не найдены",
+                "message": preferEnglish
+                    ? "Failed to build Sonic Bridge: no matching tracks found"
+                    : "Не удалось построить маршрут: подходящие треки не найдены",
                 "songs": [[String: Any]](),
                 "step_count": 0
             ]

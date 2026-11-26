@@ -179,6 +179,8 @@ extension QueueManager {
             PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
             PlaybackStateStore.shared.lastKnownPosition = 0.0
             PlaybackStateStore.shared.scheduledSmartTransitionStart = nil
+            PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.removeAll()
+            PlaybackStateStore.shared.activeOverlapTransition = nil
             PlaybackStateStore.shared.currentOriginalPlaylistName = (t.isLocal == true || MusicKitManager.shared.hasUserToken) ? "Очередь AMR" : nil
 
             // Update upcoming & history tracks
@@ -198,8 +200,19 @@ extension QueueManager {
         let canonicalKey = !track.name.isEmpty
             ? "\(track.artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()):\(track.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
             : nil
-        let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: track.artist, title: track.name)
-        BitPerfectLogMonitor.shared.resetTrackState(trackKey: canonicalKey, expectedSampleRate: cachedFmt?.sampleRate, expectedBitDepth: cachedFmt?.bitDepth)
+        let initialCatalogId = MusicKitManager.extractNumericCatalogId(from: track)
+        let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: track.artist, title: track.name, catalogId: initialCatalogId)
+        if PlaybackRouter.shared.isTestingEnvironment || PlaybackRouter.shared.urlOpener != nil {
+            BitPerfectLogMonitor.shared.resetTrackState(
+                trackKey: canonicalKey,
+                catalogId: initialCatalogId,
+                expectedSampleRate: cachedFmt?.sampleRate,
+                expectedBitDepth: cachedFmt?.bitDepth,
+                clearPrebuffer: true
+            )
+        } else {
+            BitPerfectLogMonitor.shared.beginExplicitTrackSwitch()
+        }
 
         if ExternalAmpTCPController.shared.isActive,
            ExternalAmpTCPController.shared.isSoundCheckEnabled,
@@ -301,6 +314,12 @@ extension QueueManager {
         var hadStaleNumericId = false
         if track.isLocal == true, let nid = track.numericId, nid > 0, nid < 10_000_000, PlaybackRouter.shared.urlOpener == nil {
             if PlaybackRouter.shared.playTrackByDatabaseIdViaAMRQueue(nid, generation: gen) {
+                BitPerfectLogMonitor.shared.endExplicitTrackSwitch(
+                    trackKey: canonicalKey,
+                    catalogId: trackCatalogId,
+                    expectedSampleRate: cachedFmt?.sampleRate,
+                    expectedBitDepth: cachedFmt?.bitDepth
+                )
                 let now = Date()
                 PlaybackStateStore.shared.withLock {
                     if PlaybackStateStore.shared.playbackGeneration == gen {
@@ -372,6 +391,12 @@ extension QueueManager {
                         return true
                     }
                     if isCurrentGen && PlaybackRouter.shared.playTrackByDatabaseIdViaAMRQueue(foundDbId, generation: gen) {
+                        BitPerfectLogMonitor.shared.endExplicitTrackSwitch(
+                            trackKey: canonicalKey,
+                            catalogId: trackCatalogId,
+                            expectedSampleRate: cachedFmt?.sampleRate,
+                            expectedBitDepth: cachedFmt?.bitDepth
+                        )
                         let now = Date()
                         PlaybackStateStore.shared.withLock {
                             if PlaybackStateStore.shared.playbackGeneration == gen {
@@ -452,12 +477,13 @@ extension QueueManager {
             if let nextIdx = fallbackNextIndex, nextIdx != index {
                 NSLog("[QueueManager] ⏭ Track '%@ — %@' (index %d/%d) is unavailable in Apple Music — auto-skipping to index %d",
                       track.artist, track.name, index + 1, qCount, nextIdx + 1)
-                let label = track.name.isEmpty ? "Трек" : track.name
+                let labelRu = track.name.isEmpty ? "Трек" : track.name
+                let labelEn = track.name.isEmpty ? "Track" : track.name
                 WebSocketServer.shared.broadcastEvent(
                     name: "toast",
                     data: [
-                        "message_ru": "⏭ «\(label)» недоступен в Apple Music — пропуск",
-                        "message_en": "⏭ '\(label)' is unavailable on Apple Music — skipping"
+                        "message_ru": "⏭ «\(labelRu)» недоступен в Apple Music — пропуск",
+                        "message_en": "⏭ '\(labelEn)' is unavailable on Apple Music — skipping"
                     ]
                 )
                 return playQueueIndexUnlocked(nextIdx, incrementGeneration: true, unavailableSkipDepth: unavailableSkipDepth + 1)

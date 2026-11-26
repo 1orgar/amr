@@ -74,8 +74,11 @@ public struct SpectralAnalysisInfo: Codable, Sendable, Equatable {
         isEnabled: Bool = true,
         isCached: Bool = false,
         verdict: String = "analyzing",
-        verdictTitle: String = "Спектральный анализ...",
-        verdictDescription: String = "Накопление PCM-буферов из CoreAudio Process Tap для расчёта БПФ-спектра.",
+        verdictTitle: String = AMRLocalization.tr("Spectral Analysis...", "Спектральный анализ..."),
+        verdictDescription: String = AMRLocalization.tr(
+            "Accumulating PCM buffers from CoreAudio Process Tap for FFT spectrum calculation.",
+            "Накопление PCM-буферов из CoreAudio Process Tap для расчёта БПФ-спектра."
+        ),
         isAuthentic: Bool = true,
         sampleRate: Int = 44100,
         claimedBitDepth: Int = 16,
@@ -135,7 +138,8 @@ public struct SpectralAnalysisInfo: Codable, Sendable, Equatable {
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.isCached = try container.decodeIfPresent(Bool.self, forKey: .isCached) ?? false
         self.verdict = try container.decodeIfPresent(String.self, forKey: .verdict) ?? "analyzing"
-        self.verdictTitle = try container.decodeIfPresent(String.self, forKey: .verdictTitle) ?? "Спектральный анализ..."
+        self.verdictTitle = try container.decodeIfPresent(String.self, forKey: .verdictTitle)
+            ?? AMRLocalization.tr("Spectral Analysis...", "Спектральный анализ...")
         self.verdictDescription = try container.decodeIfPresent(String.self, forKey: .verdictDescription) ?? ""
         self.isAuthentic = try container.decodeIfPresent(Bool.self, forKey: .isAuthentic) ?? true
         self.sampleRate = try container.decodeIfPresent(Int.self, forKey: .sampleRate) ?? 44100

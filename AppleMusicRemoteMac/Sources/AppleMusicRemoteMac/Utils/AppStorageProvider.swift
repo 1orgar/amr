@@ -65,7 +65,11 @@ public enum AppStorageProvider {
     }()
 }
 
-// MARK: - Keychain & Encrypted Secret Store (`org.ksholokhov.amr.client-secrets`)
+// MARK: - Local AES-256-GCM Encrypted Secret Store (`org.ksholokhov.amr.client-secrets`)
+//
+// Uses a strict 0700/0600 local symmetric key (`~/Library/Application Support/AppleMusicRemoteMac/.token_key`)
+// with CryptoKit AES-256-GCM instead of macOS File-Based Keychain (`SecItem*`), eliminating scary
+// login-keychain password prompts on launch, app relocation, or upgrades.
 
 public final class AppSecretStore: @unchecked Sendable {
     public static let shared = AppSecretStore()
@@ -85,24 +89,6 @@ public final class AppSecretStore: @unchecked Sendable {
             return lock.withLock { inMemoryTestSecrets[cleanAccount] }
         }
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.serviceName,
-            kSecAttrAccount as String: cleanAccount,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip as String
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecSuccess,
-           let data = item as? Data,
-           let secret = String(data: data, encoding: .utf8),
-           !secret.isEmpty {
-            return secret
-        }
-
-        // Ad-hoc unsigned dev fallback: AES-GCM encrypted entry in AppStorageProvider (never plaintext)
         let fallbackKey = Self.encryptedDefaultsPrefix + cleanAccount
         if let rawCipher = AppStorageProvider.shared.string(forKey: fallbackKey),
            rawCipher.hasPrefix(MusicKitManager.encryptedUserTokenPrefix),
@@ -125,26 +111,11 @@ public final class AppSecretStore: @unchecked Sendable {
             return true
         }
 
-        var storedInKeychain = false
-        if let data = cleanSecret.data(using: .utf8) {
-            let baseQuery: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: Self.serviceName,
-                kSecAttrAccount as String: cleanAccount
-            ]
-            SecItemDelete(baseQuery as CFDictionary)
-            var addQuery = baseQuery
-            addQuery[kSecValueData as String] = data
-            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock as String
-            storedInKeychain = (SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess)
-        }
-
         let fallbackKey = Self.encryptedDefaultsPrefix + cleanAccount
-        if storedInKeychain && MusicKitManager.hasTeamCodeSignature() {
-            AppStorageProvider.shared.removeObject(forKey: fallbackKey)
-        } else if let encrypted = MusicKitManager.encryptUserTokenForDefaults(cleanSecret) {
-            AppStorageProvider.shared.set(encrypted, forKey: fallbackKey)
+        guard let encrypted = MusicKitManager.encryptUserTokenForDefaults(cleanSecret) else {
+            return false
         }
+        AppStorageProvider.shared.set(encrypted, forKey: fallbackKey)
         return true
     }
 
@@ -159,12 +130,6 @@ public final class AppSecretStore: @unchecked Sendable {
             return
         }
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.serviceName,
-            kSecAttrAccount as String: cleanAccount
-        ]
-        SecItemDelete(query as CFDictionary)
         AppStorageProvider.shared.removeObject(forKey: Self.encryptedDefaultsPrefix + cleanAccount)
     }
 }

@@ -73,6 +73,55 @@ jobs:
             echo "⚠️ MUSICKIT_KEY_P8 secret not found; build will proceed with fallback behavior"
           fi
 
+      - name: Import Developer ID Certificate into Temporary Keychain (Optional)
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE_P12_BASE64" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ]; then
+            KEYCHAIN_PATH="$RUNNER_TEMP/amr-signing.keychain-db"
+            KEYCHAIN_PASS="$(uuidgen)"
+            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+            echo "REQUIRE_NOTARIZATION=1" >> "$GITHUB_ENV"
+
+            echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+            security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+            security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+
+            # Ensure Apple Developer ID Intermediate CAs are present in the signing keychain
+            curl -fsSL "https://www.apple.com/certificateauthority/DeveloperIDCA.cer" -o "$RUNNER_TEMP/DeveloperIDCA.cer" && \
+              security import "$RUNNER_TEMP/DeveloperIDCA.cer" -k "$KEYCHAIN_PATH" -A || true
+            curl -fsSL "https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer" -o "$RUNNER_TEMP/DeveloperIDG2CA.cer" && \
+              security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$KEYCHAIN_PATH" -A || true
+
+            security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            # shellcheck disable=SC2046
+            security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/DeveloperIDCA.cer" "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+            echo "✅ Developer ID certificate imported into temporary keychain"
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+          else
+            echo "ℹ️ APPLE_CERTIFICATE_P12_BASE64 not configured; building DMG without Developer ID notarization"
+          fi
+
+      - name: Setup App Store Connect API Key for Notarytool (Optional)
+        env:
+          APPLE_NOTARIZE_API_KEY_P8: ${{ secrets.APPLE_NOTARIZE_API_KEY_P8 }}
+        run: |
+          if [ -n "$APPLE_NOTARIZE_API_KEY_P8" ]; then
+            KEY_PATH="$RUNNER_TEMP/NotaryAuthKey.p8"
+            if echo "$APPLE_NOTARIZE_API_KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
+              echo "$APPLE_NOTARIZE_API_KEY_P8" > "$KEY_PATH"
+            else
+              echo "$APPLE_NOTARIZE_API_KEY_P8" | base64 --decode > "$KEY_PATH"
+            fi
+            chmod 600 "$KEY_PATH"
+            echo "APPLE_NOTARIZE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+            echo "✅ App Store Connect API Key staged for notarytool"
+          fi
+
       - name: Build Universal DMG (Intel x86_64 + Apple Silicon arm64)
         env:
           APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
@@ -80,10 +129,20 @@ jobs:
           APPLE_NOTARIZE_APPLE_ID: ${{ secrets.APPLE_NOTARIZE_APPLE_ID }}
           APPLE_NOTARIZE_TEAM_ID: ${{ secrets.APPLE_NOTARIZE_TEAM_ID }}
           APPLE_NOTARIZE_APP_PASSWORD: ${{ secrets.APPLE_NOTARIZE_APP_PASSWORD }}
+          APPLE_NOTARIZE_API_KEY_ID: ${{ secrets.APPLE_NOTARIZE_API_KEY_ID }}
+          APPLE_NOTARIZE_API_ISSUER_ID: ${{ secrets.APPLE_NOTARIZE_API_ISSUER_ID }}
         run: |
           chmod +x ./build_universal_dmg.sh
           ./build_universal_dmg.sh
           shasum -a 256 AppleMusicRemoteMac-Universal.dmg > AppleMusicRemoteMac-Universal.dmg.sha256
+
+      - name: Cleanup Temporary Signing Keychain & API Key
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          rm -f "$RUNNER_TEMP/NotaryAuthKey.p8" "$RUNNER_TEMP/certificate.p12" || true
 
       - name: Prepare Release Metadata
         id: release_meta
@@ -115,4 +174,4 @@ jobs:
             AppleMusicRemoteMac-Universal.dmg.sha256
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
