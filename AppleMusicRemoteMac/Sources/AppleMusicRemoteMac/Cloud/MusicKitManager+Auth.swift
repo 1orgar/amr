@@ -529,6 +529,7 @@ extension MusicKitManager {
         self.playlistTracksCache.removeAll()
         lock.unlock()
         CloudCatalogService.shared.invalidateExploreFeedCache()
+        AccountHealthService.shared.invalidateCache()
         NSLog("[MusicKitManager] ✅ Saved Apple Music User Token (len: %d)", trimmed.count)
         if !isTestingProcess && !PlaybackRouter.shared.isTestingEnvironment {
             Task.detached(priority: .userInitiated) { [weak self] in
@@ -554,6 +555,7 @@ extension MusicKitManager {
         lock.unlock()
         deleteKeychainItem(account: "AppleMusicUserToken")
         CloudCatalogService.shared.invalidateExploreFeedCache()
+        AccountHealthService.shared.invalidateCache()
         NSLog("[MusicKitManager] Cleared Apple Music User Token")
     }
 }

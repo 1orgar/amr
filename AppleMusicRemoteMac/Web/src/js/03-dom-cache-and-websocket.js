@@ -627,6 +627,19 @@
         state.isAiCurating = false;
         state.pendingStandbyAiAutoPlay = false;
         state.sonicBridgeAutoPlay = false;
+      } else if (act === 'set_user_token') {
+        for (let i = pendingPreOpenQueue.length - 1; i >= 0; i--) {
+          const itemAct = pendingPreOpenQueue[i] && pendingPreOpenQueue[i].action
+            ? String(pendingPreOpenQueue[i].action).toLowerCase()
+            : '';
+          if (itemAct === 'set_user_token') {
+            pendingPreOpenQueue.splice(i, 1);
+          }
+        }
+        pendingPreOpenQueue.push(msgObj);
+        if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+          connectWebSocket();
+        }
       } else if (act === 'previous' || act === 'next' || act === 'play' || act === 'pause') {
         for (let i = pendingPreOpenQueue.length - 1; i >= 0; i--) {
           const itemAct = pendingPreOpenQueue[i] && pendingPreOpenQueue[i].action

@@ -1,5 +1,5 @@
 // Apple Music Remote (AMR) - Service Worker for PWA
-const CACHE_NAME = 'amr-shell-15129e29';
+const CACHE_NAME = 'amr-shell-a6900d8c';
 
 const SHELL_PATHS = new Set([
   '/',

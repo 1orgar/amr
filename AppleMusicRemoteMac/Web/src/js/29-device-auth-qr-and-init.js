@@ -256,6 +256,9 @@
     if (state.deviceAuthorized && !state.initialAuthFetched && state.connected) {
       state.initialAuthFetched = true;
       const authTime = Date.now();
+      if (typeof flushPendingAppleUserToken === 'function') {
+        flushPendingAppleUserToken();
+      }
       flushPendingPreOpenQueue();
       send({ action: 'get_user_token_status' });
       send({ action: 'get_developer_token' });

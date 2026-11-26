@@ -75,6 +75,23 @@ extension WebSocketServer {
             }
             return true
 
+        case "prepare_apple_auth_redirect":
+            guard ClientDeviceManager.shared.canConnectionModifyLibrary(connectionId: clientId) else {
+                sendError(
+                    action: action,
+                    error: AMRLocalization.tr(
+                        "Modifying the Apple Music token is disabled for this device in Mac settings",
+                        "Изменение токена Apple Music отключено для этого устройства в настройках Mac"
+                    ),
+                    id: id,
+                    to: connection
+                )
+                return true
+            }
+            let invite = ClientDeviceManager.shared.createInviteToken(ttlSeconds: 300)
+            sendSuccess(action: action, data: ["invite_token": invite], id: id, to: connection)
+            return true
+
         case "set_user_token", "user_token":
             guard ClientDeviceManager.shared.canConnectionModifyLibrary(connectionId: clientId) else {
                 if let record = ClientDeviceManager.shared.getDeviceForConnection(connectionId: clientId) {
@@ -94,15 +111,37 @@ extension WebSocketServer {
             if let token = (params["token"] as? String) ?? (params["user_token"] as? String),
                !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 MusicKitManager.shared.setUserToken(token.trimmingCharacters(in: .whitespacesAndNewlines))
-                sendSuccess(action: action, data: [
+                let payload: [String: Any] = [
                     "status": "ok",
                     "has_user_token": true,
                     "storefront": MusicKitManager.shared.getUserStorefront(),
                     "locale": MusicKitManager.shared.getPreferredLanguageTag()
-                ], id: id, to: connection)
+                ]
+                sendSuccess(action: action, data: payload, id: id, to: connection)
+                broadcastEvent(name: "user_token_status", data: payload)
+                Task.detached(priority: .userInitiated) { [weak self] in
+                    let rawHealth = await AccountHealthService.shared.checkAccountHealth(forceRefresh: true)
+                    let masked = Self.maskedAccountHealth(rawHealth)
+                    self?.broadcastEvent("account_health", data: masked)
+                    DispatchQueue.main.async {
+                        SettingsWindow.refreshIfVisible()
+                        MenuManager.shared.updateMenuState()
+                    }
+                }
             } else {
                 MusicKitManager.shared.clearUserToken()
-                sendSuccess(action: action, data: ["status": "ok", "has_user_token": false], id: id, to: connection)
+                let payload: [String: Any] = ["status": "ok", "has_user_token": false]
+                sendSuccess(action: action, data: payload, id: id, to: connection)
+                broadcastEvent(name: "user_token_status", data: payload)
+                Task.detached(priority: .userInitiated) { [weak self] in
+                    let rawHealth = await AccountHealthService.shared.checkAccountHealth(forceRefresh: true)
+                    let masked = Self.maskedAccountHealth(rawHealth)
+                    self?.broadcastEvent("account_health", data: masked)
+                    DispatchQueue.main.async {
+                        SettingsWindow.refreshIfVisible()
+                        MenuManager.shared.updateMenuState()
+                    }
+                }
             }
             return true
 

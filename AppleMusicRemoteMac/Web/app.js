@@ -2067,6 +2067,19 @@
         state.isAiCurating = false;
         state.pendingStandbyAiAutoPlay = false;
         state.sonicBridgeAutoPlay = false;
+      } else if (act === 'set_user_token') {
+        for (let i = pendingPreOpenQueue.length - 1; i >= 0; i--) {
+          const itemAct = pendingPreOpenQueue[i] && pendingPreOpenQueue[i].action
+            ? String(pendingPreOpenQueue[i].action).toLowerCase()
+            : '';
+          if (itemAct === 'set_user_token') {
+            pendingPreOpenQueue.splice(i, 1);
+          }
+        }
+        pendingPreOpenQueue.push(msgObj);
+        if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+          connectWebSocket();
+        }
       } else if (act === 'previous' || act === 'next' || act === 'play' || act === 'pause') {
         for (let i = pendingPreOpenQueue.length - 1; i >= 0; i--) {
           const itemAct = pendingPreOpenQueue[i] && pendingPreOpenQueue[i].action
@@ -2190,6 +2203,7 @@
       type === 'device_auth_status' ||
       type === 'register_device' ||
       type === 'get_developer_token' ||
+      type === 'prepare_apple_auth_redirect' ||
       type === 'get_artwork' ||
       type === 'get_lyrics' ||
       type === 'get_booklet_info' ||
@@ -2481,6 +2495,12 @@
         if (data && data.token) {
           state.developerToken = data.token;
           initMusicKit(data.token);
+        }
+        break;
+
+      case 'prepare_apple_auth_redirect':
+        if (data && data.invite_token) {
+          state.appleAuthRedirectInviteToken = String(data.invite_token);
         }
         break;
 
@@ -6905,11 +6925,169 @@
   // --- Apple MusicKit & User Token Handlers ---
   let musicKitInstance = null;
   let musicKitLoadedListenerBound = false;
+  let musicKitEventsBound = false;
+  let explicitlyLoggedOutThisSession = false;
+  let lastSyncedUserTokenSent = '';
+  let lastSyncedUserTokenAt = 0;
+
+  function isStandalonePwaMode() {
+    try {
+      return Boolean(
+        window.navigator.standalone === true ||
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function decodeBase64Flexible(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    let normalized = raw.trim().replace(/-/g, '+').replace(/_/g, '/');
+    const pad = normalized.length % 4;
+    if (pad > 0) normalized += '='.repeat(4 - pad);
+    return atob(normalized);
+  }
+
+  function readPendingSessionUserToken() {
+    try {
+      const s = sessionStorage.getItem('amr_pending_apple_user_token');
+      return (s && s.trim().length > 20) ? s.trim() : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function writePendingSessionUserToken(token) {
+    try {
+      if (token && token.trim().length > 20) {
+        sessionStorage.setItem('amr_pending_apple_user_token', token.trim());
+      } else {
+        sessionStorage.removeItem('amr_pending_apple_user_token');
+      }
+    } catch (_) {}
+  }
+
+  function extractAppleUserTokenFromUrlHash() {
+    try {
+      const rawHash = window.location.hash ? window.location.hash.slice(1).trim() : '';
+      if (!rawHash || rawHash.length < 24) return '';
+      const unescaped = decodeURIComponent(rawHash);
+      const decodedJson = decodeBase64Flexible(unescaped);
+      if (!decodedJson || !decodedJson.startsWith('{')) return '';
+      const parsed = JSON.parse(decodedJson);
+      const candidate = parsed && typeof parsed.musicUserToken === 'string'
+        ? parsed.musicUserToken.trim()
+        : '';
+      if (candidate.length > 20) {
+        const cleanUrl = window.location.pathname + window.location.search;
+        window.history.replaceState(null, '', cleanUrl || '/');
+        explicitlyLoggedOutThisSession = false;
+        queueAppleUserTokenForServerSync(candidate);
+        return candidate;
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  function readExistingMusicKitTokenFromBrowser() {
+    if (explicitlyLoggedOutThisSession) return '';
+    try {
+      if (musicKitInstance && typeof musicKitInstance.musicUserToken === 'string') {
+        const instTok = musicKitInstance.musicUserToken.trim();
+        if (instTok.length > 20) return instTok;
+      }
+    } catch (_) {}
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if ((key.startsWith('music.') && key.endsWith('.u')) || key === 'music.ampwebplay.user-token') {
+          const val = (localStorage.getItem(key) || '').trim();
+          if (val.length > 20) return val;
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  function queueAppleUserTokenForServerSync(rawToken) {
+    const trimmed = String(rawToken || '').trim();
+    if (trimmed.length <= 20) return false;
+    explicitlyLoggedOutThisSession = false;
+    state.pendingAppleUserToken = trimmed;
+    writePendingSessionUserToken(trimmed);
+    if (dom.modalAppleAuth) {
+      dom.modalAppleAuth.classList.add('hidden');
+      dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
+    }
+    return flushPendingAppleUserToken();
+  }
+
+  function flushPendingAppleUserToken() {
+    const candidate = (state.pendingAppleUserToken || readPendingSessionUserToken() || '').trim();
+    if (candidate.length <= 20) return false;
+    state.pendingAppleUserToken = candidate;
+    const now = Date.now();
+    if (lastSyncedUserTokenSent === candidate && (now - lastSyncedUserTokenAt) < 1200 && state.connected) {
+      return true;
+    }
+    lastSyncedUserTokenSent = candidate;
+    lastSyncedUserTokenAt = now;
+    return send({ action: 'set_user_token', params: { user_token: candidate } });
+  }
+
+  function bindMusicKitInstanceEvents(instance) {
+    if (!instance || musicKitEventsBound || typeof instance.addEventListener !== 'function') return;
+    musicKitEventsBound = true;
+    const onAuthChange = () => {
+      if (explicitlyLoggedOutThisSession) return;
+      const tok = typeof instance.musicUserToken === 'string' ? instance.musicUserToken.trim() : '';
+      if (tok.length > 20 && !state.hasUserToken) {
+        queueAppleUserTokenForServerSync(tok);
+      }
+    };
+    try {
+      instance.addEventListener('userTokenDidChange', onAuthChange);
+      instance.addEventListener('authorizationStatusDidChange', onAuthChange);
+    } catch (_) {}
+  }
+
+  // Hydrate any redirect hash token or unconfirmed session token immediately at boot
+  state.pendingAppleUserToken = readPendingSessionUserToken();
+  extractAppleUserTokenFromUrlHash();
+  window.addEventListener('hashchange', () => { extractAppleUserTokenFromUrlHash(); });
+  window.addEventListener('pageshow', () => { extractAppleUserTokenFromUrlHash(); });
+
+  function refreshAppleAuthStateAfterExternalSheet() {
+    extractAppleUserTokenFromUrlHash();
+    if (!state.deviceAuthorized || !state.connected) return;
+    if (state.pendingAppleUserToken) {
+      flushPendingAppleUserToken();
+      return;
+    }
+    const existingTok = readExistingMusicKitTokenFromBrowser();
+    if (existingTok && !state.hasUserToken) {
+      queueAppleUserTokenForServerSync(existingTok);
+      return;
+    }
+    if (!state.hasUserToken && dom.modalAppleAuth && !dom.modalAppleAuth.classList.contains('hidden')) {
+      send({ action: 'get_user_token_status' });
+      send({ action: 'get_account_status', params: { refresh: true } });
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshAppleAuthStateAfterExternalSheet();
+  });
+  window.addEventListener('focus', () => {
+    refreshAppleAuthStateAfterExternalSheet();
+  });
 
   function setupMusicKitFromState(forceConfigure = false) {
     const devToken = state.developerToken;
     if (!devToken || !window.MusicKit) return;
-    if (!forceConfigure && (state.hasUserToken || state.isAccountSynced || !state.userTokenStatusChecked)) {
+    if (!forceConfigure && musicKitInstance && (state.hasUserToken || state.isAccountSynced)) {
       return;
     }
     try {
@@ -6922,15 +7100,16 @@
           }
         });
         musicKitInstance = window.MusicKit.getInstance();
-        if (musicKitInstance && musicKitInstance.isAuthorized) {
-          const uToken = musicKitInstance.musicUserToken;
-          if (uToken && !state.hasUserToken) {
-            send({ action: 'set_user_token', params: { user_token: uToken } });
-          }
-        }
+        bindMusicKitInstanceEvents(musicKitInstance);
         if (state.lockScreenControls && state.deviceAuthorized) {
           setupMediaSession(true);
           updateMediaSession();
+        }
+      }
+      if (!state.hasUserToken && !explicitlyLoggedOutThisSession) {
+        const existingTok = readExistingMusicKitTokenFromBrowser();
+        if (existingTok) {
+          queueAppleUserTokenForServerSync(existingTok);
         }
       }
     } catch (e) {
@@ -6957,6 +7136,7 @@
       }
       return;
     }
+    const wasSignedIn = Boolean(state.hasUserToken);
     const hasToken = Boolean(data && (data.has_user_token !== undefined ? data.has_user_token : data.hasUserToken));
     state.hasUserToken = hasToken;
     state.userTokenStatusChecked = true;
@@ -6968,6 +7148,10 @@
     }
 
     if (hasToken || state.isAccountSynced) {
+      if (hasToken) {
+        state.pendingAppleUserToken = '';
+        writePendingSessionUserToken('');
+      }
       if (dom.modalAppleAuth) {
         dom.modalAppleAuth.classList.add('hidden');
         dom.modalAppleAuth.setAttribute('aria-hidden', 'true');
@@ -6978,8 +7162,24 @@
         state.trends.country = activeCountry;
         loadTrends(activeCountry);
       }
+      if (hasToken && !wasSignedIn && state.connected) {
+        send({ action: 'get_account_status', params: { refresh: true } });
+        send({ action: 'get_personal_mixes' });
+        send({ action: 'get_playlists' });
+        send({ action: 'get_library_albums' });
+      }
     } else {
       setupMusicKitFromState(true);
+      const pendingOrBrowserToken = !explicitlyLoggedOutThisSession
+        ? (state.pendingAppleUserToken || readPendingSessionUserToken() || readExistingMusicKitTokenFromBrowser())
+        : '';
+      if (pendingOrBrowserToken) {
+        queueAppleUserTokenForServerSync(pendingOrBrowserToken);
+        return;
+      }
+      if (isStandalonePwaMode() && !state.appleAuthRedirectInviteToken) {
+        send({ action: 'prepare_apple_auth_redirect' });
+      }
       if (dom.modalAppleAuth && !state.isAccountSynced) {
         dom.modalAppleAuth.classList.remove('hidden');
         dom.modalAppleAuth.setAttribute('aria-hidden', 'false');
@@ -7090,14 +7290,44 @@
     }
 
     try {
+      explicitlyLoggedOutThisSession = false;
       if (dom.authModalStatus) dom.authModalStatus.innerHTML = '<div class="spinner-sm"></div><span>Ожидание авторизации Apple ID...</span>';
-      const uToken = await musicKitInstance.authorize();
-      if (uToken) {
-        send({ action: 'set_user_token', params: { user_token: uToken } });
+
+      // In iOS Home Screen Standalone PWA, `window.open('https://authorize.music.apple.com/...')`
+      // opens an isolated SFSafariViewController sheet where `window.opener` is null and Apple
+      // falls back to redirecting `referrer` + `#<base64UserToken>`. Temporarily attach a 5-min
+      // invite token synchronously before `authorize()` so the callback session auto-authorizes
+      // on Mac and broadcasts `user_token_status` back to this PWA!
+      const prevRelativeUrl = window.location.pathname + window.location.search + window.location.hash;
+      let restoreUrlTimer = null;
+      if (isStandalonePwaMode() && state.appleAuthRedirectInviteToken) {
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.set('invite', state.appleAuthRedirectInviteToken);
+          window.history.replaceState(null, '', u.pathname + u.search);
+          restoreUrlTimer = setTimeout(() => {
+            try { window.history.replaceState(null, '', prevRelativeUrl || '/'); } catch (_) {}
+          }, 250);
+        } catch (_) {}
+      }
+
+      const authPromise = musicKitInstance.authorize();
+      const uToken = await authPromise;
+      if (restoreUrlTimer) clearTimeout(restoreUrlTimer);
+      const resolvedToken = (typeof uToken === 'string' && uToken.trim().length > 20)
+        ? uToken.trim()
+        : readExistingMusicKitTokenFromBrowser();
+      if (resolvedToken) {
+        queueAppleUserTokenForServerSync(resolvedToken);
         updateUserTokenStatus({ has_user_token: true });
       }
     } catch (err) {
       console.error('Apple Music authorization error:', err);
+      const fallbackToken = extractAppleUserTokenFromUrlHash() || readExistingMusicKitTokenFromBrowser();
+      if (fallbackToken) {
+        queueAppleUserTokenForServerSync(fallbackToken);
+        updateUserTokenStatus({ has_user_token: true });
+      }
     } finally {
       if (dom.btnAuthModalLogin) dom.btnAuthModalLogin.disabled = false;
       if (dom.authModalStatus) dom.authModalStatus.classList.add('hidden');
@@ -7106,6 +7336,9 @@
 
   async function handleAppleIdLogout() {
     triggerHaptic('medium');
+    explicitlyLoggedOutThisSession = true;
+    state.pendingAppleUserToken = '';
+    writePendingSessionUserToken('');
     if (musicKitInstance) {
       try { await musicKitInstance.unauthorize(); } catch (e) {}
     }
@@ -17816,6 +18049,9 @@
     if (state.deviceAuthorized && !state.initialAuthFetched && state.connected) {
       state.initialAuthFetched = true;
       const authTime = Date.now();
+      if (typeof flushPendingAppleUserToken === 'function') {
+        flushPendingAppleUserToken();
+      }
       flushPendingPreOpenQueue();
       send({ action: 'get_user_token_status' });
       send({ action: 'get_developer_token' });

@@ -191,6 +191,14 @@ public final class AccountHealthService: @unchecked Sendable {
 
     // MARK: - Health Check & Cross-Verification
 
+    public func invalidateCache() {
+        lock.lock()
+        cachedStatus = nil
+        inFlightHealthTask?.cancel()
+        inFlightHealthTask = nil
+        lock.unlock()
+    }
+
     private func getCachedStatus(forceRefresh: Bool) -> AccountHealthStatus? {
         lock.lock()
         defer { lock.unlock() }

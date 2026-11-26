@@ -223,4 +223,55 @@ final class WebSocketServerTests: XCTestCase {
         // Must be authorized immediately upon return so pipelined frames in the same TCP read buffer do not fail auth
         XCTAssertTrue(ClientDeviceManager.shared.isConnectionAuthorized(connectionId: connId))
     }
+
+    func testAppleIDUserTokenPersistenceAndAccountHealthCacheInvalidation() async {
+        let server = WebSocketServer.shared
+        let lanConn = NWConnection(host: "10.10.30.89", port: 8080, using: .tcp)
+        let connId = UUID()
+        let testUid = "test-appleid-sync-\(UUID().uuidString.lowercased())"
+        let invite = ClientDeviceManager.shared.createInviteToken(ttlSeconds: 60)
+
+        let prevToken = MusicKitManager.shared.getUserToken()
+        defer {
+            ClientDeviceManager.shared.unregisterConnection(connectionId: connId)
+            ClientDeviceManager.shared.removeDevice(deviceId: testUid)
+            if let prev = prevToken, !prev.isEmpty {
+                MusicKitManager.shared.setUserToken(prev)
+            } else {
+                MusicKitManager.shared.clearUserToken()
+            }
+        }
+
+        MusicKitManager.shared.clearUserToken()
+        // Prime AccountHealthService cache while unsigned ("not_authorized")
+        let initialHealth = await AccountHealthService.shared.checkAccountHealth(forceRefresh: true)
+        XCTAssertEqual(initialHealth.status, "not_authorized")
+
+        // Verify index.html embeds strict-origin-when-cross-origin referrer meta for MusicKit.js authorize()
+        let html = server.loadWebAsset(filename: "index.html") ?? ""
+        XCTAssertTrue(
+            html.contains("strict-origin-when-cross-origin"),
+            "index.html must include strict-origin-when-cross-origin referrer policy so authorize.music.apple.com receives origin"
+        )
+
+        // Register authorized smartphone device and send set_user_token via WebSocket dispatcher
+        let regMsg = """
+        {"action":"register_device","params":{"device_id":"\(testUid)","device_name":"Test iPhone","device_type":"mobile","invite_token":"\(invite)"}}
+        """
+        server.dispatchClientTextMessage(regMsg, clientId: connId, connection: lanConn)
+        XCTAssertTrue(ClientDeviceManager.shared.isConnectionAuthorized(connectionId: connId))
+
+        let fakeMusicUserToken = "Atza|IwEBIEexampleValidLengthAppleMusicUserToken1234567890"
+        let tokenMsg = """
+        {"action":"set_user_token","params":{"user_token":"\(fakeMusicUserToken)"}}
+        """
+        server.dispatchClientTextMessage(tokenMsg, clientId: connId, connection: lanConn)
+
+        // Wait briefly for async handleLibraryOrCatalogAction dispatch
+        for _ in 0..<25 {
+            if MusicKitManager.shared.hasUserToken { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(MusicKitManager.shared.getUserToken(), fakeMusicUserToken)
+    }
 }

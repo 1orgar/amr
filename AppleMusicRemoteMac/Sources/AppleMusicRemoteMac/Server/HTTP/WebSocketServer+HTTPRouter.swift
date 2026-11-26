@@ -233,7 +233,7 @@ extension WebSocketServer {
             let useGzip = acceptsGzip && asset.gzip != nil
             let etag = (useGzip ? asset.gzipETag : nil) ?? asset.rawETag
             if Self.matchesIfNoneMatch(ifNoneMatch, etag: etag) {
-                sendNotModified(etag: etag, cacheSeconds: 0, varyGzip: true, connection: connection)
+                sendNotModified(etag: etag, cacheSeconds: 0, varyGzip: true, referrerPolicy: "strict-origin-when-cross-origin", connection: connection)
                 return
             }
             let body = (useGzip ? asset.gzip : nil) ?? asset.raw
@@ -588,6 +588,7 @@ extension WebSocketServer {
         etag: String,
         cacheSeconds: Int,
         varyGzip: Bool,
+        referrerPolicy: String = "no-referrer",
         connection: NWConnection
     ) {
         _ = consumeHeadRequestFlag(for: connection)
@@ -595,7 +596,7 @@ extension WebSocketServer {
         var header = "HTTP/1.1 304 Not Modified\r\n" +
             "ETag: \(etag)\r\n" +
             "X-Content-Type-Options: nosniff\r\n" +
-            "Referrer-Policy: no-referrer\r\n"
+            "Referrer-Policy: \(referrerPolicy)\r\n"
         if varyGzip {
             header += "Vary: Accept-Encoding\r\n"
         }
@@ -630,11 +631,16 @@ extension WebSocketServer {
         let isHead = headOnly || consumeHeadRequestFlag(for: connection)
         let statusForceClose = status.hasPrefix("400") || status.hasPrefix("403") || status.hasPrefix("413")
         let keepAlive = !statusForceClose && isKeepAliveEnabled(for: connection)
+        let isHtmlDoc = contentType.lowercased().contains("text/html")
+        // MusicKit.js v3 requires `document.referrer` origin on `https://authorize.music.apple.com/woa`
+        // to establish its postMessage / redirect channel; `strict-origin-when-cross-origin` sends ONLY
+        // the origin (`http://<host>:<port>/`) without leaking path or `?invite=` query parameters.
+        let referrerPolicy = isHtmlDoc ? "strict-origin-when-cross-origin" : "no-referrer"
         var header = "HTTP/1.1 \(status)\r\n" +
             "Content-Type: \(contentType)\r\n" +
             "Content-Length: \(body.count)\r\n" +
             "X-Content-Type-Options: nosniff\r\n" +
-            "Referrer-Policy: no-referrer\r\n" +
+            "Referrer-Policy: \(referrerPolicy)\r\n" +
             "Accept-Ranges: bytes\r\n" +
             "Access-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\n" +
             "Access-Control-Allow-Headers: Range, Content-Type, X-AMR-Device-ID, X-AMR-Device-Secret, X-AMR-API-Token, Authorization\r\n"
@@ -643,7 +649,7 @@ extension WebSocketServer {
         } else {
             header += "Connection: close\r\n"
         }
-        if contentType.lowercased().contains("text/html") {
+        if isHtmlDoc {
             header += "Content-Security-Policy: \(Self.htmlContentSecurityPolicy)\r\n"
         }
         if let etag = etag, !etag.isEmpty {

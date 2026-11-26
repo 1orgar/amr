@@ -30,6 +30,7 @@
       type === 'device_auth_status' ||
       type === 'register_device' ||
       type === 'get_developer_token' ||
+      type === 'prepare_apple_auth_redirect' ||
       type === 'get_artwork' ||
       type === 'get_lyrics' ||
       type === 'get_booklet_info' ||
@@ -321,6 +322,12 @@
         if (data && data.token) {
           state.developerToken = data.token;
           initMusicKit(data.token);
+        }
+        break;
+
+      case 'prepare_apple_auth_redirect':
+        if (data && data.invite_token) {
+          state.appleAuthRedirectInviteToken = String(data.invite_token);
         }
         break;
 
