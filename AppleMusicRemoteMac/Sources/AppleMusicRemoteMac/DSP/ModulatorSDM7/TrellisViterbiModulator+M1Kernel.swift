@@ -177,9 +177,14 @@ extension TrellisViterbiModulator {
                     let y1Vec = SIMD2<Double>(v1Vec.x >= 0.0 ? 1.0 : -1.0, v1Vec.y >= 0.0 ? 1.0 : -1.0)
                     let err1Vec = v1Vec - y1Vec
                     let du1Vec = SIMD2<Double>(repeating: b0 * u1) - b0 * y1Vec
-                    let p0Vec = SIMD2<Double>(repeating: p0Pair.x + p0Pair.y) + q0_0 * ns0Vec + o0_0 * du1Vec
-                    let p1Vec = SIMD2<Double>(repeating: p1Pair.x + p1Pair.y) + q1_0 * ns0Vec + o1_0 * du1Vec
-                    rankVec = (err0Vec * err0Vec) + isiVec + 0.85 * (err1Vec * err1Vec) + 0.25 * (p0Vec * p0Vec + p1Vec * p1Vec)
+                    let p0Base = SIMD2<Double>(repeating: p0Pair.x + p0Pair.y)
+                    let p0Vec: SIMD2<Double> = p0Base + (q0_0 * ns0Vec + o0_0 * du1Vec)
+                    let p1Base = SIMD2<Double>(repeating: p1Pair.x + p1Pair.y)
+                    let p1Vec: SIMD2<Double> = p1Base + (q1_0 * ns0Vec + o1_0 * du1Vec)
+                    let e0Cost: SIMD2<Double> = (err0Vec * err0Vec) + isiVec
+                    let e1Cost: SIMD2<Double> = 0.85 * (err1Vec * err1Vec)
+                    let pCost: SIMD2<Double> = 0.25 * (p0Vec * p0Vec + p1Vec * p1Vec)
+                    rankVec = (e0Cost + e1Cost) + pCost
                 } else {
                     let maxHi0 = fmax2(fmax2(ps23.y.magnitude, maxAbsSIMD2(ps45)), ps6I.x.magnitude)
                     let oddInC = SIMD2<Double>(ps23.x, ps45.x)
@@ -322,11 +327,19 @@ extension TrellisViterbiModulator {
                         let ex0 = simd_max(SIMD2<Double>.zero, simd_abs(raw0_2Vec) - thrVec)
                         let ex1 = simd_max(SIMD2<Double>.zero, simd_abs(raw1_2Vec) - thrVec)
                         let ex2 = simd_max(SIMD2<Double>.zero, simd_abs(raw2_2Vec) - thrVec)
-                        bar2Vec = SIMD2<Double>(repeating: sharedBar2) + ex0 * ex0 + ex1 * ex1 + ex2 * ex2
+                        let exSqSum: SIMD2<Double> = (ex0 * ex0 + ex1 * ex1) + (ex2 * ex2)
+                        bar2Vec = SIMD2<Double>(repeating: sharedBar2) + exSqSum
                     }
-                    let p0Vec = SIMD2<Double>(repeating: obs0Tail) + o0_0 * ns0_2Vec + o0_1 * ns1_2Vec + o0_2 * ns2_2Vec
-                    let p1Vec = SIMD2<Double>(repeating: obs1Tail) + o1_0 * ns0_2Vec + o1_1 * ns1_2Vec + o1_2 * ns2_2Vec
-                    rankVec = (err0Vec * err0Vec) + 24.0 * bar1Vec + isiVec + 0.85 * (err1Vec * err1Vec) + 0.25 * (p0Vec * p0Vec + p1Vec * p1Vec) + 36.0 * bar2Vec
+                    let p0A: SIMD2<Double> = SIMD2<Double>(repeating: obs0Tail) + o0_0 * ns0_2Vec
+                    let p0B: SIMD2<Double> = o0_1 * ns1_2Vec + o0_2 * ns2_2Vec
+                    let p0Vec: SIMD2<Double> = p0A + p0B
+                    let p1A: SIMD2<Double> = SIMD2<Double>(repeating: obs1Tail) + o1_0 * ns0_2Vec
+                    let p1B: SIMD2<Double> = o1_1 * ns1_2Vec + o1_2 * ns2_2Vec
+                    let p1Vec: SIMD2<Double> = p1A + p1B
+                    let rTerm0: SIMD2<Double> = (err0Vec * err0Vec) + (24.0 * bar1Vec + isiVec)
+                    let rTerm1: SIMD2<Double> = 0.85 * (err1Vec * err1Vec) + 36.0 * bar2Vec
+                    let rTerm2: SIMD2<Double> = 0.25 * (p0Vec * p0Vec + p1Vec * p1Vec)
+                    rankVec = (rTerm0 + rTerm1) + rTerm2
                 }
 
                 let choosePos = rankVec.y <= rankVec.x

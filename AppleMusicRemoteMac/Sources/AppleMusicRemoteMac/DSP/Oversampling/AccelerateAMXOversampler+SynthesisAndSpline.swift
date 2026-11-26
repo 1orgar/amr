@@ -274,9 +274,42 @@ extension AccelerateAMXOversampler {
         var ym1 = SIMD2<Double>(splineHistL.1, splineHistR.1)
         var y0  = SIMD2<Double>(splineHistL.2, splineHistR.2)
         var yp1 = SIMD2<Double>(splineHistL.3, splineHistR.3)
-        let inv12 = 1.0 / 12.0
-        let inv24 = 1.0 / 24.0
+        let inv12Vec = SIMD2<Double>(repeating: 1.0 / 12.0)
+        let inv24Vec = SIMD2<Double>(repeating: 1.0 / 24.0)
         var outIdx = 0
+
+        @inline(__always)
+        func evalQuartic(
+            _ y0: SIMD2<Double>,
+            _ c1: SIMD2<Double>,
+            _ c2: SIMD2<Double>,
+            _ c3: SIMD2<Double>,
+            _ c4: SIMD2<Double>,
+            _ t: Double
+        ) -> SIMD2<Double> {
+            let tVec = SIMD2<Double>(repeating: t)
+            let p3: SIMD2<Double> = c4 * tVec + c3
+            let p2: SIMD2<Double> = p3 * tVec + c2
+            let p1: SIMD2<Double> = p2 * tVec + c1
+            return p1 * tVec + y0
+        }
+
+        @inline(__always)
+        func computeQuarticCoeffs(
+            _ y0: SIMD2<Double>,
+            _ sum1: SIMD2<Double>,
+            _ diff1: SIMD2<Double>,
+            _ sum2: SIMD2<Double>,
+            _ diff2: SIMD2<Double>
+        ) -> (SIMD2<Double>, SIMD2<Double>, SIMD2<Double>, SIMD2<Double>) {
+            let c1: SIMD2<Double> = (SIMD2<Double>(repeating: 8.0) * diff1 - diff2) * inv12Vec
+            let c2a: SIMD2<Double> = SIMD2<Double>(repeating: 16.0) * sum1 - sum2
+            let c2: SIMD2<Double> = (c2a - SIMD2<Double>(repeating: 30.0) * y0) * inv24Vec
+            let c3: SIMD2<Double> = (diff2 - SIMD2<Double>(repeating: 2.0) * diff1) * inv12Vec
+            let c4a: SIMD2<Double> = sum2 - SIMD2<Double>(repeating: 4.0) * sum1
+            let c4: SIMD2<Double> = (c4a + SIMD2<Double>(repeating: 6.0) * y0) * inv24Vec
+            return (c1, c2, c3, c4)
+        }
 
         if factor == 8 {
             // Развёрнутое векторное ядро NEON float64x2_t для DSD256 (1.4112 МГц -> 11.2896 МГц)
@@ -288,33 +321,29 @@ extension AccelerateAMXOversampler {
                 let diff2 = yp2 - ym2
                 let sum1  = ym1 + yp1
                 let diff1 = yp1 - ym1
-
-                let c1 = (8.0 * diff1 - diff2) * inv12
-                let c2 = (16.0 * sum1 - sum2 - 30.0 * y0) * inv24
-                let c3 = (diff2 - 2.0 * diff1) * inv12
-                let c4 = (sum2 - 4.0 * sum1 + 6.0 * y0) * inv24
+                let (c1, c2, c3, c4) = computeQuarticCoeffs(y0, sum1, diff1, sum2, diff2)
 
                 outL[outIdx] = y0.x; outR[outIdx] = y0.y
 
-                let v1 = (((c4 * 0.125 + c3) * 0.125 + c2) * 0.125 + c1) * 0.125 + y0
+                let v1 = evalQuartic(y0, c1, c2, c3, c4, 0.125)
                 outL[outIdx &+ 1] = v1.x; outR[outIdx &+ 1] = v1.y
 
-                let v2 = (((c4 * 0.25 + c3) * 0.25 + c2) * 0.25 + c1) * 0.25 + y0
+                let v2 = evalQuartic(y0, c1, c2, c3, c4, 0.25)
                 outL[outIdx &+ 2] = v2.x; outR[outIdx &+ 2] = v2.y
 
-                let v3 = (((c4 * 0.375 + c3) * 0.375 + c2) * 0.375 + c1) * 0.375 + y0
+                let v3 = evalQuartic(y0, c1, c2, c3, c4, 0.375)
                 outL[outIdx &+ 3] = v3.x; outR[outIdx &+ 3] = v3.y
 
-                let v4 = (((c4 * 0.5 + c3) * 0.5 + c2) * 0.5 + c1) * 0.5 + y0
+                let v4 = evalQuartic(y0, c1, c2, c3, c4, 0.5)
                 outL[outIdx &+ 4] = v4.x; outR[outIdx &+ 4] = v4.y
 
-                let v5 = (((c4 * 0.625 + c3) * 0.625 + c2) * 0.625 + c1) * 0.625 + y0
+                let v5 = evalQuartic(y0, c1, c2, c3, c4, 0.625)
                 outL[outIdx &+ 5] = v5.x; outR[outIdx &+ 5] = v5.y
 
-                let v6 = (((c4 * 0.75 + c3) * 0.75 + c2) * 0.75 + c1) * 0.75 + y0
+                let v6 = evalQuartic(y0, c1, c2, c3, c4, 0.75)
                 outL[outIdx &+ 6] = v6.x; outR[outIdx &+ 6] = v6.y
 
-                let v7 = (((c4 * 0.875 + c3) * 0.875 + c2) * 0.875 + c1) * 0.875 + y0
+                let v7 = evalQuartic(y0, c1, c2, c3, c4, 0.875)
                 outL[outIdx &+ 7] = v7.x; outR[outIdx &+ 7] = v7.y
 
                 outIdx &+= 8
@@ -329,21 +358,17 @@ extension AccelerateAMXOversampler {
                 let diff2 = yp2 - ym2
                 let sum1  = ym1 + yp1
                 let diff1 = yp1 - ym1
-
-                let c1 = (8.0 * diff1 - diff2) * inv12
-                let c2 = (16.0 * sum1 - sum2 - 30.0 * y0) * inv24
-                let c3 = (diff2 - 2.0 * diff1) * inv12
-                let c4 = (sum2 - 4.0 * sum1 + 6.0 * y0) * inv24
+                let (c1, c2, c3, c4) = computeQuarticCoeffs(y0, sum1, diff1, sum2, diff2)
 
                 outL[outIdx] = y0.x; outR[outIdx] = y0.y
 
-                let v1 = (((c4 * 0.25 + c3) * 0.25 + c2) * 0.25 + c1) * 0.25 + y0
+                let v1 = evalQuartic(y0, c1, c2, c3, c4, 0.25)
                 outL[outIdx &+ 1] = v1.x; outR[outIdx &+ 1] = v1.y
 
-                let v2 = (((c4 * 0.5 + c3) * 0.5 + c2) * 0.5 + c1) * 0.5 + y0
+                let v2 = evalQuartic(y0, c1, c2, c3, c4, 0.5)
                 outL[outIdx &+ 2] = v2.x; outR[outIdx &+ 2] = v2.y
 
-                let v3 = (((c4 * 0.75 + c3) * 0.75 + c2) * 0.75 + c1) * 0.75 + y0
+                let v3 = evalQuartic(y0, c1, c2, c3, c4, 0.75)
                 outL[outIdx &+ 3] = v3.x; outR[outIdx &+ 3] = v3.y
 
                 outIdx &+= 4
@@ -359,11 +384,7 @@ extension AccelerateAMXOversampler {
                 let diff2 = yp2 - ym2
                 let sum1  = ym1 + yp1
                 let diff1 = yp1 - ym1
-
-                let c1 = (8.0 * diff1 - diff2) * inv12
-                let c2 = (16.0 * sum1 - sum2 - 30.0 * y0) * inv24
-                let c3 = (diff2 - 2.0 * diff1) * inv12
-                let c4 = (sum2 - 4.0 * sum1 + 6.0 * y0) * inv24
+                let (c1, c2, c3, c4) = computeQuarticCoeffs(y0, sum1, diff1, sum2, diff2)
 
                 outL[outIdx] = y0.x
                 outR[outIdx] = y0.y
@@ -371,7 +392,7 @@ extension AccelerateAMXOversampler {
 
                 for sub in 1..<factor {
                     let t = Double(sub) * step
-                    let v = (((c4 * t + c3) * t + c2) * t + c1) * t + y0
+                    let v = evalQuartic(y0, c1, c2, c3, c4, t)
                     outL[outIdx] = v.x
                     outR[outIdx] = v.y
                     outIdx &+= 1

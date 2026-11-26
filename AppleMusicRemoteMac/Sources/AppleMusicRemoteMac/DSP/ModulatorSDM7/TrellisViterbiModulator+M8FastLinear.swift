@@ -307,17 +307,21 @@ extension TrellisViterbiModulator {
                     let y1Neg = SIMD2<Double>(v1Neg.x >= 0.0 ? 1.0 : -1.0, v1Neg.y >= 0.0 ? 1.0 : -1.0)
                     let err1Neg = v1Neg - y1Neg
                     let du1Neg = b0_ff6.x * (u1Vec - y1Neg)
-                    let p0Neg = p0Tail + q0_01.x * ns0Neg + q06_o00.y * du1Neg
-                    let p1Neg = p1Tail + q1_01.x * ns0Neg + q16_o10.y * du1Neg
-                    let fNeg = gNeg + w1_isiThr.x * (err1Neg * err1Neg) + 0.25 * (p0Neg * p0Neg + p1Neg * p1Neg)
+                    let p0Neg: SIMD2<Double> = p0Tail + (q0_01.x * ns0Neg + q06_o00.y * du1Neg)
+                    let p1Neg: SIMD2<Double> = p1Tail + (q1_01.x * ns0Neg + q16_o10.y * du1Neg)
+                    let e1NegCost: SIMD2<Double> = w1_isiThr.x * (err1Neg * err1Neg)
+                    let pNegCost: SIMD2<Double> = 0.25 * (p0Neg * p0Neg + p1Neg * p1Neg)
+                    let fNeg: SIMD2<Double> = (gNeg + e1NegCost) + pNegCost
 
                     let v1Pos = v1Base + ff01.x * ns0Pos
                     let y1Pos = SIMD2<Double>(v1Pos.x >= 0.0 ? 1.0 : -1.0, v1Pos.y >= 0.0 ? 1.0 : -1.0)
                     let err1Pos = v1Pos - y1Pos
                     let du1Pos = b0_ff6.x * (u1Vec - y1Pos)
-                    let p0Pos = p0Tail + q0_01.x * ns0Pos + q06_o00.y * du1Pos
-                    let p1Pos = p1Tail + q1_01.x * ns0Pos + q16_o10.y * du1Pos
-                    let fPos = gPos + w1_isiThr.x * (err1Pos * err1Pos) + 0.25 * (p0Pos * p0Pos + p1Pos * p1Pos)
+                    let p0Pos: SIMD2<Double> = p0Tail + (q0_01.x * ns0Pos + q06_o00.y * du1Pos)
+                    let p1Pos: SIMD2<Double> = p1Tail + (q1_01.x * ns0Pos + q16_o10.y * du1Pos)
+                    let e1PosCost: SIMD2<Double> = w1_isiThr.x * (err1Pos * err1Pos)
+                    let pPosCost: SIMD2<Double> = 0.25 * (p0Pos * p0Pos + p1Pos * p1Pos)
+                    let fPos: SIMD2<Double> = (gPos + e1PosCost) + pPosCost
 
                     let cA0 = UInt64(iA &<< 1)
                     let (loKA, hiKA) = sort2Keys(packRankKey(fNeg.x, cA0), packRankKey(fPos.x, cA0 | 1))
