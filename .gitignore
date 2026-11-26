@@ -3,7 +3,9 @@
 .AppleDouble
 .LSOverride
 ._*
-Icon?
+Icon[^A-Za-z0-9]
+!SharedAssets/Icons/
+!SharedAssets/Icons/**
 Thumbs.db
 
 # Swift & Xcode

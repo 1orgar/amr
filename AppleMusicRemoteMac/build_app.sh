@@ -70,9 +70,24 @@ fi
 # Copy Icon & MusicKit Auth Key
 if [ -f "$ROOT_DIR/SharedAssets/Icons/macOS/AppIcon.icns" ]; then
     cp "$ROOT_DIR/SharedAssets/Icons/macOS/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+elif [ -d "$ROOT_DIR/SharedAssets/Assets.xcassets/AppIcon.appiconset" ]; then
+    ICONSET_TMP="$BUILD_DIR/AppIcon.iconset"
+    rm -rf "$ICONSET_TMP"
+    mkdir -p "$ICONSET_TMP"
+    for f in "$ROOT_DIR/SharedAssets/Assets.xcassets/AppIcon.appiconset"/mac_icon_*.png; do
+        cp "$f" "$ICONSET_TMP/$(basename "$f" | sed 's/^mac_//')"
+    done
+    iconutil -c icns "$ICONSET_TMP" -o "$RESOURCES_DIR/AppIcon.icns"
+    rm -rf "$ICONSET_TMP"
+fi
+if [ ! -s "$RESOURCES_DIR/AppIcon.icns" ]; then
+    echo "❌ Missing AppIcon.icns in bundle Resources!"
+    exit 1
 fi
 if [ -f "$ROOT_DIR/SharedAssets/Icons/macOS/icon_256x256.png" ]; then
     cp "$ROOT_DIR/SharedAssets/Icons/macOS/icon_256x256.png" "$RESOURCES_DIR/icon.png"
+elif [ -f "$ROOT_DIR/SharedAssets/Assets.xcassets/AppIcon.appiconset/mac_icon_256x256.png" ]; then
+    cp "$ROOT_DIR/SharedAssets/Assets.xcassets/AppIcon.appiconset/mac_icon_256x256.png" "$RESOURCES_DIR/icon.png"
 fi
 # Ensure private key is NEVER bundled inside the .app Resources or copied to Application Support
 rm -f "$RESOURCES_DIR"/AuthKey_*.p8
