@@ -15,7 +15,7 @@
 [![Architecture](https://img.shields.io/badge/Universal%202-arm64%20%7C%20x86__64-2563eb)](https://developer.apple.com/documentation/apple-silicon)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b.svg)](LICENSE)
 
-[**⬇ Download Universal DMG**](https://github.com/1orgar/amr/releases/latest) · [**🎛 64-Bit DSP Engine Guide**](docs/DSP_AUDIO_ENGINE.md) · [**🗺 Roadmap**](ROADMAP.md) · [**🔌 WebSocket & HTTP API**](#-api--protocols)
+[**🌐 Website & Live Signal Lab**](https://amraudio.app) · [**⬇ Download Universal DMG**](https://github.com/1orgar/amr/releases/latest) · [**🎛 64-Bit DSP Engine Guide**](docs/DSP_AUDIO_ENGINE.md) · [**🗺 Roadmap**](ROADMAP.md) · [**🔌 WebSocket & HTTP API**](#-api--protocols)
 
 </div>
 
@@ -63,7 +63,7 @@ macOS resamples all system audio to a single fixed sample rate inside `coreaudio
 **Apple Music Remote (AMR)** solves both problems in a single native Swift menu bar server (~0% idle CPU, zero Electron, zero virtual audio drivers):
 
 * **100% Bit-Perfect Direct Mode** — Automatically switches your hardware DAC clock (`44.1 – 192 kHz`) bit-for-bit to match each Apple Music track, enforces `100% Volume Lock`, and verifies ultrasonic content in real time via `vDSP` FFT so upsampled "fake Hi-Res" masters never go unnoticed.
-* **Optional 64-Bit Studio DSP (`Exclusive Hog Mode`)** — Engage `DSD64–DSD512 DoP` (`7EC` 7th-order Sigma-Delta with Viterbi Trellis), synchronous `2x–16x` oversampling up to `768 kHz` (`Accelerate AMX FP64` 65k taps / `Metal GPU df64` 262k taps + `LNS15` 15th-order noise shaper for R2R NOS DACs), 64-bit **Room Auto-PEQ** measured straight from your iPhone mic, **Pre-DSP De-Clipper & Weiss De-Esser**, or **Late-Night DRC** — with an instant 1-click return to `100% Bit-Perfect Bypass`.
+* **Optional 64-Bit Studio DSP (`Exclusive Hog Mode`)** — Engage `DSD64–DSD256 DoP` (`7EC` 7th-order Sigma-Delta with Viterbi Trellis), synchronous `2x–16x` oversampling up to `768 kHz` (`Accelerate AMX FP64` 65k taps / `Metal GPU df64` 262k taps + `LNS15` 15th-order noise shaper for R2R NOS DACs), 64-bit **Room Auto-PEQ** measured straight from your iPhone mic, **Pre-DSP De-Clipper & Weiss De-Esser**, or **Late-Night DRC** — with an instant 1-click return to `100% Bit-Perfect Bypass`.
 * **Pure `#000000` OLED Web Remote (PWA)** — Control playback, playlists, library, AI curation, digital booklets, and hardware amplifier volume from any iPhone, iPad, Android phone, desktop browser, or living-room TV over LAN with zero app-store friction.
 * **Signed, Notarized & Zero-Keychain Vault** — Distributed as an Apple Developer ID signed & notarized Universal 2 `.dmg` (`arm64` + `x86_64`) with a local `AES-256-GCM` `CryptoKit` secret store — **zero Gatekeeper warnings and zero macOS Keychain password prompts**.
 
@@ -74,7 +74,7 @@ macOS resamples all system audio to a single fixed sample rate inside `coreaudio
 ### 🎧 Bit-Perfect CoreAudio HAL & Hybrid 64-Bit Studio DSP
 * **Automatic Hardware Sample Rate Sync**: Instant CoreAudio clock switching across `44.1`, `48`, `88.2`, `96`, `176.4`, and `192 kHz` in `Bit-Perfect Passthrough`, plus `DAC Muting Guard` (`Pre-Mute → PLL Lock → Unmute`) for click-free relay transitions.
 * **Exclusive `Hog Mode` + Non-Mixable Integer (`0x4c`)**: Lock-free `SPSCAtomicRingBuffer` + `RealtimeMachWorker` captures `Music.app` via `AudioProcessTapService` and drives your external USB DAC directly, isolating it from macOS system alerts and the 32-bit OS mixer.
-* **`DSD64 / DSD128 / DSD256 / DSD512 DoP` (`7EC` Modulator)**: 7th-order Chebyshev Sigma-Delta modulator (`7EC-Transient`, `7EC-Balanced`, `7EC-Super`) with **Viterbi Trellis lookahead (`M = 4..16`)** and ISI regularizer.
+* **`DSD64 / DSD128 / DSD256 DoP` (`7EC` Modulator)**: 7th-order Chebyshev Sigma-Delta modulator (`7EC-Transient`, `7EC-Balanced`, `7EC-Super`) with **Viterbi Trellis lookahead (`M = 4..16`)** and ISI regularizer up to `11.29 / 12.29 MHz` (`DoP 705.6 / 768 kHz`).
 * **`HQ PCM NOS` up to `705.6 / 768 kHz`**: Multi-stage `Accelerate AMX FP64` (**65,536 taps**) and `Metal GPU Overlap-Save df64` (**262,144 taps**) Linear-Phase / Minimum-Phase Sinc filters paired with a 15th-order psychoacoustic **`LNS15`** noise shaper (`< -165 dBFS` audible floor — tailored for discrete R2R / Multibit ladder DACs).
 * **3-Stage Hardware USB DAC Verifier**: Automatically inspects bus transport, integer bit depth (`≥ 24-bit`), and supported rate grids — blocking `DSD DoP` / `NOS` on built-in Mac speakers, AirPlay, Bluetooth, HDMI, or 16-bit headsets.
 * **Full Technical Reference**: Read [**`docs/DSP_AUDIO_ENGINE.md`**](docs/DSP_AUDIO_ENGINE.md) for filter math, preset architecture, and acoustic tuning.
@@ -114,7 +114,7 @@ macOS resamples all system audio to a single fixed sample rate inside `coreaudio
                        │                                                        │
  📱 iPhone / iPad / TV │  ┌──────────────────────────────────────────────────┐  │   🎧 External USB DAC
  💻 Pure OLED Web PWA ─┼─►│  CoreAudio HAL + Hybrid 64-Bit Studio DSP        ├──┼──► • Bit-Perfect 44.1–192 kHz
- (WebSocket + gzip)    │  │  • Exclusive Hog Mode • DSD512 DoP • NOS 768 kHz │  │    • DSD64–512 DoP / 768k NOS
+ (WebSocket + gzip)    │  │  • Exclusive Hog Mode • DSD256 DoP • NOS 768 kHz │  │    • DSD64–256 DoP / 768k NOS
                        │  │  • Room Auto-PEQ • De-Clipper • vDSP FFT / DR    │  │
  🏠 Home Assistant     │  └────────────────────────▲─────────────────────────┘  │   🔊 Integrated Amplifier
  📻 UPnP / DLNA DMR ───┼─►                         │ AudioProcessTap            ├──► • TCP Volume & iTunNORM

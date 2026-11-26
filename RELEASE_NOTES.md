@@ -1,10 +1,12 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/1orgar/amr/v3.0.0/docs/images/amr-social-preview.png" alt="Apple Music Remote 3.0 — Wagner" width="100%">
+  <img src="https://raw.githubusercontent.com/1orgar/amr/main/docs/images/amr-social-preview.png" alt="Apple Music Remote 3.0 — Wagner" width="100%">
 </div>
 
 # Apple Music Remote 3.0.0 — "Wagner"
 
-**v3.0.0 ("Wagner")** is our biggest milestone release yet — introducing a reference **Hybrid 64-Bit Studio DSP Engine** with `CoreAudio Exclusive Hog Mode` (`DSD64–DSD512 DoP` via 7th-order `7EC` + Viterbi Trellis, and `HQ PCM NOS` up to `768 kHz` with `AMX FP64` 65k / `Metal GPU df64` 262k Sinc filters & `LNS15` noise shaping), **64-Bit Room Acoustic `Auto-PEQ`** measured straight from your iPhone / iPad microphone, real-time **Mastering Telemetry (`TT DR`, `EBU R128 LUFS`, `4x ISP`, `Phase`)**, **Pre-DSP Mastering Restoration (`De-Clipper` & `Weiss Dynamic De-Esser`)**, **Audiophile `Late-Night DRC`**, **Apple Neural Engine `Sonic Bridge`** (`512-D SLERP` trajectory routing), **Two-Way iCloud Drive Sync**, a **sub-second Direct Cloud Hi-Res Engine** with zero library pollution, a **Zero-Keychain `AES-256-GCM` Vault**, **Apple Developer ID Signing & Notarization**, **100% English & Russian Localization**, and **410+ automated Swift unit tests**.
+**v3.0.0 ("Wagner")** is our biggest milestone release yet — introducing a reference **Hybrid 64-Bit Studio DSP Engine** with `CoreAudio Exclusive Hog Mode` (`DSD64–DSD256 DoP` via 7th-order `7EC` + Viterbi Trellis, and `HQ PCM NOS` up to `768 kHz` with `AMX FP64` 65k / `Metal GPU df64` 262k Sinc filters & `LNS15` noise shaping), **64-Bit Room Acoustic `Auto-PEQ`** measured straight from your iPhone / iPad microphone, real-time **Mastering Telemetry (`TT DR`, `EBU R128 LUFS`, `4x ISP`, `Phase`)**, **Pre-DSP Mastering Restoration (`De-Clipper` & `Weiss Dynamic De-Esser`)**, **Audiophile `Late-Night DRC`**, **Apple Neural Engine `Sonic Bridge`** (`512-D SLERP` trajectory routing), **Two-Way iCloud Drive Sync**, a **sub-second Direct Cloud Hi-Res Engine** with zero library pollution, a **Zero-Keychain `AES-256-GCM` Vault**, **Apple Developer ID Signing & Notarization**, **100% English & Russian Localization**, and **410+ automated Swift unit tests**.
+
+🌐 **Website & Interactive Signal Lab:** [https://amraudio.app](https://amraudio.app)
 
 ---
 
@@ -12,8 +14,8 @@
 * **Lock-Free Exclusive Hardware Pipeline (`AudioEngineController` + `CoreAudioDeviceManager`)**:
   * Captures `Music.app` via `AudioProcessTapService` (`.muted`) and drives external USB DACs directly through a dedicated `AudioDeviceIOProcID` under `kAudioDevicePropertyHogMode` + `Non-Mixable Integer (0x4c)`, powered by `SPSCAtomicRingBuffer` and `RealtimeMachWorker` with zero allocations on the real-time audio thread.
   * Instant 1-click return to **`100% Bit-Perfect Passthrough (Off)`** with native source clock restoration (`44.1 – 192 kHz`).
-* **7th-Order `7EC` Sigma-Delta DSD Modulator (`DSD64 / DSD128 / DSD256 / DSD512 DoP`)**:
-  * Three NTF profiles (`7EC-Transient`, `7EC-Balanced`, `7EC-Super`), parallel **Viterbi Trellis lookahead (`M = 4 / 8 / 16`)**, Inter-Symbol Interference (`ISI`) regularizer, and lossless DoP v1.1 (`0x05 / 0xFA`) framing.
+* **7th-Order `7EC` Sigma-Delta DSD Modulator (`DSD64 / DSD128 / DSD256 DoP`)**:
+  * Three NTF profiles (`7EC-Transient`, `7EC-Balanced`, `7EC-Super`), parallel **Viterbi Trellis lookahead (`M = 4 / 8 / 16`)**, Inter-Symbol Interference (`ISI`) regularizer, and lossless DoP v1.1 (`0x05 / 0xFA`, up to `705.6 / 768 kHz`) framing.
 * **Synchronous `2x–16x` Oversampling & `HQ PCM NOS` up to `705.6 / 768 kHz`**:
   * **`Accelerate AMX FP64` (`65,536` taps)** and **`Metal GPU Overlap-Save df64` (`262,144` taps)** Linear-Phase and Minimum-Phase Sinc filters.
   * **`HQ PCM NOS` Mode** for discrete R2R / Multibit ladder and Hi-Res PCM DACs with a **15th-order psychoacoustic `LNS15` noise shaper** (`< -165 dBFS` audible noise floor, 27+ effective bits).

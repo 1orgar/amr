@@ -23,7 +23,7 @@
 Direct bit-for-bit delivery of the native Apple Music PCM stream (`44.1 – 192 kHz`, `16/24-bit`) to your external DAC with zero oversampling, zero modulation, and automatic hardware sample rate switching via `BitPerfectLogMonitor`.
 
 ### 1.2. `DSD DoP (7EC SDM)` — 7th-Order 1-Bit Sigma-Delta Modulator
-Converts incoming PCM into a high-rate 1-bit **DSD64 / DSD128 / DSD256 / DSD512** stream (`2.82 – 22.58 MHz`) using a 7th-order cascaded modulator with Chebyshev NTF resonator notches (`7EC`) and **Viterbi Trellis lookahead** (`TrellisViterbiModulator`), packed losslessly into **DoP v1.1 (`DSD over PCM`, `0x05 / 0xFA` markers)**.
+Converts incoming PCM into a high-rate 1-bit **DSD64 / DSD128 / DSD256** stream (`2.82 – 12.29 MHz`) using a 7th-order cascaded modulator with Chebyshev NTF resonator notches (`7EC`) and **Viterbi Trellis lookahead** (`TrellisViterbiModulator`), packed losslessly into **DoP v1.1 (`DSD over PCM`, `0x05 / 0xFA` markers)**.
 * When `0x05 / 0xFA` frames arrive over a bit-exact integer transport, your external USB DAC or DDC (such as Topping, SMSL, Holo Audio, Denafrips, Chord, RME, etc.) recognizes native DSD and bypasses its internal on-chip PCM interpolation stages.
 
 ### 1.3. `HQ PCM NOS` (High-Quality Non-Oversampling PCM up to 768 kHz)
@@ -57,11 +57,10 @@ Converts incoming PCM into a high-rate 1-bit **DSD64 / DSD128 / DSD256 / DSD512*
 
 ## 3. DSP Parameter Reference & Sonic Impact
 
-### 3.1. DSD Rate (`DSD64` / `DSD128` / `DSD256` / `DSD512`)
-* **`DSD64`** (`2.8224 MHz`, DoP carrier `176.4 kHz`) — Scarlet Book SACD standard; compatible with optical Toslink and coaxial S/PDIF (`≤ 192 kHz`).
-* **`DSD128`** (`5.6448 MHz`, DoP carrier `352.8 kHz`) — pushes ultrasonic modulation noise an octave higher with low CPU usage.
-* **`DSD256`** (`11.2896 MHz`, DoP carrier `705.6 kHz`) — sweet spot for modern USB DACs (`> 155 dB` audible SNR).
-* **`DSD512`** (`22.5792 MHz`, DoP carrier `1411.2 kHz`) — for USB DACs supporting `1.411 / 1.536 MHz` PCM carriers (automatically negotiates down to the highest supported rate if the DAC caps at `705.6 / 768 kHz`).
+### 3.1. DSD Rate (`DSD64` / `DSD128` / `DSD256`)
+* **`DSD64`** (`2.8224 / 3.072 MHz`, DoP carrier `176.4 / 192 kHz`) — Scarlet Book SACD standard; compatible with optical Toslink and coaxial S/PDIF (`≤ 192 kHz`).
+* **`DSD128`** (`5.6448 / 6.144 MHz`, DoP carrier `352.8 / 384 kHz`) — pushes ultrasonic modulation noise an octave higher with low CPU usage.
+* **`DSD256`** (`11.2896 / 12.288 MHz`, DoP carrier `705.6 / 768 kHz`) — practical hardware DoP ceiling on macOS CoreAudio USB Audio Class 2 (`> 155 dB` audible SNR; automatically negotiates down if a DAC caps below `705.6 / 768 kHz`).
 
 ### 3.2. 7th-Order Modulator Profile (`7EC`)
 * **`7EC-Transient` (`OBG = 1.38`)**: conservative out-of-band gain with fast loop settling for tight bass and percussive slam.

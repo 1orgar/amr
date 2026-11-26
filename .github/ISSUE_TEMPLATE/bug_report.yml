@@ -1,0 +1,47 @@
+name: Bug Report
+description: Report a reproducible bug in AMR macOS server, CoreAudio/DSP engine, or Web PWA
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue! Including your DAC / streamer / amplifier model helps us reproduce hardware-specific CoreAudio or TCP behavior quickly.
+  - type: input
+    id: version
+    attributes:
+      label: AMR Version & macOS Version
+      placeholder: "e.g. AMR v3.0.0 on macOS 15.3 Sequoia (Mac mini M4)"
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Output Hardware (USB DAC / Streamer / Amplifier)
+      placeholder: "e.g. Topping D90 III (USB), Holo Cyan 2, Bluesound NODE, Rotel RA-1572MKII"
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Active Audio Engine Mode
+      options:
+        - Bit-Perfect Passthrough (Off)
+        - DSD DoP (7EC SDM — DSD64/128/256)
+        - HQ PCM NOS (LNS15 — up to 768 kHz)
+        - BluOS / UPnP DLNA Network Stream
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce & Observed Behavior
+      placeholder: |
+        1. Connect USB DAC...
+        2. Play 24-bit/192 kHz track...
+        3. Observed: ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Signal Path Screenshot (Optional)
+      description: Paste any relevant lines from Diagnostics / Console if available.

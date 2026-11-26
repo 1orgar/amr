@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Hardware Compatibility & Setup Q&A (GitHub Discussions)
+    url: https://github.com/1orgar/amr/discussions
+    about: Ask questions about USB DACs, R2R NOS / DSD256 DoP settings, Room Auto-PEQ, BluOS/DLNA, or TCP amplifiers.
+  - name: 🌐 Official Website & Interactive Signal Lab
+    url: https://amraudio.app
+    about: Explore live FFT / Auto-PEQ / 7EC SDM diagrams, Retina UI previews, and quick-start documentation.

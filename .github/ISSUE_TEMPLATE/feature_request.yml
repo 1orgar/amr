@@ -1,0 +1,25 @@
+name: Feature / Hardware Support Request
+description: Propose a new feature, DSP filter, network streamer, or TCP amplifier integration
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Component Area
+      options:
+        - CoreAudio / USB DAC / Bit-Perfect Sync
+        - 64-Bit Studio DSP / Room Auto-PEQ
+        - External Amplifier TCP / Hardware SoundCheck
+        - BluOS / UPnP / DLNA / Multi-Room
+        - OLED Web PWA / StandBy TV / WLED Ambilight
+        - On-Device Apple Neural Engine AI
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Proposal & Use Case
+      placeholder: Describe the feature or hardware model (including TCP protocol docs if requesting a new amplifier/streamer).
+    validations:
+      required: true
