@@ -21,10 +21,14 @@
 
   #standby-tv-overlay .standby-top-bar,
   #standby-tv-overlay .standby-top-right,
+  #standby-btn-ai-curator,
+  #standby-btn-queue,
   #standby-btn-library,
   #standby-btn-wled-toggle,
   #btn-close-standby,
   #standby-wled-badge,
+  #standby-ai-modal,
+  #standby-queue-modal,
   #standby-library-modal,
   #top-settings-popover {
     display: none !important;

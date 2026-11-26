@@ -555,6 +555,7 @@
     const modal = document.getElementById('standby-library-modal');
     if (!modal) return;
     closeStandbyAiModal();
+    if (typeof closeStandbyQueueModal === 'function') closeStandbyQueueModal();
     if (!state.tvLibraryConfigLoaded) {
       send({ action: 'get_tv_library_config' });
     }

@@ -46,7 +46,7 @@
 * **🌉 Sonic Bridge (`NativeMusicCuratorService+SonicBridge`)**:
   * Computes a smooth `10 / 12 / 16`-step geodesic musical route from **Point A** to **Point B** (tracks, artists, or moods) via spherical linear interpolation (`SLERP`) in 512-D `NLEmbedding` space on Apple Neural Engine.
 * **Dedicated `Playlists` & 4-Tab `Library` Architecture**:
-  * Independent **Playlists** view (`+ Save to Playlists` with `0 ms` optimistic insertion) alongside a 4-tab **Library** (**Recent / Artists / Albums / Songs**), full library deletion (`removeTrack`, `removeAlbum`, `removeArtist`, `removePlaylist`), **Album Completeness Detector** (`Saved X of Y` with 1-tap catalog completion), and customizable **TV Mode Library tiles**.
+  * Independent **Playlists** view (`+ Save to Playlists` with `0 ms` optimistic insertion) alongside a 4-tab **Library** (**Recent / Artists / Albums / Songs**), full library deletion (`removeTrack`, `removeAlbum`, `removeArtist`, `removePlaylist`), **Album Completeness Detector** (`Saved X of Y` with 1-tap catalog completion), customizable **TV Mode Library tiles**, and a **Fullscreen OLED TV Queue** (*Previous / Now Playing / Up Next*).
 * **Sub-Second Direct Cloud ALAC/Hi-Res Engine (`0.5–0.9 s`) & Zero Library Pollution**:
   * Starts Apple Music cloud catalog streams in **`0.5–0.9 s`** in native **ALAC Lossless / Hi-Res up to `192 kHz / 24-bit`** using a single reusable staging buffer (`play once=true`) with vectorized `~1.5 ms` Shuffle/Queue staging, automatic crash-orphan cleanup, and in-memory RFC 1952 `gzip` PWA asset delivery (`907 KB → 149 KB`).
 

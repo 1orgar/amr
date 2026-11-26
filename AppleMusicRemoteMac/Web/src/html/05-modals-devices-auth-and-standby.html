@@ -116,6 +116,18 @@
           </svg>
           <span>ИИ Подбор</span>
         </button>
+        <button id="standby-btn-queue" class="standby-library-pill-btn standby-queue-pill-btn" type="button" title="Очередь воспроизведения">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="8" y1="6" x2="21" y2="6"/>
+            <line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/>
+            <line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          <span>Очередь</span>
+          <span id="standby-queue-count-badge" class="standby-queue-count-badge hidden">0</span>
+        </button>
         <button id="standby-btn-library" class="standby-library-pill-btn" type="button" title="Медиатека и станции">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1.5"/>
@@ -263,6 +275,65 @@
             <input id="standby-volume-input" class="standby-vol-input" type="range" min="0" max="100" value="50" aria-label="Громкость">
           </div>
           <span id="standby-volume-text" class="standby-volume-text">100%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fullscreen TV Playback Queue Overlay (Previous, Now Playing, Up Next) -->
+    <div id="standby-queue-modal" class="standby-library-modal standby-queue-modal hidden" aria-hidden="true" role="dialog" aria-label="Очередь воспроизведения">
+      <header class="standby-library-header standby-queue-header">
+        <div class="standby-library-header-left">
+          <h2 class="standby-library-title">Очередь</h2>
+          <span id="standby-queue-subtitle" class="standby-library-subtitle">Предыдущие, текущий трек и следующие композиции</span>
+        </div>
+        <div class="standby-queue-header-actions">
+          <button id="btn-standby-queue-clear" class="standby-library-pill-btn standby-queue-clear-btn hidden" type="button" title="Очистить предстоящие треки">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+            </svg>
+            <span>Очистить далее</span>
+          </button>
+          <button id="btn-close-standby-queue" class="standby-close-btn" type="button" title="Закрыть очередь" aria-label="Закрыть очередь">
+            ✕
+          </button>
+        </div>
+      </header>
+      <div id="standby-queue-scroll" class="standby-library-scroll standby-queue-scroll">
+        <div class="standby-queue-sections">
+          <section id="standby-queue-history-section" class="tv-queue-section tv-queue-section-history hidden">
+            <div class="tv-queue-section-header">
+              <div class="tv-queue-section-title-wrap">
+                <span class="tv-queue-section-dot is-history"></span>
+                <h3 class="tv-queue-section-title">РАНЕЕ</h3>
+                <span id="standby-queue-history-count" class="tv-queue-section-count">0</span>
+              </div>
+              <button id="btn-standby-queue-history-toggle" class="tv-queue-expand-btn hidden" type="button">Показать все</button>
+            </div>
+            <div id="standby-queue-history-list" class="tv-queue-list"></div>
+          </section>
+
+          <section id="standby-queue-current-section" class="tv-queue-section tv-queue-section-current">
+            <div class="tv-queue-section-header">
+              <div class="tv-queue-section-title-wrap">
+                <span class="tv-queue-section-dot is-current"></span>
+                <h3 class="tv-queue-section-title">СЕЙЧАС ИГРАЕТ</h3>
+              </div>
+            </div>
+            <div id="standby-queue-current-track" class="tv-queue-list"></div>
+          </section>
+
+          <section id="standby-queue-upcoming-section" class="tv-queue-section tv-queue-section-upcoming">
+            <div class="tv-queue-section-header">
+              <div class="tv-queue-section-title-wrap">
+                <span class="tv-queue-section-dot is-upcoming"></span>
+                <h3 class="tv-queue-section-title">ДАЛЕЕ В ОЧЕРЕДИ</h3>
+                <span id="standby-queue-upcoming-count" class="tv-queue-section-count">0</span>
+              </div>
+            </div>
+            <div id="standby-queue-upcoming-list" class="tv-queue-list"></div>
+          </section>
         </div>
       </div>
     </div>

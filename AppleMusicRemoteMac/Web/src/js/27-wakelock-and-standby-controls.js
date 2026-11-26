@@ -244,6 +244,8 @@
     if (!state.libraryAlbums || state.libraryAlbums.length === 0) {
       send({ action: 'get_library_albums' });
     }
+    send({ action: 'get_queue' });
+    if (typeof syncStandbyQueueBadge === 'function') syncStandbyQueueBadge();
     syncStandbyAndMotionCoverUI();
     syncActiveMotionVideoTarget();
     syncBookletViewerLayoutMode();
@@ -267,6 +269,7 @@
   function closeStandbyMode() {
     closeStandbyLibraryModal();
     closeStandbyAiModal();
+    if (typeof closeStandbyQueueModal === 'function') closeStandbyQueueModal();
     ScreenWakeLockManager.release();
     document.body.classList.remove('tv-mode-open');
     if (standbyRtaRafId) {
@@ -391,6 +394,12 @@
 
     const btnCloseStandbyLib = document.getElementById('btn-close-standby-library');
     if (btnCloseStandbyLib) btnCloseStandbyLib.addEventListener('click', closeStandbyLibraryModal);
+
+    const btnStandbyQueue = document.getElementById('standby-btn-queue');
+    if (btnStandbyQueue) btnStandbyQueue.addEventListener('click', openStandbyQueueModal);
+
+    const btnCloseStandbyQueue = document.getElementById('btn-close-standby-queue');
+    if (btnCloseStandbyQueue) btnCloseStandbyQueue.addEventListener('click', closeStandbyQueueModal);
 
     const btnStandbyAi = document.getElementById('standby-btn-ai-curator');
     if (btnStandbyAi) btnStandbyAi.addEventListener('click', openStandbyAiModal);
@@ -517,6 +526,12 @@
         if (aiModal && !aiModal.classList.contains('hidden')) {
           e.stopImmediatePropagation();
           closeStandbyAiModal();
+          return;
+        }
+        const queueModal = document.getElementById('standby-queue-modal');
+        if (queueModal && !queueModal.classList.contains('hidden')) {
+          e.stopImmediatePropagation();
+          closeStandbyQueueModal();
           return;
         }
         const libModal = document.getElementById('standby-library-modal');

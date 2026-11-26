@@ -152,6 +152,9 @@
 
     renderVolumeUI();
     renderCurrentQueueTrack(dom.queueCurrentTrack);
+    if (typeof isStandbyQueueModalOpen === 'function' && isStandbyQueueModalOpen()) {
+      renderStandbyQueueModal();
+    }
     updateMediaSession();
     syncStandbyAndMotionCoverUI();
     syncCurrentTrackBookletAvailability();
@@ -654,7 +657,7 @@
   document.addEventListener('pointerup', (e) => {
     const now = Date.now();
     if (now - lastGlobalHapticTime < 80) return;
-    const target = e.target.closest('button, .track-row, .playlist-card, .hero-card, .station-card, .media-card, .genre-card, .tab-item, .nav-btn, .search-chip, .quality-badge, .pill, .mini-btn, .mini-player-content');
+    const target = e.target.closest('button, .track-row, .tv-queue-row, .playlist-card, .hero-card, .station-card, .media-card, .genre-card, .tab-item, .nav-btn, .search-chip, .quality-badge, .pill, .mini-btn, .mini-player-content');
     if (target) {
       lastGlobalHapticTime = now;
       triggerHaptic('light');
@@ -669,6 +672,9 @@
   function syncStandbyLandscapeBodyClass() {
     const isLandscapeStandby = Boolean(standbyLandscapeMq && standbyLandscapeMq.matches && !document.body.classList.contains('keyboard-open'));
     document.body.classList.toggle('standby-landscape-open', isLandscapeStandby);
+    if (isLandscapeStandby && typeof closeStandbyQueueModal === 'function') {
+      closeStandbyQueueModal();
+    }
   }
 
   if (standbyLandscapeMq) {

@@ -101,6 +101,7 @@
     const modal = document.getElementById('standby-ai-modal');
     if (!modal) return;
     closeStandbyLibraryModal();
+    if (typeof closeStandbyQueueModal === 'function') closeStandbyQueueModal();
     const p = document.getElementById('top-settings-popover');
     if (p) {
       blurFocusedInContainer(p);
