@@ -120,14 +120,14 @@ public final class AppleSoundCheckService: @unchecked Sendable {
         return (clamped * 100.0).rounded() / 100.0
     }
 
-    /// Checks whether a string is a valid Apple Music / iTunes catalog Adam ID (numeric, >= 5,000,000),
-    /// filtering out small local Music.app `database ID` integers (like `4135` or `9099`).
+    /// Checks whether a string is a valid Apple Music / iTunes catalog Adam ID (numeric, >= 10,000,000),
+    /// filtering out local Music.app `database ID`s (`1 ..< 5,000,000`) and `ITLibraryReader` synthetic IDs (`5,000,000 ..< 10,000,000`).
     public static func isValidCatalogId(_ raw: String?) -> Bool {
         guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty,
               trimmed.allSatisfy({ $0.isNumber }),
               let val = Int64(trimmed),
-              val >= 5_000_000 else {
+              val >= 10_000_000 else {
             return false
         }
         return true

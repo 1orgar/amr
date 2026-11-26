@@ -243,7 +243,10 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             if Thread.isMainThread {
                 // Never block DispatchQueue.main while MediaPlayer dispatches XPC completion on main!
                 var completed = false
-                prepFn(player, prepSel) { _ in
+                prepFn(player, prepSel) { err in
+                    if let err = err {
+                        NSLog("[SystemMusicPlayerBridge] ⚠️ prepareToPlay error for cid=%@: %@", startStoreId, err.localizedDescription)
+                    }
                     completed = true
                     sema.signal()
                 }
@@ -252,7 +255,10 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
                     _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
                 }
             } else {
-                prepFn(player, prepSel) { _ in
+                prepFn(player, prepSel) { err in
+                    if let err = err {
+                        NSLog("[SystemMusicPlayerBridge] ⚠️ prepareToPlay error for cid=%@: %@", startStoreId, err.localizedDescription)
+                    }
                     sema.signal()
                 }
                 _ = sema.wait(timeout: .now() + 2.0)
@@ -310,7 +316,7 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
             }
         }
         if rawCid == nil, let rid = id?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let num = Int(rid), num >= 1_000_000 {
+           let num = Int(rid), num >= 1_000_000, !ITLibraryReader.isSyntheticTrackId(num) {
             rawCid = rid
         }
         if rawCid == nil, !cleanName.isEmpty,
@@ -452,7 +458,10 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
                 var prevCid = targetCid
                 for idx in (curIdx + 1)..<min(q.count, curIdx + 13) {
                     let ut = q[idx]
-                    if ut.isLocal == true { break }
+                    let isDownloadedLocal = ut.isLocal == true && (
+                        ut.numericId == nil || ITLibraryReader.shared.downloadedFileTrackStatus(forTrackId: ut.numericId!) != false
+                    )
+                    if isDownloadedLocal { break }
                     guard let rawNextCid = MusicKitManager.extractNumericCatalogId(from: ut) else { break }
                     let effNextCid = MusicKitManager.shared.preferredAlternateCatalogSong(for: rawNextCid)?.id ?? rawNextCid
                     guard effNextCid != prevCid,

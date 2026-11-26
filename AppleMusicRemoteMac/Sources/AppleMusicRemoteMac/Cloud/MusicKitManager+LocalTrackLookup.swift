@@ -41,7 +41,7 @@ extension MusicKitManager {
         checkSubscriptionPlaylists: Bool = false,
         alternateTitles: [String] = [],
         alternateArtists: [String] = []
-    ) -> (dbId: Int, isPermanentLibrary: Bool, album: String)? {
+    ) -> (dbId: Int, isPermanentLibrary: Bool, isDownloadedFile: Bool, album: String)? {
         guard !PlaybackRouter.shared.isTestingEnvironment else { return nil }
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let validPrefId = (preferredDbId != nil && preferredDbId! > 0 && preferredDbId! < 10_000_000) ? preferredDbId! : 0
@@ -91,17 +91,19 @@ extension MusicKitManager {
         }
 
         let sep = Self.rowFieldSeparator
-        func matchCandidateRows(_ raw: String?) -> (dbId: Int, isPermanentLibrary: Bool, album: String)? {
+        func matchCandidateRows(_ raw: String?) -> (dbId: Int, isPermanentLibrary: Bool, isDownloadedFile: Bool, album: String)? {
             guard let text = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty, text != "0" else { return nil }
             for line in text.components(separatedBy: .newlines) {
                 let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty, trimmed != "0" else { continue }
                 let parts = trimmed.components(separatedBy: sep)
                 guard parts.count >= 2, let id = Int(parts[1]), id > 0 else { continue }
-                let isPerm = (parts[0] == "lib")
+                let tag = parts[0]
+                let isPerm = (tag == "lib" || tag == "lib_file" || tag == "lib_cloud")
+                let isFile = (tag == "lib_file")
                 let rowAlbum = parts.count >= 5 ? parts[4] : ""
                 if parts.count < 4 || normalizedTargets.isEmpty {
-                    return (dbId: id, isPermanentLibrary: isPerm, album: rowAlbum)
+                    return (dbId: id, isPermanentLibrary: isPerm, isDownloadedFile: isFile, album: rowAlbum)
                 }
                 let rowName = parts[2]
                 let rowArtist = parts[3]
@@ -128,7 +130,7 @@ extension MusicKitManager {
                 if !candidateArtists.isEmpty {
                     guard Self.matchesAnyCandidateArtist(rowArtist, candidates: candidateArtists) else { continue }
                 }
-                return (dbId: id, isPermanentLibrary: isPerm, album: rowAlbum)
+                return (dbId: id, isPermanentLibrary: isPerm, isDownloadedFile: isFile, album: rowAlbum)
             }
             return nil
         }
@@ -149,7 +151,13 @@ extension MusicKitManager {
                         end try
                         try
                             set prefTr to (first track of library playlist 1 whose database ID is \(validPrefId))
-                            return "lib\(sep)" & ((database ID of prefTr as integer) as string) & "\(sep)" & (name of prefTr as string) & "\(sep)" & (artist of prefTr as string) & "\(sep)" & (album of prefTr as string)
+                            set prefTag to "lib_cloud"
+                            try
+                                if (class of prefTr is file track) and (location of prefTr is not missing value) then
+                                    set prefTag to "lib_file"
+                                end if
+                            end try
+                            return prefTag & "\(sep)" & ((database ID of prefTr as integer) as string) & "\(sep)" & (name of prefTr as string) & "\(sep)" & (artist of prefTr as string) & "\(sep)" & (album of prefTr as string)
                         end try
                         \(prefSubCheck)
         """ : ""
@@ -177,7 +185,13 @@ extension MusicKitManager {
                                     set trName to (name of tr as string)
                                     set trArtist to (artist of tr as string)
                                     set trAlbum to (album of tr as string)
-                                    set end of outRows to "lib\(sep)" & ((database ID of tr as integer) as string) & "\(sep)" & trName & "\(sep)" & trArtist & "\(sep)" & trAlbum
+                                    set rowTag to "lib_cloud"
+                                    try
+                                        if (class of tr is file track) and (location of tr is not missing value) then
+                                            set rowTag to "lib_file"
+                                        end if
+                                    end try
+                                    set end of outRows to rowTag & "\(sep)" & ((database ID of tr as integer) as string) & "\(sep)" & trName & "\(sep)" & trArtist & "\(sep)" & trAlbum
                                 end try
                             end repeat
                         end try
@@ -207,7 +221,13 @@ extension MusicKitManager {
                                     set trName to (name of tr as string)
                                     set trArtist to (artist of tr as string)
                                     set trAlbum to (album of tr as string)
-                                    set end of outRows to "lib\(sep)" & ((database ID of tr as integer) as string) & "\(sep)" & trName & "\(sep)" & trArtist & "\(sep)" & trAlbum
+                                    set rowTag to "lib_cloud"
+                                    try
+                                        if (class of tr is file track) and (location of tr is not missing value) then
+                                            set rowTag to "lib_file"
+                                        end if
+                                    end try
+                                    set end of outRows to rowTag & "\(sep)" & ((database ID of tr as integer) as string) & "\(sep)" & trName & "\(sep)" & trArtist & "\(sep)" & trAlbum
                                 end try
                             end repeat
                         end try

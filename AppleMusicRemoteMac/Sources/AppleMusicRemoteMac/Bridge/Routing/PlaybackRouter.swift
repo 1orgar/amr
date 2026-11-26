@@ -388,6 +388,12 @@ public final class PlaybackRouter: @unchecked Sendable {
                 return false
             }
         }
+        if urlOpener == nil {
+            _ = SystemMusicPlayerBridge.shared.stop()
+        }
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.nativeQueuedUpcomingCatalogIds.removeAll()
+        }
         let storeRepeat = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.repeatMode }
         let isRepeatOne = (storeRepeat == "one")
         let appleSongRepeat = isRepeatOne ? "one" : "off"
@@ -409,6 +415,10 @@ public final class PlaybackRouter: @unchecked Sendable {
                     if foundTrack is missing value then
                         return "not_found"
                     end if
+                    set targetName to ""
+                    try
+                        set targetName to (name of foundTrack as string)
+                    end try
                     try
                         stop
                     end try
@@ -416,21 +426,46 @@ public final class PlaybackRouter: @unchecked Sendable {
                     set song repeat to \(appleSongRepeat)
                     try
                         \(localPlayStatement)
-                        return "ok"
                     on error playErr number playErrNum
-                        if playErrNum is -1712 then
-                            return "ok_buffering"
+                        if playErrNum is not -1712 then
+                            try
+                                play foundTrack
+                            on error playErr2 number playErrNum2
+                                if playErrNum2 is -1712 then
+                                    return "ok_buffering"
+                                end if
+                                return "err:" & playErrNum2 & ":" & playErr2
+                            end try
                         end if
+                    end try
+                    delay 0.1
+                    set curName to ""
+                    try
+                        if current track is not missing value then
+                            set curName to (name of current track as string)
+                        end if
+                    end try
+                    if curName is "" or curName is "AutoPlay" or (targetName is not "" and curName is not targetName and player state is not playing) then
                         try
                             play foundTrack
-                            return "ok"
-                        on error playErr2 number playErrNum2
-                            if playErrNum2 is -1712 then
+                        on error retryErr number retryErrNum
+                            if retryErrNum is -1712 then
                                 return "ok_buffering"
                             end if
-                            return "err:" & playErrNum2 & ":" & playErr2
+                            return "err:" & retryErrNum & ":" & retryErr
                         end try
-                    end try
+                        delay 0.12
+                        set curName to ""
+                        try
+                            if current track is not missing value then
+                                set curName to (name of current track as string)
+                            end if
+                        end try
+                        if curName is "AutoPlay" or (curName is "" and player state is not playing) then
+                            return "err:autoplay_stuck"
+                        end if
+                    end if
+                    return "ok"
                 end timeout
             on error outerErr number outerErrNum
                 if outerErrNum is -1712 then

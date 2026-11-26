@@ -116,6 +116,21 @@ public final class ITLibraryReader: @unchecked Sendable {
         return syntheticIdToPersistentHex[trackId]
     }
 
+    /// Returns:
+    /// - `true` if `trackId` is an `ITLibrary` synthetic ID backed by a real downloaded file on disk (`locationType == .file && location != nil`),
+    /// - `false` if `trackId` is an `ITLibrary` synthetic ID for an un-downloaded cloud library item (`shared track`),
+    /// - `nil` if `trackId` is outside the synthetic `ITLibrary` range or not cached.
+    public func downloadedFileTrackStatus(forTrackId trackId: Int) -> Bool? {
+        guard Self.isSyntheticTrackId(trackId) else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        guard let hex = syntheticIdToPersistentHex[trackId],
+              let item = itemsByPersistentHex[hex] else {
+            return nil
+        }
+        return item.locationType == .file && item.location != nil
+    }
+
     public func invalidate() {
         lock.lock()
         itemsByPersistentHex.removeAll(keepingCapacity: true)

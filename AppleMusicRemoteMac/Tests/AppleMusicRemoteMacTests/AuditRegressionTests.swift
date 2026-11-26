@@ -847,6 +847,39 @@ final class AuditRegressionTests: XCTestCase {
 
         // If the alternate itself becomes unstageable, preferredAlternateCatalogSong must drop it
         MusicKitManager.shared.markUnstageableCatalogId("6817136270")
-        XCTAssertNil(MusicKitManager.shared.preferredAlternateCatalogSong(for: "6829729404"))
+        XCTAssertNil(MusicKitManager.shared.preferredAlternateCatalogSong(for: "6817136270") ?? MusicKitManager.shared.preferredAlternateCatalogSong(for: "6829729404"))
+    }
+
+    func testITLibrarySyntheticIdNeverCollidesWithCatalogAdamIds() {
+        // Synthetic ITLibrary ID `5000367` (`5_000_000 ..< 10_000_000`) without catalogId must NEVER be treated as an Apple Music catalog ID
+        let itLibOnlyTrack = TrackInfo(
+            id: "5000367",
+            numericId: 5_000_367,
+            name: "So What",
+            artist: "Miles Davis",
+            album: "Kind of Blue",
+            duration: 562,
+            isLocal: true
+        )
+        XCTAssertTrue(ITLibraryReader.isSyntheticTrackId(5_000_367))
+        XCTAssertNil(ITLibraryReader.shared.downloadedFileTrackStatus(forTrackId: 101))
+        XCTAssertNil(MusicKitManager.extractNumericCatalogId(from: itLibOnlyTrack))
+        XCTAssertFalse(AppleSoundCheckService.isValidCatalogId("5000367"))
+        XCTAssertFalse(AppleSoundCheckService.isCloudSyncableCacheKey("id:5000367"))
+
+        // When matched against a catalog track (`catalogId: "201277832"`), explicit catalogId IS extracted cleanly
+        let catalogMatchedLibTrack = TrackInfo(
+            id: "5000367",
+            numericId: 5_000_367,
+            name: "So What",
+            artist: "Miles Davis",
+            album: "Kind of Blue",
+            duration: 562,
+            isLocal: true,
+            catalogId: "201277832"
+        )
+        XCTAssertEqual(MusicKitManager.extractNumericCatalogId(from: catalogMatchedLibTrack), "201277832")
+        XCTAssertTrue(AppleSoundCheckService.isValidCatalogId("201277832"))
+        XCTAssertTrue(AppleSoundCheckService.isCloudSyncableCacheKey("id:201277832"))
     }
 }

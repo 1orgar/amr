@@ -310,9 +310,18 @@ extension QueueManager {
         let trackCatalogId = MusicKitManager.extractNumericCatalogId(from: track)
         let cachedVariants = MusicKitManager.shared.cachedTitleVariants(catalogId: trackCatalogId)
 
-        // 1a. Immediate Music.app Lossless/Hi-Res fast path (~15 ms): permanent local library tracks (`isLocal == true`) ONLY!
+        // 1a. Immediate Music.app Lossless/Hi-Res fast path (~15 ms): downloaded local files (`isLocal == true` & not cloud-only `shared track`) ONLY!
         var hadStaleNumericId = false
-        if track.isLocal == true, let nid = track.numericId, nid > 0, nid < 10_000_000, PlaybackRouter.shared.urlOpener == nil {
+        var fallbackCloudLibraryDbId: Int? = nil
+        let itDownloadedStatus: Bool? = (track.numericId != nil)
+            ? ITLibraryReader.shared.downloadedFileTrackStatus(forTrackId: track.numericId!)
+            : nil
+        if itDownloadedStatus == false, let cloudLibNid = track.numericId, cloudLibNid > 0, cloudLibNid < 10_000_000 {
+            // Track is saved in Apple Music Library (`ITLibrary`) as a cloud-only item without a downloaded local file;
+            // play via native `SystemMusicPlayerBridge` first to avoid `Music.app` `AutoPlay` XPC queue deadlocks,
+            // keeping `cloudLibNid` as fallback for private iCloud-uploaded audio.
+            fallbackCloudLibraryDbId = cloudLibNid
+        } else if track.isLocal == true, let nid = track.numericId, nid > 0, nid < 10_000_000, PlaybackRouter.shared.urlOpener == nil {
             if PlaybackRouter.shared.playTrackByDatabaseIdViaAMRQueue(nid, generation: gen) {
                 BitPerfectLogMonitor.shared.endExplicitTrackSwitch(
                     trackKey: canonicalKey,
@@ -340,13 +349,16 @@ extension QueueManager {
                 PlaybackRouter.shared.prestageUpcomingCloudTracks(fromIndex: index + 1, count: 5, expectedGeneration: gen)
                 return true
             } else {
-                // Stale dbId (e.g. removed from library) — purge from all caches immediately
+                // Stale or non-playable dbId — purge if non-synthetic or fall through to native cloud engine
                 hadStaleNumericId = true
-                LibraryService.shared.purgeDeletedTrackDbIdsFromAllCaches([nid])
-                PlaybackStateStore.shared.unregisterStagedTemporaryTrack(dbId: nid)
+                if !ITLibraryReader.isSyntheticTrackId(nid) {
+                    LibraryService.shared.purgeDeletedTrackDbIdsFromAllCaches([nid])
+                    PlaybackStateStore.shared.unregisterStagedTemporaryTrack(dbId: nid)
+                }
                 PlaybackStateStore.shared.withLock {
                     if PlaybackStateStore.shared.playbackGeneration == gen {
-                        if index >= 0 && index < PlaybackStateStore.shared.activeCustomQueue.count {
+                        if !ITLibraryReader.isSyntheticTrackId(nid),
+                           index >= 0 && index < PlaybackStateStore.shared.activeCustomQueue.count {
                             PlaybackStateStore.shared.activeCustomQueue[index].numericId = nil
                             PlaybackStateStore.shared.activeCustomQueue[index].isLocal = false
                         }
@@ -359,11 +371,12 @@ extension QueueManager {
             }
         }
 
-        // 1b. Fast ~2 ms lookup in `library playlist 1` ONLY (skipped in `0 ms` when library cache is confirmed empty!)
-        if !track.name.isEmpty,
+        // 1b. Fast ~2 ms lookup in `library playlist 1` ONLY for downloaded `file track`s (skipped in `0 ms` when library cache is confirmed empty or already known cloud-only!)
+        if fallbackCloudLibraryDbId == nil,
+           !track.name.isEmpty,
            PlaybackRouter.shared.urlOpener == nil,
            !LibraryService.shared.hasConfirmedEmptyLibraryCache() {
-            let prefDbId = (!hadStaleNumericId && track.isLocal == true && track.numericId != nil && track.numericId! > 0 && track.numericId! < 10_000_000) ? track.numericId : nil
+            let prefDbId = (!hadStaleNumericId && track.isLocal == true && track.numericId != nil && track.numericId! > 0 && track.numericId! < 10_000_000 && !ITLibraryReader.isSyntheticTrackId(track.numericId!)) ? track.numericId : nil
             let altTitles = cachedVariants.map(\.name).filter { !$0.isEmpty }
             let altArtists = cachedVariants.map(\.artist).filter { !$0.isEmpty }
             if let found = MusicKitManager.shared.findTrackDatabaseIdDetailedInMusicApp(
@@ -379,48 +392,53 @@ extension QueueManager {
                     PlaybackStateStore.shared.stagedTemporaryTrackDbIds.contains(foundDbId)
                 }
                 if !isStagedTemp {
-                    let isCurrentGen = PlaybackStateStore.shared.withLock { () -> Bool in
-                        guard PlaybackStateStore.shared.playbackGeneration == gen else { return false }
-                        if !cachedVariants.isEmpty {
-                            PlaybackStateStore.shared.activeTrackTitleVariants = cachedVariants
-                        }
-                        if index >= 0 && index < PlaybackStateStore.shared.activeCustomQueue.count {
-                            PlaybackStateStore.shared.activeCustomQueue[index].numericId = foundDbId
-                            PlaybackStateStore.shared.activeCustomQueue[index].isLocal = true
-                        }
-                        return true
-                    }
-                    if isCurrentGen && PlaybackRouter.shared.playTrackByDatabaseIdViaAMRQueue(foundDbId, generation: gen) {
-                        BitPerfectLogMonitor.shared.endExplicitTrackSwitch(
-                            trackKey: canonicalKey,
-                            catalogId: trackCatalogId,
-                            expectedSampleRate: cachedFmt?.sampleRate,
-                            expectedBitDepth: cachedFmt?.bitDepth
-                        )
-                        let now = Date()
-                        PlaybackStateStore.shared.withLock {
-                            if PlaybackStateStore.shared.playbackGeneration == gen {
-                                PlaybackStateStore.shared.lastCloudPlayTime = now
-                                PlaybackStateStore.shared.lastSkipTime = now
-                                PlaybackStateStore.shared.lastWasPlayingCloud = true
-                                PlaybackStateStore.shared.activeLoadingStage = nil
-                                PlaybackStateStore.shared.activeLoadingStartedAt = nil
-                                PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+                    if found.isDownloadedFile {
+                        let isCurrentGen = PlaybackStateStore.shared.withLock { () -> Bool in
+                            guard PlaybackStateStore.shared.playbackGeneration == gen else { return false }
+                            if !cachedVariants.isEmpty {
+                                PlaybackStateStore.shared.activeTrackTitleVariants = cachedVariants
                             }
+                            if index >= 0 && index < PlaybackStateStore.shared.activeCustomQueue.count {
+                                PlaybackStateStore.shared.activeCustomQueue[index].numericId = foundDbId
+                                PlaybackStateStore.shared.activeCustomQueue[index].isLocal = true
+                            }
+                            return true
                         }
-                        PlaybackStateStore.shared.invalidateQueueCache()
-                        PlaybackStateStore.shared.invalidateStatusCache()
-                        WebSocketServer.shared.broadcastStatus(includeQueue: true)
-                        PlaybackRouter.shared.prestageUpcomingCloudTracks(fromIndex: index + 1, count: 5, expectedGeneration: gen)
-                        return true
+                        if isCurrentGen && PlaybackRouter.shared.playTrackByDatabaseIdViaAMRQueue(foundDbId, generation: gen) {
+                            BitPerfectLogMonitor.shared.endExplicitTrackSwitch(
+                                trackKey: canonicalKey,
+                                catalogId: trackCatalogId,
+                                expectedSampleRate: cachedFmt?.sampleRate,
+                                expectedBitDepth: cachedFmt?.bitDepth
+                            )
+                            let now = Date()
+                            PlaybackStateStore.shared.withLock {
+                                if PlaybackStateStore.shared.playbackGeneration == gen {
+                                    PlaybackStateStore.shared.lastCloudPlayTime = now
+                                    PlaybackStateStore.shared.lastSkipTime = now
+                                    PlaybackStateStore.shared.lastWasPlayingCloud = true
+                                    PlaybackStateStore.shared.activeLoadingStage = nil
+                                    PlaybackStateStore.shared.activeLoadingStartedAt = nil
+                                    PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+                                }
+                            }
+                            PlaybackStateStore.shared.invalidateQueueCache()
+                            PlaybackStateStore.shared.invalidateStatusCache()
+                            WebSocketServer.shared.broadcastStatus(includeQueue: true)
+                            PlaybackRouter.shared.prestageUpcomingCloudTracks(fromIndex: index + 1, count: 5, expectedGeneration: gen)
+                            return true
+                        }
+                    } else {
+                        fallbackCloudLibraryDbId = foundDbId
                     }
                 }
             }
         }
 
-        // 2. Primary Music.app Lossless/Hi-Res Cloud Engine (prefer numeric `catalogId` when `track.id` is a library `i.xxx` or `<10M` subscription playlist ID!)
+        // 2. Primary Music.app Lossless/Hi-Res Cloud Engine (prefer numeric `catalogId` when `track.id` is a library `i.xxx` or `<10M` ID!)
         let effectiveSongId: String? = {
-            if let cat = track.catalogId?.trimmingCharacters(in: .whitespacesAndNewlines), let num = Int(cat), num >= 1_000_000 {
+            if let cat = track.catalogId?.trimmingCharacters(in: .whitespacesAndNewlines),
+               let num = Int(cat), num >= 1_000_000, !ITLibraryReader.isSyntheticTrackId(num) {
                 return cat
             }
             let raw = track.id.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -452,6 +470,34 @@ extension QueueManager {
                     _ = await MusicKitManager.shared.resolveTrackStation(title: nextTrack.name, artist: nextTrack.artist)
                 }
             }
+            return true
+        }
+
+        // 2b. Fallback for private iCloud-uploaded library tracks not present in Apple Music's public catalog
+        if let uploadDbId = fallbackCloudLibraryDbId,
+           PlaybackRouter.shared.urlOpener == nil,
+           !PlaybackRouter.shared.isTestingEnvironment,
+           PlaybackRouter.shared.playTrackByDatabaseIdViaAMRQueue(uploadDbId, generation: gen) {
+            BitPerfectLogMonitor.shared.endExplicitTrackSwitch(
+                trackKey: canonicalKey,
+                catalogId: trackCatalogId,
+                expectedSampleRate: cachedFmt?.sampleRate,
+                expectedBitDepth: cachedFmt?.bitDepth
+            )
+            let now = Date()
+            PlaybackStateStore.shared.withLock {
+                if PlaybackStateStore.shared.playbackGeneration == gen {
+                    PlaybackStateStore.shared.lastCloudPlayTime = now
+                    PlaybackStateStore.shared.lastSkipTime = now
+                    PlaybackStateStore.shared.lastWasPlayingCloud = true
+                    PlaybackStateStore.shared.activeLoadingStage = nil
+                    PlaybackStateStore.shared.activeLoadingStartedAt = nil
+                    PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+                }
+            }
+            PlaybackStateStore.shared.invalidateQueueCache()
+            PlaybackStateStore.shared.invalidateStatusCache()
+            WebSocketServer.shared.broadcastStatus(includeQueue: true)
             return true
         }
 
@@ -506,17 +552,21 @@ extension QueueManager {
         let script = """
         tell application "Music"
             try
-                set foundTracks to (every track of library playlist 1 whose name is "\(escN)" and artist is "\(escA)")
+                set foundTracks to (every file track of library playlist 1 whose name is "\(escN)" and artist is "\(escA)")
                 if (count of foundTracks) > 0 then
-                    play item 1 of foundTracks
-                    return "ok"
+                    if location of (item 1 of foundTracks) is not missing value then
+                        play item 1 of foundTracks
+                        return "ok"
+                    end if
                 end if
             end try
             try
-                set foundTracks to (every track of library playlist 1 whose name is "\(escN)")
+                set foundTracks to (every file track of library playlist 1 whose name is "\(escN)")
                 if (count of foundTracks) > 0 then
-                    play item 1 of foundTracks
-                    return "ok"
+                    if location of (item 1 of foundTracks) is not missing value then
+                        play item 1 of foundTracks
+                        return "ok"
+                    end if
                 end if
             end try
             return "not_found"

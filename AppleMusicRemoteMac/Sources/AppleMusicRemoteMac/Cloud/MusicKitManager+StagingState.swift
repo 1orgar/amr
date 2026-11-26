@@ -31,16 +31,16 @@ extension MusicKitManager {
 
     public static func extractNumericCatalogId(from track: TrackInfo) -> String? {
         if let cat = track.catalogId?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let num = Int(cat), num >= 1_000_000 {
+           let num = Int(cat), num >= 1_000_000, !ITLibraryReader.isSyntheticTrackId(num) {
             return cat
         }
         let rawId = track.id.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let num = Int(rawId), num >= 1_000_000 {
+        if let num = Int(rawId), num >= 10_000_000 {
             return rawId
         }
         if let u = track.url, let comp = URLComponents(string: u),
            let qi = comp.queryItems?.first(where: { $0.name == "i" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let num = Int(qi), num >= 1_000_000 {
+           let num = Int(qi), num >= 1_000_000, !ITLibraryReader.isSyntheticTrackId(num) {
             return qi
         }
         return nil
