@@ -200,7 +200,7 @@ final class QueueManagerTests: XCTestCase {
             PlaybackStateStore.shared.isCustomQueuePlayback = true
             PlaybackStateStore.shared.activeCustomQueue = [track1, track2]
             PlaybackStateStore.shared.activeCustomQueueIndex = 0
-            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-3.0) // 3 seconds ago
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-1.2) // Inside 3.5s buffering grace window
             PlaybackStateStore.shared.currentTrackPlaybackConfirmed = false
         }
 
@@ -208,6 +208,11 @@ final class QueueManagerTests: XCTestCase {
         QueueManager.shared.handleTrackNotification(userInfo: ["Player State": "stopped"])
         // Must NOT skip to next track while unconfirmed!
         XCTAssertEqual(PlaybackStateStore.shared.activeCustomQueueIndex, 0)
+
+        // Refresh timestamp so slow CI runners don't drift past the 3.5s grace window after getPlayerStatus()
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-1.2)
+        }
 
         // Notification: previous or foreign track playing while buffering (unconfirmed)
         QueueManager.shared.handleTrackNotification(userInfo: [
