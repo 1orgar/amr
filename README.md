@@ -10,6 +10,7 @@
 
 [![CI](https://github.com/1orgar/amr/actions/workflows/ci.yml/badge.svg)](https://github.com/1orgar/amr/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/1orgar/amr?color=10b981&label=release)](https://github.com/1orgar/amr/releases/latest)
+[![Homebrew](https://img.shields.io/badge/Homebrew-1orgar%2Ftap%2Famr-FBB040?logo=homebrew&logoColor=white)](https://github.com/1orgar/homebrew-tap)
 [![Notarized](https://img.shields.io/badge/Apple-Notarized%20%26%20Signed-success?logo=apple)](https://github.com/1orgar/amr/releases/latest)
 [![Platform](https://img.shields.io/badge/macOS-14.0%2B%20Sonoma%20%2F%20Sequoia-000000?logo=apple)](https://www.apple.com/macos/)
 [![Architecture](https://img.shields.io/badge/Universal%202-arm64%20%7C%20x86__64-2563eb)](https://developer.apple.com/documentation/apple-silicon)
@@ -128,6 +129,14 @@ macOS resamples all system audio to a single fixed sample rate inside `coreaudio
 
 ## 🚀 Installation
 
+### Option 1 — Homebrew Cask (Recommended)
+```bash
+brew tap 1orgar/tap
+brew trust 1orgar/tap 2>/dev/null || true
+brew install --cask 1orgar/tap/amr
+```
+
+### Option 2 — Direct Universal 2 DMG
 1. Download **`AppleMusicRemoteMac-Universal.dmg`** from the [**Latest Release**](https://github.com/1orgar/amr/releases/latest) (`arm64` Apple Silicon & `x86_64` Intel, macOS 14.0 Sonoma or newer).
 2. Open the disk image and drag **`AppleMusicRemoteMac.app`** to **`/Applications`**.
    * *The binary is signed with an Apple Developer ID certificate and notarized by Apple — macOS Gatekeeper opens it cleanly with zero terminal workarounds and zero Keychain prompts.*

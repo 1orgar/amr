@@ -64,6 +64,15 @@
 ---
 
 ## 📦 Installation
+
+### Homebrew (macOS 14.0+)
+```bash
+brew tap 1orgar/tap
+brew trust 1orgar/tap 2>/dev/null || true
+brew install --cask 1orgar/tap/amr
+```
+
+### Manual DMG
 1. Download **`AppleMusicRemoteMac-Universal.dmg`** below (Universal 2 binary for **Apple Silicon M1–M4** and **Intel `x86_64`**, macOS 14.0+).
 2. Open the `.dmg` and drag **`AppleMusicRemoteMac.app`** to **`/Applications`**.
 3. Launch the app from `/Applications` and grant permission to control `Music.app` when prompted.
