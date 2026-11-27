@@ -245,6 +245,9 @@ extension PlaybackTransportController {
             let curTrack = PlaybackStateStore.shared.lastPlayerStatusCache?.status.track
             return (isCustom, curTrack)
         }
+        if validMode == "one" {
+            BitPerfectLogMonitor.shared.clearPendingNextTrackFormat()
+        }
         if validMode == "one" && !isCustomQueue {
             let candidate = cachedTrack ?? (PlaybackRouter.shared.isTestingEnvironment ? nil : PlayerStatusEngine.shared.getPlayerStatus().track)
             if let t = candidate {
@@ -270,14 +273,26 @@ extension PlaybackTransportController {
         // During radio playback, never mutate Music.app's native repeat mode to `one` (which is ignored or can halt station streaming);
         // Radio Repeat-One is handled cleanly by seeking the active radio track to `0:00` before track end.
         let musicAppMode = (isRadio || (isCustomQueue && validMode == "all")) ? "off" : validMode
+        if !isRadio {
+            _ = SystemMusicPlayerBridge.shared.setRepeatMode(musicAppMode)
+        }
+        var appliedViaSB = false
         if let app = MusicAppProvider.shared.getMusicApp() {
             var rMode: MusicERpt = .off
             if musicAppMode == "all" { rMode = .all }
             else if musicAppMode == "one" { rMode = .one }
             app.songRepeat = rMode
-        } else if MusicAppProvider.shared.isMusicAppRunning {
-            _ = AppleScriptExecutor.shared.execute("tell application \"Music\" to try\nset song repeat to \(musicAppMode)\nend try")
+            appliedViaSB = (app.songRepeat == rMode)
         }
+        if !appliedViaSB && MusicAppProvider.shared.isMusicAppRunning {
+            _ = AppleScriptExecutor.shared.execute(
+                "tell application \"Music\" to try\nset song repeat to \(musicAppMode)\nend try",
+                maxWait: 1.5,
+                reportTimeout: false
+            )
+        }
+        NSLog("[PlaybackTransportController] 🔁 Repeat mode set to '%@' (Music.app='%@', sb=%d, customQueue=%d, radio=%d)",
+              validMode, musicAppMode, appliedViaSB ? 1 : 0, isCustomQueue ? 1 : 0, isRadio ? 1 : 0)
 
         PlayerStatusEngine.shared.updateCachedRepeatMode(validMode)
         WebSocketServer.shared.broadcastStatus(includeQueue: false)

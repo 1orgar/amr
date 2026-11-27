@@ -355,6 +355,13 @@ public final class PlaybackRouter: @unchecked Sendable {
         if ok, res?.trimmingCharacters(in: .whitespacesAndNewlines) == "ok" {
             if let app = MusicAppProvider.shared.getMusicApp() {
                 app.shuffleEnabled = shuffle
+                if applePlaylistRepeat == "one" { app.songRepeat = .one }
+                else if applePlaylistRepeat == "all" { app.songRepeat = .all }
+                else { app.songRepeat = .off }
+            }
+            _ = SystemMusicPlayerBridge.shared.setRepeatMode(applePlaylistRepeat)
+            if applePlaylistRepeat == "one" {
+                QueueManager.shared.startQueueMonitoring()
             }
             PlaybackStateStore.shared.invalidateQueueCache()
             PlaybackStateStore.shared.invalidateStatusCache()

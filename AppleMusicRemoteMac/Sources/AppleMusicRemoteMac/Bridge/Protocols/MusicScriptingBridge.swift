@@ -20,10 +20,10 @@ import ScriptingBridge
     case rewinding = 0x6b505352      // 'kPSR'
 }
 
-@objc public enum MusicERpt: Int {
-    case off = 0x6b52504f // 'kRPO'
-    case one = 0x6b525031 // 'kRP1'
-    case all = 0x6b525041 // 'kRPA'
+@objc public enum MusicERpt: CInt {
+    case off = 0x6b52704f // 'kRpO'
+    case one = 0x6b527031 // 'kRp1'
+    case all = 0x6b416c6c // 'kAll'
 }
 
 @objc public protocol MusicArtworkProtocol: NSObjectProtocol {

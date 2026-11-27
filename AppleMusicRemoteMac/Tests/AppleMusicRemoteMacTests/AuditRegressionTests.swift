@@ -882,4 +882,71 @@ final class AuditRegressionTests: XCTestCase {
         XCTAssertTrue(AppleSoundCheckService.isValidCatalogId("201277832"))
         XCTAssertTrue(AppleSoundCheckService.isCloudSyncableCacheKey("id:201277832"))
     }
+
+    func testMusicERptFourCharCodesAndRepeatOneInterception() {
+        // 1. Verify Music.app ScriptingBridge FourCharCodes match `/System/Applications/Music.app` sdef (`'kRpO'`, `'kRp1'`, `'kAll'`)
+        XCTAssertEqual(MusicERpt.off.rawValue, 0x6b52704f)
+        XCTAssertEqual(MusicERpt.one.rawValue, 0x6b527031)
+        XCTAssertEqual(MusicERpt.all.rawValue, 0x6b416c6c)
+
+        defer {
+            PlaybackStateStore.shared.resetCustomQueue()
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.repeatMode = "off"
+                PlaybackStateStore.shared.repeatOnePinnedTrack = nil
+            }
+        }
+
+        // 2. Custom/cloud queue with Repeat ONE enabled mid-track: if Music.app's AVQueuePlayer advances to pre-buffered Track 2 (`aespa — ZOOM ZOOM`),
+        // QueueManager MUST intercept and replay index 0 (`ONE OK ROCK — Prove`) instead of advancing to index 1!
+        let track0 = TrackInfo(
+            id: "1770001001",
+            numericId: nil,
+            name: "Prove",
+            artist: "ONE OK ROCK",
+            album: "Luxury Disease",
+            duration: 226,
+            isLocal: false,
+            url: "https://music.apple.com/us/album/prove/1770001000?i=1770001001",
+            index: 1,
+            catalogId: "1770001001"
+        )
+        let track1 = TrackInfo(
+            id: "1770002002",
+            numericId: nil,
+            name: "ZOOM ZOOM",
+            artist: "aespa",
+            album: "ZOOM ZOOM - Single",
+            duration: 194,
+            isLocal: false,
+            url: "https://music.apple.com/us/album/zoom-zoom/1770002000?i=1770002002",
+            index: 2,
+            catalogId: "1770002002"
+        )
+
+        let genBefore = PlaybackStateStore.shared.withLock { () -> UInt64 in
+            PlaybackStateStore.shared.isCustomQueuePlayback = true
+            PlaybackStateStore.shared.activeCustomQueue = [track0, track1]
+            PlaybackStateStore.shared.activeCustomQueueIndex = 0
+            PlaybackStateStore.shared.currentOriginalPlaylistName = "Очередь AMR"
+            PlaybackStateStore.shared.currentTrackPlaybackConfirmed = true
+            PlaybackStateStore.shared.hasTriggeredAdvanceForCurrentTrack = false
+            PlaybackStateStore.shared.lastCloudPlayTime = Date().addingTimeInterval(-220.0)
+            PlaybackStateStore.shared.isUserPaused = false
+            return PlaybackStateStore.shared.playbackGeneration
+        }
+        XCTAssertTrue(PlaybackTransportController.shared.setRepeat(mode: "one"))
+
+        QueueManager.shared.handleTrackNotification(userInfo: [
+            "Player State": "Playing",
+            "Name": "ZOOM ZOOM",
+            "Artist": "aespa"
+        ])
+
+        let (idxAfter, genAfter) = PlaybackStateStore.shared.withLock {
+            (PlaybackStateStore.shared.activeCustomQueueIndex, PlaybackStateStore.shared.playbackGeneration)
+        }
+        XCTAssertEqual(idxAfter, 0, "Repeat ONE intercept must keep activeCustomQueueIndex on index 0 ('Prove'), never advancing to index 1 ('ZOOM ZOOM')")
+        XCTAssertEqual(genAfter, genBefore &+ 1, "Repeat ONE intercept must immediately replay index 0")
+    }
 }

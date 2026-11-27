@@ -67,7 +67,10 @@ extension QueueManager {
     }
 
     internal func stopMusicAppImmediatelyForQueueCutoff() {
-        if !PlaybackRouter.shared.isTestingEnvironment && PlaybackRouter.shared.urlOpener == nil {
+        if PlaybackRouter.shared.isTestingEnvironment {
+            return
+        }
+        if PlaybackRouter.shared.urlOpener == nil {
             if SystemMusicPlayerBridge.shared.stop() {
                 return
             }
@@ -461,16 +464,19 @@ extension QueueManager {
         }
     }
 
-    /// Enforces `repeatMode == "one"` during Apple Music Radio / station playback strictly via `seek(to: 0.0)`
-    /// BEFORE track end or station crossfade — NEVER replacing the radio stream with a custom queue (`playSearchResults`).
+    /// Enforces `repeatMode == "one"` during Apple Music Radio, Subscription Playlists, and Native Playlists:
+    /// - On Radio: seeks to `0:00` before track end / station crossfade without leaving the radio station.
+    /// - On Native / Subscription Playlists: lets `Music.app` loop sample-accurately when `songRepeat == .one`,
+    ///   while catching pre-buffered `AVQueuePlayer` next-track jumps (`previousTrack`) or streaming containers that refuse `songRepeat == .one`.
     func enforceRadioRepeatOneLocked(triggerTrackName: String? = nil, triggerArtistName: String? = nil) {
-        let (repMode, isRadio, stationName, pinnedTrack, lastRewind, isUserPaused, isStaging, scheduledSmartStart) = PlaybackStateStore.shared.withLock {
+        let (repMode, isRadio, stationName, pinnedTrack, lastRewind, lastSkip, isUserPaused, isStaging, scheduledSmartStart) = PlaybackStateStore.shared.withLock {
             (
                 PlaybackStateStore.shared.repeatMode,
                 PlaybackStateStore.shared.isRadioPlayback,
                 PlaybackStateStore.shared.activeStationName,
                 PlaybackStateStore.shared.repeatOnePinnedTrack,
                 PlaybackStateStore.shared.lastRepeatOneRewindTime,
+                PlaybackStateStore.shared.lastSkipTime,
                 PlaybackStateStore.shared.isUserPaused,
                 PlaybackStateStore.shared.isStagingCloudTrack,
                 PlaybackStateStore.shared.scheduledSmartTransitionStart
@@ -480,7 +486,6 @@ extension QueueManager {
 
         let status = PlayerStatusEngine.shared.getPlayerStatus()
         let activeRadio = isRadio || status.isRadio
-        guard activeRadio else { return }
         guard status.playerState == "playing" else { return }
 
         let rawName = (triggerTrackName?.isEmpty == false) ? triggerTrackName! : (status.track?.name ?? "")
@@ -491,6 +496,89 @@ extension QueueManager {
         let lowerName = curName.lowercased()
         if (lowerName.hasPrefix("станция:") || lowerName.hasPrefix("station:") || curName == (stationName ?? "")) &&
             (curArtist.isEmpty || curArtist == "Apple Music") {
+            return
+        }
+
+        if !activeRadio {
+            let isRecentUserSkip = Date().timeIntervalSince(lastSkip) < 3.5
+            if pinnedTrack == nil || isRecentUserSkip {
+                let candidate = status.track ?? TrackInfo(
+                    id: "native_pinned",
+                    numericId: nil,
+                    name: curName,
+                    artist: curArtist,
+                    album: "",
+                    duration: status.duration,
+                    hasArtwork: false,
+                    artworkUrl: "",
+                    favorited: false,
+                    isLocal: false,
+                    url: nil,
+                    index: 1
+                )
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.repeatOnePinnedTrack = candidate
+                }
+                return
+            }
+
+            if let pinned = pinnedTrack,
+               !matchesExpectedQueueTrack(pinned, candidateName: curName, candidateArtist: curArtist),
+               Date().timeIntervalSince(lastRewind) >= 2.5 {
+                PlaybackStateStore.shared.withLock {
+                    PlaybackStateStore.shared.lastRepeatOneRewindTime = Date()
+                }
+                NSLog("[QueueManager] 🔂 Native Repeat ONE: Music.app advanced from '%@' to pre-buffered '%@' — stepping back to pinned track!",
+                      pinned.name, curName)
+                BitPerfectLogMonitor.shared.clearPendingNextTrackFormat()
+                if !PlaybackRouter.shared.isTestingEnvironment {
+                    _ = SystemMusicPlayerBridge.shared.setRepeatMode("one")
+                    if let app = MusicAppProvider.shared.getMusicApp() {
+                        app.songRepeat = .one
+                        app.previousTrack()
+                    } else {
+                        _ = AppleScriptExecutor.shared.execute(
+                            "tell application \"Music\"\ntry\nset song repeat to one\nprevious track\nend try\nend tell",
+                            maxWait: 1.5,
+                            reportTimeout: false
+                        )
+                    }
+                    PlaybackStateStore.shared.invalidateStatusCache()
+                    PlaybackStateStore.shared.invalidateQueueCache()
+                    WebSocketServer.shared.broadcastStatus(includeQueue: true)
+                }
+                return
+            }
+
+            // If Music.app refuses `songRepeat == .one` on a streaming subscription playlist container,
+            // proactively loop at `dur - 0.35s` so Repeat One still works seamlessly.
+            if !PlaybackRouter.shared.isTestingEnvironment,
+               let app = MusicAppProvider.shared.getMusicApp() {
+                if app.songRepeat != .one {
+                    app.songRepeat = .one
+                }
+                if app.songRepeat != .one {
+                    let dur = max(status.duration, pinnedTrack?.duration ?? 0.0)
+                    guard dur > 5.0 else { return }
+                    var livePos = status.position
+                    if dur - livePos <= 5.0 {
+                        let directPos = app.playerPosition
+                        if directPos > 0 { livePos = directPos }
+                    }
+                    let remaining = max(1.0, dur - 0.35) - livePos
+                    if remaining <= 0.0 && Date().timeIntervalSince(lastRewind) >= 2.0 {
+                        PlaybackStateStore.shared.withLock {
+                            PlaybackStateStore.shared.lastRepeatOneRewindTime = Date()
+                        }
+                        NSLog("[QueueManager] 🔂 Subscription Repeat ONE: Seeking '%@' at %.2f/%.2fs to 0:00", curName, livePos, dur)
+                        _ = PlaybackTransportController.shared.seek(to: 0.0)
+                        WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                    } else if remaining > 0.0 && remaining <= 0.65 {
+                        let wakeDelay = max(0.02, min(remaining + 0.01, remaining * 0.6))
+                        self.schedulePrecisionCutoffWakeup(delay: wakeDelay)
+                    }
+                }
+            }
             return
         }
 

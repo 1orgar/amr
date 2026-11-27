@@ -156,6 +156,30 @@ public final class SystemMusicPlayerBridge: @unchecked Sendable {
         return true
     }
 
+    /// Synchronizes `MPMusicPlayerController.systemMusicPlayer.repeatMode` over XPC (`0` AppleEvents, `< 1 ms`)
+    /// so active Apple Music catalog / subscription playlist sessions honor Repeat Off / One / All immediately.
+    @discardableResult
+    public func setRepeatMode(_ mode: String) -> Bool {
+        guard !PlaybackRouter.shared.isTestingEnvironment, PlaybackRouter.shared.urlOpener == nil else {
+            return false
+        }
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty,
+              let (player, _) = ensureSystemPlayerLoaded() else {
+            return false
+        }
+        let mpValue: Int
+        switch mode.lowercased() {
+        case "one", "1", "track":
+            mpValue = 2 // MPMusicRepeatModeOne
+        case "all":
+            mpValue = 3 // MPMusicRepeatModeAll
+        default:
+            mpValue = 1 // MPMusicRepeatModeNone
+        }
+        invokeSetInt(player, selectorName: "setRepeatMode:", value: mpValue)
+        return true
+    }
+
     /// Gentle serialized fallback probe used ONLY if `DistributedNotificationCenter` hasn't emitted `playerInfo` yet.
     /// Never contends with busy `AppleScriptExecutor` and never triggers false watchdog kills.
     private func probeLivePlayingTrackIfIdle() -> (name: String, artist: String)? {

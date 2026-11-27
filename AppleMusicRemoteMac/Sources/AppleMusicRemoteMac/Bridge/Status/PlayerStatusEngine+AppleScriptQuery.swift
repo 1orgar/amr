@@ -260,7 +260,7 @@ extension PlayerStatusEngine {
                             && s.curPlNameRaw != "Медиатека"
                             && s.curPlNameRaw != "Очередь AMR"
                         let preferStoreShuffle = isCustom || isRadio || isRadioPl || candidateState == "stopped" || Date().timeIntervalSince(lastShuffleSetTime) < 5.0 || !hasNamedNativePlaylist
-                        let preferStoreRepeat = isCustom || isRadio || isRadioPl || candidateState == "stopped" || Date().timeIntervalSince(lastRepeatSetTime) < 5.0 || !hasNamedNativePlaylist
+                        let preferStoreRepeat = isCustom || isRadio || isRadioPl || candidateState == "stopped" || Date().timeIntervalSince(lastRepeatSetTime) < 5.0 || !hasNamedNativePlaylist || (lastRepeatSetTime != .distantPast && storeRepMode != "off" && staticMeta.repeatMode == "off")
                         s.shuf = preferStoreShuffle ? isShufActive : (staticMeta.shuffle || isShufActive)
                         s.repMode = preferStoreRepeat ? storeRepMode : staticMeta.repeatMode
                         s.hasLoc = staticMeta.hasLoc
@@ -407,7 +407,7 @@ extension PlayerStatusEngine {
             && s.curPlNameRaw != "Медиатека"
             && s.curPlNameRaw != "Очередь AMR"
         let preferStoreShuffle = isCustom || isRadio || isRadioPl || s.rawState == "stopped" || Date().timeIntervalSince(lastShuffleSetTime) < 5.0 || !hasNamedNativePlaylist
-        let preferStoreRepeat = isCustom || isRadio || isRadioPl || s.rawState == "stopped" || Date().timeIntervalSince(lastRepeatSetTime) < 5.0 || !hasNamedNativePlaylist
+        let preferStoreRepeat = isCustom || isRadio || isRadioPl || s.rawState == "stopped" || Date().timeIntervalSince(lastRepeatSetTime) < 5.0 || !hasNamedNativePlaylist || (lastRepeatSetTime != .distantPast && storeRepMode != "off" && rawRep == "off")
         s.shuf = preferStoreShuffle ? isShufActive : (rawShuf || isShufActive)
         s.repMode = preferStoreRepeat ? storeRepMode : rawRep
         s.knd = parts.count > 12 ? parts[12] : ""

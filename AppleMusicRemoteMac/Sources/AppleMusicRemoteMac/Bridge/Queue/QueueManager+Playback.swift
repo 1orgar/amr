@@ -12,7 +12,9 @@ extension QueueManager {
     public func playQueueIndex(_ index: Int) async -> Bool {
         PlaybackStateStore.shared.invalidateQueueCache()
         let (hasCustom, curCustomIndex, customCount) = PlaybackStateStore.shared.withLock {
-            (
+            PlaybackStateStore.shared.lastSkipTime = Date()
+            PlaybackStateStore.shared.repeatOnePinnedTrack = nil
+            return (
                 PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
                 PlaybackStateStore.shared.activeCustomQueueIndex,
                 PlaybackStateStore.shared.activeCustomQueue.count
@@ -545,6 +547,10 @@ extension QueueManager {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanName.isEmpty else { return false }
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.lastSkipTime = Date()
+            PlaybackStateStore.shared.repeatOnePinnedTrack = nil
+        }
 
         let escN = cleanName.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let escA = cleanArtist.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
@@ -583,7 +589,9 @@ extension QueueManager {
     public func playHistoryIndex(_ index: Int) async -> Bool {
         PlaybackStateStore.shared.invalidateQueueCache()
         let (hasCustom, curCustomIndex, customCount) = PlaybackStateStore.shared.withLock {
-            (
+            PlaybackStateStore.shared.lastSkipTime = Date()
+            PlaybackStateStore.shared.repeatOnePinnedTrack = nil
+            return (
                 PlaybackStateStore.shared.isCustomQueuePlayback && !PlaybackStateStore.shared.activeCustomQueue.isEmpty,
                 PlaybackStateStore.shared.activeCustomQueueIndex,
                 PlaybackStateStore.shared.activeCustomQueue.count

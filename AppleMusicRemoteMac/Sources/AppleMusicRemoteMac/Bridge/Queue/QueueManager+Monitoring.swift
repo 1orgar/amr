@@ -325,6 +325,14 @@ extension QueueManager {
             candidateName: trackName,
             candidateArtist: artistName
         ) {
+            let curRep = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.repeatMode }
+            if curRep == "one" {
+                NSLog("[QueueManager] 🔂 Notification: Intercepted forward advance to '%@' while Repeat ONE is active — replaying index %d ('%@')",
+                      trackName, activeIdx, expected.name)
+                stopMusicAppImmediatelyForQueueCutoff()
+                advanceOrEndCustomQueueUnlocked(reason: "repeat-one-intercept")
+                return
+            }
             completeNaturalForwardQueueAdvance(from: activeIdx, to: relativeIdx)
             return
         }
@@ -573,6 +581,14 @@ extension QueueManager {
                     candidateName: curTrackName,
                     candidateArtist: curArtist
                 ) {
+                    let curRep = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.repeatMode }
+                    if curRep == "one" {
+                        NSLog("[QueueManager] 🔂 Poller: Intercepted forward advance to '%@' while Repeat ONE is active — replaying index %d ('%@')",
+                              curTrackName, activeIdx, expectedTrack.name)
+                        stopMusicAppImmediatelyForQueueCutoff()
+                        advanceOrEndCustomQueueUnlocked(reason: "repeat-one-intercept")
+                        return
+                    }
                     completeNaturalForwardQueueAdvance(from: activeIdx, to: relativeIdx)
                     return
                 } else if isAMR && !confirmed && timeSincePlay < 15.0,
@@ -695,14 +711,20 @@ extension QueueManager {
             let eofLeadWindow: Double = 0.18
 
             if isIsolatedAMRPlaylist {
-                if currentRepeatMode == "one" && confirmed && !PlaybackRouter.shared.isTestingEnvironment && dur > 5.0 && effectivePos >= repeatOneCutoffPos {
-                    let lastRewind = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastRepeatOneRewindTime }
-                    if Date().timeIntervalSince(lastRewind) >= 2.0 {
-                        PlaybackStateStore.shared.withLock {
-                            PlaybackStateStore.shared.lastRepeatOneRewindTime = Date()
+                if currentRepeatMode == "one" && confirmed && !PlaybackRouter.shared.isTestingEnvironment && dur > 5.0 && effectivePos > 1.0 {
+                    let remainingToRepeat = repeatOneCutoffPos - effectivePos
+                    if remainingToRepeat <= 0.0 {
+                        let lastRewind = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastRepeatOneRewindTime }
+                        if Date().timeIntervalSince(lastRewind) >= 2.0 {
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.lastRepeatOneRewindTime = Date()
+                            }
+                            _ = PlaybackTransportController.shared.seek(to: 0.0)
+                            WebSocketServer.shared.broadcastStatus(includeQueue: false)
                         }
-                        _ = PlaybackTransportController.shared.seek(to: 0.0)
-                        WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                    } else if remainingToRepeat <= 0.45 {
+                        let wakeDelay = max(0.015, min(remainingToRepeat + 0.008, remainingToRepeat * 0.65))
+                        self.schedulePrecisionCutoffWakeup(delay: wakeDelay)
                     }
                 } else if currentRepeatMode != "one" && !hasMatchingNativeNextTrack && confirmed && !alreadyTriggered && dur > 5.0 && effectivePos > 1.0 {
                     let cutoffPos = dur - eofLeadWindow
@@ -719,14 +741,21 @@ extension QueueManager {
                 let isSingleTrackOff = (queueTracks.count <= 1 && currentRepeatMode == "off")
                 let cutoffPos: Double = dur - eofLeadWindow
                 let timeBasedSmoothEnd = (lastKnownPos <= 1.0 || lastKnownPos >= dur - 10.0) && (effectivePos <= 0.0 && timeSincePlay >= cutoffPos)
-                if currentRepeatMode == "one" && confirmed && !PlaybackRouter.shared.isTestingEnvironment && dur > 5.0 && effectivePos >= repeatOneCutoffPos {
-                    let lastRewind = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastRepeatOneRewindTime }
-                    if Date().timeIntervalSince(lastRewind) >= 2.0 {
-                        PlaybackStateStore.shared.withLock {
-                            PlaybackStateStore.shared.lastRepeatOneRewindTime = Date()
+                let needsPrequeuedRepeatRewind = (firstNativeQueuedCid != nil)
+                if currentRepeatMode == "one" && confirmed && !PlaybackRouter.shared.isTestingEnvironment && dur > 5.0 && effectivePos > 1.0 && needsPrequeuedRepeatRewind {
+                    let remainingToRepeat = repeatOneCutoffPos - effectivePos
+                    if remainingToRepeat <= 0.0 {
+                        let lastRewind = PlaybackStateStore.shared.withLock { PlaybackStateStore.shared.lastRepeatOneRewindTime }
+                        if Date().timeIntervalSince(lastRewind) >= 2.0 {
+                            PlaybackStateStore.shared.withLock {
+                                PlaybackStateStore.shared.lastRepeatOneRewindTime = Date()
+                            }
+                            _ = PlaybackTransportController.shared.seek(to: 0.0)
+                            WebSocketServer.shared.broadcastStatus(includeQueue: false)
                         }
-                        _ = PlaybackTransportController.shared.seek(to: 0.0)
-                        WebSocketServer.shared.broadcastStatus(includeQueue: false)
+                    } else if remainingToRepeat <= 0.45 {
+                        let wakeDelay = max(0.015, min(remainingToRepeat + 0.008, remainingToRepeat * 0.65))
+                        self.schedulePrecisionCutoffWakeup(delay: wakeDelay)
                     }
                 } else if !hasMatchingNativeNextTrack && confirmed && !alreadyTriggered && dur > 5.0 && ((effectivePos > 1.0 && effectivePos >= cutoffPos) || timeBasedSmoothEnd) {
                     if isNativePlayingPlaylist {

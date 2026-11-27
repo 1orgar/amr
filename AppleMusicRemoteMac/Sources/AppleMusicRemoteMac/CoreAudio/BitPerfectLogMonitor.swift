@@ -276,6 +276,13 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
     }
 
+    /// Discards any pre-buffered next-track sample rate (e.g. when the user enables Repeat One after Music.app pre-buffered the next song).
+    public func clearPendingNextTrackFormat() {
+        queue.async { [weak self] in
+            self?.pendingNextTrackFormat = nil
+        }
+    }
+
     /// Suppresses trailing decoder teardown logs of the outgoing track while AMR stops/replaces the queue in `Music.app`,
     /// preventing old-track decoder lines from locking onto the incoming track before `play` executes.
     public func beginExplicitTrackSwitch() {
