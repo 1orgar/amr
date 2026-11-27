@@ -464,4 +464,45 @@ final class BitPerfectLogMonitorFullTests: XCTestCase {
         monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   Input format:  2 ch,  44100 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
         XCTAssertNil(monitor.pendingNextTrackFormat, "Post-seek decoder flush must never pollute pendingNextTrackFormat")
     }
+
+    func testNativeNextSkipAdoptsEarlyALACLockDuringLastSkipWindowAndNeverFallsBackToAAC() {
+        let monitor = BitPerfectLogMonitor.shared
+        PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isStagingCloudTrack = false
+            PlaybackStateStore.shared.isActivelyStagingInBuffer = false
+            PlaybackStateStore.shared.lastSkipTime = Date()
+        }
+        defer {
+            PlaybackStateStore.shared.withLock {
+                PlaybackStateStore.shared.lastSkipTime = .distantPast
+            }
+        }
+
+        // 1. Simulate native `nextTrack()`: unkeyed switch begins & ends, and `lastSkipTime` is fresh (< 2.5s -> `isTransitioningTrack == true`)
+        monitor.queue.sync {
+            monitor.isSuppressingTeardownLogs = true
+            monitor.teardownSuppressStartedAt = Date()
+        }
+        monitor.resetTrackStateSyncForTesting(trackKey: nil)
+        XCTAssertFalse(monitor.isFormatLockedForCurrentTrack)
+
+        // 2. +70ms: Music.app starts gaplessly pre-buffered `zaq:minor piece` at 96.0 kHz / 24-bit BEFORE `playerInfo` arrives!
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   (0xa9dad2300) Input format:  2 ch,  96000 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 96000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+        XCTAssertTrue(monitor.currentIsLossless)
+
+        // 3. +1.3s (still within `lastSkipTime < 2.5s`): `PlayerStatusEngine` and `WebSocketServer` both notify `'zaq:minor piece'`
+        monitor.resetTrackStateSyncForTesting(trackKey: "zaq:minor piece")
+        monitor.resetTrackStateSyncForTesting(trackKey: "zaq:minor piece")
+
+        // Format lock MUST stay strictly at 96.0 kHz / 24-bit Lossless (never wiped, never scheduling AAC fallback), and cache `zaq:minor piece`!
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack, "Delayed track notification during lastSkipTime window must adopt 96 kHz lock, never release it")
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 96000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+        XCTAssertTrue(monitor.currentIsLossless)
+        XCTAssertEqual(monitor.getCachedFormat(artist: "ZAQ", title: "Minor Piece")?.sampleRate, 96000.0)
+        XCTAssertEqual(monitor.getCachedFormat(artist: "ZAQ", title: "Minor Piece")?.bitDepth, 24)
+    }
 }

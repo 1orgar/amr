@@ -386,8 +386,8 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
                 NSLog("[BitPerfectLogMonitor] 🛡 Ignoring redundant resetTrackState for already-locked track '%@'", key)
                 return
             }
-            if cleanCid == nil && self.currentLockedCatalogId != nil && Date().timeIntervalSince(self.lastResetTimestamp) < 2.5 {
-                // Keep the catalog-isolated awaiting-decoder state armed by `endExplicitTrackSwitch`
+            if !clearPrebuffer && expectedSampleRate == nil && Date().timeIntervalSince(self.lastResetTimestamp) < 2.5 {
+                // Ignore duplicate `PlayerStatusEngine` + `DistributedNotificationCenter` resets arriving milliseconds apart for the same awaiting-decoder track
                 return
             }
         }
@@ -400,19 +400,26 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             return
         }
 
-        // Guard against delayed keyed track notification overwriting a fresh authoritative ALACDecoder lock established moments earlier
-        // while `Music.app` started natively (NEVER adopt across AMR-staged cloud/skip transitions!)
-        let isStagingOrTransitioning = PlaybackStateStore.shared.withLock {
-            PlaybackStateStore.shared.isStagingCloudTrack || PlaybackStateStore.shared.isTransitioningTrack
+        // Guard against delayed keyed track notification (`PlayerStatusEngine` / `playerInfo` arriving 0.4–1.8s after `next` / `previous`)
+        // overwriting a fresh authoritative `ACAppleLosslessDecoder` lock established moments earlier after `lastResetTimestamp`!
+        let isActivelyStagingCloud = PlaybackStateStore.shared.withLock {
+            PlaybackStateStore.shared.isStagingCloudTrack || PlaybackStateStore.shared.isActivelyStagingInBuffer
         }
-        if !clearPrebuffer, !isStagingOrTransitioning,
+        if !clearPrebuffer, !isActivelyStagingCloud,
            let key = cleanKey, !key.isEmpty,
            self.currentLockedTrackKey == nil,
            self.isFormatLockedForCurrentTrack, self.isAuthoritativelyLocked,
-           Date().timeIntervalSince(self.lockTimestamp) < 3.5,
+           self.lockTimestamp >= self.lastResetTimestamp.addingTimeInterval(-0.05),
+           Date().timeIntervalSince(self.lockTimestamp) < 4.5,
            let lockedRate = self.currentDetectedSampleRate {
             self.currentLockedTrackKey = key
             self.currentLockedCatalogId = cleanCid
+            self.lossyFallbackWorkItem?.cancel()
+            self.lossyFallbackWorkItem = nil
+            // Keep `isFormatLockedForCurrentTrack = true` so `AACStreamDefault16Bit44kHz` NEVER fires and DAC stays locked,
+            // while setting `isAuthoritativelyLocked = false` so if `previous` flushed an outgoing seek before opening the real decoder <12s later, it still self-heals once.
+            self.isAuthoritativelyLocked = false
+            self.lockTimestamp = Date()
             let lockedDepth = self.currentDetectedBitDepth ?? (lockedRate >= 48000.0 ? 24 : 16)
             if self.currentIsLossless {
                 self.cacheLockedTrackKeyFormat(key, catalogId: cleanCid, sampleRate: lockedRate, bitDepth: lockedDepth)
@@ -488,7 +495,7 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
                 func scheduleLossyFallbackCheck(attempt: Int, delay: TimeInterval) {
                     let checkItem = DispatchWorkItem { [weak self] in
                         guard let self = self else { return }
-                        guard !self.isFormatLockedForCurrentTrack, self.currentLockedTrackKey == key else { return }
+                        guard !self.isFormatLockedForCurrentTrack, !self.currentIsLossless, self.currentLockedTrackKey == key else { return }
                         let (stillTransitioning, cachedState, cachedPos) = PlaybackStateStore.shared.withLock {
                             (
                                 PlaybackStateStore.shared.isStagingCloudTrack || PlaybackStateStore.shared.isTransitioningTrack,
@@ -843,13 +850,8 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         let desc = formatQualityString(rate: rate, bitDepth: validDepth, isLossless: isLossless)
         currentQualityDescription = desc
 
-        if isLossless {
-            if let lockedKey = currentLockedTrackKey, !lockedKey.isEmpty {
-                cacheLockedTrackKeyFormat(lockedKey, catalogId: currentLockedCatalogId, sampleRate: rate, bitDepth: validDepth)
-            } else if let curTrack = PlaybackStateStore.shared.withLock({ PlaybackStateStore.shared.lastPlayerStatusCache })?.status.track {
-                let curCid = MusicKitManager.extractNumericCatalogId(from: curTrack)
-                cacheTrackFormat(artist: curTrack.artist, title: curTrack.name, catalogId: curCid, sampleRate: rate, bitDepth: validDepth)
-            }
+        if isLossless, let lockedKey = currentLockedTrackKey, !lockedKey.isEmpty {
+            cacheLockedTrackKeyFormat(lockedKey, catalogId: currentLockedCatalogId, sampleRate: rate, bitDepth: validDepth)
         }
         // Do NOT call PlaybackStateStore.shared.invalidateStatusCache() here!
         // PlayerStatusEngine.getPlayerStatus() dynamically overlays BitPerfectLogMonitor's sampleRate/bitDepth/audioQuality

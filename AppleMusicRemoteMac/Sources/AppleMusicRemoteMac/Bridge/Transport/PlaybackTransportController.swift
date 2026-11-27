@@ -291,7 +291,9 @@ public final class PlaybackTransportController: @unchecked Sendable {
         PlaybackStateStore.shared.withLock {
             PlaybackStateStore.shared.repeatOnePinnedTrack = nil
         }
-        app.playerPosition = 0.0
+        if effectivePos > 3.0 {
+            app.playerPosition = 0.0
+        }
         app.previousTrack()
         BitPerfectLogMonitor.shared.endExplicitTrackSwitch(trackKey: nil)
         return true
