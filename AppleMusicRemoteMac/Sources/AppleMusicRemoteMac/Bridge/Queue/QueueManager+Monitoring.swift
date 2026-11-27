@@ -668,7 +668,10 @@ extension QueueManager {
                     return false
                 }
                 let nextTrack = queueTracks[activeIdx + 1]
-                guard nextTrack.isLocal != true,
+                let isDownloadedLocalNext = nextTrack.isLocal == true && (
+                    nextTrack.numericId == nil || ITLibraryReader.shared.downloadedFileTrackStatus(forTrackId: nextTrack.numericId!) != false
+                )
+                guard !isDownloadedLocalNext,
                       let rawNextCid = MusicKitManager.extractNumericCatalogId(from: nextTrack) else {
                     return false
                 }

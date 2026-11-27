@@ -359,6 +359,36 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
         }
     }
 
+    private func matchesCurrentLockedTrack(incomingKey: String, lockedKey: String, incomingCatalogId: String?) -> Bool {
+        if incomingKey == lockedKey {
+            return true
+        }
+        if let inCid = incomingCatalogId, let curCid = self.currentLockedCatalogId, inCid == curCid {
+            return true
+        }
+        if let curCid = self.currentLockedCatalogId, incomingCatalogId == nil,
+           let colonIdx = incomingKey.firstIndex(of: ":") {
+            let candArtist = String(incomingKey[..<colonIdx]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let candTitle = String(incomingKey[incomingKey.index(after: colonIdx)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !candTitle.isEmpty {
+                let activeExpected: TrackInfo? = PlaybackStateStore.shared.withLock {
+                    guard PlaybackStateStore.shared.isCustomQueuePlayback else { return nil }
+                    let q = PlaybackStateStore.shared.activeCustomQueue
+                    let idx = PlaybackStateStore.shared.activeCustomQueueIndex
+                    guard idx >= 0 && idx < q.count else { return nil }
+                    let cur = q[idx]
+                    guard MusicKitManager.extractNumericCatalogId(from: cur) == curCid else { return nil }
+                    return cur
+                }
+                if let expected = activeExpected,
+                   QueueManager.shared.matchesExpectedQueueTrack(expected, candidateName: candTitle, candidateArtist: candArtist) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     private func resetTrackStateInternal(
         trackKey: String?,
         catalogId: String? = nil,
@@ -376,11 +406,21 @@ public final class BitPerfectLogMonitor: @unchecked Sendable {
             }
         }
 
-        // Guard against false resetTrackState() on intermediate playerInfo notifications for the SAME active track
+        // Guard against false resetTrackState() on intermediate or localized (`'wayne shorter:...'` -> `'уэйн шортер:...'`)
+        // playerInfo / StatusBuilder notifications for the SAME active track!
         if let key = cleanKey, !key.isEmpty,
-           let lockedKey = self.currentLockedTrackKey, key == lockedKey {
+           let lockedKey = self.currentLockedTrackKey,
+           self.matchesCurrentLockedTrack(incomingKey: key, lockedKey: lockedKey, incomingCatalogId: cleanCid) {
             if let cid = cleanCid, self.currentLockedCatalogId == nil {
                 self.currentLockedCatalogId = cid
+            }
+            if key != lockedKey {
+                self.currentLockedTrackKey = key
+                if self.isFormatLockedForCurrentTrack, self.currentIsLossless,
+                   let rate = self.currentDetectedSampleRate {
+                    let depth = self.currentDetectedBitDepth ?? (rate >= 48000.0 ? 24 : 16)
+                    self.cacheLockedTrackKeyFormat(key, catalogId: self.currentLockedCatalogId, sampleRate: rate, bitDepth: depth)
+                }
             }
             if self.isFormatLockedForCurrentTrack {
                 NSLog("[BitPerfectLogMonitor] 🛡 Ignoring redundant resetTrackState for already-locked track '%@'", key)

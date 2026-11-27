@@ -505,4 +505,108 @@ final class BitPerfectLogMonitorFullTests: XCTestCase {
         XCTAssertEqual(monitor.getCachedFormat(artist: "ZAQ", title: "Minor Piece")?.sampleRate, 96000.0)
         XCTAssertEqual(monitor.getCachedFormat(artist: "ZAQ", title: "Minor Piece")?.bitDepth, 24)
     }
+
+    func testLocalizedArtistNotificationWithSameCatalogIdPreservesHiResLockInMixedQueue() {
+        let monitor = BitPerfectLogMonitor.shared
+
+        // 1. Custom/mixed queue arms English catalog track `wayne shorter:speak no evil` (cid=1440857120)
+        monitor.endExplicitTrackSwitch(trackKey: "wayne shorter:speak no evil", catalogId: "1440857120")
+        let expLock = expectation(description: "Queue sync after endExplicitTrackSwitch")
+        monitor.queue.async { expLock.fulfill() }
+        wait(for: [expLock], timeout: 1.0)
+
+        // 2. Live ACAppleLosslessDecoder locks 96.0 kHz / 24-bit
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   Input format:  2 ch,  96000 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 96000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+        XCTAssertTrue(monitor.currentIsLossless)
+
+        // 3. Music.app emits localized Russian artist `уэйн шортер:speak no evil` for the SAME `catalogId` ("1440857120")
+        monitor.resetTrackStateSyncForTesting(trackKey: "уэйн шортер:speak no evil", catalogId: "1440857120")
+
+        // Must preserve 96.0 kHz / 24-bit lock without releasing or scheduling AAC fallback, and cache localized key too!
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+        XCTAssertEqual(monitor.currentDetectedSampleRate, 96000.0)
+        XCTAssertEqual(monitor.currentDetectedBitDepth, 24)
+        XCTAssertTrue(monitor.currentIsLossless)
+        XCTAssertEqual(monitor.getCachedFormat(artist: "Уэйн Шортер", title: "Speak No Evil", catalogId: "1440857120")?.sampleRate, 96000.0)
+    }
+
+    func testDownloadedAppleMusicHLSTrackDoesNotOverrideAuthoritativeHiResLockWithLegacy44kHzMetadata() {
+        let monitor = BitPerfectLogMonitor.shared
+        let prevEnabled = monitor.isEnabled
+        monitor.isEnabled = true
+        defer { monitor.isEnabled = prevEnabled }
+
+        // Downloaded Apple Music `.movpkg` track in Library: AppleScript reports `hasLoc = true`, `knd = "Медиафайл HLS"`,
+        // and legacy catalog header `sRate = 44100`, `bRate = 256`, while `ACAppleLosslessDecoder` decodes 96.0 kHz / 24-bit ALAC!
+        let sample = RawMusicAppStatusSample(
+            rawState: "playing",
+            rawPos: 12.0,
+            vol: 100,
+            dur: 245.0,
+            tName: "Nefertiti (HLS Test)",
+            tArtist: "Miles Davis Quintet",
+            tAlbum: "Nefertiti",
+            dbId: 424242,
+            persistentId: "AABBCCDDEEFF0011",
+            shuf: false,
+            repMode: "off",
+            hasLoc: true,
+            curPlNameRaw: "Очередь AMR",
+            knd: "Медиафайл HLS",
+            bRate: 256,
+            sRate: 44100,
+            isFavorited: true
+        )
+        let queueTrack = TrackInfo(
+            id: "1999888777",
+            numericId: 424242,
+            name: "Nefertiti (HLS Test)",
+            artist: "Miles Davis Quintet",
+            album: "Nefertiti",
+            duration: 245.0,
+            isLocal: true,
+            catalogId: "1999888777"
+        )
+
+        // First status sample before ALACDecoder must NOT pre-lock 44.1 kHz / 16-bit on an Apple Music HLS `.movpkg`
+        _ = PlayerStatusEngine.shared.assemblePlayerStatusLocked(
+            sample: sample,
+            isRadio: false,
+            stationName: nil,
+            isCustom: true,
+            customQueue: [queueTrack],
+            customIndex: 0,
+            customName: "Jazz Mix",
+            storeRepMode: "off",
+            origPl: nil
+        )
+        let exp1 = expectation(description: "Drain BitPerfectLogMonitor queue after initial HLS sample")
+        monitor.queue.async { exp1.fulfill() }
+        wait(for: [exp1], timeout: 1.0)
+        XCTAssertFalse(monitor.isFormatLockedForCurrentTrack, "Apple Music HLS download must await real ALACDecoder instead of pre-locking legacy 44.1 kHz catalog header")
+
+        // Live ACAppleLosslessDecoder locks 96.0 kHz / 24-bit
+        monitor.processLogMessageForTesting("ACAppleLosslessDecoder.cpp:680   Input format:  2 ch,  96000 Hz, alac (0x00000003) from 24-bit source, 4096 frames/packet")
+        XCTAssertTrue(monitor.isFormatLockedForCurrentTrack)
+        XCTAssertTrue(monitor.isAuthoritativelyLocked)
+
+        // Subsequent StatusBuilder assembly MUST surface 96000 Hz / 24-bit Hi-Res Lossless, never 44100 Hz / AAC!
+        let status = PlayerStatusEngine.shared.assemblePlayerStatusLocked(
+            sample: sample,
+            isRadio: false,
+            stationName: nil,
+            isCustom: true,
+            customQueue: [queueTrack],
+            customIndex: 0,
+            customName: "Jazz Mix",
+            storeRepMode: "off",
+            origPl: nil
+        )
+        XCTAssertEqual(status.track?.sampleRate, 96000)
+        XCTAssertEqual(status.track?.bitDepth, 24)
+        XCTAssertEqual(status.audioQuality, "Hi-Res Lossless (ALAC 24-bit/96kHz)")
+    }
 }

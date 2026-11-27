@@ -122,6 +122,8 @@ extension PlayerStatusEngine {
                 isFavorited = favOverride
             }
         }
+        let lowerKind = knd.lowercased()
+        let isAppleMusicCatalogDownload = hasLoc && (lowerKind.contains("hls") || lowerKind.contains("apple music"))
         let matchedCatalogId: String? = matchedQueueTrackForKey.flatMap { MusicKitManager.extractNumericCatalogId(from: $0) }
             ?? activeOverlapIncomingTrack.flatMap { MusicKitManager.extractNumericCatalogId(from: $0) }
         if !canonicalKey.isEmpty && stateStr == "playing" {
@@ -132,7 +134,7 @@ extension PlayerStatusEngine {
                     ?? (matchedCatalogId == nil ? BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName) : nil) {
                     preRate = cached.sampleRate
                     preDepth = cached.bitDepth
-                } else if hasLoc && sRate > 0 {
+                } else if hasLoc && !isAppleMusicCatalogDownload && sRate > 0 {
                     let locQuality = AudioQualityDetector.determineAudioQuality(kind: knd, bitRate: bRate, sampleRate: sRate)
                     let locIsLossless = !locQuality.contains("AAC") && !locQuality.contains("MP3")
                     preRate = Double(sRate)
@@ -319,7 +321,11 @@ extension PlayerStatusEngine {
                 }
             }
             var resolvedCatalogId: String? = nil
-            if isCustom && customIndex < customQueue.count {
+            if let mCid = matchedCatalogId, AppleSoundCheckService.isValidCatalogId(mCid) {
+                resolvedCatalogId = mCid
+                MusicKitManager.shared.cacheTrackCatalogId(mCid, name: tName, artist: tArtist, album: tAlbum)
+            }
+            if resolvedCatalogId == nil, isCustom && customIndex < customQueue.count {
                 let curQueueTrack = customQueue[customIndex]
                 if curQueueTrack.name.caseInsensitiveCompare(tName) == .orderedSame {
                     let cid = curQueueTrack.catalogId ?? curQueueTrack.id
@@ -354,12 +360,16 @@ extension PlayerStatusEngine {
 
             let cachedFmt = BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName, catalogId: resolvedCatalogId)
             let isLiveFormatLocked = BitPerfectLogMonitor.shared.isFormatLockedForCurrentTrack && BitPerfectLogMonitor.shared.currentIsLossless
+            let isAuthoritativeLiveLossless = isLiveFormatLocked && BitPerfectLogMonitor.shared.isAuthoritativelyLocked
             let detectedRate = BitPerfectLogMonitor.shared.currentDetectedSampleRate.map { Int($0) }
             let detectedDepth = BitPerfectLogMonitor.shared.currentDetectedBitDepth
             let isStreamLossless = (cachedFmt != nil) || (BitPerfectLogMonitor.shared.currentIsLossless && detectedRate != nil)
             let effectiveTrackRate: Int?
             let effectiveTrackDepth: Int?
-            if hasLoc && sRate > 0 {
+            if isAuthoritativeLiveLossless, let liveRate = detectedRate {
+                effectiveTrackRate = liveRate
+                effectiveTrackDepth = detectedDepth ?? (liveRate >= 48000 ? 24 : 16)
+            } else if hasLoc && !isAppleMusicCatalogDownload && sRate > 0 {
                 effectiveTrackRate = sRate
                 effectiveTrackDepth = !isLocalLossless ? 16 : ((sRate >= 48000) ? 24 : (bRate > 1000 ? 24 : (detectedDepth ?? 16)))
             } else if isStreamLossless {
@@ -394,15 +404,21 @@ extension PlayerStatusEngine {
             )
         }
 
-        if stateStr == "playing" && hasLoc && sRate > 0 && BitPerfectLogMonitor.shared.isEnabled {
+        if stateStr == "playing" && hasLoc && !isAppleMusicCatalogDownload && sRate > 0 && BitPerfectLogMonitor.shared.isEnabled {
             let depth = !isLocalLossless ? 16 : (sRate >= 48000 ? 24 : (bRate > 1000 ? 24 : 16))
             BitPerfectLogMonitor.shared.reportLocalTrackFormat(sampleRate: Double(sRate), bitDepth: depth, isLossless: isLocalLossless)
         }
 
-        let isLosslessTrack = hasLoc ? isLocalLossless : ((BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName, catalogId: trackObj?.catalogId) != nil) || (BitPerfectLogMonitor.shared.currentIsLossless && BitPerfectLogMonitor.shared.currentDetectedSampleRate != nil))
+        let isLosslessTrack: Bool = {
+            if hasLoc && !isAppleMusicCatalogDownload {
+                return isLocalLossless || (BitPerfectLogMonitor.shared.isFormatLockedForCurrentTrack && BitPerfectLogMonitor.shared.isAuthoritativelyLocked && BitPerfectLogMonitor.shared.currentIsLossless && BitPerfectLogMonitor.shared.currentDetectedSampleRate != nil)
+            }
+            return (BitPerfectLogMonitor.shared.getCachedFormat(artist: tArtist, title: tName, catalogId: trackObj?.catalogId) != nil)
+                || (BitPerfectLogMonitor.shared.currentIsLossless && BitPerfectLogMonitor.shared.currentDetectedSampleRate != nil)
+        }()
         let activeSourceRate = trackObj?.sampleRate.map { Double($0) } ?? (isLosslessTrack ? BitPerfectLogMonitor.shared.currentDetectedSampleRate : 44100.0)
         let activeSourceDepth = !isLosslessTrack ? 16 : (trackObj?.bitDepth ?? BitPerfectLogMonitor.shared.currentDetectedBitDepth)
-        if BitPerfectLogMonitor.shared.isEnabled {
+        if BitPerfectLogMonitor.shared.isEnabled || isAppleMusicCatalogDownload {
             if isLosslessTrack, let rate = activeSourceRate {
                 let depth = activeSourceDepth ?? (rate >= 48000.0 ? 24 : 16)
                 let khz = rate / 1000.0
@@ -412,7 +428,7 @@ extension PlayerStatusEngine {
                 } else {
                     curQuality = "Lossless (ALAC \(depth)-bit/\(khzStr)kHz)"
                 }
-            } else if !hasLoc {
+            } else if !hasLoc || isAppleMusicCatalogDownload {
                 curQuality = "AAC (256 kbps)"
             }
         }
